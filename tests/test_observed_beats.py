@@ -172,6 +172,21 @@ def test_run_chapter_writes_observed_beats_file_on_pass(tmp_path: Path) -> None:
     assert record["rom_sha256"] is not None
 
 
+def test_observed_beats_records_suite(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    chapter = make_chapter("CH03", [("B1", ok)])
+    rom = make_rom(tmp_path / "rom.gba")
+    for suite in ("hand", "gen"):
+        out = tmp_path / suite
+        run_chapter(replace(chapter, suite=suite), rom, tmp_path / "engine",
+                    output_root=out, emulator_factory=fake_factory)
+        record = json.loads((out / "observed_beats" / "CH03.json")
+                            .read_text(encoding="utf-8"))
+        assert record["suite"] == suite
+        assert record["version"] == 2
+
+
 def test_run_chapter_writes_observed_beats_file_on_failure(tmp_path: Path) -> None:
     def boom(emu):
         raise ScenarioError("nope")

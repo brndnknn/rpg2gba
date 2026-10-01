@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Chapter route</title>
+<link rel="stylesheet" href="/chapter-assets/chapter.css">
+</head>
+<body>
+<header id="top">
+  <select id="chsel" aria-label="Chapter"></select>
+  <div id="mode" role="group" aria-label="Path source">
+    <button id="mode-plan" class="seg on" type="button">Plan</button>
+    <button id="mode-walk" class="seg" type="button">Walk</button>
+  </div>
+  <button id="fit" type="button" title="Fit chapter (f)">&#x2922; fit</button>
+  <button id="notes-btn" type="button" hidden aria-label="Notes">&#9432; <span id="notes-n" class="badge"></span></button>
+</header>
+<div id="notes" hidden></div>
+<main id="main">
+  <div id="stage"><canvas id="cv"></canvas><div id="toast" hidden></div></div>
+  <aside id="card" aria-label="Beat card">
+    <div id="card-head">
+      <div id="grab"></div>
+      <button id="card-x" type="button" aria-label="Close card">&#x2715;</button>
+    </div>
+    <div id="card-body"></div>
+  </aside>
+</main>
+<footer id="bottom">
+  <button id="prev" type="button" aria-label="Previous step">&#9664;</button>
+  <div id="stepinfo"><b id="steplbl">-</b><span id="stepname"></span></div>
+  <button id="next" type="button" aria-label="Next step">&#9654;</button>
+  <button id="cardbtn" type="button">Card</button>
+</footer>
+<script src="/chapter-assets/chapter.js"></script>
+</body>
+</html>

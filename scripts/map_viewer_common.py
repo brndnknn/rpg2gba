@@ -818,6 +818,42 @@ def render_metatile_png(map_id: int, idx: int, layer: str) -> bytes:
     return png
 
 
+_map_png_cache: dict[int, tuple[object, int, bytes]] = {}  # map_id -> (fingerprint, quant_gen, PNG)
+
+
+def render_map_png(map_id: int) -> bytes:
+    """Whole map as ONE PNG, matching the client's default 'gba' layer.
+
+    Per cell (16 px): metatile ``bottom`` then ``top`` alpha-composited (same
+    order as viewer.js drawCellBase). No background fill; cells with no metatile
+    stay transparent. Memoized per map_id; stale when the on-disk input
+    fingerprint or the quantize generation changes (mirrors ``_ensure_loaded``)."""
+    _ensure_loaded(map_id)
+    state = _map_cache[map_id]
+    hit = _map_png_cache.get(map_id)
+    if hit is not None and hit[0] == state.input_fingerprint and hit[1] == _quant_generation:
+        return hit[2]
+
+    grid = state.grid
+    comp: dict[int, Image.Image] = {}
+    out = Image.new("RGBA", (grid.xsize * 16, grid.ysize * 16), (0, 0, 0, 0))
+    for y in range(grid.ysize):
+        for x in range(grid.xsize):
+            idx = state.colkey_to_idx[column_key(grid, x, y)]
+            tile = comp.get(idx)
+            if tile is None:
+                tile = Image.open(io.BytesIO(render_metatile_png(map_id, idx, "bottom"))).convert("RGBA")
+                top = Image.open(io.BytesIO(render_metatile_png(map_id, idx, "top"))).convert("RGBA")
+                tile = Image.alpha_composite(tile, top)
+                comp[idx] = tile
+            out.paste(tile, (x * 16, y * 16))
+    buf = io.BytesIO()
+    out.save(buf, format="PNG")
+    png = buf.getvalue()
+    _map_png_cache[map_id] = (state.input_fingerprint, _quant_generation, png)
+    return png
+
+
 def render_npc_png(character_name: str) -> bytes:
     """Render one NPC's sheet to PNG bytes (cached by lowercased name).
 

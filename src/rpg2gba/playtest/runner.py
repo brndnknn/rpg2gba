@@ -1197,6 +1197,7 @@ def build_observed_beats_record(chapter: Chapter, attempts: list[AttemptResult],
     return {
         "version": 2,
         "chapter": chapter.name,
+        "suite": chapter.suite,
         "rom_sha256": rom_sha256,
         "generated_at": generated_at or datetime.now(timezone.utc).isoformat(),
         "from_beat": from_beat,

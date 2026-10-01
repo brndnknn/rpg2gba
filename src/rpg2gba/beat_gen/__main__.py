@@ -1246,6 +1246,13 @@ def write_outputs(plan: ChapterPlan, out_dir: Path, *, module_dir: Path | None =
                       locate=_ViewerLocator(build_dir)),
         encoding="utf-8")
     write_plan(plan.route, route_path)
+    from rpg2gba.beat_gen.beats_sidecar import render_sidecar
+    beats_path = out_dir / f"{plan.chapter_id}.beats.json"
+    beats_path.write_text(
+        render_sidecar(plan, floor_lookup=lambda row_id: floor_for_row(row_id, build_dir=build_dir),
+                       locate=_ViewerLocator(build_dir)),
+        encoding="utf-8")
+    logger.info("wrote %s", beats_path)  # sidecar: not in the returned fixed-order triple
     return [module_path, review_path, route_path]
 
 

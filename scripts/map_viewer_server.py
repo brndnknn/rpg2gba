@@ -40,6 +40,7 @@ from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).parent))
 from map_graph import build_index, component_layout, map_relationships  # noqa: E402
+import map_viewer_common  # noqa: E402
 from map_viewer_common import (  # noqa: E402
     MAP_VIEWER_HTML,
     PALETTE_VIEWER_HTML,
@@ -69,6 +70,16 @@ except Exception as _exc:  # noqa: BLE001 - any import-time failure is fine here
 else:
     _MAP_VIEWER_EVENTS_ERROR = None
 
+# Same defensive import for the chapter route viewer's data join: a broken
+# module degrades only /api/chapter* to a 503.
+try:
+    import chapter_route_data  # noqa: E402
+except Exception as _exc:  # noqa: BLE001
+    chapter_route_data = None
+    _CHAPTER_ROUTE_DATA_ERROR = str(_exc)
+else:
+    _CHAPTER_ROUTE_DATA_ERROR = None
+
 # Serializes knob Applies: re-quantization mutates the shared module-level caches in
 # map_viewer_common, so two concurrent POSTs (ThreadingHTTPServer) must not interleave.
 _quant_lock = threading.Lock()
@@ -90,6 +101,14 @@ _RE_API_FEEDBACK = re.compile(r"^/api/feedback/(\d+)$")
 # own 400 JSON response instead of the generic 404 catch-all.
 _RE_API_EVENT = re.compile(r"^/api/event/([^/]+)/([^/]+)$")
 _RE_API_BEATS = re.compile(r"^/api/beats/([^/]+)$")
+# Chapter route viewer (reference/viewer/chapter_route_viewer.md).
+_RE_CHAPTER_PAGE = re.compile(r"^/chapter/(CH\d+)$")
+_RE_API_CHAPTER = re.compile(r"^/api/chapter/(CH\d+)$")
+_RE_API_MAPPNG = re.compile(r"^/api/mappng/(\d+)\.png$")
+_RE_CHAPTER_ASSET = re.compile(r"^/chapter-assets/(chapter\.(?:js|css))$")
+_CHAPTER_ASSET_DIR = Path(__file__).parent / "map_viewer"
+_CHAPTER_ASSET_TYPES = {"js": "text/javascript; charset=utf-8",
+                        "css": "text/css; charset=utf-8"}
 
 _CACHE_IMMUTABLE = "public, max-age=31536000, immutable"
 
@@ -217,6 +236,17 @@ class _Handler(BaseHTTPRequestHandler):
                 self._serve_event(m.group(1), m.group(2))
             elif m := _RE_API_BEATS.match(path):
                 self._serve_beats(m.group(1))
+            elif m := _RE_CHAPTER_PAGE.match(path):
+                self._serve_chapter_asset("chapter.html", "text/html; charset=utf-8")
+            elif m := _RE_CHAPTER_ASSET.match(path):
+                name = m.group(1)
+                self._serve_chapter_asset(name, _CHAPTER_ASSET_TYPES[name.rsplit(".", 1)[1]])
+            elif path == "/api/chapters":
+                self._serve_chapter_api(None)
+            elif m := _RE_API_CHAPTER.match(path):
+                self._serve_chapter_api(m.group(1))
+            elif m := _RE_API_MAPPNG.match(path):
+                self._serve_mappng(int(m.group(1)))
             else:
                 self._send(404, "text/plain", b"Not found")
         except (FileNotFoundError, KeyError, IndexError) as exc:
@@ -344,6 +374,33 @@ class _Handler(BaseHTTPRequestHandler):
         data = map_viewer_events.beat_markers(map_id)
         body = json.dumps(data, separators=(",", ":")).encode("utf-8")
         self._send(200, "application/json", body)
+
+    def _serve_chapter_asset(self, name: str, content_type: str) -> None:
+        """Chapter route viewer page/assets, read per request (no inlining, no
+        cache) so a front-end edit shows on the next reload."""
+        body = (_CHAPTER_ASSET_DIR / name).read_bytes()
+        self._send(200, content_type, body, cache="no-cache")
+
+    def _serve_chapter_api(self, chapter: str | None) -> None:
+        """/api/chapters (list) or /api/chapter/<CHnn> (joined payload).  Reads
+        generator and playtest artifacts that change between runs -- never cached."""
+        if chapter_route_data is None:
+            self._send(503, "application/json",
+                       json.dumps({"error": f"chapter_route_data unavailable: {_CHAPTER_ROUTE_DATA_ERROR}"}).encode("utf-8"))
+            return
+        data = (chapter_route_data.list_chapters() if chapter is None
+                else chapter_route_data.chapter_payload(chapter))
+        body = json.dumps(data, separators=(",", ":")).encode("utf-8")
+        self._send(200, "application/json", body, cache="no-cache")
+
+    def _serve_mappng(self, map_id: int) -> None:
+        """Whole-map composite for the chapter page.  Not immutable: a knob
+        Apply re-quantizes, so let the browser revalidate."""
+        render = getattr(map_viewer_common, "render_map_png", None)
+        if render is None:
+            self._send(503, "text/plain", b"render_map_png not available")
+            return
+        self._send(200, "image/png", render(map_id), cache="no-cache")
 
     def _serve_index(self) -> None:
         index_json = json.dumps(build_index(), separators=(",", ":"))

@@ -120,6 +120,7 @@ Map068 was, with three `code 117` sites.)
 - **`reference/recon/maps_and_common_events.md` (2026-06-14).** Hand-authored explainer of the map↔common-event relationship (humans + build agent). Covers: CE = a flat global page (no pages/graphic/position/self-switch) vs map events; the two link types (**code 117 explicit call** — 73 sites / 6 CEs, incl. the 11-Pokémon-Center receptionist CE4/5/6 reuse; vs **trigger 1/2 switch loops** — 3 parallel CEs, e.g. racing CE10/11); **caller-context semantics** (a called CE's `this event`/target-0 move route binds to the calling event); and the conversion mapping (`convert_common_events` → one `CommonEvent_<NNN>` block in `CommonEvents.pory`, `117 [N]`→`call CommonEvent_<NNN>`, STRIP emits a stub so calls don't dangle, CE pass before fork assembly). Worked example: Map002 EV009 "Receptionist PVP" `117 [5]` → `call CommonEvent_005`. 22/100 CEs have real commands.
 - **Map-viewer browsable UI (`scripts/map_graph.py` + landing page + cross-map nav strip, 2026-06-23).** Phase A done (server-only): searchable name+tree landing + per-map nav chips (up/sub/warp→). Details + Phase B (multi-floor composite, not built) in `reference/viewer/map_viewer.md`.
 - **Map viewer = tile-FEEDBACK tool** (refocused 2026-07-11; supersedes the "Map Inspector/Issues/slice-pool" framing in the notes above). `scripts/map_viewer_{common,server}.py`, server-only. Guide, workflow, architecture, ROM-parity pooling and provenance: `reference/viewer/map_viewer.md`.
+- **Chapter route viewer `/chapter/<CHnn>` (2026-10-01).** A mobile-first page for stepping through *generated* beats, showing the to/from route at each one. It reads only the gen suite: `output/beats/` route + `CHnn.beats.json` sidecar, and `output/playtest-gen/observed_beats/`. The events view's beat overlay still reads hand suites + `reference/routes/` and is stale for gen work. Design + built deviations: `reference/viewer/chapter_route_viewer.md`.
 
 - **Warp arrival facing (C5b, 2026-09-18) — carried on the DEPARTURE warp.** `metadata_wiring.warp_facing_for` writes map.json `"facing"` (RMXP 2/4/6/8 → `DIR_*`, 0 = retain) on each source warp_event; the engine applies it under `RPG2GBA_WARP_RETAIN_FACING` (`include/config/rpg2gba.h`). Script warps use `deterministic.warp_lines` (`SetWarpArrivalFacing` special). `reference/warp_facing_overrides.json`, `compute_arrival_facings` and the ON_WARP_INTO_MAP facing table are deleted; `tests/test_warp_facing_invariant.py` holds the corpus invariants.
 - **`tests/test_warp_facing_invariant.py` (added 2026-08-18) — corpus-wide invariant suite, chapter-agnostic.** Skips when `output/` isn't staged. Asserts: every in-bounds arrival has an explicit facing row; a DERIVED facing never points off-map/impassable; no arrival faces back at its own warp-source cell (bounce guard). Plus a hard regression pin on the 5 fixed Kevlar arrival coords → `DIR_NORTH`, and `test_uranium_authored_wall_facers_are_pinned` pinning maps 49/172 (Moki stairwell, dest_dir=4 into a wall) as an exact expected set — Uranium authored it that way; we reproduce faithfully pending a user fidelity call (see Open Questions).
@@ -291,15 +292,6 @@ Bambo reward thresholds (count-of-owned, not switches/vars) from `213_Bambo_Rewa
 
 ## Last Session Summary
 
-**2026-09-30/10-01 (ROM runs 50–54, CH02 walk):** One fix per run, committed with tests (details in
-Frontier): stacked-warp approach sides, flat screenshot names, stair crossings as
-(dir, approach, exit), `converter_dropped` rows, native sight-trainer win arm claimed. Grade clean
-×5; suite two halves 2275 + 2496 / 16 skipped. **Lesson:** the generator must read what the
-*converter* emitted (dropped events, demoted routes, native stairs), not the RMXP source — three of
-these five were the generator asserting RMXP shapes the ROM no longer has. Invocation:
-`.venv/bin/python -m rpg2gba.playtest run --chapter CH02 --suite gen --engine engine --output
-output/playtest-gen [--from-beat X]`.
-
 **2026-10-01 (ROM runs 55–61, generated CH02 green 185/185):** **Runner speed (operator-asked):**
 each seed capture is an in-game save, ~2.6s wall clock — measured 7.7 of an 8.5-min CH02 attempt;
 a completed predecessor's replay now seeds only its boundary beat (`1ebdbbfd`), full CH02 run
@@ -319,3 +311,4 @@ repro across frame offsets — the trace named the cause in one pass where readi
 guessed twice. Open: `reference/playtest_rule_versions.json` carries test-chapter entries
 (`t1`, `t5`, `v4…`) that older runner tests write into the real ledger.
 
+**2026-10-01b (chapter route viewer, built):** The operator found the events view unusable for following generated beats: retraced tiles hid the order, and the labels were unreadable. A design was grilled, approved and built in one session (`reference/viewer/chapter_route_viewer.md`). It is a mobile-first `/chapter/<CHnn>` page: step group-by-group with badges numbered by group, to/from paths in blue/orange with arrows, parallel offset lines on shared tiles, a bottom-sheet beat card, and a Plan/Walk toggle. **Operator ruling:** hand suites are excluded from this page entirely. Pipeline additions: `beat_gen` writes a `CHnn.beats.json` sidecar, and observed-beats records carry `"suite"`. **Lessons:** the plan's beat names differ from the runtime names for one template call (`_arms` → `_spent`/`_retalk1`), so cards fall back to row/stem matching. Gen runs live in `output/playtest-gen/`, not `output/playtest/`. Viewer tests 19 + sidecar/runner/mappng green; operator-approved after review (incl. borrowed-map cropping); committed on `rederive-ch01-ch04` as "Viewer: chapter route viewer for generated beats". The 5 untracked `chapters_gen/ch0N.py` were deliberately left out (C9 gate).

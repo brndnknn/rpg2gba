@@ -341,6 +341,9 @@ class Chapter:
     #: Declaring it leaves `locations[0]` meaning exactly what it meant
     #: before for every chapter, so CH01-CH04 re-solve unchanged.
     route_entry: BeatLocation | None = None
+    #: Which suite built this chapter (copied from `ChapterBuilder.suite`);
+    #: recorded in the observed-beats file so a run is attributable.
+    suite: Suite = "hand"
 
     def index_of(self, beat_name: str) -> int:
         for i, b in enumerate(self.beats):
@@ -707,7 +710,7 @@ class ChapterBuilder:
 
         return Chapter(name=self.name, doc=self.doc, beats=beats,
                         predecessor=self.predecessor,
-                        route_entry=self.route_entry)
+                        route_entry=self.route_entry, suite=self.suite)
 
 
 def _validate_groups(beats: tuple[Beat, ...], *, chapter_name: str) -> None:

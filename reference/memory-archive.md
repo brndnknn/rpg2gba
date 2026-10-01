@@ -10,6 +10,17 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-10-01 — Last Session Summary entry 2026-09-30/10-01 (ROM runs 50–54, CH02 walk)
+
+**2026-09-30/10-01 (ROM runs 50–54, CH02 walk):** One fix per run, committed with tests (details in
+Frontier): stacked-warp approach sides, flat screenshot names, stair crossings as
+(dir, approach, exit), `converter_dropped` rows, native sight-trainer win arm claimed. Grade clean
+×5; suite two halves 2275 + 2496 / 16 skipped. **Lesson:** the generator must read what the
+*converter* emitted (dropped events, demoted routes, native stairs), not the RMXP source — three of
+these five were the generator asserting RMXP shapes the ROM no longer has. Invocation:
+`.venv/bin/python -m rpg2gba.playtest run --chapter CH02 --suite gen --engine engine --output
+output/playtest-gen [--from-beat X]`.
+
 ## Archived 2026-10-01 — Last Session Summary entry 2026-09-30 (ROM runs 36–49)
 
 **2026-09-30 (ROM runs 36–49, generated CH01 green 139/139):** One fix per run, each committed
