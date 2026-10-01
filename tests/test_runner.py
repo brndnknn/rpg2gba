@@ -260,6 +260,49 @@ def test_from_beat_refuses_blob_from_different_rom_hash(tmp_path: Path) -> None:
                     emulator_factory=fake_factory, from_beat="B2")
 
 
+def _digested(name: str, beats: list[tuple[str, str]]) -> Chapter:
+    """A chapter whose beats carry explicit `source_digest`s."""
+    return Chapter(name=name, doc=f"reference/chapters/{name}.md", beats=tuple(
+        Beat(name=n, description=f"desc {n}", run=ok, source_digest=d) for n, d in beats))
+
+
+def test_from_beat_refuses_seed_whose_earlier_beats_changed(tmp_path: Path) -> None:
+    """A regenerated earlier beat (new source digest) makes every later
+    seed stale; a change after the seed point leaves it usable."""
+    rom = make_rom(tmp_path / "rom.gba")
+    out = tmp_path / "out"
+    first = run_chapter(_digested("t5", [("B1", "a"), ("B2", "b"), ("B3", "c")]),
+                        rom, tmp_path / "engine", output_root=out,
+                        emulator_factory=fake_factory)
+    assert first.verdict == "pass"
+
+    later_changed = _digested("t5", [("B1", "a"), ("B2", "b"), ("B3", "CHANGED")])
+    assert run_chapter(later_changed, rom, tmp_path / "engine", output_root=out,
+                       emulator_factory=fake_factory, from_beat="B2").verdict == "pass"
+
+    earlier_changed = _digested("t5", [("B1", "CHANGED"), ("B2", "b"), ("B3", "c")])
+    with pytest.raises(RunnerError, match="stale"):
+        run_chapter(earlier_changed, rom, tmp_path / "engine", output_root=out,
+                    emulator_factory=fake_factory, from_beat="B2")
+
+
+def test_predecessor_replay_seeds_only_its_boundary(tmp_path: Path) -> None:
+    """A completed predecessor's beats get no seeds except the one before
+    the next chapter's first beat; the chapter's own beats keep theirs."""
+    chapter = make_chapter("CH02", [
+        ("CH00:B1", ok), ("CH01:B1", ok), ("CH01:B2", ok), ("CH01:B3", ok),
+        ("B1", ok), ("B2", ok), ("B3", ok)])
+    rom = make_rom(tmp_path / "rom.gba")
+    out = tmp_path / "out"
+    versions = tmp_path / "rule_versions.json"   # never the repo's ledger
+    versions.write_text(json.dumps({"CH00": 2, "CH01": 2}), encoding="utf-8")
+    assert run_chapter(chapter, rom, tmp_path / "engine", output_root=out,
+                       emulator_factory=fake_factory,
+                       rule_versions_path=versions).verdict == "pass"
+    seeded = sorted(p.stem for p in (out / "blobs" / "CH02").glob("*.blob"))
+    assert seeded == ["B1", "B2", "B3", "CH01:B1"]
+
+
 # -- F3 rerun-once flake classification ------------------------------------------
 
 def test_verdict_pass_when_first_attempt_succeeds(tmp_path: Path) -> None:

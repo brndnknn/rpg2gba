@@ -701,10 +701,23 @@ def blob_paths(blobs_dir: Path, chapter: str, beat: str) -> tuple[Path, Path]:
     chapter_dir = blobs_dir / chapter
     return chapter_dir / f"{beat}.blob", chapter_dir / f"{beat}.json"
 
+def prefix_fingerprint(chapter: Chapter, beat_name: str) -> str:
+    """What a seed sitting before `beat_name` was produced by: the name and
+    `Beat.source_digest` of every earlier beat, in order. A regenerated or
+    reordered earlier beat changes it; a harness fix does not (by design --
+    resuming after a harness fix is the point)."""
+    digest = hashlib.sha256()
+    for beat in chapter.beats[:chapter.index_of(beat_name)]:
+        digest.update(f"{beat.name}\t{beat.source_digest}\n".encode("utf-8"))
+    return digest.hexdigest()
+
+
 def persist_seed_blob(blobs_dir: Path, chapter: str, rom: Path,
-                       snapshot: Snapshot, emu: "Emulator") -> None:
+                       snapshot: Snapshot, emu: "Emulator", *,
+                       prefix_sha256: str) -> None:
     """Record `snapshot` as the seed for `snapshot.beat`, tagged with the
-    ROM's hash so a later `--from-beat` run can refuse a stale blob."""
+    ROM's hash and the beats before it (`prefix_fingerprint`) so a later
+    `--from-beat` run can refuse a stale blob."""
     blob_path, meta_path = blob_paths(blobs_dir, chapter, snapshot.beat)
     blob_path.parent.mkdir(parents=True, exist_ok=True)
     blob = build_blob(emu.offsets, snapshot.blocks)
@@ -713,6 +726,7 @@ def persist_seed_blob(blobs_dir: Path, chapter: str, rom: Path,
         "chapter": chapter,
         "seeds_beat": snapshot.beat,
         "rom_sha256": hash_file(rom),
+        "prefix_sha256": prefix_sha256,
         "blob_offset": emu.symbols["gUraniumEmbeddedSave"],
         "created": datetime.now(timezone.utc).isoformat(),
         "player_pos": list(snapshot.player_pos),
@@ -721,7 +735,8 @@ def persist_seed_blob(blobs_dir: Path, chapter: str, rom: Path,
     meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
-def load_seed(blobs_dir: Path, chapter: str, beat: str, rom: Path) -> tuple[bytes, int]:
+def load_seed(blobs_dir: Path, chapter: str, beat: str, rom: Path, *,
+              prefix_sha256: str) -> tuple[bytes, int]:
     blob_path, meta_path = blob_paths(blobs_dir, chapter, beat)
     if not blob_path.exists() or not meta_path.exists():
         raise RunnerError(
@@ -737,6 +752,12 @@ def load_seed(blobs_dir: Path, chapter: str, beat: str, rom: Path) -> tuple[byte
             f"current={current_hash}) — blobs are invalidated by any ROM "
             "rebuild (ROM_TEST_DEV D2a); re-run the chapter green from the "
             "start to refresh it")
+    if meta.get("prefix_sha256") != prefix_sha256:
+        raise RunnerError(
+            f"seed blob for chapter {chapter!r} beat {beat!r} is stale: the "
+            "beats before it have changed since it was captured (or it "
+            "predates prefix tracking) -- resume from an earlier beat whose "
+            "seed is still current, or run from the start")
     return blob_path.read_bytes(), meta["blob_offset"] - ROM_BASE
 
 
@@ -761,7 +782,9 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
     scratch.parent.mkdir(parents=True, exist_ok=True)
 
     if start_idx > 0:
-        blob, file_offset = load_seed(blobs_dir, chapter.name, from_beat, rom)  # type: ignore[arg-type]
+        blob, file_offset = load_seed(  # type: ignore[arg-type]
+            blobs_dir, chapter.name, from_beat, rom,
+            prefix_sha256=prefix_fingerprint(chapter, from_beat))  # type: ignore[arg-type]
         shutil.copy(rom, scratch)
         scratch.with_suffix(".sav").unlink(missing_ok=True)
         write_blob_to_rom(scratch, scratch, blob, file_offset)
@@ -924,7 +947,16 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
             emu.waypoint(beat.name, note=beat.description)
 
             idx = chapter.index_of(beat.name)
-            if idx + 1 < len(chapter.beats):
+            owner = playtest_rules.owning_chapter(chapter.name, beat.name)
+            if (idx + 1 < len(chapter.beats) and owner != chapter.name
+                    and playtest_rules.owning_chapter(
+                        chapter.name, chapter.beats[idx + 1].name) == owner):
+                # Inside a completed predecessor's replay: no seed. Each
+                # capture is an in-game save, ~2.6s wall clock (measured
+                # 2026-10-01: 179 of a CH02 attempt's 8.5 min). The boundary
+                # into the next chapter still gets one.
+                pass
+            elif idx + 1 < len(chapter.beats):
                 # Some beats legitimately end mid-scene with the field still
                 # locked (moki B5 hands its running autorun to B6). Capturing a
                 # seed there is not possible and would not be worth having: the
@@ -948,7 +980,10 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                     # catch above) -- this is bookkeeping, not the test.
                     try:
                         last_snapshot = _snapshot(emu, chapter.beats[idx + 1].name)
-                        persist_seed_blob(blobs_dir, chapter.name, rom, last_snapshot, emu)
+                        persist_seed_blob(
+                            blobs_dir, chapter.name, rom, last_snapshot, emu,
+                            prefix_sha256=prefix_fingerprint(
+                                chapter, chapter.beats[idx + 1].name))
                     except Exception as exc:  # noqa: BLE001 - snapshot bookkeeping, not the beat under test
                         logger.warning(
                             "[%s] no seed for %s: snapshot failed at the end "

@@ -121,6 +121,19 @@ def test_moki_chapter_beats_have_nonempty_descriptions() -> None:
         assert beat.description.strip(), f"{beat.name} has an empty description"
 
 
+def test_every_beat_carries_its_registering_statement_digest() -> None:
+    """The seed-staleness fingerprint reads `Beat.source_digest`: every
+    module-registered beat has one, distinct beats' statements differ, and
+    a predecessor replay carries the digest through its renamed copy."""
+    chapter = load_chapter("CH01")
+    digests = [b.source_digest for b in chapter.beats]
+    assert all(digests)
+    assert len(set(digests)) == len(digests)
+    replay = load_chapter("CH02")
+    inherited = {b.name: b.source_digest for b in replay.beats if b.name.startswith("CH01:")}
+    assert inherited == {f"CH01:{b.name}": b.source_digest for b in chapter.beats}
+
+
 def test_index_of_resolves_every_beat() -> None:
     chapter = load_chapter("CH01")
     for i, beat in enumerate(chapter.beats):

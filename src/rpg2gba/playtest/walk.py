@@ -80,6 +80,9 @@ def _load_beat_seed(blobs_dir: Path, chapter: Chapter, beat_name: str,
         logger.debug("skipping stale seed %s (rom_sha256=%s, current=%s)",
                       meta_path, rom_sha256, current_hash)
         return None
+    if meta.get("prefix_sha256") != runner.prefix_fingerprint(chapter, beat_name):
+        logger.debug("skipping stale seed %s (the beats before it changed)", meta_path)
+        return None
 
     return Seed(chapter=chapter.name, kind="beat", beat=beat_name, source=blob_path,
                 blob_offset=blob_offset - ROM_BASE,
@@ -188,6 +191,12 @@ def resolve_seed(output_root: Path, chapter: Chapter, rom: Path, *,
                 stale_hash = meta.get("rom_sha256", "?")
             except (OSError, json.JSONDecodeError):
                 stale_hash = "?"
+            if stale_hash == current_hash:
+                raise runner.RunnerError(
+                    f"seed for chapter {chapter.name!r} beat {at_beat!r} is "
+                    "stale: the beats before it have changed since it was "
+                    "captured (or it predates prefix tracking) -- run the "
+                    "chapter from the start to refresh it")
             raise runner.RunnerError(
                 f"seed blob for chapter {chapter.name!r} beat {at_beat!r} was "
                 f"captured from a different ROM build (blob rom_sha256="
@@ -245,7 +254,8 @@ def build_walk_rom(output_root: Path, chapter: Chapter, rom: Path, engine: Path,
     if seed.kind == "beat":
         assert seed.beat is not None
         blob, file_offset = runner.load_seed(
-            output_root / "blobs", chapter.name, seed.beat, rom)
+            output_root / "blobs", chapter.name, seed.beat, rom,
+            prefix_sha256=runner.prefix_fingerprint(chapter, seed.beat))
         runner.write_blob_to_rom(rom, out, blob, file_offset)
     elif seed.kind == "chapter-complete":
         shutil.copy(seed.source, out)

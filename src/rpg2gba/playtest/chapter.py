@@ -55,7 +55,11 @@ multi-point beat is interpreted, and `ChapterBuilder.beat`'s docstring for
 """
 from __future__ import annotations
 
+import ast
+import functools
+import hashlib
 import importlib
+import inspect
 import logging
 import os
 import pkgutil
@@ -168,6 +172,11 @@ class Beat:
     # these to the emulator up front (`Emulator.drain_answers`) and the
     # drain answers the page's menus with them instead of pressing A.
     drain_answers: tuple[str, tuple[int, ...]] | None = None
+    # sha256 of the chapter-module statement that registered this beat
+    # (`_registration_digest`), or None when it wasn't registered from one.
+    # A seed blob records the digests of every beat before it, so a resume
+    # refuses a seed whose earlier beats have since been regenerated.
+    source_digest: str | None = None
 
     def archetype_of(self, row_id: str) -> str | None:
         """The archetype this beat claims for `row_id`, or None when it
@@ -395,7 +404,43 @@ def _prefix_beat(owner: str, beat: Beat) -> Beat:
                 description=f"[{owner}] {beat.description}", run=beat.run,
                 locations=beat.locations, entry_at=beat.entry_at,
                 group=prefixed_group, rows=beat.rows, archetype=beat.archetype,
-                assertions=beat.assertions, drain_answers=beat.drain_answers)
+                assertions=beat.assertions, drain_answers=beat.drain_answers,
+                source_digest=beat.source_digest)
+
+
+_CHAPTER_PACKAGES = ("rpg2gba.playtest.chapters.", "rpg2gba.playtest.chapters_gen.")
+
+
+@functools.lru_cache(maxsize=None)
+def _module_statements(filename: str) -> tuple[list[str], tuple[tuple[int, int], ...]]:
+    """`filename`'s lines and the (first, last) line of each top-level
+    statement, decorators included."""
+    source = Path(filename).read_text(encoding="utf-8")
+    spans = []
+    for stmt in ast.parse(source).body:
+        first = min([stmt.lineno] + [d.lineno for d in getattr(stmt, "decorator_list", ())])
+        spans.append((first, stmt.end_lineno or stmt.lineno))
+    return source.splitlines(), tuple(spans)
+
+
+def _registration_digest() -> str | None:
+    """sha256 of the top-level statement of the chapter module currently
+    registering a beat -- a generated module's template call with its
+    emitted arguments, or a hand module's decorated beat function. None
+    when no chapter module is on the stack (a test building a chapter)."""
+    frame = inspect.currentframe()
+    while frame is not None:
+        if (frame.f_code.co_name == "<module>"
+                and str(frame.f_globals.get("__name__", "")).startswith(_CHAPTER_PACKAGES)):
+            lines, spans = _module_statements(frame.f_code.co_filename)
+            line = frame.f_lineno
+            for first, last in spans:
+                if first <= line <= last:
+                    text = "\n".join(lines[first - 1:last])
+                    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+            return None
+        frame = frame.f_back
+    return None
 
 
 @dataclass
@@ -589,13 +634,16 @@ class ChapterBuilder:
         else:
             resolved_locations = ()
 
+        source_digest = _registration_digest()
+
         def decorate(fn: BeatFn) -> BeatFn:
             self._beats.append(Beat(name=name, description=description,
                                     run=fn, locations=resolved_locations,
                                     entry_at=entry_at, group=group, rows=rows,
                                     archetype=resolved_archetype,
                                     assertions=assertions,
-                                    drain_answers=drain_answers))
+                                    drain_answers=drain_answers,
+                                    source_digest=source_digest))
             return fn
 
         return decorate

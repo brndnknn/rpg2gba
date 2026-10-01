@@ -53,15 +53,22 @@ def write_beat_seed(blobs_dir: Path, chapter: str, beat: str, rom: Path, *,
                      player_pos: tuple[int, int] = (5, 7),
                      map_location: tuple[int, int] = (2, 9),
                      extra_meta: dict | None = None,
-                     omit_key: str | None = None) -> bytes:
+                     omit_key: str | None = None,
+                     prefix_sha256: str | None = None) -> bytes:
     blob = blob if blob is not None else make_blob()
     blob_path, meta_path = runner.blob_paths(blobs_dir, chapter, beat)
     blob_path.parent.mkdir(parents=True, exist_ok=True)
     blob_path.write_bytes(blob)
+    if prefix_sha256 is None:
+        try:
+            prefix_sha256 = runner.prefix_fingerprint(three_beat_chapter(), beat)
+        except KeyError:
+            prefix_sha256 = ""
     meta = {
         "chapter": chapter,
         "seeds_beat": beat,
         "rom_sha256": rom_sha256 if rom_sha256 is not None else runner.hash_file(rom),
+        "prefix_sha256": prefix_sha256,
         "blob_offset": blob_offset,
         "created": "2026-01-01T00:00:00+00:00",
         "player_pos": list(player_pos),
@@ -131,6 +138,17 @@ def test_available_seeds_excludes_seed_with_mismatched_rom_hash(tmp_path: Path) 
     seeds = walk.available_seeds(out, chapter, rom)
 
     assert [s.beat for s in seeds] == ["B1"]
+
+
+def test_stale_prefix_seed_is_skipped_and_named_stale_when_asked_for(
+        tmp_path: Path) -> None:
+    chapter = three_beat_chapter()
+    rom = make_rom(tmp_path / "rom.gba", ROM_SIZE)
+    out = tmp_path / "out"
+    write_beat_seed(out / "blobs", chapter.name, "B2", rom, prefix_sha256="old" * 8)
+    assert walk.available_seeds(out, chapter, rom) == []
+    with pytest.raises(runner.RunnerError, match="stale: the beats before it"):
+        walk.resolve_seed(out, chapter, rom, at_beat="B2")
 
 
 def test_available_seeds_skips_malformed_sidecar_json(tmp_path: Path) -> None:
@@ -451,6 +469,7 @@ def test_round_trip_build_blob_persist_resolve_build_walk_rom_and_read_back(
         "chapter": chapter.name,
         "seeds_beat": "B2",
         "rom_sha256": runner.hash_file(rom),
+        "prefix_sha256": runner.prefix_fingerprint(chapter, "B2"),
         "blob_offset": BLOB_OFFSET_ABS,
         "created": "2026-01-01T00:00:00+00:00",
         "player_pos": [3, 8],
