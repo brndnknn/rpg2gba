@@ -360,7 +360,7 @@ def _approach(emu: Emulator, approach: tuple[int, int]) -> bool:
     from ..emulator import WalkInterrupted
 
     try:
-        emu.walk_to(*approach)
+        emu.walk_to(*approach, absorb_wild=True)
     except WalkInterrupted as exc:
         logger.info(
             "approach to %s was interrupted at %s -- the trainer fired during "
@@ -684,7 +684,7 @@ def _register_retalk_beat(
         if local_id is not None:
             _press_a_live(emu, name, local_id, facing)
         else:
-            emu.walk_to(*approach)
+            emu.walk_to(*approach, absorb_wild=True)
             emu.face(facing)
             emu.interact()
         if text_assertions:
@@ -719,7 +719,7 @@ def _press_a_live(
     dx, dy = {"DOWN": (0, 1), "UP": (0, -1), "LEFT": (-1, 0), "RIGHT": (1, 0)}[facing]
     for _ in range(max_attempts):
         ev = emu.object_event(local_id)
-        emu.walk_to(ev.x - dx, ev.y - dy)
+        emu.walk_to(ev.x - dx, ev.y - dy, absorb_wild=True)
         emu.face(facing)
         try:
             emu.interact()

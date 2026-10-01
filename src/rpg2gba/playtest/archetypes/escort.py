@@ -164,7 +164,7 @@ def escort_beat(
     )
     def body(emu: "Emulator") -> None:
         assertions.require_map(emu, beat_name, map_constant)
-        emu.walk_to(x, y)
+        emu.walk_to(x, y, absorb_wild=True)
         emu.face(face)
         STEP_HANDLERS["trigger"](emu, beat_name, trigger_step)
         for step in ride_steps:

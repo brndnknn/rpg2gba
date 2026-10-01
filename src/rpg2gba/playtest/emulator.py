@@ -98,6 +98,14 @@ _REPLAN_WAIT = 60
 # spin forever.
 _MAX_INTERRUPTION_RESOLUTIONS = 3
 
+# `walk_to(..., absorb_wild=True)`: how many wild battles one walk may fight
+# off, and how long a lock that is not yet a battle gets to become one. The
+# cap is `ch02.py`'s `_MAX_ABSORBED_INTERRUPTIONS` (sized there from Route 1's
+# grass: P(>12 encounters in a 15-tile crossing at 25%) < 1e-6). The wait is
+# input-free, so a scene waiting on a button is left exactly as it was.
+_MAX_ABSORBED_WILD = 12
+_WILD_BATTLE_WAIT = 600  # 10s
+
 # `_walk_greedy`'s grace period for a mid-walk lock that might be a
 # self-resolving scene -- an autorun cameo that plays out with no input and
 # releases the field on its own (ch01.py B4: crossing the fence-row tile
@@ -2549,7 +2557,8 @@ class Emulator:
 
     def walk_to(self, tx: int, ty: int, frame_budget: int = 3000,
                 max_sidesteps: int = 8, *,
-                resolve_interruptions: bool = False) -> None:
+                resolve_interruptions: bool = False,
+                absorb_wild: bool = False) -> None:
         """Walk to `(tx, ty)` on the current map, planning around walls.
 
         The route comes from the engine's own collision grid
@@ -2581,7 +2590,26 @@ class Emulator:
         `_walk_to_once` call and gets a brand-new, fully fresh budget every
         time; the retry COUNT (`_MAX_INTERRUPTION_RESOLUTIONS`) is what
         bounds the loop, not a shrinking per-attempt allowance.
+
+        `absorb_wild=True` is the narrower policy the generated templates
+        use (ROM run 55: two attempts, two random grass encounters): a wild
+        battle is won and the walk resumes; anything else -- a trainer, a
+        scene, a touch page -- re-raises the original `WalkInterrupted`
+        untouched, because the caller decides whether that was its own
+        event. Encounters are RNG, not a fact the generator can order.
         """
+        if absorb_wild and not resolve_interruptions:
+            for _ in range(_MAX_ABSORBED_WILD):
+                try:
+                    _walk_to_once(self, tx, ty, frame_budget, max_sidesteps)
+                    return
+                except WalkInterrupted as exc:
+                    if not self._absorb_wild_battle(exc):
+                        raise
+            shot = self.screenshot("walk_to_wild_cap")
+            raise ScenarioError(
+                f"walk_to({tx},{ty}) absorbed {_MAX_ABSORBED_WILD} wild "
+                f"battles without arriving ({shot})")
         if not resolve_interruptions:
             _walk_to_once(self, tx, ty, frame_budget, max_sidesteps)
             return
@@ -2697,6 +2725,30 @@ class Emulator:
             self._wait_for_overworld_return(dialogue_settle_budget)
             return "dialogue"
         return "none"
+
+    def _absorb_wild_battle(self, exc: WalkInterrupted) -> bool:
+        """Win `exc`'s battle if it is (or, within `_WILD_BATTLE_WAIT`
+        input-free frames, becomes) a wild one, and settle the overworld.
+        False -- nothing pressed, nothing resolved -- for anything else."""
+        if not exc.battle:
+            waited = 0
+            while waited < _WILD_BATTLE_WAIT and not self._in_battle():
+                if not self.field_locked():
+                    return False
+                self.run(30)
+                waited += 30
+            if not self._in_battle():
+                shot = self.screenshot("walk_to_lock_not_a_battle")
+                logger.info("walk_to: lock at %s is not a battle after %d "
+                            "frames (%s)", exc.stopped_at, waited, shot)
+                return False
+        if self.is_trainer_battle():
+            return False
+        from . import battle
+        logger.info("walk_to: absorbing a wild battle at %s", self.player_pos())
+        battle.win_battle(self)
+        self._wait_for_overworld_return(_BATTLE_SETTLE_BUDGET)
+        return True
 
     def _wait_for_overworld_return(self, budget: int) -> None:
         """Wait until the overworld is genuinely back: field unlocked AND

@@ -421,7 +421,7 @@ def _start_talk(
         assertions.talk_to_moving_npc(
             emu, beat_name, local_id(map_constant, event_id), route=route)
         return
-    emu.walk_to(*approach)
+    emu.walk_to(*approach, absorb_wild=True)
     if event_page_moves(map_constant, event_id, page_idx):
         assertions.talk_to_moving_npc(emu, beat_name, local_id(map_constant, event_id))
         return

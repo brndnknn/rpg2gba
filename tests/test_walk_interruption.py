@@ -943,6 +943,127 @@ def test_walk_to_resolve_interruptions_passes_the_same_fresh_budget_every_retry(
     assert budgets_seen == [1234, 1234, 1234]
 
 
+# -- walk_to(absorb_wild=True): the generated templates' policy (ROM run 55,
+# two attempts each stopped by a random grass encounter) --------------------
+
+class _AbsorbWildEmu:
+    """Fake for `Emulator.walk_to(absorb_wild=True)`. `script` lists what
+    each `_walk_to_once` call does: None arrives, else the interruption --
+    ("wild"|"trainer", battle_flag, frames_until_battle)."""
+
+    def __init__(self, script) -> None:
+        from rpg2gba.playtest.emulator import Emulator
+        self._absorb_wild_battle = Emulator._absorb_wild_battle.__get__(self)
+        self.script = list(script)
+        self.kind: str | None = None
+        self.battle_in = 0
+        self.locked = False
+        self.shots: list[str] = []
+        self.taps = 0
+        self.settled = 0
+
+    def _in_battle(self) -> bool:
+        return self.kind is not None and self.battle_in <= 0
+
+    def field_locked(self) -> bool:
+        return self.locked
+
+    def run(self, frames: int) -> None:
+        self.battle_in -= frames
+
+    def tap(self, _button: str) -> None:
+        self.taps += 1
+
+    def is_trainer_battle(self) -> bool:
+        return self.kind == "trainer"
+
+    def screenshot(self, name: str) -> str:
+        self.shots.append(name)
+        return name
+
+    def player_pos(self) -> tuple[int, int]:
+        return (0, 0)
+
+    def _wait_for_overworld_return(self, _budget: int) -> None:
+        self.settled += 1
+
+
+def _run_absorb_wild(monkeypatch, emu: _AbsorbWildEmu) -> list[str]:
+    from rpg2gba.playtest import battle
+    from rpg2gba.playtest.emulator import Emulator, WalkInterrupted
+    import rpg2gba.playtest.emulator as emulator_module
+
+    won: list[str] = []
+
+    def _win(e) -> None:
+        won.append(e.kind)
+        e.kind = None
+        e.locked = False
+
+    def _once(e, tx, ty, frame_budget, max_sidesteps) -> None:
+        step = e.script.pop(0)
+        if step is None:
+            return
+        kind, flag, frames = step
+        e.kind, e.battle_in, e.locked = kind, frames, True
+        raise WalkInterrupted((tx, ty), (0, 0), flag)
+
+    monkeypatch.setattr(battle, "win_battle", _win)
+    monkeypatch.setattr(emulator_module, "_walk_to_once", _once)
+    Emulator.walk_to(emu, 5, 5, absorb_wild=True)
+    return won
+
+
+@needs_mgba
+def test_walk_to_absorb_wild_wins_wild_battles_and_arrives(monkeypatch) -> None:
+    emu = _AbsorbWildEmu([("wild", True, 0), ("wild", True, 0), None])
+    assert _run_absorb_wild(monkeypatch, emu) == ["wild", "wild"]
+    assert emu.settled == 2 and not emu.script
+
+
+@needs_mgba
+def test_walk_to_absorb_wild_hands_a_trainer_battle_back(monkeypatch) -> None:
+    from rpg2gba.playtest.emulator import WalkInterrupted
+
+    emu = _AbsorbWildEmu([("trainer", True, 0), None])
+    with pytest.raises(WalkInterrupted):
+        _run_absorb_wild(monkeypatch, emu)
+    assert emu.kind == "trainer" and emu.settled == 0
+
+
+@needs_mgba
+def test_walk_to_absorb_wild_waits_for_a_lock_to_become_a_wild_battle(monkeypatch) -> None:
+    """The encounter transition locks the field before `BattleMainCB2`
+    owns the loop; the wait is input-free."""
+    emu = _AbsorbWildEmu([("wild", False, 240), None])
+    assert _run_absorb_wild(monkeypatch, emu) == ["wild"]
+    assert emu.taps == 0
+
+
+@needs_mgba
+def test_walk_to_absorb_wild_reraises_a_lock_that_is_no_battle(monkeypatch) -> None:
+    """A scene waiting on a button is left as found: nothing pressed, the
+    original interruption re-raised, a screenshot of what it was."""
+    from rpg2gba.playtest.emulator import WalkInterrupted
+
+    emu = _AbsorbWildEmu([("scene", False, 10**6), None])
+    with pytest.raises(WalkInterrupted) as info:
+        _run_absorb_wild(monkeypatch, emu)
+    assert info.value.battle is False
+    assert emu.taps == 0 and emu.locked
+    assert emu.shots == ["walk_to_lock_not_a_battle"]
+
+
+@needs_mgba
+def test_walk_to_absorb_wild_gives_up_after_the_cap(monkeypatch) -> None:
+    from rpg2gba.playtest.emulator import _MAX_ABSORBED_WILD
+    from rpg2gba.playtest.errors import ScenarioError
+
+    emu = _AbsorbWildEmu([("wild", True, 0)] * _MAX_ABSORBED_WILD + [None])
+    with pytest.raises(ScenarioError, match="absorbed"):
+        _run_absorb_wild(monkeypatch, emu)
+
+
 # -- ch02.py's `_effective_trainer_facing`/`_sight_triggered`/
 # `_absorb_stray_wild`/`_step_absorbing` -- the 2026-08-11 route1 B7
 # regression's second and third cuts. Flood is `MOVEMENT_TYPE_LOOK_AROUND`

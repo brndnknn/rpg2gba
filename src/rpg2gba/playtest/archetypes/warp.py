@@ -548,7 +548,7 @@ def warp_beat(
             assertions=declared,
         )
         def run_boundary(emu: Emulator) -> None:
-            emu.walk_to(*edge)
+            emu.walk_to(*edge, absorb_wild=True)
             assertions.require_map(emu, beat_name, map_constant)
             assertions.assert_position_exact(emu, beat_name, edge)
             if emu.field_locked():

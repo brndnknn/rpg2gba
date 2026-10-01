@@ -41,7 +41,7 @@ def heal_at_counter(emu: Emulator, approach: tuple[int, int], facing: str, *,
     still releases the field cleanly, which is exactly why the field-lock
     check alone didn't catch it.
     """
-    emu.walk_to(*approach)
+    emu.walk_to(*approach, absorb_wild=True)
     emu.face(facing)
     assertions.damage_lead(emu, beat)
     emu.interact()
@@ -79,7 +79,7 @@ def use_pc(emu: Emulator, approach: tuple[int, int], facing: str, *,
     boots through the real native chain and returns control cleanly, not a
     box deposit/withdraw round-trip.
     """
-    emu.walk_to(*approach)
+    emu.walk_to(*approach, absorb_wild=True)
     emu.face(facing)
     emu.interact()
     emu.advance_dialog("B")

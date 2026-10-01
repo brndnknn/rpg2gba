@@ -144,7 +144,7 @@ def cross_threshold(emu: Emulator, beat: str, approach: tuple[int, int],
     loud when a step changes the map (that guard is what catches an
     accidental warp), so a deliberate crossing has to be the step *after*
     the walk, not part of it."""
-    emu.walk_to(*approach)
+    emu.walk_to(*approach, absorb_wild=True)
     try_step(emu, direction)
     wait_for_map(emu, beat, dest_map)
 
@@ -159,7 +159,7 @@ def enter_door(emu: Emulator, beat: str, door: tuple[int, int],
     must step onto the door tile *and keep holding UP*. A `try_step`-style
     tap arrives on the tile and stands there."""
     dx, dy = door
-    emu.walk_to(dx, dy + 1)
+    emu.walk_to(dx, dy + 1, absorb_wild=True)
     emu.run(hold, ["UP"])
     wait_for_map(emu, beat, dest_map)
 
@@ -192,7 +192,7 @@ def cross_arrow_warp(emu: Emulator, beat: str, tile: tuple[int, int],
             f"expected one of {sorted(_ARROW_APPROACH_DELTA)}")
     tx, ty = tile
     dx, dy = _ARROW_APPROACH_DELTA[direction]
-    emu.walk_to(tx + dx, ty + dy)
+    emu.walk_to(tx + dx, ty + dy, absorb_wild=True)
     emu.run(hold, [direction])
     wait_for_map(emu, beat, dest_map)
 

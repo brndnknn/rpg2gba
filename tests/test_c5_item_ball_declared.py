@@ -252,7 +252,7 @@ class _FakeGrantEmu:
     def bag_item_quantity(self, item: str) -> int:
         return next(self._bag_quantities)
 
-    def walk_to(self, x: int, y: int) -> None:
+    def walk_to(self, x: int, y: int, **_kw) -> None:
         pass
 
     def face(self, direction: str) -> None:

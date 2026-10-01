@@ -156,7 +156,7 @@ class _SilentEmu:
         self.pos = (0, 0)
         self.required: list[bool] = []
 
-    def walk_to(self, x: int, y: int) -> None:
+    def walk_to(self, x: int, y: int, **_kw) -> None:
         self.pos = (x, y)
 
     def face(self, direction: str) -> None:
@@ -224,7 +224,7 @@ class _RockEmu:
         self.locked = False
         self.stepped_while_locked = False
 
-    def walk_to(self, x: int, y: int) -> None:
+    def walk_to(self, x: int, y: int, **_kw) -> None:
         assert not self.locked, "walked with the rock's message still open"
         self.pos = (x, y)
 

@@ -1323,7 +1323,7 @@ def generic_beat(
             emu.clear_mart_items()
         try:
             if not arrival:
-                emu.walk_to(x, y)
+                emu.walk_to(x, y, absorb_wild=True)
         except WalkInterrupted:
             # An event-touch page can reach the player first (the trainer
             # template's `_approach` makes the same call); the steps below
@@ -1494,7 +1494,7 @@ def obstacle_beat(
             parsed = parse_row_id(row_id)
             approach = approach_to(map_constant, parsed.event_id, prefer=approach_prefer)
             facing = facing_toward(approach, (ox, oy), caller="obstacle_beat")
-            emu.walk_to(*approach)
+            emu.walk_to(*approach, absorb_wild=True)
             emu.face(facing)
             before = emu.player_pos()
             emu.interact()
@@ -1604,7 +1604,7 @@ def stair_beat(
             # cannot route over a staircase); `order_stair_crossings` never
             # asks for any other kind.
             if emu.player_pos() != step.approach:
-                emu.walk_to(*step.approach)
+                emu.walk_to(*step.approach, absorb_wild=True)
             # Two presses: the bump that pushes diagonally, then the plain
             # step off (`terrain.stair_crossings`). Only the exit is asserted
             # -- the native metatiles can pass a different middle cell.

@@ -429,7 +429,7 @@ def item_ball_beats(
                 "set before the pickup"
             )
         bag_before = emu.bag_item_quantity(item)
-        emu.walk_to(*approach)
+        emu.walk_to(*approach, absorb_wild=True)
         emu.face(facing)
         emu.interact()
         emu.advance_dialog()
@@ -484,7 +484,7 @@ def item_ball_beats(
                     "set -- the grant beat must run first"
                 )
             bag_before = emu.bag_item_quantity(item)
-            emu.walk_to(*approach)
+            emu.walk_to(*approach, absorb_wild=True)
             emu.face(facing)
             started = emu.interact(require_script=not spent_page_is_empty)
             if spent_page_is_empty and started:

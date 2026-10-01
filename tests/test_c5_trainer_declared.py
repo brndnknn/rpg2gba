@@ -174,7 +174,7 @@ class _FakeRetalkEmu:
     def flag(self, _name: str) -> bool:
         return self._defeat_flag_set
 
-    def walk_to(self, _x: int, _y: int) -> None:
+    def walk_to(self, _x: int, _y: int, **_kw) -> None:
         pass
 
     def face(self, _direction: str) -> None:

@@ -118,7 +118,7 @@ class _Emu:
     def object_event(self, local_id: int) -> "_Emu._Ev":
         return self._Ev(*self.live)
 
-    def walk_to(self, x: int, y: int) -> None:
+    def walk_to(self, x: int, y: int, **_kw) -> None:
         self.walks.append((x, y))
 
     def face(self, direction: str) -> None:
