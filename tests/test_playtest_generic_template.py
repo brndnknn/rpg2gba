@@ -295,7 +295,46 @@ def test_stair_beat_declares_stair_crossings():
     assert beat.locations[0].map_constant == "MAP_PASSAGE_CAVE_2F"
 
 
-SEAM = "map031/seam/N/map035"
+def _crossing(row: str, d: str, a: tuple[int, int], e: tuple[int, int],
+              cell: tuple[int, int]) -> generic.StairCrossing:
+    return generic.StairCrossing(row, d, a, e, cell)
+
+
+# Map033's x=57 column (ROM run 52): two lanes, each crossed both ways.
+_M033 = (
+    _crossing("57,9", "RIGHT", (56, 9), (58, 10), (57, 9)),
+    _crossing("57,10", "LEFT", (58, 10), (56, 9), (57, 10)),
+    _crossing("57,10", "RIGHT", (56, 10), (58, 11), (57, 10)),
+    _crossing("57,11", "LEFT", (58, 11), (56, 10), (57, 11)),
+)
+
+
+def test_order_stair_crossings_chains_and_returns_to_the_reached_side():
+    order = generic.order_stair_crossings(_M033, prefer="east", beat_name="b")
+    assert [(c.direction, c.approach) for c in order] == [
+        ("LEFT", (58, 10)), ("RIGHT", (56, 9)),     # lane 1 there and back
+        ("LEFT", (58, 11)), ("RIGHT", (56, 10)),    # same-side hop, lane 2
+    ]
+    assert order[-1].exit == (58, 11)
+
+
+def test_order_stair_crossings_west_start():
+    order = generic.order_stair_crossings(_M033, prefer="west", beat_name="b")
+    assert order[0].approach == (56, 9)
+    assert order[-1].side_of(order[-1].exit) == -1
+
+
+def test_order_stair_crossings_refuses_a_one_way_walk():
+    with pytest.raises(ValueError, match="end across the staircase"):
+        generic.order_stair_crossings(_M033[1:2], prefer="east", beat_name="b")
+
+
+def test_order_stair_crossings_refuses_an_unreached_preferred_side():
+    with pytest.raises(ValueError, match="no crossing starts on the north side"):
+        generic.order_stair_crossings(_M033, prefer="north", beat_name="b")
+
+
+SEAM ="map031/seam/N/map035"
 
 
 def test_seam_beat_declares_the_crossing():

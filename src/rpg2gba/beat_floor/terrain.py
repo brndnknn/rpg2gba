@@ -144,6 +144,37 @@ def derive_stair_steps(
     return steps, None
 
 
+_UNIT_BY_STEP_DIR: dict[str, tuple[int, int]] = {
+    "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0), "UP": (0, -1)}
+
+
+def stair_crossings(
+    x: int, y: int, steps: tuple[tuple[str, int, int], ...],
+) -> tuple[tuple[str, int, int, int, int], ...]:
+    """`(step_dir, approach_x, approach_y, exit_x, exit_y)` for every arm of
+    the stair cell at (x, y) that moves the player -- an empty arm is a bump
+    into a solid event, not a crossing, and yields nothing.
+
+    RMXP's crossing is two presses: the player stands beside the solid cell
+    at `approach`, presses `step_dir` into it, and the event pushes them
+    diagonally by the arm's (dx, dy) *from where they stand*; a plain step
+    the same way then carries them off. A forced move never chains into the
+    stair event it lands on: the event doing the pushing is still running,
+    and `Game_Player#check_event_trigger_here` returns early while the map
+    interpreter runs (`reference/scripts_dump/023__Game_Player_v17.rb`).
+    The native sideways-stairs metatiles end the same two presses on the
+    same cell, though the cell between can differ (ROM run 52), so only
+    the exit is the RMXP fact a crossing asserts."""
+    crossings = []
+    for step_dir, dx, dy in steps:
+        if (dx, dy) == (0, 0):
+            continue
+        ux, uy = _UNIT_BY_STEP_DIR[step_dir]
+        ax, ay = x - ux, y - uy
+        crossings.append((step_dir, ax, ay, ax + dx + ux, ay + dy + uy))
+    return tuple(crossings)
+
+
 def seam_floors_for_map(
     map_id: int, connections: list[list[Any]],
 ) -> dict[str, RowFloor]:
@@ -214,11 +245,25 @@ def stair_floors_for_map(map_id: int, map_data: dict[str, Any]) -> dict[str, Row
             )
             continue
 
+        crossings = stair_crossings(terrain.x, terrain.y, steps)
+        if not crossings:
+            result[row.row_id] = RowFloor(
+                row_id=row.row_id, trigger="player_touch", assertions=frozenset(),
+                refusals=(FloorRefusal(
+                    row_id=row.row_id, reason="stair_no_crossing",
+                    list_index=-1, code=111,
+                    detail=(
+                        f"map {map_id} event {terrain.source_event_id} "
+                        f"({event.get('name')!r}): neither arm moves the player"),
+                ),),
+            )
+            continue
+
         assertion = FloorAssertion(
             row_id=row.row_id, kind="stair_crossing", list_index=-1, code=None,
             params=make_params(
                 x=terrain.x, y=terrain.y, side=_side_value(row, stair_cells),
-                steps=steps,
+                crossings=crossings,
             ),
             tag="position",
         )

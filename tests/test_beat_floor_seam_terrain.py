@@ -88,7 +88,9 @@ def test_stair_crossing_synthetic_right_side():
     assert params["x"] == 5
     assert params["y"] == 5
     assert params["side"] == "right"
-    assert params["steps"] == (("LEFT", -1, -1), ("RIGHT", 1, 1))
+    # Bump from beside the cell, pushed diagonally from there, one plain
+    # step off: (6,5) -LEFT-> NW to (5,4) -> (4,4).
+    assert params["crossings"] == (("LEFT", 6, 5, 4, 4), ("RIGHT", 4, 5, 6, 6))
 
 
 def test_stair_crossing_synthetic_left_side():
@@ -99,12 +101,13 @@ def test_stair_crossing_synthetic_left_side():
     a = next(iter(row.assertions))
     params = dict(a.params)
     assert params["side"] == "left"
-    assert params["steps"] == (("LEFT", -1, 1), ("RIGHT", 1, -1))
+    assert params["crossings"] == (("LEFT", 6, 5, 4, 6), ("RIGHT", 4, 5, 6, 4))
 
 
-def test_stair_crossing_synthetic_empty_arm_yields_zero_displacement():
+def test_stair_crossing_synthetic_empty_arm_is_not_a_crossing():
     # Map033 ev026's own shape: the "facing into the stair" arm has no
-    # diagonal move at all -- net (0, 0), not a refusal.
+    # diagonal move at all -- a bump into a solid event, not a crossing and
+    # not a refusal.
     commands = [
         {"code": 111, "indent": 0, "parameters": [6, -1, 6]},
         {"code": 0, "indent": 1, "parameters": []},
@@ -116,7 +119,13 @@ def test_stair_crossing_synthetic_empty_arm_yields_zero_displacement():
     row = terrain.stair_floors_for_map(99, map_data)["map099/terrain/stairs/5,5"]
     assert not row.refused
     params = dict(next(iter(row.assertions)).params)
-    assert params["steps"] == (("LEFT", -1, -1), ("RIGHT", 0, 0))
+    assert params["crossings"] == (("LEFT", 6, 5, 4, 4),)
+
+
+def test_stair_crossings_skip_empty_arms():
+    # Detection already drops an event with no diagonal move at all, so the
+    # floor's `stair_no_crossing` guard is only for a move outside the branch.
+    assert terrain.stair_crossings(5, 5, (("LEFT", 0, 0), ("RIGHT", 0, 0))) == ()
 
 
 def test_stair_crossing_refusal_unknown_facing_direction():
@@ -172,13 +181,13 @@ def test_ch05_map037_east_staircase_nw_se_axis():
     map_data = _load_map(37)
     floors = terrain.stair_floors_for_map(37, map_data)
     for row_id, expected in (
-        ("map037/terrain/stairs/20,9", (("LEFT", -1, -1), ("RIGHT", 1, 1))),
+        ("map037/terrain/stairs/20,9", (("LEFT", 21, 9, 19, 8), ("RIGHT", 19, 9, 21, 10))),
     ):
         row = floors[row_id]
         assert not row.refused, row.refusals
         params = dict(next(iter(row.assertions)).params)
         assert params["side"] == "right"
-        assert params["steps"] == expected
+        assert params["crossings"] == expected
 
 
 def test_ch05_map037_west_staircase_ne_sw_axis():
@@ -189,7 +198,7 @@ def test_ch05_map037_west_staircase_ne_sw_axis():
     assert not row.refused, row.refusals
     params = dict(next(iter(row.assertions)).params)
     assert params["side"] == "left"
-    assert params["steps"] == (("LEFT", -1, 1), ("RIGHT", 1, -1))
+    assert params["crossings"] == (("LEFT", 12, 9, 10, 10), ("RIGHT", 10, 9, 12, 8))
 
 
 def test_ch02_map033_stairs_57_10():
@@ -200,7 +209,16 @@ def test_ch02_map033_stairs_57_10():
     assert not row.refused, row.refusals
     params = dict(next(iter(row.assertions)).params)
     assert params["side"] == "right"
-    assert params["steps"] == (("LEFT", -1, -1), ("RIGHT", 1, 1))
+    assert params["crossings"] == (("LEFT", 58, 10, 56, 9), ("RIGHT", 56, 10, 58, 11))
+
+
+def test_ch02_map033_stairs_57_9_east_bump_is_not_a_crossing():
+    # ROM run 52: (57,9)'s LEFT arm is empty -- in RMXP (58,9) is a wall from
+    # the east, so the floor must not ask the ROM to cross from there.
+    _skip_if_no_corpus()
+    floors = terrain.stair_floors_for_map(33, _load_map(33))
+    params = dict(next(iter(floors["map033/terrain/stairs/57,9"].assertions)).params)
+    assert params["crossings"] == (("RIGHT", 56, 9, 58, 10),)
 
 
 def test_ch04_map035_seam_south_to_map031():

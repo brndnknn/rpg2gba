@@ -41,7 +41,7 @@ AssertionKind = Literal[
     "visual",             # params: code, detail (visual-only; asserts nothing beyond completes)
     # Row-level kinds for rows with no command list (C5): list_index -1, code None.
     "seam_crossing",      # params: map_id, direction, offset, other_map_id, other_direction, other_offset
-    "stair_crossing",     # params: x, y, side ("left"|"right"), steps (((step_dir, dx, dy), ...))
+    "stair_crossing",     # params: x, y, side ("left"|"right"), crossings (((step_dir, approach_x, approach_y, exit_x, exit_y), ...); see terrain.stair_crossings)
     "blocked_obstacle",   # params: x, y, capability ("rock_smash"|"strength")
 ]
 

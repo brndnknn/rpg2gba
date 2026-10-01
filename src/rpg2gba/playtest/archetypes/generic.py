@@ -1574,18 +1574,16 @@ def stair_beat(
             f"chapter {chapter_id!r}'s manifest"
         )
     cell = cell_for_row(first_row)
-    if approach_prefer is not None:
-        candidate = next(
-            (c for c in cell.approach_candidates if c.side == approach_prefer), None)
-        if candidate is None:
-            sides = [c.side for c in cell.approach_candidates]
-            raise ValueError(
-                f"stair_beat: {beat_name}: approach_prefer={approach_prefer!r} "
-                f"is not among {resolved_rows[0]}'s candidate sides {sides}"
-            )
-        x, y = candidate.x, candidate.y
-    else:
-        x, y = cell.x, cell.y
+    walk = order_stair_crossings(
+        [
+            StairCrossing(row_id, str(d), (int(ax), int(ay)), (int(ex), int(ey)),
+                          (int(crossing.param("x")), int(crossing.param("y"))))
+            for row_id, crossing in crossings.items()
+            for d, ax, ay, ex, ey in crossing.param("crossings")
+        ],
+        prefer=approach_prefer, beat_name=beat_name,
+    )
+    x, y = walk[0].approach
 
     declared = declare_assertions(
         resolved_rows, executed_kinds=frozenset({"stair_crossing"}), template="stair",
@@ -1601,39 +1599,106 @@ def stair_beat(
     )
     def body(emu: "Emulator") -> None:
         assertions.require_map(emu, beat_name, cell.map_constant)
-        emu.walk_to(x, y)
-        taken: list[tuple[str, tuple[int, int]]] = []
-        for row_id in resolved_rows:
-            crossing = crossings[row_id]
-            for step_dir, dx, dy in crossing.param("steps"):
+        for step in walk:
+            # Only a same-side hop is planned by `walk_to` (4-neighbour, so it
+            # cannot route over a staircase); `order_stair_crossings` never
+            # asks for any other kind.
+            if emu.player_pos() != step.approach:
+                emu.walk_to(*step.approach)
+            # Two presses: the bump that pushes diagonally, then the plain
+            # step off (`terrain.stair_crossings`). Only the exit is asserted
+            # -- the native metatiles can pass a different middle cell.
+            for press in (1, 2):
                 before = emu.player_pos()
-                moved = assertions.try_step(emu, step_dir)
-                after = emu.player_pos()
-                if not moved or (after[0] - before[0], after[1] - before[1]) != (dx, dy):
-                    shot = emu.screenshot(f"{beat_name}_{row_id}_step")
+                if not assertions.try_step(emu, step.direction):
+                    shot = emu.screenshot(f"{beat_name}_{step.row_id}_press{press}")
                     raise ScenarioError(
-                        f"{beat_name}: {row_id}: stepping {step_dir} from "
-                        f"{before} landed at {after}, expected a move of "
-                        f"({dx},{dy}) ({shot})"
+                        f"{beat_name}: {step.row_id}: press {press} of "
+                        f"{step.direction} from {before} did not move "
+                        f"(crossing {step.approach} -> {step.exit}) ({shot})"
                     )
-                taken.append((step_dir, (dx, dy)))
-        # Cross back the same way, reversed, so the beat ends where it
-        # started (the round-trip idiom `routing.locations.choose_routing_
-        # point`'s own docstring documents for a staircase beat).
-        for step_dir, (dx, dy) in reversed(taken):
-            reverse_dir = _OPPOSITE_DIR[step_dir]
-            before = emu.player_pos()
-            moved = assertions.try_step(emu, reverse_dir)
             after = emu.player_pos()
-            if not moved or (after[0] - before[0], after[1] - before[1]) != (-dx, -dy):
-                shot = emu.screenshot(f"{beat_name}_return_step")
+            if after != step.exit:
+                shot = emu.screenshot(f"{beat_name}_{step.row_id}_exit")
                 raise ScenarioError(
-                    f"{beat_name}: stepping back {reverse_dir} from {before} "
-                    f"landed at {after}, expected a move of ({-dx},{-dy}) "
+                    f"{beat_name}: {step.row_id}: crossing {step.direction} from "
+                    f"{step.approach} ended at {after}, expected {step.exit} "
                     f"({shot})"
                 )
 
     del body
+
+
+@dataclass(frozen=True)
+class StairCrossing:
+    """One RMXP stair crossing (`terrain.stair_crossings`): from `approach`,
+    two presses of `direction` end on `exit`. `cell` is the stair cell the
+    first press bumps; it fixes which side of the staircase a point is on."""
+
+    row_id: str
+    direction: str
+    approach: tuple[int, int]
+    exit: tuple[int, int]
+    cell: tuple[int, int]
+
+    def side_of(self, point: tuple[int, int]) -> int:
+        """-1/+1: which side of this crossing's cell `point` lies on, along
+        the crossing's axis (0 when level with the cell)."""
+        axis = 0 if self.direction in ("LEFT", "RIGHT") else 1
+        delta = point[axis] - self.cell[axis]
+        return (delta > 0) - (delta < 0)
+
+
+_PREFER_SIGN: dict[str, tuple[int, int]] = {
+    "east": (0, 1), "west": (0, -1), "south": (1, 1), "north": (1, -1)}
+
+
+def order_stair_crossings(
+    crossings: Sequence[StairCrossing], *, prefer: str | None, beat_name: str,
+) -> tuple[StairCrossing, ...]:
+    """Every crossing once, in an order the walker can play: start on the
+    `prefer` side (the side the route reaches), chain into a crossing that
+    starts where the last one ended, else hop to one starting on the side
+    the player now stands on -- a hop `walk_to` can plan. Fails loud when
+    no order covers them all, or when the walk would end across the
+    staircase from where it began (the route's next beat expects the
+    player back on the reached side)."""
+    remaining = sorted(crossings, key=lambda c: (c.approach[1], c.approach[0], c.row_id))
+    if not remaining:
+        raise ValueError(f"stair_beat: {beat_name}: no crossings")
+    if prefer is None:
+        first = remaining[0]
+    else:
+        if prefer not in _PREFER_SIGN:
+            raise ValueError(f"stair_beat: {beat_name}: unknown approach_prefer {prefer!r}")
+        axis, sign = _PREFER_SIGN[prefer]
+        first = next(
+            (c for c in remaining
+             if (c.approach[axis] - c.cell[axis]) * sign > 0), None)
+        if first is None:
+            raise ValueError(
+                f"stair_beat: {beat_name}: no crossing starts on the "
+                f"{prefer} side")
+    order = [first]
+    remaining.remove(first)
+    start_side = first.side_of(first.approach)
+    while remaining:
+        pos = order[-1].exit
+        nxt = next((c for c in remaining if c.approach == pos), None)
+        if nxt is None:
+            nxt = next(
+                (c for c in remaining if c.side_of(pos) == c.side_of(c.approach)), None)
+        if nxt is None:
+            raise ValueError(
+                f"stair_beat: {beat_name}: from {pos} no remaining crossing "
+                f"starts on the player's side: {[c.row_id for c in remaining]}")
+        order.append(nxt)
+        remaining.remove(nxt)
+    if first.side_of(order[-1].exit) != start_side:
+        raise ValueError(
+            f"stair_beat: {beat_name}: the crossings end across the staircase "
+            f"at {order[-1].exit}, not back on the side they began")
+    return tuple(order)
 
 
 # -- seam_beat --------------------------------------------------------------

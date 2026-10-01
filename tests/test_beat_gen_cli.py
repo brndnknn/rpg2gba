@@ -202,9 +202,10 @@ def test_never_fires_elsewhere_skips_beats_outside_dead_groups():
 # --- _cell_fn: which cells get re-sided as warps --------------------------------
 
 class _OpenGraph:
-    """Every cell walkable except `walls`."""
+    """Every cell walkable except `walls`; no warp tiles."""
     def __init__(self, walls=()):
         self.walls = set(walls)
+        self.warp_exits = frozenset()
 
     def is_walkable(self, cell):
         return cell not in self.walls

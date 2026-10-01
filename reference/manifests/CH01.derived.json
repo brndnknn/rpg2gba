@@ -769,6 +769,30 @@
     "disposition": "beat:B12",
     "derived_hash": "a40a381c635b17d9"
   },
+  "map172/ev004/p0/b0": {
+    "disposition": "cosmetic",
+    "derived_hash": "7642657152a6045f"
+  },
+  "map172/ev004/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "5da3601d0faadf9b"
+  },
+  "map172/ev004/p0/b2": {
+    "disposition": "cosmetic",
+    "derived_hash": "da021371fca0030b"
+  },
+  "map172/ev004/p0/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "baa9b40e9c4977a6"
+  },
+  "map172/ev004/p0/b4": {
+    "disposition": "cosmetic",
+    "derived_hash": "cbf3058c971f06df"
+  },
+  "map172/ev004/p0/b5": {
+    "disposition": "cosmetic",
+    "derived_hash": "13341cb11abe38ac"
+  },
   "map172/ev004/p1": {
     "disposition": "cosmetic",
     "derived_hash": "331e082dfe47215a"
