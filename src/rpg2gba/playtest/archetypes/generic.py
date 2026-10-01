@@ -870,6 +870,11 @@ def _gift_ceremony(emu: "Emulator", beat_name: str, row_id: str) -> None:
 #: "{PLAYER} found one X!", then "{PLAYER} put away the X in the ... POCKET."
 _ITEM_BOX_OPENERS = ("Obtained", "{PLAYER} found")
 _ITEM_BOX_CLOSER = "{PLAYER} put away the"
+#: Boxes read before the pocket line must have come. The native berry tree
+#: is the longest flow (engine/data/scripts/berry_tree.inc): "You found ...
+#: pick them?", "{PLAYER} picked the ...", then the pocket line -- the
+#: pick prompt can be read twice while its yes/no is up (ROM run 56).
+_ITEM_BOX_LIMIT = 5
 
 
 def _item_boxes(emu: "Emulator", beat_name: str, row_id: str) -> None:
@@ -884,17 +889,17 @@ def _item_boxes(emu: "Emulator", beat_name: str, row_id: str) -> None:
         raise ScenarioError(
             f"{beat_name}: {row_id}: expected the item grant's obtain line, got "
             f"{text!r} ({shot})")
-    for _ in range(3):
-        if text is not None and text_matches(_ITEM_BOX_CLOSER, text):
-            break
+    read = 1
+    while text is None or not text_matches(_ITEM_BOX_CLOSER, text):
+        if read == _ITEM_BOX_LIMIT:
+            shot = emu.screenshot(f"{beat_name}_no_pocket_box")
+            raise ScenarioError(
+                f"{beat_name}: {row_id}: the item grant's \"put away\" line never "
+                f"came in {read} boxes, last box {text!r} ({shot})")
         emu.clear_field_message()
         emu.dismiss_message()
         text = emu.wait_for_field_message(frame_budget=600)
-    else:
-        shot = emu.screenshot(f"{beat_name}_no_pocket_box")
-        raise ScenarioError(
-            f"{beat_name}: {row_id}: the item grant's \"put away\" line never "
-            f"came, last box {text!r} ({shot})")
+        read += 1
     emu.clear_field_message()
     emu.dismiss_message()
 

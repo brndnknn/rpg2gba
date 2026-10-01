@@ -507,6 +507,27 @@ def test_item_boxes_get_through_obtain_and_pocket_lines():
     assert emu.boxes == ["Poké Balls are necessary for catching Pokémon"]
 
 
+def test_item_boxes_read_the_native_berry_trees_longer_flow():
+    """ROM run 56: the berry tree's pocket line is its 3rd box, and the pick
+    prompt can be read twice while its yes/no is up -- the 4th read must
+    still be checked (the old loop read it and never looked)."""
+    emu = _BoxEmu(["You found 2 ORAN BERRIES!\\pDo you want to pick them?",
+                   "You found 2 ORAN BERRIES!\\pDo you want to pick them?",
+                   "RED picked the 2 ORAN BERRIES.",
+                   "RED put away the ORAN BERRIES\\nin the BAG’s BERRIES POCKET."
+                   "\\pThe soil returned to its soft and\\nloamy state.",
+                   "next"])
+    generic._item_boxes(emu, "B1", "map033/ev102/p0")
+    assert emu.boxes == ["next"]
+
+
+def test_item_boxes_fail_loud_when_the_pocket_line_never_comes():
+    from rpg2gba.playtest.errors import ScenarioError
+    emu = _BoxEmu(["Obtained a POTION!"] + ["more"] * 10)
+    with pytest.raises(ScenarioError, match=r"never came in 5 boxes"):
+        generic._item_boxes(emu, "B1", "r")
+
+
 def test_item_boxes_fail_loud_without_an_obtain_line():
     from rpg2gba.playtest.errors import ScenarioError
     with pytest.raises(ScenarioError, match="obtain line"):
