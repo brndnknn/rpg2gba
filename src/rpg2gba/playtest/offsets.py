@@ -225,6 +225,12 @@ _PROBE_ENTRIES: dict[str, str] = {
     # future engine change grows that block, this probed value moves and the
     # hardcoded facing offset below is what will look wrong.
     "off_objevent_fieldeffectspriteid": "offsetof(struct ObjectEvent, fieldEffectSpriteId)",
+    # -- native berry trees (emulator.berry_tree_picked) ---------------------
+    # gSaveBlock1Ptr->berryTrees[id] is compared whole against the ROM's own
+    # gBlankBerryTree (what RemoveBerryTree writes on a pick), so no bitfield
+    # inside struct BerryTree needs an offset.
+    "off_sb1_berrytrees": "offsetof(struct SaveBlock1, berryTrees)",
+    "sizeof_berrytree": "sizeof(struct BerryTree)",
     # OBJECT_EVENTS_COUNT (constants/global.h:93): size of gObjectEvents[].
     "val_object_events_count": "OBJECT_EVENTS_COUNT",
     # Direction enum (constants/global.h:205-209) as stored in

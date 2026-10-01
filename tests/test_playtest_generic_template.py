@@ -528,6 +528,42 @@ def test_item_boxes_fail_loud_when_the_pocket_line_never_comes():
         generic._item_boxes(emu, "B1", "r")
 
 
+class _BerryEmu:
+    """Reads a native berry tree's pick state; any flag read is a bug."""
+
+    def __init__(self, picked: bool) -> None:
+        self.picked = picked
+        self.trees: list[int] = []
+
+    def berry_tree_picked(self, tree_id: int) -> bool:
+        self.trees.append(tree_id)
+        return self.picked
+
+    def flag(self, name: str) -> bool:
+        raise AssertionError(f"read {name}; a native berry tree has no self-switch")
+
+    def screenshot(self, name: str) -> str:
+        return f"{name}.png"
+
+
+_BERRY_SSA = generic.Step("map033/ev102/p0/b0", "self_switch_write", 1,
+                          (("event_id", 102), ("letter", "A"), ("value", True)))
+
+
+def test_native_berry_tree_state_is_the_self_switch_write():
+    """Operator ruling 2026-10-01 (ROM run 57): the pick blanking tree 97 is
+    the RMXP page's self-switch-A write."""
+    emu = _BerryEmu(picked=True)
+    generic._handle_self_switch_write(emu, "B1", _BERRY_SSA)
+    assert emu.trees == [97]
+
+
+def test_an_unpicked_native_berry_tree_fails_the_write():
+    from rpg2gba.playtest.errors import ScenarioError
+    with pytest.raises(ScenarioError, match="berry tree 97 picked reads False"):
+        generic._handle_self_switch_write(_BerryEmu(picked=False), "B1", _BERRY_SSA)
+
+
 def test_item_boxes_fail_loud_without_an_obtain_line():
     from rpg2gba.playtest.errors import ScenarioError
     with pytest.raises(ScenarioError, match="obtain line"):

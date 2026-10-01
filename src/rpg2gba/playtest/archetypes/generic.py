@@ -122,6 +122,7 @@ from rpg2gba.playtest.cells import (
     event_page_empty,
     event_is_sight_trainer,
     event_page_moves,
+    native_berry_tree_id,
     local_id,
     seam_cells,
 )
@@ -528,7 +529,15 @@ def _handle_self_switch_write(emu: "Emulator", beat_name: str, step: Step) -> No
     if selected is None:
         return
     expected = tuple(bool(v) for v in selected)
-    actual = emu.flag(name)
+    tree_id = native_berry_tree_id(map_id, params["event_id"])
+    if tree_id is not None:
+        # Emitted as a native berry tree: the pick blanks the tree's own
+        # saved state, and that IS this write (operator ruling 2026-10-01,
+        # the bfee6641 shape); the RMXP self-switch flag is never set.
+        name = f"berry tree {tree_id} picked"
+        actual = emu.berry_tree_picked(tree_id)
+    else:
+        actual = emu.flag(name)
     if actual not in expected:
         shot = emu.screenshot(f"{beat_name}_ssa")
         raise ScenarioError(

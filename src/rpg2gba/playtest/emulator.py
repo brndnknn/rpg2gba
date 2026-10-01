@@ -1179,6 +1179,15 @@ class Emulator:
         byte = self.u8(self.sb1 + self.offsets["off_sb1_flags"] + flag_id // 8)
         return bool(byte >> (flag_id % 8) & 1)
 
+    def berry_tree_picked(self, tree_id: int) -> bool:
+        """Is native berry tree `tree_id` blank -- what `RemoveBerryTree`
+        writes on a pick (engine/src/berry.c)? Compared whole against the
+        ROM's own `gBlankBerryTree`, so no bitfield offset is assumed."""
+        size = self.offsets["sizeof_berrytree"]
+        tree = self.read_bytes(
+            self.sb1 + self.offsets["off_sb1_berrytrees"] + tree_id * size, size)
+        return tree == self.read_bytes(self.symbols["gBlankBerryTree"], size)
+
     def var(self, var: str | int) -> int:
         """Read a VAR_* value, following the engine's own VarGet/GetVarPointer
         (event_data.c): ids in [VARS_START, SPECIAL_VARS_START) index

@@ -47,6 +47,13 @@ def test_sight_trainers_are_read_off_the_compiled_map():
     assert not event_is_sight_trainer("MAP_MOKI_TOWN_PROFESSOR_LAB", 26)  # the PC: no object
 
 
+def test_native_berry_trees_are_read_off_the_compiled_map():
+    # ROM run 57: Route 1's three berry plants compile to BerryTreeScript.
+    from rpg2gba.playtest.cells import native_berry_tree_id
+    assert [native_berry_tree_id(33, e) for e in (100, 101, 102)] == [95, 96, 97]
+    assert native_berry_tree_id(33, 98) is None      # a flavour NPC
+
+
 def test_a_back_and_forth_walker_keeps_its_route():
     steps = custom_route_loop("MAP_MOKI_TOWN", 27)
     assert steps is not None

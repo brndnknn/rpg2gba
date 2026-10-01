@@ -420,16 +420,41 @@ def event_is_sight_trainer(map_constant: str, event_id: int) -> bool:
     Route 1's EV053 stood on (17,10), the approach its spawn derives). An
     event emitted as no object at all (a sign, the lab PC) is not one; an
     unstaged map still fails loud through `local_id`."""
-    path = _local_id_table_path(_uranium_id(map_constant, resolver="event_is_sight_trainer"))
-    if path.exists() and str(event_id) not in json.loads(path.read_text(encoding="utf-8")):
+    if not has_local_id(map_constant, event_id):
         return False
+    obj = _emitted_object(map_constant, event_id, resolver="event_is_sight_trainer")
+    return obj.get("trainer_type", "TRAINER_TYPE_NONE") != "TRAINER_TYPE_NONE"
+
+
+def native_berry_tree_id(map_id: int, event_id: int) -> int | None:
+    """The engine berry tree id the ROM runs Uranium map `map_id`'s event
+    `event_id` as (its compiled object's script is `BerryTreeScript`), else
+    None. Such a page's self-switch write is the tree's own saved state on
+    the ROM (operator ruling 2026-10-01, ROM run 57: picking blanks the tree,
+    `RemoveBerryTree`; nothing sets the RMXP self-switch)."""
+    consts = [c for c, uid in _map_const_index().items() if uid == map_id]
+    if len(consts) != 1:
+        raise ValueError(
+            f"native_berry_tree_id: Uranium map {map_id} names {len(consts)} map "
+            f"constants {consts}, expected exactly one")
+    const = consts[0]
+    if not has_local_id(const, event_id):
+        return None
+    obj = _emitted_object(const, event_id, resolver="native_berry_tree_id")
+    if obj.get("script") != "BerryTreeScript":
+        return None
+    return int(obj["trainer_sight_or_berry_tree_id"])
+
+
+def _emitted_object(map_constant: str, event_id: int, *, resolver: str) -> dict:
+    """Event `event_id`'s compiled object, found by local id."""
     objects = _emitted_map_json(map_constant).get("object_events") or []
     lid = local_id(map_constant, event_id)
     if not 1 <= lid <= len(objects):
         raise ValueError(
-            f"event_is_sight_trainer: {map_constant} event {event_id} has local "
-            f"id {lid}, but the compiled map has {len(objects)} object events")
-    return objects[lid - 1].get("trainer_type", "TRAINER_TYPE_NONE") != "TRAINER_TYPE_NONE"
+            f"{resolver}: {map_constant} event {event_id} has local id {lid}, "
+            f"but the compiled map has {len(objects)} object events")
+    return objects[lid - 1]
 
 
 def approach_to(map_constant: str, event_id: int, *, prefer: str | None = None) -> Cell:
