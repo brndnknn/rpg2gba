@@ -12,6 +12,12 @@
       "value": false,
       "feature": "'Skip intro?' prompt on New Game (137__PScreen_Load.rb:840-844), offered only under $DEBUG or when a save file already exists; its arm in the intro (Map051 EV002) fast-forwards gender select, Running Shoes and switch 52 'Mum', then warps into the house",
       "reason": "No-port. A fresh game in this port always takes the full intro path, where talking to Auntie (map049/ev001/p0) is the only writer of switch 52 and the gate out of the house. Operator ruling 2026-09-25 (REDERIVATION_PLAN.md §16.3 ruling 14), which also removed C3's FlagSet(FLAG_MUM) new-game seed that had mirrored this arm."
+    },
+    {
+      "predicate": "Kernel.pbPokerus?",
+      "value": false,
+      "feature": "Pokerus infection check (any party Pokemon infected); Map068 EV001's healing-counter YES branch shows the Pokerus explanation on its then arm",
+      "reason": "Deferred to CH18 (Nuclear Plant Epsilon, its home chapter), so no Pokemon in this port is ever infected and the check is statically false. Decision: CH03_TODO.md decision #4 update, 2026-08-14; the transpiler already emits only the else arm (`conversion_agent/transpiler.py` `_emit_pokerus_branch`, still hardcoded rather than reading this entry). Recorded here 2026-10-02 so the story model and beat generator see the same constant (ROM run 67: the generated nurse beat expected the then arm's text)."
     }
   ],
   "common_events": [
