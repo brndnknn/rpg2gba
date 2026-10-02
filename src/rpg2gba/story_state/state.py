@@ -58,7 +58,19 @@ class EngineKey:
 
 RESPAWN_MAP = EngineKey("respawn_map")
 
-Key = Switch | Variable | SelfSwitch | TempSwitch | EngineKey
+
+@dataclass(frozen=True)
+class BagHas:
+    """Boolean: the player's bag holds at least one of KEY item `item` (the
+    item's internal symbol, e.g. ``"BIKEWHEEL"``). Switch-like: seeded False at
+    new game, set True by a literal grant, havoc'd by anything else that
+    touches the item (`story_state.bag`). Key items only -- ordinary items can
+    arrive by channels a script scan cannot see."""
+
+    item: str
+
+
+Key = Switch | Variable | SelfSwitch | TempSwitch | EngineKey | BagHas
 
 CompareOp = Literal["==", "!=", ">=", "<=", ">", "<"]
 

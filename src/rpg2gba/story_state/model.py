@@ -38,6 +38,7 @@ from rpg2gba.story_state.state import (
     RESPAWN_MAP,
     Adjust,
     Assign,
+    BagHas,
     EngineKey,
     Key,
     Refusal,
@@ -576,6 +577,16 @@ def _ce_writes_var(body: Mapping[str, Any], var_id: int) -> bool:
         for cmd in body.get("list", ()))
 
 
+def _bag_carry(row: RowState) -> tuple[tuple[Write, ...], tuple[Key, ...]]:
+    """The key-item bag writes/havocs extraction attached to `row` (they come
+    from script TEXT, not from the interpreter run a computed row defers, so
+    re-resolution must not drop them)."""
+    return (
+        tuple(w for w in row.writes if isinstance(w.key, BagHas)),
+        tuple(k for k in row.havoc_keys if isinstance(k, BagHas)),
+    )
+
+
 def _resolve_computed_row(
     row: RowState, state: State, exact_counters: frozenset[Key] = frozenset(),
 ) -> RowState:
@@ -606,6 +617,7 @@ def _resolve_computed_row(
         return values
 
     result = run_scope(row.computed, read_domain)
+    bag_writes, bag_havoc = _bag_carry(row)
     carried = tuple(r for r in row.refusals if r.code != "unparsed_state_write")
 
     if result.refusal is not None:
@@ -620,7 +632,7 @@ def _resolve_computed_row(
         return replace(
             row,
             refusals=carried + (Refusal(code, f"{row.row_id}: {result.refusal.detail}"),),
-            havoc_keys=named,
+            havoc_keys=tuple(named) + bag_havoc,
             havoc_global=not named,
         )
 
@@ -675,23 +687,24 @@ def _resolve_computed_row(
     if self_referential:
         return replace(
             row,
-            writes=(),
+            writes=bag_writes,
             refusals=carried + (Refusal(
                 "computed_row_self_reference",
                 f"{row.row_id}: {', '.join(repr(k) for k in self_referential)} "
                 f"read and written by this row -- a counter, widened to TOP",
             ),),
-            havoc_keys=tuple(sorted(result.values, key=repr)),
+            havoc_keys=tuple(sorted(set(result.values) | set(bag_havoc), key=repr)),
             havoc_global=True,
         )
 
     return replace(
         row,
-        writes=writes,
+        writes=writes + tuple(w for w in bag_writes if w not in writes),
         refusals=carried,
         witnesses=witness_citations(result),
         havoc_global=False,
-        havoc_keys=tuple(sorted(set(nonscalar) | set(counter_havoc), key=repr)),
+        havoc_keys=tuple(sorted(
+            set(nonscalar) | set(counter_havoc) | set(bag_havoc), key=repr)),
     )
 
 
@@ -1612,6 +1625,8 @@ def _state_key_repr(key: Key) -> str:
         return f"temp_switch:{key.map_id}/{key.event_id}/{key.letter}"
     if isinstance(key, EngineKey):
         return f"engine:{key.name}"
+    if isinstance(key, BagHas):
+        return f"bag:{key.item}"
     raise TypeError(f"unknown key {key!r}")
 
 

@@ -56,9 +56,11 @@ from rpg2gba.story_state.scope_search import (
 from rpg2gba.ruby_subset.builtins import STATIC_PREDICATES
 from rpg2gba.ruby_subset.search import search_scope
 from rpg2gba.story_state.graphics_vars import graphics_only_variables
+from rpg2gba.story_state.bag import key_item_symbols, scan_bag_text
 from rpg2gba.story_state.state import (
     Adjust,
     Assign,
+    BagHas,
     Key,
     Refusal,
     SelfSwitch,
@@ -79,6 +81,7 @@ CODE_SELF_SWITCH_WRITE = 123
 CODE_COMMON_EVENT_CALL = 117
 CODE_SCRIPT = 355
 CODE_SCRIPT_CONT = 655
+CODE_CONDITIONAL = 111
 
 _TRIGGER_NAMES: dict[int, str] = {
     0: "action", 1: "player_touch", 2: "event_touch", 3: "autorun", 4: "parallel",
@@ -283,6 +286,30 @@ def _static_predicate_arm(text: str, is_else: bool) -> ArmOutcome | None:
     return ArmOutcome(kind="dead", detail=f"{predicate}={STATIC_PREDICATES[predicate]}")
 
 
+_BAG_QTY_RE = re.compile(
+    r"\$PokemonBag\.pbQuantity\(\s*(?:::)?(?:PBItems::|:)([A-Z][A-Z0-9_]*)\s*\)"
+    r"\s*(>|>=|==|<)\s*(0|1)")
+# (operator, constant) -> does the THEN arm mean "the bag holds the item"?
+_BAG_HAS_FORMS: dict[tuple[str, str], bool] = {
+    (">", "0"): True, (">=", "1"): True, ("==", "0"): False, ("<", "1"): False,
+}
+
+
+def _bag_has_test(text: str, is_else: bool) -> Test | None:
+    """`$PokemonBag.pbQuantity(<KEY ITEM>) > 0` (and `>= 1`, `== 0`, `< 1`),
+    as a `BagHas` test; None for anything else (non-key item, other
+    comparison, compound expression) so it falls through to the family table
+    unchanged."""
+    m = _BAG_QTY_RE.fullmatch(" ".join(text.split()))
+    if m is None:
+        return None
+    has = _BAG_HAS_FORMS.get((m.group(2), m.group(3)))
+    item = m.group(1)
+    if has is None or item not in key_item_symbols():
+        return None
+    return Test(BagHas(item), "==", (not has) if is_else else has)
+
+
 def _arm_guard(
     branch: BranchRef,
     raw_commands: list[dict[str, Any]],
@@ -365,6 +392,11 @@ def _arm_guard(
         static = _static_predicate_arm(text, is_else)
         if static is not None:
             return ArmGuard(outcome=static, negated=is_else, opener_index=branch.opener_index), ()
+        bag_test = _bag_has_test(text, is_else)
+        if bag_test is not None:
+            return ArmGuard(
+                tests=(bag_test,), negated=is_else, opener_index=branch.opener_index,
+            ), ()
         family = classify_condition(text)
         if family is None:
             return None, (Refusal(
@@ -535,7 +567,114 @@ def _extract_leaf_writes(
     return (), (), frozenset(), False
 
 
+def _bag_texts(commands: list[dict[str, Any]]) -> list[tuple[int, str]]:
+    """`(position in `commands`, text)` for every script block (355 plus its
+    655 continuations) and every 111 type-12 condition in `commands`."""
+    out: list[tuple[int, str]] = []
+    i = 0
+    while i < len(commands):
+        cmd = commands[i]
+        code = cmd.get("code")
+        params = cmd.get("parameters") or []
+        if code in (CODE_SCRIPT, CODE_SCRIPT_CONT) and params:
+            lines = [str(params[0])]
+            j = i + 1
+            while j < len(commands) and commands[j].get("code") == CODE_SCRIPT_CONT:
+                lines.append(str((commands[j].get("parameters") or [""])[0]))
+                j += 1
+            out.append((i, "\n".join(lines)))
+            i = j
+            continue
+        if code == CODE_CONDITIONAL and len(params) > 1 and params[0] == 12:
+            out.append((i, str(params[1])))
+        i += 1
+    return out
+
+
+def _bag_effects(
+    commands: list[dict[str, Any]],
+    *,
+    index_of: dict[int, int],
+    forced_list_index: int | None,
+    conditional: bool,
+    common_events_by_id: dict[int, dict[str, Any]],
+    stripped_ce_ids: frozenset[int],
+    visited_ce: frozenset[int],
+    inline_ce: bool,
+) -> tuple[list[Write], set[Key]]:
+    """Key-item grants (`BagHas(X) = True`) and havocs in this scope's script
+    and condition text (`story_state.bag`). `inline_ce` additionally walks
+    every 117-called common event's whole body (all arms, conditional) -- used
+    only where the interpreter path inlines CEs itself, so the structural leaf
+    walk (which recurses through `_extract_leaf_writes`) never double-counts."""
+    writes: list[Write] = []
+    havoc: set[Key] = set()
+    for pos, text in _bag_texts(commands):
+        scan = scan_bag_text(text)
+        if not scan.grants and not scan.havocs:
+            continue
+        if forced_list_index is not None:
+            idx = forced_list_index
+        else:
+            idx = index_of.get(id(commands[pos]), -1)
+        for item in sorted(scan.grants):
+            writes.append(Assign(
+                BagHas(item), frozenset({True}), conditional,
+                f"script @list[{idx}]: grants {item}", idx))
+        havoc |= {BagHas(item) for item in scan.havocs}
+    if inline_ce:
+        for pos, cmd in enumerate(commands):
+            if cmd.get("code") != CODE_COMMON_EVENT_CALL or not (cmd.get("parameters") or []):
+                continue
+            ce_id = cmd["parameters"][0]
+            ce = common_events_by_id.get(ce_id)
+            if ce_id in stripped_ce_ids or ce_id in visited_ce or ce is None:
+                continue
+            idx = forced_list_index if forced_list_index is not None else index_of.get(id(cmd), -1)
+            ce_cmds = ce.get("list") or []
+            w, h = _bag_effects(
+                ce_cmds, index_of={}, forced_list_index=idx, conditional=True,
+                common_events_by_id=common_events_by_id, stripped_ce_ids=stripped_ce_ids,
+                visited_ce=visited_ce | {ce_id}, inline_ce=True)
+            writes.extend(w)
+            havoc |= h
+    return writes, havoc
+
+
 def _extract_scope_writes(
+    commands: list[dict[str, Any]],
+    map_id: int,
+    event_id: int,
+    common_events_by_id: dict[int, dict[str, Any]],
+    conditional: bool,
+    visited_ce: frozenset[int],
+    *,
+    index_of: dict[int, int],
+    forced_list_index: int | None,
+    stripped_ce_ids: frozenset[int],
+    row_id: str | None = None,
+) -> ScopeExtraction:
+    """`_extract_scope_writes_core` plus the key-item bag grants/havocs
+    (`BagHas`, `story_state.bag`) read off the same scope's script text."""
+    base = _extract_scope_writes_core(
+        commands, map_id, event_id, common_events_by_id, conditional, visited_ce,
+        index_of=index_of, forced_list_index=forced_list_index,
+        stripped_ce_ids=stripped_ce_ids, row_id=row_id)
+    bag_writes, bag_havoc = _bag_effects(
+        commands, index_of=index_of, forced_list_index=forced_list_index,
+        conditional=conditional, common_events_by_id=common_events_by_id,
+        stripped_ce_ids=stripped_ce_ids, visited_ce=visited_ce,
+        inline_ce=scope_needs_interpreter(commands))
+    if not bag_writes and not bag_havoc:
+        return base
+    return _dc_replace(
+        base,
+        writes=base.writes + tuple(bag_writes),
+        havoc_keys=base.havoc_keys | frozenset(bag_havoc),
+    )
+
+
+def _extract_scope_writes_core(
     commands: list[dict[str, Any]],
     map_id: int,
     event_id: int,
