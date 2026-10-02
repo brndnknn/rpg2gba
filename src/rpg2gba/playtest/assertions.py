@@ -569,10 +569,46 @@ def _intercept_route_walker(emu: Emulator, beat: str, local_id: int,
             f"{beat}: waited {budget} frames on {cell} for route walker local id "
             f"{local_id} to arrive at one of {sorted(arrivals)}; last seen at "
             f"{last_seen} ({shot})")
+    if _ambush_route_walker(emu, local_id, route, candidates, walk, live):
+        return
     shot = emu.screenshot(f"{beat}_intercept_unreachable")
     raise ScenarioError(
         f"{beat}: no cell of route walker local id {local_id}'s path "
         f"{candidates} could be reached to intercept it ({shot})")
+
+
+def _ambush_route_walker(emu: Emulator, local_id: int, route: Sequence[RouteStep],
+                         candidates: Sequence[tuple[int, int]],
+                         walk: Callable[[int, int], None],
+                         live: Callable[[], tuple[int, int] | None]) -> bool:
+    """Fallback for `_intercept_route_walker`: stand BESIDE the path and talk
+    when the walker steps onto the adjacent path cell (ROM run 68: Kevlar
+    Center's map068/ev003 paces two cells, so the free one is always its
+    next step and the walker wins every race onto it). Tries each path cell,
+    nearest first, from each off-path side the walk can reach; waits two laps
+    per side. True once an interaction starts."""
+    path = {s.origin for s in route} | {s.target for s in route}
+    budget = 2 * sum(s.frames for s in route)
+    for cell in candidates:
+        for (dx, dy), facing in _TALK_SIDES:
+            side = (cell[0] + dx, cell[1] + dy)
+            if side in path:
+                continue
+            try:
+                walk(*side)
+            except ScenarioError:
+                continue
+            if emu.player_pos() != side:
+                continue
+            waited = 0
+            while waited <= budget:
+                if live() == cell:
+                    emu.face(facing)
+                    if emu.interact(require_script=False):
+                        return True
+                emu.run(_INTERCEPT_POLL_FRAMES)
+                waited += _INTERCEPT_POLL_FRAMES
+    return False
 
 
 def talk_to_moving_npc(emu: Emulator, beat: str, local_id: int, *,
