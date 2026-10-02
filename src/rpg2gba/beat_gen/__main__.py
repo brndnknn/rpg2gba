@@ -887,14 +887,25 @@ def _firing_for(records: Sequence[BeatLocationRecord], nudge_groups: Collection[
     return firing
 
 
+# Elsewhere statuses whose rows cannot fire during this chapter's walk.
+_CANNOT_FIRE_HERE = frozenset({"blocked", "unreachable", "later"})
+
+
 def _unwalked_taint(beats: Sequence[PlannedBeat], verdicts: Sequence[RowVerdict],
-                    row_states) -> list[Taint]:  # noqa: ANN001
+                    row_states, elsewhere: Sequence[Elsewhere] = ()) -> list[Taint]:  # noqa: ANN001
     """Every write of a live row whose page the walk never fires -- or fires
-    but which keeps running (a parallel page) -- as `state_arms` taint."""
+    but which keeps running (a parallel page) -- as `state_arms` taint.
+
+    A row the generator itself placed elsewhere as blocked (a capability it
+    lacks), unreachable or later cannot fire in this chapter at all, so it
+    taints nothing (2026-10-02, ROM run 64: the story model counts Grott-Hole
+    Richboy's switch-100 arm live in CH03 -- it does not enforce Strength --
+    so Maury's switch-100 page on map 73 read as undecided, not dead)."""
     fired = {p for b in beats if b.template in FIRING_TEMPLATES for p in fired_pages(b)}
+    cannot_fire = {e.row_id for e in elsewhere if e.status in _CANNOT_FIRE_HERE}
     out: list[Taint] = []
     for v in verdicts:
-        if v.status != "live":
+        if v.status != "live" or v.row_id in cannot_fire:
             continue
         page = parse_row_id(v.row_id).owning_page_row_id or v.row_id
         states = row_states(parse_row_id(v.row_id).map_id)
@@ -1235,7 +1246,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     beats, state_elsewhere = select_state_arms(
         beats, seeds[chapter_id], order_problems=liveness_problems, row_states=row_states, page_for=_page_for(build_dir),
         firing_for=_firing_for(records, nudge_groups, _event_cell(build_dir)),
-        taint=_unwalked_taint(beats, story.rows, row_states),
+        taint=_unwalked_taint(beats, story.rows, row_states, selection.elsewhere),
         walkable=lambda rid: rid in floors and not floors[rid].refused,
         choice_openers=lambda rid: [a.list_index for a in floors[rid].assertions
                                     if a.kind == "choice"] if rid in floors else [])
