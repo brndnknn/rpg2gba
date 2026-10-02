@@ -43,11 +43,12 @@ import dataclasses
 from collections.abc import Callable, Mapping, Sequence
 
 from rpg2gba.beat_gen.plan import PlannedBeat, make_kwargs
+from rpg2gba.beat_gen.rooms import Place
 
 Hop = tuple[str, int, int, str, str]   # `generic.transit_beat`'s hop shape
-RouteStep = tuple[int, int, Hop, int]  # (src map id, dst map id, hop, event id)
-RouteBetween = Callable[[int, int], tuple[RouteStep, ...]]
-"""(from map, to map) -> ((src map id, dest map id, hop, event id), ...);
+RouteStep = tuple[Place, Place, Hop, int]  # (src place, dst place, hop, event id)
+RouteBetween = Callable[[Place, Place], tuple[RouteStep, ...]]
+"""(from place, to place) -> ((src place, dest place, hop, event id), ...);
 raises `ValueError` when there is no way. The event id is the door event
 each hop crosses -- needed by the gated-door transit guard, since a hop's
 `Hop` tuple (`generic.transit_beat`'s own shape) carries no event id."""
@@ -57,38 +58,53 @@ def _is_crossing_warp(beat: PlannedBeat) -> bool:
     return beat.template == "warp" and not dict(beat.kwargs).get("boundary", False)
 
 
-def _maps_accepted(beat: PlannedBeat, warp_dest: Mapping[str, int]) -> frozenset[int]:
-    """The maps a beat can start on. 2026-09-28: a crossing warp beat now
-    always starts on its origin (`beat.map_id`), never on `dest` -- so this
-    is just the beat's own map for every beat, crossing warp or not.
-    `warp_dest` is kept as a parameter for call-site stability even though
-    it is no longer read here."""
-    del warp_dest
-    return frozenset({beat.map_id})
+def _start_place(beat: PlannedBeat, beat_place: Mapping[str, Place],
+                 warp_origin: Mapping[str, Place]) -> Place:
+    """The place a beat starts in: a crossing warp's origin room, else the
+    beat's own place. Fails loud on a beat with neither."""
+    table = warp_origin if _is_crossing_warp(beat) else beat_place
+    try:
+        return table[beat.name]
+    except KeyError:
+        raise ValueError(f"beat {beat.name!r} has no start place") from None
 
 
 def thread_maps(
     beats: Sequence[PlannedBeat],
     *,
-    start_map: int,
-    warp_dest: Mapping[str, int],
-    nudge_source: Mapping[str, int],
+    start: Place,
+    beat_place: Mapping[str, Place],
+    warp_dest: Mapping[str, Place],
+    warp_origin: Mapping[str, Place],
+    nudge_source: Mapping[str, tuple[int, int | None]],
+    places_on_map: Mapping[int, tuple[Place, ...]] | None = None,
     route_between: RouteBetween | None = None,
+    door_steps: Mapping[tuple[int, int], tuple[RouteStep, ...]] | None = None,
     gated_doors: frozenset[tuple[int, int]] = frozenset(),
 ) -> tuple[PlannedBeat, ...]:
     """`beats` with `start_side`/`end_side` set on every crossing warp (and
     `round_trip` dropped: `end_side` replaces it), and a `transit` beat
     inserted wherever the player must change map between two beats.
 
-    `warp_dest` maps each warp beat to its destination map; `nudge_source`
-    maps each arrival-nudge beat to the map its source warp leaves from.
+    Places are `(map id, room)`. `beat_place` is the place each non-transit
+    beat starts in, `warp_origin` the place each crossing warp is pressed
+    from, `warp_dest` the place a warp or escort lands in. `nudge_source`
+    maps each arrival-nudge beat to `(map, warp event)` its source warp
+    leaves from; the event is None when one warp between the two maps is the
+    only candidate (the template's own `from_event_id` is then omitted).
+    `places_on_map` lists the places of each map (an arrival nudge's transit
+    may enter its source map in any of them -- the shortest route wins; with
+    an event, its last hop must be that very warp: 2026-10-02, the three
+    Kevlar shop doors' nudges all left by one door). `door_steps` maps
+    (map id, warp event) to the hops over that warp; without it, the
+    shortest route's last hop must happen to be the warp.
     A crossing warp beat always starts on its origin (`travel()`s there
     first if the player isn't already) and ends on `dest` (one leg) unless
     the next beat needs `origin` and not `dest`, in which case it ends on
     `origin` (the local back-and-forth, "F", "B"). If the next beat needs
     neither side, the warp still ends on `dest`; the next beat's own travel
     inserts whatever transit it needs. `route_between(a, b)` returns the
-    hops from map `a` to map `b` (raising when there are none); without it,
+    hops from place `a` to place `b` (raising when there are none); without it,
     a map change no beat performs raises `ValueError` naming the beat.
 
     `gated_doors` is `(map id, event id)` pairs of doors that refuse until a
@@ -98,22 +114,31 @@ def thread_maps(
     `ValueError` naming the transit, the hop, and that warp beat (or that
     none claims it)."""
     out: list[PlannedBeat] = []
-    cur = start_map
-    arrived_from: int | None = None     # the map the last crossing left from
+    cur = start
+    # (map, warp event) the last crossing left from; the event is None when
+    # the crossing doesn't say (a warp beat's return leg, an escort).
+    arrived_from: tuple[int, int | None] | None = None
     claimed_doors: set[tuple[int, int]] = set()
     door_beat_name: dict[tuple[int, int], str] = {
         (b.map_id, int(dict(b.kwargs)["event_id"])): b.name
         for b in beats if _is_crossing_warp(b)
     }
 
-    def travel(beat: PlannedBeat, targets: Sequence[int], via: int | None = None) -> None:
+    def arrived_as(need: tuple[int, int | None]) -> bool:
+        if arrived_from is None or arrived_from[0] != need[0]:
+            return False
+        return need[1] is None or arrived_from[1] is None or arrived_from[1] == need[1]
+
+    def travel(beat: PlannedBeat, targets: Sequence[Place],
+               via: tuple[int, int | None] | None = None) -> None:
         """Insert a transit to the first of `targets` with the fewest hops,
-        going through map `via` first when given (an arrival nudge must land
-        from its source map, so the transit's last hop leaves `via`)."""
+        going through map `via[0]` (any place on it) first when given (an
+        arrival nudge must land from its source map, so the transit's last
+        hop leaves `via[0]` -- over warp event `via[1]` when that is set)."""
         nonlocal cur, arrived_from
         if route_between is None:
             raise ValueError(
-                f"beat {beat.name!r} needs map {sorted(targets)}, but the player is on map "
+                f"beat {beat.name!r} needs place {sorted(targets)}, but the player is at "
                 f"{cur}: the route needs a crossing no beat claims")
         routes = []
         for target in targets:
@@ -121,37 +146,55 @@ def thread_maps(
                 if via is None:
                     routes.append(route_between(cur, target))
                 else:
-                    first = route_between(cur, via) if cur != via else ()
-                    routes.append(first + route_between(via, target))
+                    via_map, via_event = via
+                    for mid in sorted((places_on_map or {}).get(via_map, ((via_map, 0),))):
+                        try:
+                            first = route_between(cur, mid) if cur != mid else ()
+                            tail = route_between(mid, target)
+                        except ValueError:
+                            continue
+                        if via_event is not None and (
+                                len(tail) != 1 or tail[0][3] != via_event):
+                            continue
+                        routes.append(first + tail)
+                    if via_event is not None and door_steps is not None:
+                        for step in door_steps.get((via_map, via_event), ()):
+                            if step[1] != target:
+                                continue
+                            try:
+                                first = route_between(cur, step[0]) if cur != step[0] else ()
+                            except ValueError:
+                                continue
+                            routes.append(first + (step,))
             except ValueError:
                 continue
         if not routes:
-            raise ValueError(f"beat {beat.name!r}: no way from map {cur} to {sorted(targets)}"
+            raise ValueError(f"beat {beat.name!r}: no way from {cur} to {sorted(targets)}"
                              + (f" via {via}" if via is not None else ""))
         route = min(routes, key=len)
         for src, _dst, _hop, ev in route:
-            key = (src, ev)
+            key = (src[0], ev)
             if key in gated_doors and key not in claimed_doors:
                 owner = door_beat_name.get(key)
                 raise ValueError(
-                    f"beat {beat.name!r}: its transit crosses gated door (map {src}, "
+                    f"beat {beat.name!r}: its transit crosses gated door (map {src[0]}, "
                     f"event {ev}) before that door's own warp beat has run -- "
                     + (f"{owner!r} claims it later in the order"
                        if owner is not None else "no warp beat in this chapter claims it"))
-        out.append(PlannedBeat(name=f"{beat.name}_transit", template="transit", map_id=cur,
+        out.append(PlannedBeat(name=f"{beat.name}_transit", template="transit", map_id=cur[0],
                                rows=(), group=beat.group,
                                kwargs=make_kwargs(hops=tuple(hop for _, _, hop, _ in route))))
-        arrived_from, cur = route[-1][0], route[-1][1]
+        arrived_from, cur = (route[-1][0][0], route[-1][3]), route[-1][1]
 
     for i, beat in enumerate(beats):
         if _is_crossing_warp(beat):
-            origin, dest = beat.map_id, warp_dest[beat.name]
+            origin, dest = warp_origin[beat.name], warp_dest[beat.name]
             if cur != origin:
                 travel(beat, (origin,))
             end = "dest"
             if i + 1 < len(beats):
-                need = _maps_accepted(beats[i + 1], warp_dest)
-                if origin in need and dest not in need:
+                need = _start_place(beats[i + 1], beat_place, warp_origin)
+                if origin == need and dest != need:
                     end = "origin"
             # `adapt.route_kwargs` always supplies `return_direction` (it
             # used to always be load-bearing, every `end_side` crossed the
@@ -165,25 +208,27 @@ def thread_maps(
             kwargs["start_side"] = "origin"
             kwargs["end_side"] = end
             out.append(dataclasses.replace(beat, kwargs=make_kwargs(**kwargs)))
-            claimed_doors.add((origin, int(dict(beat.kwargs)["event_id"])))
+            claimed_doors.add((origin[0], int(dict(beat.kwargs)["event_id"])))
             if end == "origin":
-                arrived_from, cur = dest, origin
+                arrived_from, cur = (dest[0], None), origin
             else:
-                arrived_from, cur = origin, dest
+                arrived_from, cur = (origin[0], int(dict(beat.kwargs)["event_id"])), dest
             continue
 
+        here = _start_place(beat, beat_place, warp_origin)
         if beat.template == "arrival_nudge" and route_between is not None and (
-                cur != beat.map_id or arrived_from != nudge_source[beat.name]):
-            travel(beat, (beat.map_id,), via=nudge_source[beat.name])
-        elif cur != beat.map_id:
-            travel(beat, (beat.map_id,))
-        if beat.template == "arrival_nudge" and arrived_from != nudge_source[beat.name]:
+                cur != here or not arrived_as(nudge_source[beat.name])):
+            travel(beat, (here,), via=nudge_source[beat.name])
+        elif cur != here:
+            travel(beat, (here,))
+        if beat.template == "arrival_nudge" and not arrived_as(nudge_source[beat.name]):
             raise ValueError(
                 f"arrival nudge {beat.name!r} needs the player to have just landed on map "
-                f"{beat.map_id} from map {nudge_source[beat.name]}; the beat before it is "
+                f"{beat.map_id} from (map, warp event) {nudge_source[beat.name]}; the beat "
+                f"before it is "
                 f"{out[-1].name if out else None!r}")
         arrived_from = None     # only the beat right after a crossing sees the arrival
         out.append(beat)
         if beat.template == "escort":
-            arrived_from, cur = beat.map_id, warp_dest[beat.name]
+            arrived_from, cur = (here[0], None), warp_dest[beat.name]
     return tuple(out)

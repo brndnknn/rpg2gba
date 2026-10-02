@@ -242,10 +242,10 @@ def test_entry_map_inside_region_does_not_change_edges() -> None:
 
 
 def test_arrival_nudge_edges_orders_warp_before_nudge() -> None:
-    nudge_groups = {"n1": (2, 1)}  # nudge lives on map 2, must arrive from map 1
+    nudge_groups = {"n1": (2, 1, None)}  # nudge lives on map 2, must arrive from map 1
     warp_groups = {
-        "w_in": (1, 2),   # origin 1 -> dest 2: matches
-        "w_other": (3, 2),  # wrong origin: no match
+        "w_in": (1, 2, 7),   # origin 1 -> dest 2: matches
+        "w_other": (3, 2, 7),  # wrong origin: no match
     }
 
     result = arrival_nudge_edges(nudge_groups=nudge_groups, warp_groups=warp_groups)
@@ -425,3 +425,14 @@ def test_gated_entry_edges_none_when_the_chapter_starts_inside() -> None:
     accepted = [PrecedenceEdge(before="blocker", after="lab_out", reason="story:z")]
     assert gated_entry_edges(world, **regions, gated_doors=frozenset({(50, 1)}),
                              hard_and_story=accepted) == ()
+
+
+def test_arrival_nudge_edges_match_the_source_warp_event() -> None:
+    # 2026-10-02: map 73's four shop doors all lead to map 31; a nudge that
+    # names its source door is ordered after that door's warp only.
+    nudge_groups = {"n": (31, 73, 4)}
+    warp_groups = {"w2": (73, 31, 2), "w4": (73, 31, 4), "w9": (73, 31, 9)}
+
+    result = arrival_nudge_edges(nudge_groups=nudge_groups, warp_groups=warp_groups)
+
+    assert [(e.before, e.after) for e in result] == [("w4", "n")]

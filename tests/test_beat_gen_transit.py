@@ -4,13 +4,27 @@ from __future__ import annotations
 
 import pytest
 
-from rpg2gba.beat_gen.continuity import thread_maps
+from rpg2gba.beat_gen.continuity import thread_maps as _thread_maps
 from rpg2gba.beat_gen.plan import PlannedBeat, make_kwargs
 
 
 def _beat(name: str, map_id: int, template: str = "generic") -> PlannedBeat:
     return PlannedBeat(name=name, template=template, map_id=map_id, rows=(f"{name}/r",),
                        group=name)
+
+
+def _thread(beats, *, start_map, warp_dest, nudge_source, route_between):
+    """`thread_maps` over single-room maps: map m is the place `(m, 0)`."""
+    wrapped = None
+    if route_between is not None:
+        def wrapped(a, b):
+            return tuple(((s, 0), (d, 0), hop, ev)
+                         for s, d, hop, ev in route_between(a[0], b[0]))
+    return _thread_maps(
+        beats, start=(start_map, 0), beat_place={b.name: (b.map_id, 0) for b in beats},
+        warp_dest={k: (v, 0) for k, v in warp_dest.items()}, warp_origin={},
+        nudge_source={k: v if isinstance(v, tuple) else (v, None)
+                      for k, v in nudge_source.items()}, route_between=wrapped)
 
 
 def _route_between_factory(table):
@@ -30,7 +44,7 @@ def test_non_warp_beat_on_another_map_gets_a_transit_inserted_before_it():
     hops = ((2, 1, ("warp", 2, 1, "L", "R"), 0),)
     route_between = _route_between_factory({(2, 1): hops})
 
-    out = thread_maps(
+    out = _thread(
         [_beat("a", 1)], start_map=2, warp_dest={}, nudge_source={},
         route_between=route_between,
     )
@@ -45,7 +59,7 @@ def test_non_warp_beat_on_another_map_gets_a_transit_inserted_before_it():
 
 def test_without_route_between_the_same_situation_raises_legacy_error():
     with pytest.raises(ValueError, match="no beat claims"):
-        thread_maps(
+        _thread(
             [_beat("a", 1)], start_map=2, warp_dest={}, nudge_source={},
             route_between=None,
         )
@@ -60,7 +74,7 @@ def test_arrival_nudge_not_right_after_its_crossing_gets_a_transit_via_its_sourc
     route_between = _route_between_factory({(1, 5): hop_out, (5, 1): hop_back})
 
     beats = [_beat("a", 1), _beat("n", 1, "arrival_nudge")]
-    out = thread_maps(
+    out = _thread(
         beats, start_map=1, warp_dest={}, nudge_source={"n": 5},
         route_between=route_between,
     )
@@ -77,7 +91,7 @@ def test_route_between_raising_for_every_target_raises_no_way():
     route_between = _route_between_factory({})  # every lookup raises
 
     with pytest.raises(ValueError, match="no way"):
-        thread_maps(
+        _thread(
             [_beat("a", 5)], start_map=1, warp_dest={}, nudge_source={},
             route_between=route_between,
         )
@@ -132,3 +146,55 @@ def test_warp_presses_reads_each_warp_beats_side():
         _beat("g", 48),
     ]
     assert _warp_presses(beats) == {(48, 2): "LEFT"}
+
+
+def test_arrival_nudge_transit_leaves_by_its_own_source_door():
+    # 2026-10-02: map 5 is two rooms, each with a door to map 1 (events 2 and
+    # 4). A nudge that needs event 4's arrival routes into room 1 and out of
+    # its door, not out of room 0's first-sorted door.
+    hops = {
+        ((1, 0), (5, 0)): (((1, 0), (5, 0), ("in0",), 10),),
+        ((1, 0), (5, 1)): (((1, 0), (5, 1), ("in1",), 11),),
+        ((5, 0), (1, 0)): (((5, 0), (1, 0), ("out0",), 2),),
+        ((5, 1), (1, 0)): (((5, 1), (1, 0), ("out1",), 4),),
+    }
+
+    def route_between(a, b):
+        try:
+            return hops[(a, b)]
+        except KeyError:
+            raise ValueError((a, b)) from None
+
+    beats = [_beat("a", 1), _beat("n", 1, "arrival_nudge")]
+    out = _thread_maps(
+        beats, start=(1, 0), beat_place={"a": (1, 0), "n": (1, 0)}, warp_dest={},
+        warp_origin={}, nudge_source={"n": (5, 4)},
+        places_on_map={5: ((5, 0), (5, 1))}, route_between=route_between)
+
+    transit = next(b for b in out if b.template == "transit")
+    assert dict(transit.kwargs)["hops"] == (("in1",), ("out1",))
+
+
+def test_arrival_nudge_transit_uses_door_steps_when_the_route_picks_another_door():
+    # 2026-10-02, CH02: Moki's stacked west exit -- three warps (events 37,
+    # 23, 36) from map 32 to map 33. The shortest route crosses event 37; a
+    # nudge that needs event 23's arrival takes event 23's own step.
+    out37 = ((32, 0), (33, 0), ("ev37",), 37)
+    out23 = ((32, 0), (33, 0), ("ev23",), 23)
+    hops = {((33, 0), (32, 0)): (((33, 0), (32, 0), ("back",), 1),),
+            ((32, 0), (33, 0)): (out37,)}
+
+    def route_between(a, b):
+        try:
+            return hops[(a, b)]
+        except KeyError:
+            raise ValueError((a, b)) from None
+
+    beats = [_beat("a", 33), _beat("n", 33, "arrival_nudge")]
+    out = _thread_maps(
+        beats, start=(33, 0), beat_place={"a": (33, 0), "n": (33, 0)}, warp_dest={},
+        warp_origin={}, nudge_source={"n": (32, 23)}, route_between=route_between,
+        door_steps={(32, 23): (out23,), (32, 37): (out37,)})
+
+    transit = next(b for b in out if b.template == "transit")
+    assert dict(transit.kwargs)["hops"] == (("back",), ("ev23",))

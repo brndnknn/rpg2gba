@@ -71,6 +71,7 @@ from rpg2gba.beat_gen.never_fires import (
     never_fires_proof,
 )
 from rpg2gba.beat_gen.reach import engine_spawn, reachable_sites
+from rpg2gba.beat_gen.rooms import Place, PlaceWorld, RoomIndex
 from rpg2gba.beat_gen.emit import emit_module
 from rpg2gba.beat_gen.facing import (
     event_ids_by_map,
@@ -425,11 +426,17 @@ def _warp_presses(beats: Sequence[PlannedBeat]) -> dict[tuple[int, int], str]:
 def _route_between(world: WorldGraph, maps: frozenset[int],
                    reach: frozenset[tuple[int, tuple[int, int]]],
                    graphs: Mapping[int, MapGraph], *,
+                   rooms: RoomIndex | None = None,
                    stepped_transfers: frozenset[tuple[int, int]] | None = None,
                    warp_presses: Mapping[tuple[int, int], str] | None = None):  # noqa: ANN202
-    """`continuity.RouteBetween` over this chapter's maps: the fewest warp
-    hops from map `a` to map `b`, each crossed from a reachable walkable side
-    of its warp tile. Deterministic: edges are tried in sorted order.
+    """(`continuity.RouteBetween`, door steps) over this chapter's maps. The
+    door steps map (map id, warp event) to every usable hop over that warp,
+    for an arrival nudge that must land through one particular door
+    (2026-10-02: Moki's stacked west exit, Kevlar's shop doors). The route: the fewest warp
+    hops from place `a` to place `b` (`rooms.Place`, `(map id, room)`), each
+    crossed from a reachable walkable side of its warp tile. A hop leaves the
+    room of the side it is pressed from and lands in the room of its landing
+    cell. Deterministic: edges are tried in sorted order.
 
     `stepped_transfers` (see `_stepped_transfers`) limits `warp` edges to the
     events a step fires; None keeps every edge (synthetic test worlds).
@@ -437,7 +444,10 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
     crosses from; a hop over one of those uses it. Otherwise the first
     reachable side in `_PRESS_INTO` order -- `reach` floods through warp
     tiles, so that side can be one the live walker can only reach by
-    stepping on the warp (2026-09-27: Map048's stairs, north side (3,2))."""
+    stepping on the warp (2026-09-27: Map048's stairs, north side (3,2)).
+    `rooms` defaults to a `RoomIndex` over `graphs`."""
+    rooms = rooms if rooms is not None else RoomIndex(graphs)
+
     def lands_reachably(e) -> bool:  # noqa: ANN001
         """The arrival's LANDING is reachable (a door arrival's destination
         cell is the solid door tile; the player stands one step off it)."""
@@ -473,26 +483,31 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
                         _map_constant_for(edge.dst_map))
         return None
 
-    usable = [(e, h) for e in edges if (h := hop_for(e)) is not None]
+    usable = []
+    for e in edges:
+        h = hop_for(e)
+        if h is not None:
+            usable.append((e, h, rooms.place_of(e.src_map, (h[1], h[2])),
+                           rooms.landing_place(e)))
 
     @functools.cache
-    def route(a: int, b: int) -> "tuple[continuity.RouteStep, ...]":
+    def route(a: Place, b: Place) -> "tuple[continuity.RouteStep, ...]":
         # The 4th element of each step is the hop's door event id (the
         # source map's warp event), which `continuity.thread_maps`' gated-
         # door guard needs -- `Hop` itself (`generic.transit_beat`'s own
         # shape) carries no event id, so it rides alongside instead.
-        prev: dict[int, tuple[int, tuple]] = {a: (a, ())}
+        prev: dict[Place, tuple[Place, tuple]] = {a: (a, ())}
         frontier = [a]
         while frontier and b not in prev:
-            nxt: list[int] = []
+            nxt: list[Place] = []
             for m in frontier:
-                for e, h in usable:
-                    if e.src_map == m and e.dst_map not in prev:
-                        prev[e.dst_map] = (m, (e.src_map, e.dst_map, h, e.event_id))
-                        nxt.append(e.dst_map)
+                for e, h, src, dst in usable:
+                    if src == m and dst not in prev:
+                        prev[dst] = (m, (src, dst, h, e.event_id))
+                        nxt.append(dst)
             frontier = nxt
         if b not in prev or a == b:
-            raise ValueError(f"no warp route from map {a} to map {b} over {sorted(maps)}")
+            raise ValueError(f"no warp route from {a} to {b} over {sorted(maps)}")
         path = []
         node = b
         while node != a:
@@ -500,7 +515,41 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
             path.append(step)
         return tuple(reversed(path))
 
-    return route
+    door_steps: dict[tuple[int, int], list] = {}
+    for e, h, src, dst in usable:
+        door_steps.setdefault((e.src_map, e.event_id), []).append((src, dst, h, e.event_id))
+    return route, {k: tuple(v) for k, v in door_steps.items()}
+
+
+def _nudge_source(beat: PlannedBeat) -> tuple[int, int | None]:
+    """(map, warp event) an arrival nudge's arrival comes from: the event is
+    the template's own `from_event_id`, None when one warp is the only
+    candidate (2026-10-02: Kevlar's shop doors, one nudge per door)."""
+    kwargs = dict(beat.kwargs)
+    event = kwargs.get("from_event_id")
+    return (map_uranium_id(kwargs["from_map_constant"]),
+            None if event is None else int(event))
+
+
+def _beat_place(rooms: RoomIndex, beat: PlannedBeat, cell: tuple[int, int] | None) -> Place:
+    """The place a beat stands in: the room of `cell` on its map. A
+    single-room map is room 0 whatever the cell; a multi-room map with no cell
+    for the beat fails loud."""
+    if not rooms.is_multi_room(beat.map_id):
+        return (beat.map_id, 0)
+    if cell is None:
+        raise ValueError(f"beat {beat.name!r} has no cell, and map {beat.map_id} has several "
+                         f"rooms: cannot tell which room it is in")
+    return rooms.place_of(beat.map_id, cell)
+
+
+def _record_cell(record: BeatLocationRecord) -> tuple[int, int]:
+    """Where the player stands for a located group: its first approach cell,
+    else the located cell itself."""
+    if record.approach_candidates:
+        first = record.approach_candidates[0]
+        return (first.x, first.y)
+    return (record.x, record.y)
 
 
 class _NoOccupancy:
@@ -1132,16 +1181,27 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     # 2026-09-28 ruling (one-way warps): enter a dead-end interior, do its
     # first-visit beats, leave; an arrival nudge after the warp landing on it.
     warp_beats = [b for b in beats if b.template == "warp"]
-    group_map = {b.group: b.map_id for b in reversed(beats)}
+    # Places (`beat_gen/rooms.py`): a map with several disconnected rooms is
+    # several regions. A group's place is the room of its located cell; the
+    # dict keeps the FIRST beat per group (later writes win in `reversed`).
+    rooms = RoomIndex(graphs)
+    record_of = {r.beat_id: r for r in records}
+    group_map = {b.group: _beat_place(rooms, b, (_record_cell(record_of[b.group])
+                                                  if b.group in record_of else None))
+                 for b in reversed(beats)}
+    entry_place = rooms.place_of(*entry)
     soft = arrival_nudge_edges(
-        nudge_groups={b.group: (b.map_id, map_uranium_id(dict(b.kwargs)["from_map_constant"]))
+        nudge_groups={b.group: (b.map_id, *_nudge_source(b))
                       for b in beats if b.template == "arrival_nudge"},
-        warp_groups={b.group: (b.map_id, _warp_dest(b, floors)) for b in warp_beats})
+        warp_groups={b.group: (b.map_id, _warp_dest(b, floors), int(dict(b.kwargs)["event_id"]))
+                     for b in warp_beats})
     regions = dict(
-        chapter_maps=frozenset(group_map.values()) | {entry[0]}, entry_map=entry[0],
+        chapter_maps=frozenset(group_map.values()) | {entry_place}, entry_map=entry_place,
         group_map=group_map,
         group_warps={b.group: ((b.map_id, int(dict(b.kwargs)["event_id"])),)
-                     for b in warp_beats})
+                     for b in warp_beats},
+        label=rooms.label, node_map=lambda place: place[0])
+    place_world = PlaceWorld(world, rooms)
     gated = _gated_doors(chain_maps, build_dir)
     route = solve_route(
         chapter_from_locations(chapter_id, records), chapter_id,
@@ -1151,13 +1211,13 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         enabled_by=story_enabled_by, threshold_enabled_by=threshold_by, killed_before=killers,
         guard_enabled_by=guard_enabled_by(guard_waits, {r.beat_id: r.rows[0] for r in records}),
         soft_precedence=lambda accepted, any_of: soft + interior_exit_edges(
-            world, **regions, hard_and_story=accepted, any_of=any_of),
-        order_violations=region_order_check(world, **regions),
+            place_world, **regions, hard_and_story=accepted, any_of=any_of),
+        order_violations=region_order_check(place_world, **regions),
         # 2026-09-30 (operator): a region whose exit is a gated door is held
         # hard, and what its exit waits on outside comes before its entry.
         derived_precedence=lambda accepted, any_of: gated_entry_edges(
-            world, **regions, gated_doors=gated, hard_and_story=accepted, any_of=any_of),
-        hard_order_violations=gated_region_check(world, **regions, gated_doors=gated),
+            place_world, **regions, gated_doors=gated, hard_and_story=accepted, any_of=any_of),
+        hard_order_violations=gated_region_check(place_world, **regions, gated_doors=gated),
     )
 
     # 6. Order, then adapt's route half. A warp whose destination is on no
@@ -1187,16 +1247,54 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
 
     # 7. Map continuity (`beat_gen/continuity.py`): each warp's start and
     #    end side follow from where the player is and where the next beat is.
+    group_node = {n.group: n for n in route.nodes if n.kind == "group"}
+
+    def solved_place(b: PlannedBeat) -> Place:
+        node = group_node.get(b.group)
+        return _beat_place(rooms, b, node.cell if node is not None and node.map_id == b.map_id
+                           else None)
+
+    press_dir = dict(_PRESS_INTO)
+    side_offset = {p: d for d, p in press_dir.items()}
+    beat_place = {b.name: solved_place(b) for b in beats}
+    warp_origin: dict[str, Place] = {}
+    warp_dest: dict[str, Place] = {}
+    for b in beats:
+        if b.template not in ("warp", "escort"):
+            continue
+        kwargs = dict(b.kwargs)
+        if b.template == "warp":
+            if kwargs.get("boundary", False):
+                origin = beat_place[b.name]
+            else:
+                from rpg2gba.playtest.cells import event_cell
+                ex, ey = event_cell(_map_constant_for(b.map_id), int(kwargs["event_id"]))
+                dx, dy = side_offset[str(kwargs["direction"])]
+                origin = _beat_place(rooms, b, (ex + dx, ey + dy))
+            warp_origin[b.name] = origin
+        else:
+            origin = beat_place[b.name]
+        dest_map = _warp_dest(b, floors)
+        landings = sorted({e.dst_map for e in place_world.edges_from(origin)
+                           if e.event_id == int(kwargs["event_id"]) and e.dst_map[0] == dest_map})
+        if landings:
+            warp_dest[b.name] = landings[0]
+        elif not rooms.is_multi_room(dest_map):
+            warp_dest[b.name] = (dest_map, 0)
+        else:
+            raise ValueError(f"{b.template} beat {b.name!r}: no edge from {origin} over event "
+                             f"{kwargs['event_id']} lands on multi-room map {dest_map}")
+    route_between, door_steps = _route_between(
+        world, chain_maps, reachable_sites(entry, graphs, world, chain_maps, occupancy),
+        graphs, rooms=rooms, stepped_transfers=_stepped_transfers(chain_maps, build_dir),
+        warp_presses=_warp_presses(beats))
     beats = thread_maps(
-        beats, start_map=route.nodes[0].map_id,
-        warp_dest={b.name: _warp_dest(b, floors) for b in beats
-                   if b.template in ("warp", "escort")},
-        nudge_source={b.name: map_uranium_id(dict(b.kwargs)["from_map_constant"])
-                      for b in beats if b.template == "arrival_nudge"},
-        route_between=_route_between(
-            world, chain_maps, reachable_sites(entry, graphs, world, chain_maps, occupancy),
-            graphs, stepped_transfers=_stepped_transfers(chain_maps, build_dir),
-            warp_presses=_warp_presses(beats)),
+        beats, start=rooms.place_of(route.nodes[0].map_id, route.nodes[0].cell),
+        beat_place=beat_place, warp_dest=warp_dest, warp_origin=warp_origin,
+        nudge_source={b.name: _nudge_source(b) for b in beats if b.template == "arrival_nudge"},
+        places_on_map={m: rooms.places_on_map(m)
+                       for m in sorted({b.map_id for b in beats} | set(chain_maps))},
+        route_between=route_between, door_steps=door_steps,
         gated_doors=gated,
     )
 

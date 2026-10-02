@@ -16,21 +16,42 @@ be passed to `routing.solver.solve_route(..., soft_precedence=...)`, which
 merges them in only where they close no cycle against the hard/story edges
 already accepted (logging a drop at INFO otherwise) -- so a caller never
 needs to pre-filter for cycles itself.
+
+2026-10-02 (ROM run 63, operator ruling "room-aware continuity + solver"):
+every function works on generic hashable NODES -- map ids by default, or
+`rooms.Place`s -- so one map holding several disconnected rooms (Kevlar's
+shop map 73) is several regions, not one. `world` is anything with
+`edges_from(node)` (`WorldGraph` for maps, `rooms.PlaceWorld` for places),
+`label` renders a node in a reason string (default `map031`; a multi-room
+room reads `map073r2`), and `node_map` gives a node's map id for matching
+`group_warps`, which stay `(map id, event id)`.
 """
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from typing import Any, Protocol
 
 from ..routing.plan import PrecedenceEdge
-from ..traversal.world import WorldGraph
 
 
-def _region_from(world: WorldGraph, start: int, blocked_map: int) -> frozenset[int]:
+class _World(Protocol):
+    def edges_from(self, node: Any) -> Sequence[Any]: ...  # noqa: ANN401
+
+
+def _default_label(node: Any) -> str:  # noqa: ANN401
+    return f"map{node:03d}"
+
+
+def _default_node_map(node: Any) -> int:  # noqa: ANN401
+    return node
+
+
+def _region_from(world: _World, start: Any, blocked_map: Any) -> frozenset[Any]:
     """Maps reachable from `start` over any world edge, never entering
     `blocked_map`, ignoring same-map self-loop edges (e.g. same-map stairs,
     which carry no map-to-map information for this purpose)."""
-    seen: set[int] = {start}
-    stack: list[int] = [start]
+    seen: set[Any] = {start}
+    stack: list[Any] = [start]
     while stack:
         cur = stack.pop()
         for edge in world.edges_from(cur):
@@ -45,7 +66,7 @@ def _region_from(world: WorldGraph, start: int, blocked_map: int) -> frozenset[i
 
 
 def _is_dead_end(
-    world: WorldGraph, region: frozenset[int], blocked_map: int, chapter_maps: frozenset[int],
+    world: _World, region: frozenset[Any], blocked_map: Any, chapter_maps: frozenset[Any],
 ) -> bool:
     if blocked_map in region:
         return False
@@ -64,8 +85,8 @@ def _is_dead_end(
 
 
 def _find_dead_end_regions(
-    world: WorldGraph, chapter_maps: frozenset[int],
-) -> dict[tuple[int, frozenset[int]], None]:
+    world: _World, chapter_maps: frozenset[Any],
+) -> dict[tuple[Any, frozenset[Any]], None]:
     """Every distinct `(parent_map, region)` dead-end pair reachable by some
     warp/seam-warp edge `parent -> entrance_map` within the chapter's own
     maps. A dict (not a set) purely to get deterministic insertion-order
@@ -85,9 +106,10 @@ def _find_dead_end_regions(
 
 
 def _region_doors(
-    world: WorldGraph, chapter_maps: frozenset[int],
+    world: _World, chapter_maps: frozenset[Any],
     group_warps: Mapping[str, tuple[tuple[int, int], ...]],
-) -> list[tuple[int, frozenset[int], frozenset[str], frozenset[str]]]:
+    node_map: Callable[[Any], int] = _default_node_map,
+) -> list[tuple[Any, frozenset[Any], frozenset[str], frozenset[str]]]:
     """(parent, region, entry groups, exit groups) per dead-end region:
     entry groups own a warp `parent -> region`, exit groups one `region ->
     parent`."""
@@ -95,9 +117,11 @@ def _region_doors(
     for parent, region in _find_dead_end_regions(world, chapter_maps):
         entry_groups: set[str] = set()
         exit_groups: set[str] = set()
+        nodes = sorted(chapter_maps | region | {parent})
         for group_id, warps in group_warps.items():
             for map_id, event_id in warps:
-                for edge in world.edges_from(map_id):
+                for edge in (e for n in nodes if node_map(n) == map_id
+                             for e in world.edges_from(n)):
                     if edge.event_id != event_id:
                         continue
                     if edge.src_map == parent and edge.dst_map in region:
@@ -109,16 +133,18 @@ def _region_doors(
 
 
 def _held_regions(
-    world: WorldGraph,
-    chapter_maps: frozenset[int],
+    world: _World,
+    chapter_maps: frozenset[Any],
     group_warps: Mapping[str, tuple[tuple[int, int], ...]],
     gated_doors: frozenset[tuple[int, int]] | None,
-) -> list[tuple[int, frozenset[int], frozenset[str], frozenset[str]]]:
+    node_map: Callable[[Any], int] = _default_node_map,
+) -> list[tuple[Any, frozenset[Any], frozenset[str], frozenset[str]]]:
     """Dead-end regions with an exit warp group; with `gated_doors`, only
     those whose every exit group's door refuses until a condition is met
     (`__main__._gated_doors`) -- a region you cannot walk out of early."""
     out = []
-    for parent, region, entries, exits in _region_doors(world, chapter_maps, group_warps):
+    for parent, region, entries, exits in _region_doors(
+            world, chapter_maps, group_warps, node_map):
         if not exits:
             continue
         if gated_doors is not None and not all(
@@ -129,9 +155,9 @@ def _held_regions(
 
 
 def _stay_breaks(
-    held: Sequence[tuple[int, frozenset[int], frozenset[str], frozenset[str]]],
-    entry_map: int,
-    group_map: Mapping[str, int],
+    held: Sequence[tuple[Any, frozenset[Any], frozenset[str], frozenset[str]]],
+    entry_map: Any,
+    group_map: Mapping[str, Any],
 ) -> Callable[[Sequence[str]], int]:
     def count(order: Sequence[str]) -> int:
         active = {i for i, (_, region, _, _) in enumerate(held) if entry_map in region}
@@ -153,13 +179,15 @@ def _stay_breaks(
 
 
 def gated_region_check(
-    world: WorldGraph,
+    world: _World,
     *,
-    chapter_maps: frozenset[int],
-    entry_map: int,
-    group_map: Mapping[str, int],
+    chapter_maps: frozenset[Any],
+    entry_map: Any,
+    group_map: Mapping[str, Any],
     group_warps: Mapping[str, tuple[tuple[int, int], ...]],
     gated_doors: frozenset[tuple[int, int]],
+    label: Callable[[Any], str] = _default_label,
+    node_map: Callable[[Any], int] = _default_node_map,
 ) -> Callable[[Sequence[str]], int]:
     """`region_order_check` restricted to regions whose exit is a gated door
     -- a `solve_route(hard_order_violations=)` count that must stay 0
@@ -168,19 +196,22 @@ def gated_region_check(
     detour, it is a walk through a shut door (ROM run 34's regen: CH01 left
     the lab after the quiz, before the starter opened its exit)."""
     return _stay_breaks(
-        _held_regions(world, chapter_maps, group_warps, gated_doors), entry_map, group_map)
+        _held_regions(world, chapter_maps, group_warps, gated_doors, node_map),
+        entry_map, group_map)
 
 
 def gated_entry_edges(
-    world: WorldGraph,
+    world: _World,
     *,
-    chapter_maps: frozenset[int],
-    entry_map: int,
-    group_map: Mapping[str, int],
+    chapter_maps: frozenset[Any],
+    entry_map: Any,
+    group_map: Mapping[str, Any],
     group_warps: Mapping[str, tuple[tuple[int, int], ...]],
     gated_doors: frozenset[tuple[int, int]],
     hard_and_story: Sequence[PrecedenceEdge],
     any_of: Sequence[tuple[str, tuple[str, ...]]] = (),
+    label: Callable[[Any], str] = _default_label,
+    node_map: Callable[[Any], int] = _default_node_map,
 ) -> tuple[PrecedenceEdge, ...]:
     """`before=<outside group>, after=<entry group>` edges that make the
     hard stay in a gated region satisfiable by a greedy solver.
@@ -205,7 +236,7 @@ def gated_entry_edges(
 
     edges: set[PrecedenceEdge] = set()
     for parent, region, entries, exits in _held_regions(
-            world, chapter_maps, group_warps, gated_doors):
+            world, chapter_maps, group_warps, gated_doors, node_map):
         if entry_map in region:
             continue
 
@@ -230,17 +261,19 @@ def gated_entry_edges(
             for entry in sorted(entries):
                 edges.add(PrecedenceEdge(
                     before=before, after=entry,
-                    reason=f"gated_entry:map{parent:03d}<-map{min(region):03d}"))
+                    reason=f"gated_entry:{label(parent)}<-{label(min(region))}"))
     return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
 
 
 def region_order_check(
-    world: WorldGraph,
+    world: _World,
     *,
-    chapter_maps: frozenset[int],
-    entry_map: int,
-    group_map: Mapping[str, int],
+    chapter_maps: frozenset[Any],
+    entry_map: Any,
+    group_map: Mapping[str, Any],
     group_warps: Mapping[str, tuple[tuple[int, int], ...]],
+    label: Callable[[Any], str] = _default_label,
+    node_map: Callable[[Any], int] = _default_node_map,
 ) -> Callable[[Sequence[str]], int]:
     """A `solve_route(order_violations=)` count: once an order enters a
     dead-end region (its first entry warp, or the chapter starting inside
@@ -256,7 +289,8 @@ def region_order_check(
     may still be shut (2026-09-28: CH01's lab, exit gated until the starter,
     the continuity guard caught `m032e075p1`)."""
     return _stay_breaks(
-        _held_regions(world, chapter_maps, group_warps, None), entry_map, group_map)
+        _held_regions(world, chapter_maps, group_warps, None, node_map),
+        entry_map, group_map)
 
 
 def _ancestors(group: str, pred: Mapping[str, set[str]]) -> set[str]:
@@ -272,14 +306,16 @@ def _ancestors(group: str, pred: Mapping[str, set[str]]) -> set[str]:
 
 
 def interior_exit_edges(
-    world: WorldGraph,
+    world: _World,
     *,
-    chapter_maps: frozenset[int],
-    entry_map: int,
-    group_map: Mapping[str, int],
+    chapter_maps: frozenset[Any],
+    entry_map: Any,
+    group_map: Mapping[str, Any],
     group_warps: Mapping[str, tuple[tuple[int, int], ...]],
     hard_and_story: Sequence[PrecedenceEdge],
     any_of: Sequence[tuple[str, tuple[str, ...]]] = (),
+    label: Callable[[Any], str] = _default_label,
+    node_map: Callable[[Any], int] = _default_node_map,
 ) -> tuple[PrecedenceEdge, ...]:
     """`before=<interior group>, after=<exit group>` edges for every
     dead-end region found in `chapter_maps`.
@@ -327,7 +363,7 @@ def interior_exit_edges(
     edges: set[PrecedenceEdge] = set()
 
     for parent, region, entry_groups, exit_groups in _region_doors(
-            world, chapter_maps, group_warps):
+            world, chapter_maps, group_warps, node_map):
         if not exit_groups:
             continue
 
@@ -368,7 +404,7 @@ def interior_exit_edges(
                 entrance = min(region)
                 edges.add(PrecedenceEdge(
                     before=g, after=e,
-                    reason=f"interior_exit:map{parent:03d}<-map{entrance:03d}",
+                    reason=f"interior_exit:{label(parent)}<-{label(entrance)}",
                 ))
 
     return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
@@ -376,25 +412,28 @@ def interior_exit_edges(
 
 def arrival_nudge_edges(
     *,
-    nudge_groups: Mapping[str, tuple[int, int]],
-    warp_groups: Mapping[str, tuple[int, int]],
+    nudge_groups: Mapping[str, tuple[int, int, int | None]],
+    warp_groups: Mapping[str, tuple[int, int, int]],
 ) -> tuple[PrecedenceEdge, ...]:
     """`before=<warp group>, after=<nudge group>` edges: an arrival nudge
     (a beat that reads a tile/mat only sensible right after stepping off a
     specific warp) must come after the warp beat that lands the player
     there from the nudge's required source map.
 
-    `nudge_groups[g] = (nudge_map, source_map)`: group `g`'s beat lives on
-    `nudge_map` and needs the player to have just arrived there FROM
-    `source_map`. `warp_groups[g] = (origin_map, dest_map)`: group `g` owns
-    a warp crossing `origin_map -> dest_map`. Every warp group whose
-    `origin_map == source_map` and `dest_map == nudge_map` is ordered before
-    the nudge. Output sorted for determinism.
+    `nudge_groups[g] = (nudge_map, source_map, source_event)`: group `g`'s
+    beat lives on `nudge_map` and needs the player to have just arrived there
+    FROM `source_map` over warp event `source_event` (None: any warp between
+    the two maps). `warp_groups[g] = (origin_map, dest_map, event)`: group `g`
+    owns warp `event` crossing `origin_map -> dest_map`. Every warp group whose
+    `origin_map == source_map`, `dest_map == nudge_map` and event matches is
+    ordered before the nudge (2026-10-02: Kevlar's four shop doors, one nudge
+    each). Output sorted for determinism.
     """
     edges: set[PrecedenceEdge] = set()
-    for nudge_id, (nudge_map, source_map) in nudge_groups.items():
-        for warp_id, (origin_map, dest_map) in warp_groups.items():
-            if origin_map == source_map and dest_map == nudge_map:
+    for nudge_id, (nudge_map, source_map, source_event) in nudge_groups.items():
+        for warp_id, (origin_map, dest_map, event) in warp_groups.items():
+            if origin_map == source_map and dest_map == nudge_map and (
+                    source_event is None or event == source_event):
                 edges.add(PrecedenceEdge(
                     before=warp_id, after=nudge_id,
                     reason=f"arrival_nudge:map{source_map:03d}->map{nudge_map:03d}",
