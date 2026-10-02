@@ -4,21 +4,18 @@
   vendored engine's `new_game.c`.
 - `beat_gen.group.plan_beats`: page-named beats when one event has two
   matches of the same archetype.
-- `beat_gen.adapt._toggled_page`: derives `toggled_page_idx` from the page a
-  toggling NPC's self-switch write reveals.
 - `beat_gen.plan.PlannedBeat`: empty rows are legal only for "transit".
 """
 from __future__ import annotations
 
 import pytest
 
-from rpg2gba.beat_floor.assertion import FloorAssertion, RowFloor, make_params
+from rpg2gba.beat_floor.assertion import RowFloor
 from rpg2gba.beat_gen import group
 from rpg2gba.beat_gen.reach import engine_spawn
-from rpg2gba.beat_gen.adapt import _toggled_page
 from rpg2gba.beat_gen.plan import PlannedBeat, make_kwargs
 from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch
-from rpg2gba.chapter_manifest.schema import ManifestRow, PageCondition
+from rpg2gba.chapter_manifest.schema import ManifestRow
 
 
 # ---------------------------------------------------------------------------
@@ -73,58 +70,6 @@ def test_single_match_of_an_archetype_is_not_page_named():
     beats = group.plan_beats([p0], [_match("flavour_npc", 36, 4, 0)],
                              {p0.row_id: _plain(p0.row_id)})
     assert [b.name for b in beats] == ["m036e004_flavour_npc"]
-
-
-# ---------------------------------------------------------------------------
-# adapt._toggled_page
-# ---------------------------------------------------------------------------
-
-
-def _self_switch_write_floor(row_id: str, event_id: int, letter: str) -> RowFloor:
-    a = FloorAssertion(row_id=row_id, kind="self_switch_write", list_index=0, code=123,
-                       params=make_params(event_id=event_id, letter=letter, value=0),
-                       tag="flow")
-    return RowFloor(row_id=row_id, trigger="action", assertions=frozenset({a}), refusals=())
-
-
-def test_toggled_page_idx_derived_from_the_page_the_self_switch_reveals():
-    talk_row = "map032/ev012/p0"
-    floors = {talk_row: _self_switch_write_floor(talk_row, 12, "B")}
-    rows = [
-        ManifestRow(row_id=talk_row, kind="page", map_id=32, content_hash="x",
-                   event_id=12, page_idx=0),
-        ManifestRow(row_id="map032/ev012/p2", kind="page", map_id=32, content_hash="x",
-                   event_id=12, page_idx=2, condition=PageCondition(self_switch_ch="B")),
-    ]
-
-    out = _toggled_page(talk_row, floors, rows)
-
-    assert out == {"self_switch_letter": "B", "toggled_page_idx": 2}
-
-
-def test_toggled_page_returns_empty_when_no_self_switch_write():
-    talk_row = "map032/ev012/p0"
-    floors = {talk_row: _plain(talk_row)}
-    rows = [ManifestRow(row_id=talk_row, kind="page", map_id=32, content_hash="x",
-                       event_id=12, page_idx=0)]
-
-    assert _toggled_page(talk_row, floors, rows) == {}
-
-
-def test_toggled_page_omits_letter_when_it_is_the_default_a():
-    talk_row = "map032/ev012/p0"
-    floors = {talk_row: _self_switch_write_floor(talk_row, 12, "A")}
-    rows = [
-        ManifestRow(row_id=talk_row, kind="page", map_id=32, content_hash="x",
-                   event_id=12, page_idx=0),
-        ManifestRow(row_id="map032/ev012/p2", kind="page", map_id=32, content_hash="x",
-                   event_id=12, page_idx=2, condition=PageCondition(self_switch_ch="A")),
-    ]
-
-    out = _toggled_page(talk_row, floors, rows)
-
-    assert "self_switch_letter" not in out
-    assert out["toggled_page_idx"] == 2
 
 
 # ---------------------------------------------------------------------------

@@ -133,14 +133,19 @@ def test_single_page_item_ball_reads_its_own_self_switch_write():
     assert got["self_switch_letter"] == "A"
 
 
-@pytest.mark.parametrize(("chapter", "row_id", "expected"), [
+@pytest.mark.parametrize(("chapter", "row_id"), [
     # map064/ev001: toggles inside page 0 (a self-switch branch); page 1 is
     # an unrelated switch-125 page. ROM run 35 read it as the second line.
-    ("CH01", "map064/ev001/p0", None),
-    # map073/ev005: page 1's self-switch reveals page 2.
-    ("CH03", "map073/ev005/p1", 2),
+    ("CH01", "map064/ev001/p0"),
+    # map073/ev005: page 1's self-switch reveals page 2, its own beat.
+    ("CH03", "map073/ev005/p1"),
+    # map031/ev048: p0 <-> p1 round trip. ROM run 62: a p0 `_again` talked
+    # p1, which flipped back to p0 before the planned p1 beat.
+    ("CH03", "map031/ev048/p0"),
+    ("CH03", "map031/ev048/p1"),
 ])
-def test_toggling_npc_names_its_revealed_page_or_none(chapter, row_id, expected):
+def test_toggling_npc_registers_no_second_talk(chapter, row_id):
+    expected = None
     from rpg2gba.beat_floor.walk import floor_for_chapter
     from rpg2gba.chapter_manifest.archetypes import classify_manifest
     from rpg2gba.playtest.archetypes import load_chapter_rows

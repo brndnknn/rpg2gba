@@ -315,41 +315,13 @@ def _flavour_npc_kwargs(
     if page_idx:
         out["page_idx"] = page_idx
     if out["variant"] == "toggling":
-        out.update(_toggled_page(talk_row, floors, rows))
-    return out
-
-
-def _toggled_page(talk_row: str, floors: Mapping[str, RowFloor],
-                  rows: Sequence[ManifestRow]) -> dict:
-    """For a toggling NPC: the self-switch its page (or an arm of it)
-    writes, and the page of the same event that switch reveals -- the page
-    whose own condition is that self-switch. Template defaults ("A", page
-    1) are left implicit. No revealed page: `toggled_page_idx=None`, so the
-    template registers no `_again` beat (the toggle is in-page and its
-    second line is walked by the state arms). More than one: fail loud."""
-    letters = sorted({a.param("letter") for rid, f in floors.items()
-                      if rid == talk_row or rid.startswith(f"{talk_row}/")
-                      for a in f.assertions if a.kind == "self_switch_write"})
-    if len(letters) != 1:
-        return {}
-    letter = letters[0]
-    key = parse_row_id(talk_row).event_key
-    revealed = sorted(r.page_idx for r in rows
-                      if r.kind == "page" and parse_row_id(r.row_id).event_key == key
-                      and r.condition is not None and r.condition.self_switch_ch == letter)
-    if len(revealed) > 1:
-        raise ValueError(f"archetype_kwargs: {talk_row}: self-switch {letter} reveals "
-                         f"pages {revealed} -- expected one")
-    out: dict = {}
-    if letter != "A":
-        out["self_switch_letter"] = letter
-    if not revealed:
-        # The toggle lives inside the page (a self-switch branch); the state
-        # arms' re-fire beats walk its second line (ROM run 35: the template
-        # default read page 1, an unrelated switch-125 page).
+        # One talk per beat (operator ruling, ROM run 62): the plan models a
+        # beat as one firing, so the template's `_again` second talk is never
+        # registered. A revealed page is its own planned beat, walked in route
+        # order; an in-page toggle's second line is a state-arms re-fire beat.
+        # Run 62: map031/ev048's p0 `_again` talked p1, whose write flipped the
+        # NPC back to p0, so the planned p1 beat heard p0's line.
         out["toggled_page_idx"] = None
-    elif revealed[0] != 1:
-        out["toggled_page_idx"] = revealed[0]
     return out
 
 
