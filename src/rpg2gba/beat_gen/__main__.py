@@ -70,6 +70,7 @@ from rpg2gba.beat_gen.never_fires import (
     coord_cells_by_event,
     never_fires_proof,
 )
+from rpg2gba.beat_gen.counter_shadow import counter_shadow_proof
 from rpg2gba.beat_gen.reach import engine_spawn, reachable_sites
 from rpg2gba.beat_gen.rooms import Place, PlaceWorld, RoomIndex
 from rpg2gba.beat_gen.emit import emit_module
@@ -777,6 +778,54 @@ def _touch_never_fires(
             if proof is not None:
                 proofs[page] = proof
                 logger.info("never_fires: %s", proof)
+    return _drop_never_fires(beats, proofs)
+
+
+def _counter_never_fires(
+    beats: Sequence[PlannedBeat], *, row_states, event_cell, graphs: Mapping[int, MapGraph],
+    build_dir: Path,
+) -> tuple[tuple[PlannedBeat, ...], tuple[Elsewhere, ...]]:
+    """Third source of `never_fires` (`beat_gen/counter_shadow.py`): an action
+    page whose event sits on a counter cell as no object, with an emitted
+    object across the counter from every side -- pokeemerald answers with the
+    object behind (2026-10-02, operator: accept the ROM's order)."""
+    constants = build_dir / "porymap" / "map_constants.json"
+    objects: dict[int, frozenset[tuple[int, int]]] = {}
+
+    def object_cells(map_id: int) -> frozenset[tuple[int, int]]:
+        if map_id not in objects:
+            entry_ = _load_map_constants_entry(map_id, constants)
+            emitted = _load_emitted_map(map_id, entry_["dir_name"], DEFAULT_ENGINE_MAPS_DIR)
+            objects[map_id] = frozenset(
+                (o["x"], o["y"]) for o in emitted.get("object_events", []))
+        return objects[map_id]
+
+    proofs: dict[str, str] = {}
+    for b in beats:
+        for rid in b.rows:
+            page = parse_row_id(rid).owning_page_row_id or rid
+            parsed = parse_row_id(page)
+            if page in proofs or parsed.kind != "page":
+                continue
+            states = row_states(parsed.map_id)
+            if page not in states or states[page].trigger != "action":
+                continue
+            cell = event_cell(page)
+            if cell is None:
+                continue
+            proof = counter_shadow_proof(page, cell, graph=graphs[parsed.map_id],
+                                         object_cells=object_cells(parsed.map_id))
+            if proof is not None:
+                proofs[page] = proof
+                logger.info("never_fires: %s", proof)
+    return _drop_never_fires(beats, proofs)
+
+
+def _drop_never_fires(
+    beats: Sequence[PlannedBeat], proofs: Mapping[str, str],
+) -> tuple[tuple[PlannedBeat, ...], tuple[Elsewhere, ...]]:
+    """`beats` without the rows of the proven pages (`proofs`: page row id ->
+    proof), and those rows as `never_fires` elsewhere entries."""
     if not proofs:
         return tuple(beats), ()
     kept: list[PlannedBeat] = []
@@ -1100,7 +1149,10 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         build_dir=build_dir, graphs=graphs, world=world, chain_maps=chain_maps, entry=entry,
         occupancy=occupancy, verdicts=all_verdicts, end_state=story.end_state)
     beats, touch_elsewhere = _touch_never_fires(beats, row_states=row_states, facts_for=facts_for)
-    dead_elsewhere = dead_elsewhere + touch_elsewhere
+    beats, counter_elsewhere = _counter_never_fires(
+        beats, row_states=row_states, event_cell=_event_cell(build_dir), graphs=graphs,
+        build_dir=build_dir)
+    dead_elsewhere = dead_elsewhere + touch_elsewhere + counter_elsewhere
     warp_rows = frozenset(r for b in beats if b.template == "warp" for r in b.rows)
     records, cell_refusals = locate_beats(
         beats, rows_by_id,
