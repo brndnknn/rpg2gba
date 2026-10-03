@@ -46,10 +46,24 @@ Not every RMXP event emits an object into the ROM. The pipeline drops:
   door-sheet graphic (`DROP:*` in the pipeline's own vocabulary — these have
   nothing for the player to see or touch as a real object).
 - An event whose *every* page is story-gated — it has no boot page at all
-  (`DROP:no_boot_page`). **Exception:** if a cutscene still needs it as a
-  movement target, the required-actor pass places it anyway as a
-  **flag-hidden actor** (invisible via a `FLAG_TEMP_1x` visibility flag,
-  present in `object_events` so scripted movement can still target it).
+  (`DROP:no_boot_page`) — **and which has no page with a visible graphic**
+  (non-empty `character_name`, opacity > 0, not a door sheet; blank or
+  opacity-0 autorun/parallel/touch hosts). **Exceptions, both placed as a
+  flag-hidden actor** (invisible via a `FLAG_TEMP_1x` visibility flag, present
+  in `object_events`):
+  1. a cutscene still needs it as a movement target (the required-actor pass);
+  2. **late NPCs** (operator ruling 2026-10-02, map068/ev017 "NurseTut2": one
+     page gated on self-switch A, which the tour autorun sets): *any* no-boot-page
+     event with at least one visible page. It is hidden until its page
+     condition holds (`_visibility_transition_lines`, ON_TRANSITION) and
+     follows later state changes **on the same map** via a generated
+     `MapNNN_RefreshVisibility` script (in the dispatcher file) that the
+     staging pass `call`s right after every write to a key the actor's
+     condition reads (`insert_visibility_refreshes`). The refresh acts only on
+     a hidden<->visible change: `clearflag` + `addobject`, or `setflag` +
+     `removeobject`. Strip-listed, stair, template (`item_ball`/...) and
+     `Trainer(N)` events are untouched; tile-graphic (`tile_id`) pages do not
+     count as visible (the actor path needs an `npc_gfx_map.json` sheet).
 - An event that warps to a map outside the current slice — skipped whole
   (`SKIP:out-of-slice warp`).
 - Dropped-and-unreferenced page bodies are pruned out of the staged script

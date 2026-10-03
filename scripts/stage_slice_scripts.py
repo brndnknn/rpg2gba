@@ -585,6 +585,16 @@ def main() -> int:
         guard_flags: set[str] = set()
         guard_vars: set[str] = set()
         if disp_text is not None:
+            # Mid-map visibility refresh (2026-10-02): a write to a key a hidden
+            # actor's visibility condition reads is followed by a call to the
+            # map's generated refresh script (it lives in the dispatcher file).
+            # Runs BEFORE the re-arm pass; both are idempotent and tolerate each
+            # other's lines.
+            refresh_label = mw.visibility_refresh_label(map_id)
+            refresh_flags, refresh_vars = mw.refresh_guard_symbols(disp_text, refresh_label)
+            final_text = mw.insert_visibility_refreshes(
+                final_text, refresh_label, refresh_flags, refresh_vars
+            )
             guard_flags, guard_vars = _onframe_guard_symbols(disp_text)
             final_text = mw.insert_onframe_rearms(final_text, guard_flags, guard_vars)
 

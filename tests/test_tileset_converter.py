@@ -2697,6 +2697,133 @@ def test_build_object_events_hidden_actor_warp_target_skipped() -> None:
     assert "2" not in result.local_id_map
 
 
+# --- late NPCs + mid-map visibility refresh (operator ruling 2026-10-02) -------
+
+def test_late_npc_without_boot_page_becomes_hidden_actor() -> None:
+    """Map068 EV017 shape: one page gated on self-switch A, no required-actor
+    reference, no boot page -> placed behind a pool flag, with ON_TRANSITION
+    lines that reveal it when self-switch A holds."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    event = _event(17, 8, 5, [_page(cond=_self_cond("A"), name="HGSS_000")], name="NurseTut2")
+    result = mw.build_object_events(
+        {"map_id": 32, "events": [event]}, consts, {32}, npc_gfx=_npc_gfx_fixture(),
+    )
+    assert len(result.object_events) == 1
+    obj = result.object_events[0]
+    assert (obj.x, obj.y) == (8, 5)
+    assert obj.flag == "FLAG_TEMP_11"
+    assert result.local_id_map["17"] == 1
+    assert result.transition_lines == [
+        "# EV017 NurseTut2", "setflag(FLAG_TEMP_11)",
+        "if (flag(FLAG_MAP032_EVENT017_SSA)) {", "    clearflag(FLAG_TEMP_11)", "}",
+    ]
+    assert result.refresh_script is not None
+    assert "addobject(1)" in result.refresh_script and "removeobject(1)" in result.refresh_script
+
+
+def test_no_boot_page_blank_pages_still_dropped() -> None:
+    """No boot page and no page with a visible graphic (blank/opacity-0
+    autorun-style host) keeps the plain drop."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    event = _event(
+        4, 1, 1,
+        [_page(trigger=3, cond=_self_cond("A")),
+         _page(trigger=3, cond=_self_cond("B"), name="HGSS_000", opacity=0)],
+    )
+    result = mw.build_object_events(
+        {"map_id": 32, "events": [event]}, consts, {32}, npc_gfx=_npc_gfx_fixture(),
+    )
+    assert result.object_events == []
+    assert (4, mw.DROP_NO_BOOT_PAGE) in result.drops
+    assert result.refresh_script is None
+
+
+def test_late_npc_pool_overflow_fails_loud() -> None:
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    events = [
+        _event(i, i, 0, [_page(cond=_self_cond("A"), name="HGSS_000")])
+        for i in range(1, mw.ROCK_FLAG_CAPACITY + 2)
+    ]
+    with pytest.raises(ValueError, match="exceed"):
+        mw.build_object_events(
+            {"map_id": 32, "events": events}, consts, {32}, npc_gfx=_npc_gfx_fixture(),
+        )
+
+
+def test_refresh_script_acts_only_on_state_change_and_lists_guards() -> None:
+    reg = FlagRegistry()
+    reg.propose_var(101, "VAR_QUEST_LOG")
+    consts = mc.MapConstantRegistry(Path("x")).mint(32, "Moki Town")
+    event = _event(2, 16, 45, [_page(cond=_var_cond(101, 2), name="HGSS_000")])
+    result = mw.build_object_events(
+        {"map_id": 32, "events": [event]}, consts, {32}, npc_gfx=_npc_gfx_fixture(),
+        flag_registry=reg,
+    )
+    script = result.refresh_script
+    assert script is not None
+    assert script.startswith("script Map032_RefreshVisibility {")
+    assert "if (var(VAR_QUEST_LOG) >= 2) {" in script
+    assert "        if (flag(FLAG_TEMP_11)) {" in script
+    assert "        if (!flag(FLAG_TEMP_11)) {" in script
+    assert mw.refresh_guard_symbols(script, "Map032_RefreshVisibility") == (
+        set(), {"VAR_QUEST_LOG"},
+    )
+
+
+_REFRESH_PORY = """script Map068_EV015_Page1 {
+    msgbox("hi")
+    setflag(FLAG_MAP068_EVENT017_SSA)
+    setflag(FLAG_MAP068_EVENT015_SSA)
+    setvar(VAR_UNRELATED, 1)
+    end
+}
+
+script Map068_OnFrame {
+    setflag(FLAG_MAP068_EVENT017_SSA)
+}
+"""
+
+
+def test_insert_visibility_refreshes_only_after_guarded_write() -> None:
+    label = "Map068_RefreshVisibility"
+    out = mw.insert_visibility_refreshes(
+        _REFRESH_PORY, label, {"FLAG_MAP068_EVENT017_SSA"}, set()
+    )
+    lines = out.splitlines()
+    i = lines.index("    setflag(FLAG_MAP068_EVENT017_SSA)")
+    assert lines[i + 1] == f"    call({label})"
+    assert out.count(f"call({label})") == 1  # unrelated writes and _OnFrame untouched
+    # idempotent, including alongside the ON_FRAME re-arm pass
+    assert mw.insert_visibility_refreshes(out, label, {"FLAG_MAP068_EVENT017_SSA"}, set()) == out
+    rearmed = mw.insert_onframe_rearms(out, {"FLAG_MAP068_EVENT017_SSA"}, set())
+    assert mw.insert_visibility_refreshes(
+        rearmed, label, {"FLAG_MAP068_EVENT017_SSA"}, set()
+    ) == rearmed
+
+
+def test_insert_visibility_refreshes_no_guards_is_noop() -> None:
+    assert mw.insert_visibility_refreshes(_REFRESH_PORY, "L", set(), set()) == _REFRESH_PORY
+
+
+def test_late_npc_real_map068_ev017() -> None:
+    """Real data: Map068 EV017 'NurseTut2' (operator ruling 2026-10-02)."""
+    path = Path("output/uranium-build/maps/Map068.json")
+    if not path.is_file():
+        pytest.skip("deserialized Map068.json not present")
+    map_json = json.loads(path.read_text(encoding="utf-8"))
+    ev = next(e for e in map_json["events"] if e["id"] == 17)
+    assert mw.select_boot_page(ev) is None
+    consts = mc.MapConstantRegistry(Path("x")).mint(68, "Kevlar Pokemon Center")
+    result = mw.build_object_events(
+        {"map_id": 68, "events": [ev]}, consts, {68}, npc_gfx={"HGSS_135": "OBJ_EVENT_GFX_URANIUM_HGSS_135"},
+    )
+    assert (result.object_events[0].x, result.object_events[0].y) == (8, 5)
+    assert "if (flag(FLAG_MAP068_EVENT017_SSA)) {" in result.transition_lines
+    assert mw.refresh_guard_symbols(
+        result.refresh_script, "Map068_RefreshVisibility"
+    ) == ({"FLAG_MAP068_EVENT017_SSA"}, set())
+
+
 def test_build_object_events_object_cap_exceeded_fails_loud() -> None:
     """More than 64 object_events on one map exceeds the fork's
     OBJECT_EVENT_TEMPLATES_COUNT budget — fail loud."""

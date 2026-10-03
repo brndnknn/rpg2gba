@@ -137,6 +137,11 @@
       "map_id": 32, "event_id": 55, "expect_name": "Luz",
       "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
       "reason": "See map 32 EV021."
+    },
+    {
+      "map_id": 49, "event_id": 17, "expect_name": "Lucille",
+      "feature": "Post-game NPC in the player's house: one action page gated on switch 125 (FINAL_EVENT), sprite sheet PU-CURIEend",
+      "reason": "Deferred, not a no-port. 2026-10-02 the converter began placing late NPCs (no boot page, a visible page) as flag-hidden actors (ROM run 69, map068/ev017); this one's sheet has no reference/npc_gfx_map.json entry and nothing in reach of the chain can show her. Operator ruling 2026-10-02: strip for now; revisit (map the sheet, drop this entry) when the post-game is in scope."
     }
   ],
   "maps": [

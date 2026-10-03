@@ -559,6 +559,10 @@ class ObjectBuildResult:
     local_id_map: dict[str, int] = field(default_factory=dict)
     drops: list[tuple[int, str]] = field(default_factory=list)
     transition_lines: list[str] = field(default_factory=list)
+    # `script Map{NNN}_RefreshVisibility { ... }` — mid-map visibility refresh
+    # for this map's hidden actors (see `render_visibility_refresh_script`);
+    # None when no hidden actor has a guardable visibility condition.
+    refresh_script: str | None = None
     # Door cells of GATED doors (classify_event). They carry a coord_event
     # instead of a warp_event, but still need the warp metatile override
     # (MB_NON_ANIMATED_DOOR, collision 0) so the player can step into the
@@ -1602,33 +1606,17 @@ def _assign_visibility_flags(
     }
 
 
-def _visibility_transition_lines(
+def _visibility_expr(
     pages: list[dict],
     uid: int,
     eid: int,
-    name: str,
-    flag: str,
     flag_registry: FlagRegistry | None,
-) -> tuple[list[str], bool]:
-    """ON_TRANSITION lines for one hidden cutscene actor: unconditionally hide
-    it (`setflag`), then clear the flag when RMXP's page-selection state would
-    make it visible — a page with a graphic AND `opacity > 0` whose own
-    condition holds and every higher page's does not (same highest-active-page
-    semantics as `compute_autorun_entries`). A page with a graphic but
-    `opacity == 0` never counts as visible (findings §5) — those actors stay
-    flag-hidden until a hand-authored script `addobject`s them.
-
-    Returns `(lines, always_visible)`. `always_visible` is True when some
-    visible clause has no gating at all (unconditionally satisfiable, no
-    higher page to dominate it) — the actor is visible every time it's
-    placed, so the caller should use flag "0" (never hide) instead of
-    spending a pool slot on it, and `lines` is `[]` in that case. When no
-    page ever qualifies as visible, `lines` is just the `setflag` (always
-    hidden until a script `addobject`s it) — also matching findings §5.
-
-    Fails loud (`ValueError`) on an unresolvable condition term — a
-    story-critical cutscene actor's visibility must never silently default
-    to "always hidden" or "always shown" (CLAUDE.md §4.5)."""
+) -> tuple[str | None, bool]:
+    """The Poryscript condition under which a hidden actor is VISIBLE, per
+    RMXP highest-active-page semantics (see `_visibility_transition_lines`,
+    which wraps this). Returns `(expr, always_visible)`: `expr` is None when
+    no page ever qualifies as visible (never auto-shown) or when
+    `always_visible`. Fails loud on an unresolvable condition term."""
     clauses: list[str] = []
     always_visible = False
     for i, p in enumerate(pages):
@@ -1664,13 +1652,193 @@ def _visibility_transition_lines(
         clauses.append(terms[0] if len(terms) == 1 else "(" + " && ".join(terms) + ")")
 
     if always_visible:
+        return None, True
+    if not clauses:
+        return None, False
+    return (clauses[0] if len(clauses) == 1 else " || ".join(clauses)), False
+
+
+def _visibility_transition_lines(
+    pages: list[dict],
+    uid: int,
+    eid: int,
+    name: str,
+    flag: str,
+    flag_registry: FlagRegistry | None,
+) -> tuple[list[str], bool]:
+    """ON_TRANSITION lines for one hidden cutscene actor: unconditionally hide
+    it (`setflag`), then clear the flag when RMXP's page-selection state would
+    make it visible — a page with a graphic AND `opacity > 0` whose own
+    condition holds and every higher page's does not (same highest-active-page
+    semantics as `compute_autorun_entries`). A page with a graphic but
+    `opacity == 0` never counts as visible (findings §5) — those actors stay
+    flag-hidden until a hand-authored script `addobject`s them.
+
+    Returns `(lines, always_visible)`. `always_visible` is True when some
+    visible clause has no gating at all (unconditionally satisfiable, no
+    higher page to dominate it) — the actor is visible every time it's
+    placed, so the caller should use flag "0" (never hide) instead of
+    spending a pool slot on it, and `lines` is `[]` in that case. When no
+    page ever qualifies as visible, `lines` is just the `setflag` (always
+    hidden until a script `addobject`s it) — also matching findings §5.
+
+    Fails loud (`ValueError`) on an unresolvable condition term — a
+    story-critical cutscene actor's visibility must never silently default
+    to "always hidden" or "always shown" (CLAUDE.md §4.5)."""
+    expr, always_visible = _visibility_expr(pages, uid, eid, flag_registry)
+    if always_visible:
         return [], True
 
     lines = [f"# EV{eid:03d} {name}".rstrip(), f"setflag({flag})"]
-    if clauses:
-        expr = clauses[0] if len(clauses) == 1 else " || ".join(clauses)
+    if expr is not None:
         lines += [f"if ({expr}) {{", f"    clearflag({flag})", "}"]
     return lines, False
+
+
+def _page_has_visible_actor_graphic(page: dict) -> bool:
+    """True when a page shows a placeable character sprite: non-empty
+    `character_name`, opacity > 0, not an animated-door sheet. (Tile
+    graphics — `tile_id > 0` — are NOT placeable as actors by this module's
+    hidden-actor path, which needs an `npc_gfx_map.json` sheet entry, so they
+    don't count.)"""
+    graphic = page.get("graphic", {})
+    name = graphic.get("character_name") or ""
+    return bool(name) and graphic.get("opacity", 255) > 0 and not is_door_sheet(name)
+
+
+VISIBILITY_REFRESH_GUARDS_PREFIX = "# visibility-refresh-guards:"
+_REFRESH_GUARD_FLAG_RE = re.compile(r"\bflag\((FLAG_[A-Z0-9_]+)\)")
+_REFRESH_GUARD_VAR_RE = re.compile(r"\bvar\((VAR_[A-Z0-9_]+)\)")
+
+
+def visibility_refresh_label(uranium_id: int) -> str:
+    return f"Map{uranium_id:03d}_RefreshVisibility"
+
+
+def render_visibility_refresh_script(
+    uranium_id: int,
+    entries: list[tuple[int, str, str, int, str]],
+) -> str | None:
+    """One `script MapNNN_RefreshVisibility { ... }` covering every hidden
+    actor of the map that has a guardable visibility condition. Each entry is
+    `(rmxp_event_id, name, hide_flag, local_id, visible_expr)` — the expr is
+    `_visibility_expr`'s. RMXP re-evaluates page conditions the moment state
+    changes; ON_TRANSITION only does so on map entry, so a script that writes a
+    key the condition reads must call this right after the write.
+
+    Per actor, ACT ONLY ON A STATE CHANGE (hidden -> visible: `clearflag` +
+    `addobject`; visible -> hidden: `setflag` + `removeobject`). A no-op when
+    nothing changed matters: a cutscene may have `addobject`ed a still
+    flag-hidden actor, and an unconditional `removeobject` would yank it.
+    `addobject` ignores the template flag and is a no-op on an already-spawned
+    object; `removeobject` is a no-op on an unspawned one (engine/src/
+    event_object_movement.c `GetAvailableObjectEventId`,
+    `RemoveObjectEventByLocalIdAndMap`). Local ids are the FINAL compiled ids
+    (the dispatcher channel is not remapped). The first body line is a
+    machine-readable list of the guard symbols (`VISIBILITY_REFRESH_GUARDS_PREFIX`)
+    that `refresh_guard_symbols` reads back in the staging pass."""
+    if not entries:
+        return None
+    flags: set[str] = set()
+    variables: set[str] = set()
+    body: list[str] = []
+    for eid, name, flag, local_id, expr in entries:
+        flags.update(_REFRESH_GUARD_FLAG_RE.findall(expr))
+        variables.update(_REFRESH_GUARD_VAR_RE.findall(expr))
+        body += [
+            f"    # EV{eid:03d} {name}".rstrip(),
+            f"    if ({expr}) {{",
+            f"        if (flag({flag})) {{",
+            f"            clearflag({flag})",
+            f"            addobject({local_id})",
+            "        }",
+            "    } else {",
+            f"        if (!flag({flag})) {{",
+            f"            setflag({flag})",
+            f"            removeobject({local_id})",
+            "        }",
+            "    }",
+        ]
+    guards = " ".join(sorted(flags | variables))
+    return "\n".join(
+        [f"script {visibility_refresh_label(uranium_id)} {{",
+         f"    {VISIBILITY_REFRESH_GUARDS_PREFIX} {guards}"]
+        + body + ["    return", "}"]
+    )
+
+
+def refresh_guard_symbols(dispatch_text: str, label: str) -> tuple[set[str], set[str]]:
+    """`(flags, vars)` the refresh script `label` in `dispatch_text` watches,
+    or `(set(), set())` when the map has none."""
+    m = re.search(rf"^script\s+{re.escape(label)}\s*\{{", dispatch_text, re.MULTILINE)
+    if m is None:
+        return set(), set()
+    for line in dispatch_text[m.end():].splitlines():
+        stripped = line.strip()
+        if stripped.startswith(VISIBILITY_REFRESH_GUARDS_PREFIX):
+            tokens = stripped[len(VISIBILITY_REFRESH_GUARDS_PREFIX):].split()
+            return (
+                {t for t in tokens if t.startswith("FLAG_")},
+                {t for t in tokens if t.startswith("VAR_")},
+            )
+    raise ValueError(f"{label}: refresh script has no {VISIBILITY_REFRESH_GUARDS_PREFIX} line")
+
+
+def insert_visibility_refreshes(
+    pory_text: str, label: str, guard_flags: set[str], guard_vars: set[str]
+) -> str:
+    """Emit `call(<label>)` right after every write (setflag/clearflag on a
+    guard flag, setvar/addvar/subvar/copyvar on a guard var) inside a
+    top-level `script` block — same line-based scan as
+    `insert_onframe_rearms`, and likewise idempotent (an existing call, with or
+    without a re-arm line between, suppresses a second one). Never touches the
+    refresh script itself or a `_OnFrame` dispatcher."""
+    if not guard_flags and not guard_vars:
+        return pory_text
+    call_line = f"call({label})"
+    lines = pory_text.splitlines()
+    out: list[str] = []
+    i = 0
+    n = len(lines)
+    while i < n:
+        header = _TOP_BLOCK_HEADER_RE.match(lines[i])
+        if not header:
+            out.append(lines[i])
+            i += 1
+            continue
+        kind, name = header.group(1), header.group(2)
+        j = i + 1
+        while j < n and not re.match(r"^\}\s*$", lines[j]):
+            j += 1
+        block = lines[i:j + 1] if j < n else lines[i:]
+        if kind != "script" or name.endswith("_OnFrame") or name == label:
+            out.extend(block)
+            i = j + 1
+            continue
+        out.append(block[0])
+        body = block[1:]
+        for k, bline in enumerate(body):
+            out.append(bline)
+            fm = _REARM_FLAG_WRITE_RE.match(bline)
+            vm = _REARM_VAR_WRITE_RE.match(bline)
+            indent = None
+            if fm and fm.group(2) in guard_flags:
+                indent = fm.group(1)
+            elif vm and vm.group(2) in guard_vars:
+                indent = vm.group(1)
+            if indent is None:
+                continue
+            nxt = k + 1
+            while nxt < len(body) and body[nxt].strip() in ("", ONFRAME_REARM_LINE):
+                nxt += 1
+            if nxt < len(body) and body[nxt].strip() == call_line:
+                continue
+            out.append(f"{indent}{call_line}")
+        i = j + 1
+    text = "\n".join(out)
+    if pory_text.endswith("\n"):
+        text += "\n"
+    return text
 
 
 # Code-123 RMXP "Control Self Switch" command (mirrors
@@ -2256,6 +2424,30 @@ def build_object_events(
                         f"as a bg/coord event — cannot also place it as an actor"
                     )
             hidden_actor_ids.append(eid)
+
+    # Late NPCs (operator ruling 2026-10-02, map068/ev017): an event with NO
+    # boot page but at least one page with a visible graphic is placed as a
+    # flag-hidden actor exactly like a script-referenced one, so it appears
+    # when its page condition later holds (see `_visibility_transition_lines`
+    # / `render_visibility_refresh_script`). Events whose pages are all blank
+    # / invisible keep the plain drop; strip-listed, stair, template and
+    # Trainer(N) tripwire events are untouched.
+    late_ids: list[int] = []
+    for ev in objects:
+        lid = ev["id"]
+        if (
+            lid in hidden_actor_ids
+            or lid in stair_ids
+            or (stripped_event_ids is not None and lid in stripped_event_ids)
+            or (template_fields is not None and lid in template_fields)
+            or select_boot_page(ev) is not None
+            or _TRAINER_NAME_RE.search(ev.get("name") or "")
+        ):
+            continue
+        if any(_page_has_visible_actor_graphic(pg) for pg in ev["pages"]):
+            late_ids.append(lid)
+            logger.info("map %d EV%03d: no boot page, visible later -> hidden actor", uid, lid)
+    hidden_actor_ids = sorted(set(hidden_actor_ids) | set(late_ids))
 
     rock_ids: list[int] = []
     hide_ids: list[int] = []
@@ -2926,13 +3118,19 @@ def build_object_events(
             result.local_id_map[str(eid)] = len(result.object_events)
 
     # --- hidden cutscene actors (findings §3.3/§5) ---------------------------
+    refresh_entries: list[tuple[int, str, str, int, str]] = []
     for eid in hidden_actor_ids:
         actor_event = event_by_id[eid]
         actor_pages = actor_event["pages"]
         graphic_idx = next(
-            (i for i, p in enumerate(actor_pages) if p.get("graphic", {}).get("character_name")),
+            (i for i, p in enumerate(actor_pages) if _page_has_visible_actor_graphic(p)),
             None,
         )
+        if graphic_idx is None:
+            graphic_idx = next(
+                (i for i, p in enumerate(actor_pages) if p.get("graphic", {}).get("character_name")),
+                None,
+            )
         if graphic_idx is None:
             raise ValueError(
                 f"map {uid} EV{eid:03d}: required actor has no page with a "
@@ -2982,6 +3180,9 @@ def build_object_events(
         actor_flag = "0" if always_visible else vis_flags[eid]
         if lines:
             result.transition_lines.extend(lines)
+        refresh_expr = None
+        if not always_visible:
+            refresh_expr, _ = _visibility_expr(actor_pages, uid, eid, flag_registry)
 
         result.object_events.append(
             ObjectEvent(
@@ -2991,6 +3192,13 @@ def build_object_events(
             )
         )
         result.local_id_map[str(eid)] = len(result.object_events)
+        if refresh_expr is not None:
+            refresh_entries.append(
+                (eid, actor_event.get("name", ""), vis_flags[eid],
+                 len(result.object_events), refresh_expr)
+            )
+
+    result.refresh_script = render_visibility_refresh_script(uid, refresh_entries)
 
     if len(result.object_events) > 64:
         raise ValueError(
@@ -3548,6 +3756,8 @@ def build_slice_maps(
         map_scripts = render_map_scripts(consts, frame_entries, result.transition_lines)
         if map_scripts is not None:
             blocks.append(map_scripts)
+        if result.refresh_script is not None:
+            blocks.append(result.refresh_script)
 
         disp_out = dispatcher_dir / f"Map{uid:03d}_dispatch.pory"
         if blocks:

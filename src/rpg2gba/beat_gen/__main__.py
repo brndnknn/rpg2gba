@@ -30,6 +30,7 @@ import dataclasses
 import functools
 import json
 import logging
+import re
 from collections.abc import Callable, Collection, Mapping, Sequence
 from pathlib import Path
 
@@ -126,7 +127,11 @@ from rpg2gba.routing.locations import (
     cell_for_row,
     chapter_from_locations,
 )
-from rpg2gba.routing.occupancy import _load_emitted_map, _load_map_constants_entry
+from rpg2gba.routing.occupancy import (
+    MapOccupancy,
+    _load_emitted_map,
+    _load_map_constants_entry,
+)
 from rpg2gba.routing.pathing import RoutePlanningError, landing_cell
 from rpg2gba.routing.plan import write_plan
 from rpg2gba.routing.solver import RouteCandidate, solve_route
@@ -733,6 +738,57 @@ def _page_candidate(verdicts: Mapping[str, RowVerdict], end_state, states: Mappi
     return candidate
 
 
+_DISPATCH_EVENT_RE = re.compile(r"^Map(\d{3})_EV(\d{3})_")
+
+
+class _StoryOccupancy(Mapping):
+    """`_LazyOccupancy` without the objects that can never be visible in the
+    chapter: a flag-hidden actor (2026-10-02, late NPCs placed by the
+    converter) none of whose visible-graphic pages can be the live page
+    (`_page_candidate`). On the ROM such an object is never spawned, so it
+    blocks nothing -- map050's FINAL_EVENT-gated EV024/EV025 had taken
+    EV007's only approach cell away. An event with no story verdict for a
+    visible page stays blocking (`_page_candidate` answers True)."""
+
+    def __init__(self, inner: Mapping, *, build_dir: Path, candidate_for) -> None:  # noqa: ANN001
+        self._inner = inner
+        self._build_dir = build_dir
+        self._candidate_for = candidate_for
+        self._cache: dict[int, MapOccupancy] = {}
+
+    def _never_visible(self, map_id: int, event_id: int) -> bool:
+        data = load_map_json(map_id, self._build_dir / "maps")
+        event = next((e for e in data.get("events", []) if e and e["id"] == event_id), None)
+        if event is None:
+            return False
+        candidate = self._candidate_for(map_id)
+        visible = [i for i, p in enumerate(event.get("pages", []))
+                   if (p.get("graphic") or {}).get("character_name")
+                   and (p.get("graphic") or {}).get("opacity", 255) > 0]
+        return bool(visible) and not any(
+            candidate(f"map{map_id:03d}/ev{event_id:03d}/p{i}") for i in visible)
+
+    def __getitem__(self, map_id: int) -> MapOccupancy:
+        if map_id not in self._cache:
+            occ = self._inner[map_id]
+            kept = []
+            for tile in occ.tiles:
+                m = _DISPATCH_EVENT_RE.match(tile.script)
+                if m and int(m.group(1)) == map_id and self._never_visible(map_id, int(m.group(2))):
+                    logger.info("occupancy: map %d %s is never visible in this chapter -- "
+                                "not blocking %s", map_id, tile.script, tile.cell)
+                    continue
+                kept.append(tile)
+            self._cache[map_id] = dataclasses.replace(occ, tiles=tuple(kept))
+        return self._cache[map_id]
+
+    def __iter__(self):  # noqa: ANN204 - Mapping protocol
+        return iter(self._inner)
+
+    def __len__(self) -> int:
+        return len(self._inner)
+
+
 def _map_facts_factory(
     *, row_states, page_for, event_cell, build_dir: Path, graphs: Mapping[int, MapGraph],
     world: WorldGraph, chain_maps: frozenset[int], entry: tuple[int, tuple[int, int]], occupancy,
@@ -1141,7 +1197,9 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                                                   build_dir)
     world = _build_world(build_dir)
     entry = _predecessor_end(predecessor) if predecessor is not None else engine_spawn()
-    occupancy = _LazyOccupancy(build_dir)
+    occupancy = _StoryOccupancy(
+        _LazyOccupancy(build_dir), build_dir=build_dir,
+        candidate_for=lambda m: _page_candidate(all_verdicts, story.end_state, row_states(m)))
     # 3c. Touch pages the walk can't step on while they are live (guard rows,
     #     arrival displacement): never_fires, not beats.
     facts_for = _map_facts_factory(
