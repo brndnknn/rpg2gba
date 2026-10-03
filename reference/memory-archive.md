@@ -10,6 +10,27 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-10-02 — Last Session Summary entry 2026-10-01 (ROM runs 55–61, generated CH02 green)
+
+**2026-10-01 (ROM runs 55–61, generated CH02 green 185/185):** **Runner speed (operator-asked):**
+each seed capture is an in-game save, ~2.6s wall clock — measured 7.7 of an 8.5-min CH02 attempt;
+a completed predecessor's replay now seeds only its boundary beat (`1ebdbbfd`), full CH02 run
+8.5 → ~3 min. **Seeds refuse a changed prefix:** `Beat.source_digest` (sha256 of the registering
+module statement) → `prefix_sha256` in seed metadata; `--from-beat`/`walk` reject a seed whose
+earlier beats were regenerated. Harness fixes keep seeds valid, so **resume from the failing beat
+after a harness fix** (`--from-beat X`); full run only for the green record. **Fixes:** generated
+walks absorb wild battles, a lock that isn't one re-raised untouched (`771360e8`); item boxes check
+every box read (berry tree's 3-box flow, `e35ef168`); beaten sight trainer talked to where it
+stands in the generic template (`ddfe13df`); **operator ruling:** a native berry tree's pick
+(`gBlankBerryTree`) IS the RMXP page's self-switch write (`9bc6f5ec`, `bfee6641` shape);
+**operator ruling:** a trainer re-talk presses A in place right after its battle, checking the
+live trainer is on the faced tile (`06966620` — battle + re-talks share a route group; the engine
+freezes the trainer and turns the player); `interact` wins an encounter already under way before
+pressing A (`2a547c17`, seeded repro 4/24 → 0/24). **Lesson:** a rare flake is worth a seeded
+repro across frame offsets — the trace named the cause in one pass where reading code had
+guessed twice. Open: `reference/playtest_rule_versions.json` carries test-chapter entries
+(`t1`, `t5`, `v4…`) that older runner tests write into the real ledger.
+
 ## Archived 2026-10-01 — Last Session Summary entry 2026-09-30/10-01 (ROM runs 50–54, CH02 walk)
 
 **2026-09-30/10-01 (ROM runs 50–54, CH02 walk):** One fix per run, committed with tests (details in
