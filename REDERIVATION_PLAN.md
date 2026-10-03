@@ -25,7 +25,7 @@ and §13. Branch `rederive-ch01-ch04`.
 C1–C10); P8a-2 is retired and §15.3's residue becomes the generator's backlog. Read §16 before
 any further P8 work.
 
-**2026-10-03: C9 committed (`67a88c1e`) and P11 passed (operator).** Before merge: settle C10,
+**2026-10-03: C9 committed (`67a88c1e`) and P11 passed (operator).** C10 deferred to CH06 (#122). Before merge:
 a full suite run, then hand-suite removal as its own commit.
 
 ---
@@ -208,7 +208,7 @@ prerequisite.
 | **P8** | **Derive, diff, adjudicate the manifests** — CH01–CH04, one chapter at a time, diffed against P7's freeze. Every diff line classified 1/2/3 per §1. Category-3 lines stop the pass. Also carries §10 R3's two code changes and R1's `var_` prefix. | #65 | **DONE** — CH01 `55b98f51`, CH02/CH03 adjudicated + committed, CH04 clean. All category 1. |
 | **P8a-1** | **Declare `rows=` (and `archetype=`) on every CH01–CH04 beat.** The half of P8a that P8b actually needs: §13.1's join input. Done by annotating the existing hand-written beats rather than by template adoption — the templates populate `rows=` as a side effect, but the declaration is the deliverable and does not require them. | #67, §13 | **DONE 2026-09-11** — CH04 `962bf578`, CH02 `677ef344`/`d62be7d3`, CH01+CH03 `8fe197d8`. 48 of the 74 own beats carry `rows=`, 73 rows claimed, 22 carry `archetype=`; the other 26 beats claim nothing and each file records why. |
 | **P8a-2** | **Re-author those beats onto the archetype templates**, adopting `entry_at`, paying the coordinate literals down to zero (§5). Now a code-quality and assertion-strength step, not a P8b prerequisite. Needs the §13.3 templates; #94 (registry) is DONE 2026-09-10 (`c91f70d3`) and no longer gates it. **Read §5's warning first: some literals are load-bearing ROM-verified truth, and the AST ratchet counts literals without ever asking whether one is still true.** | #67, §13 | **RETIRED 2026-09-16** — subsumed by §16 C5/C9 (regenerated behind a frozen match-or-beat test) |
-| **P8c** | **Generated beats** — branch-arm rows, story-state model, engine forks, generic extractor floor with layered archetypes, whole-module generator, Ruby-subset interpreter, CH01–CH05 regenerated behind a freeze, offline flavour checks. Steps C1–C10 in §16.3. | §16 | **C1–C9 DONE** (C9 `67a88c1e`, 2026-10-03); C10 open — see §16.3 |
+| **P8c** | **Generated beats** — branch-arm rows, story-state model, engine forks, generic extractor floor with layered archetypes, whole-module generator, Ruby-subset interpreter, CH01–CH05 regenerated behind a freeze, offline flavour checks. Steps C1–C10 in §16.3. | §16 | **C1–C9 DONE** (C9 `67a88c1e`, 2026-10-03); C10 deferred to CH06 (#122) |
 | **P8b** | **Generate the disposition files** — derive `cosmetic`/`blocked`/`unreachable`/`boundary`, join `beat:` off P8a-1's `rows=` (which now exist), hand-decide the **100**-row residue (measured; §13.1's ~109 was close). Affirmation is a separate pass from derivation. Carries §10 R2/R3's flip on CH04+CH05. **Read §14 first — it carries the operator's four rulings and corrects four claims made elsewhere in this plan.** Precedence is `boundary` > `beat` > `blocked` > `cosmetic` (§14.4); clerical rows get `derived_hash`, not `affirmed_hash` (§14.2); and P8b now absorbs **all ten** transpiler work items for the 28 undispositionable rows, item 7 timeboxed (§14.1). | #65 | TODO |
 | **P9** | **Route plans** for all four chapters (`routing plan --chapter CHnn --module <mod>`). Still last: `routing locations` hard-fails without P8b's output. | #67 | TODO |
 | **P10** | **Discharge the inherited obligations** (§4) and delete the scaffolding that expires with this task. | — | TODO |
@@ -1642,7 +1642,7 @@ Each lands unit-green. None is ROM-verified before P11.
 | **C6** | Generator + solver integration: whole-module emit, review doc, refusal list, idempotence test | R1, R4, R7 | **Part one DONE 2026-09-22** (unit-green; CH05 end to end); see "C6 part one landed" below. Part two (map continuity, boundary claims, A5, CH01–CH04) **DONE 2026-09-23** |
 | **C8** | Shared Ruby-subset interpreter + input search; `map050/ev019` | R10 | **DONE 2026-09-24** — all seven stages; see "C8 shape" and the stage entries below |
 | **C9** | Regenerate CH01–CH05 behind the frozen test, one commit per chapter — **lands alongside the hand module, never overwrites it** | R12 | **DONE 2026-10-03** — operator approved all five review docs; `chapters_gen/ch01–ch05.py` committed together in `67a88c1e` (one commit, not per chapter: all five were approved together). Hand suites still present; removal is the separate gated step. See "C9 rulings" below |
-| **C10** | `offline:` verdict head, offline flavour checker, ROM sample selection | R2, R3 | TODO |
+| **C10** | `offline:` verdict head, offline flavour checker, ROM sample selection | R2, R3 | **DEFERRED to CH06** (operator, 2026-10-03) — CH01–CH05 walk every generated beat on the ROM, so they don't need it (R13); only `offline_eligible` exists. `PROJECT_TODO.md` #122 |
 
 **C1 shape (operator, 2026-09-16):** (a) every code 111 yields **two** arm rows, then and
 else, even when the source has no 411 — the fall-through is a walkable path; (b) the parent

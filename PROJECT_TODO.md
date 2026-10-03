@@ -17,6 +17,20 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 122. C10 deferred to CH06: offline verdict head, offline checker, ROM sample selection
+
+`REDERIVATION_PLAN.md` §16.3 C10 (rulings R2/R3). Operator ruled 2026-10-03:
+defer past the `rederive-ch01-ch04` merge. Only the eligibility flag exists
+(`beat_floor/assertion.py` `RowFloor.offline_eligible`, surfaced as the review
+docs' `-- offline`/`-- ROM` labels). Not built: an `offline:<archetype>` verdict
+head distinct from `beat:`, a checker that evaluates offline-eligible rows
+without the emulator (a failure is an error), and ROM sample selection (one per
+variant × map × emission shape, resampled on revisit). Deferral is safe for
+CH01–CH05 because every generated beat there is walked on the ROM from boot,
+which is stronger than C10's offline check plus sample. **To close:** build
+before CH06's flavour-NPC count makes walking every row on hardware the
+bottleneck.
+
 ### 121. HM field-move gates are still Emerald's per-badge flags, not Uranium's badge counts
 
 CH04 boot walk (2026-10-03): Flash outside battle was refused with Emerald's
