@@ -18,6 +18,11 @@ static bool32 IsFieldMoveUnlocked_Cut(void)
 
 static bool32 IsFieldMoveUnlocked_Flash(void)
 {
+    // BEGIN URANIUM PATHFINDER SLICE — Uranium sets BADGEFORFLASH = 0 with
+    // HIDDENMOVESCOUNTBADGES = true (002__Settings.rb): Flash needs no badge.
+    // The other HMs keep Emerald's gates until the badge mapping is decided.
+    return TRUE;
+    // END URANIUM PATHFINDER SLICE
     if (IS_FRLG)
         return FlagGet(FLAG_BADGE01_GET);
 

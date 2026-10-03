@@ -17,6 +17,19 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 121. HM field-move gates are still Emerald's per-badge flags, not Uranium's badge counts
+
+CH04 boot walk (2026-10-03): Flash outside battle was refused with Emerald's
+"needs a badge" message. Uranium counts badges (`HIDDENMOVESCOUNTBADGES = true`,
+`002__Settings.rb`) with thresholds Flash 0, Rock Smash 1, Cut 3, Strength 4,
+Surf 5, Dive 7, Fly 8, Waterfall 8. Emerald gates each on one specific badge
+(`engine/src/field_move.c` `IsFieldMoveUnlocked_*`). **Flash fixed** (fenced
+`return TRUE`, pinned by `tests/test_field_move_gates.py`); operator ruled
+Flash-only for now. **To close:** once the badge→flag mapping is decided
+(`essentials_to_emerald_map.md` "Deferred — badges"), gate the rest on a badge
+count. Rock Smash currently works only because the boot harness sets
+`FLAG_BADGE03_GET` (`new_game.c`); Uranium needs just one badge.
+
 ### 120. Generated suites have no route plan, so their walks go uncompared
 
 ROM run 76 (2026-10-02): generated CH05 failed at Hiker Nunes (map037/ev004)
