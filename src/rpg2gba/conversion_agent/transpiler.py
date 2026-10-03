@@ -746,8 +746,9 @@ _ITEM_BALL_CALL_RE = re.compile(
 )
 _BERRY_PLANT_CALL_RE = re.compile(r"^\s*pbBerryPlant\s*$")
 _PICK_BERRY_CALL_RE = re.compile(
-    r"^\s*(?:Kernel\.)?pbPickBerry\(\s*(?:::)?PBItems::(\w+)\s*,\s*\d+\s*\)\s*$"
+    r"^\s*(?:Kernel\.)?pbPickBerry\(\s*(?:::)?PBItems::(\w+)\s*,\s*(\d+)\s*\)\s*$"
 )
+_PICK_BERRY_ANY_RE = re.compile(r"pbPickBerry\b")
 
 # REDERIVATION_PLAN.md §15.1 item 8 (third TF_KIND_* instance, "no engine/
 # changes"): a pushable Strength boulder. `pbPushThisBoulder`
@@ -819,7 +820,7 @@ def detect_item_ball(event: dict) -> tuple[str, int] | None:
     return None
 
 
-def detect_berry_tree(event: dict) -> tuple[str | None, bool] | None:
+def detect_berry_tree(event: dict) -> tuple[str | None, bool, int | None] | None:
     """Scan every page's raw commands for ``pbBerryPlant`` (code 355) and/or
     ``pbPickBerry(PBItems::X, n)`` (code 111).
 
@@ -831,16 +832,20 @@ def detect_berry_tree(event: dict) -> tuple[str | None, bool] | None:
 
     Returns ``None`` when neither call appears (not a berry-plant event at
     all — caller falls through to the classifiers / general transpiler).
-    Otherwise returns ``(uranium_berry_symbol_or_None, planted)``:
+    Otherwise returns ``(uranium_berry_symbol_or_None, planted, yield)``:
     ``pbPickBerry`` present -> the pre-grown 2-/3-page kind, ``planted=True``,
-    symbol from the call; ``pbPickBerry`` absent (bare-soil 1-page kind) ->
-    ``(None, False)``. The 3-page Map117 variant (soil page duplicated
+    symbol and yield (the call's literal second argument, the tree's fixed
+    first-pick count) from the call; ``pbPickBerry`` absent (bare-soil 1-page
+    kind) -> ``(None, False, None)``. A ``pbPickBerry`` whose item or count
+    is not a literal positive int, or two calls that disagree on the count,
+    raises ``ValueError`` (CLAUDE.md §4.5) — no default yield. The 3-page Map117 variant (soil page duplicated
     before and after the tree page) needs no special case: scanning every
     page for both calls finds them regardless of how many soil pages flank
     the tree page.
     """
     has_plant = False
     berry_symbol: str | None = None
+    berry_yield: int | None = None
     for page in event.get("pages", []):
         for cmd in page.get("list", []):
             script_text = _script_call_text(cmd)
@@ -851,10 +856,25 @@ def detect_berry_tree(event: dict) -> tuple[str | None, bool] | None:
             if cond_text is not None:
                 m = _PICK_BERRY_CALL_RE.match(cond_text)
                 if m:
+                    count = int(m.group(2))
+                    if count < 1 or (berry_yield is not None and count != berry_yield):
+                        raise ValueError(
+                            f"transpiler: EV{event.get('id')!r} pbPickBerry yield "
+                            f"{count} is not a positive int consistent with "
+                            f"{berry_yield!r} on another page — cannot pick the "
+                            f"tree's first-pick yield"
+                        )
                     berry_symbol = m.group(1)
+                    berry_yield = count
+                elif _PICK_BERRY_ANY_RE.search(cond_text):
+                    raise ValueError(
+                        f"transpiler: EV{event.get('id')!r} pbPickBerry call "
+                        f"{cond_text!r} has no literal PBItems item / positive-int "
+                        f"yield — cannot read the tree's first-pick yield"
+                    )
     if not has_plant and berry_symbol is None:
         return None
-    return berry_symbol, berry_symbol is not None
+    return berry_symbol, berry_symbol is not None, berry_yield
 
 
 def detect_push_boulder(event: dict) -> bool:
@@ -934,9 +954,12 @@ def resolve_native_object_template(map_id: int, event: dict, ctx: "TranspileCont
         )
         return True
 
-    berry = detect_berry_tree(event)
+    try:
+        berry = detect_berry_tree(event)
+    except ValueError as exc:
+        raise ValueError(f"Map{map_id:03d}: {exc}") from exc
     if berry is not None:
-        berry_symbol, planted = berry
+        berry_symbol, planted, berry_yield = berry
         berry_const = (
             _resolve_fork_item(
                 ctx, berry_symbol, map_id=map_id, event_id=event_id, kind="berry_tree"
@@ -946,7 +969,8 @@ def resolve_native_object_template(map_id: int, event: dict, ctx: "TranspileCont
         )
         ctx.record_template_fields(
             map_id, event_id,
-            {"kind": "berry_tree", "berry_item": berry_const, "planted": planted},
+            {"kind": "berry_tree", "berry_item": berry_const, "planted": planted,
+             "yield": berry_yield},
         )
         return True
 

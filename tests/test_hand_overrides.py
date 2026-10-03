@@ -596,8 +596,8 @@ def test_transpile_corpus_writes_template_fields_sidecar_for_berry_trees(
     sidecar_path = out_dir / "scripts" / "Map033.template_fields.json"
     assert json.loads(sidecar_path.read_text(encoding="utf-8")) == {
         "events": {
-            "100": {"kind": "berry_tree", "berry_item": "ITEM_ORAN_BERRY", "planted": True},
-            "101": {"kind": "berry_tree", "berry_item": None, "planted": False},
+            "100": {"kind": "berry_tree", "berry_item": "ITEM_ORAN_BERRY", "planted": True, "yield": 2},
+            "101": {"kind": "berry_tree", "berry_item": None, "planted": False, "yield": None},
         }
     }
     queue_raw = (out_dir / "transpile_unhandled.jsonl").read_text(encoding="utf-8")

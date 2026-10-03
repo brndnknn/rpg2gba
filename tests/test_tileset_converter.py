@@ -3630,7 +3630,10 @@ def _item_ball_tf(item: str = "ITEM_POTION", amount: int = 1) -> dict:
 
 
 def _berry_tree_tf(berry_item: str | None = "ITEM_ORAN_BERRY", planted: bool = True) -> dict:
-    return {"kind": mw.TF_KIND_BERRY_TREE, "berry_item": berry_item, "planted": planted}
+    return {
+        "kind": mw.TF_KIND_BERRY_TREE, "berry_item": berry_item, "planted": planted,
+        "yield": 2 if planted else None,
+    }
 
 
 def _self_switch_item_ball_pages(name: str = "HGSS_000") -> list[dict]:
@@ -3680,6 +3683,18 @@ def test_build_object_events_item_ball_null_flag_fails_loud() -> None:
             map_json, consts, {33}, npc_gfx=_npc_gfx_fixture(),
             template_fields={2: _item_ball_tf()},
         )
+
+
+def test_validate_berry_tree_yield_rules() -> None:
+    v = mw._validate_template_fields
+    v({1: _berry_tree_tf()}, 5, None)
+    v({1: _berry_tree_tf(None, False)}, 5, None)
+    missing = _berry_tree_tf()
+    del missing["yield"]
+    for bad in (missing, {**_berry_tree_tf(), "yield": None}, {**_berry_tree_tf(), "yield": 0},
+                {**_berry_tree_tf(), "yield": True}, {**_berry_tree_tf(None, False), "yield": 2}):
+        with pytest.raises(ValueError, match="yield"):
+            v({1: bad}, 5, None)
 
 
 def test_build_object_events_berry_tree_planted() -> None:

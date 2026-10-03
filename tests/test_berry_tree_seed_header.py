@@ -12,6 +12,7 @@ unit tests with no real git/fork dependency.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -45,9 +46,9 @@ def test_only_planted_rows_emitted_and_bare_soil_omitted(
         out,
         33,
         {
-            "100": {"berry_item": "ITEM_ORAN_BERRY", "kind": "berry_tree", "planted": True},
-            "101": {"berry_item": None, "kind": "berry_tree", "planted": False},
-            "102": {"berry_item": "ITEM_ORAN_BERRY", "kind": "berry_tree", "planted": True},
+            "100": {"berry_item": "ITEM_ORAN_BERRY", "kind": "berry_tree", "planted": True, "yield": 2},
+            "101": {"berry_item": None, "kind": "berry_tree", "planted": False, "yield": None},
+            "102": {"berry_item": "ITEM_ORAN_BERRY", "kind": "berry_tree", "planted": True, "yield": 2},
         },
     )
     _patch_fork_index(monkeypatch, {"ITEM_ORAN_BERRY"})
@@ -58,6 +59,11 @@ def test_only_planted_rows_emitted_and_bare_soil_omitted(
     text = (fork / "data" / "scripts" / "uranium_berry_trees.h").read_text(encoding="utf-8")
     assert "URANIUM_BERRY_TREE_SEED_COUNT 2" in text
     assert text.count("X(") == 2
+    # Three fields per row: treeId, item, source yield.
+    assert re.findall(r"X\((\d+), (ITEM_\w+), (\d+)\)", text) and all(
+        len(m) == 3 for m in re.findall(r"X\((\d+), (ITEM_\w+), (\d+)\)", text)
+    )
+    assert len(re.findall(r"X\(\d+, ITEM_ORAN_BERRY, 2\)", text)) == 2
     assert "ITEM_ORAN_BERRY" in text
     # Bare-soil event 101 never got assigned a row (only 2 X() lines above, for
     # the 2 planted ids — the assigned tree id for 101 must not appear either).
@@ -76,11 +82,25 @@ def test_planted_true_with_null_berry_item_fails_loud(tmp_path: Path, monkeypatc
     _write_template_fields(
         out,
         33,
-        {"100": {"berry_item": None, "kind": "berry_tree", "planted": True}},
+        {"100": {"berry_item": None, "kind": "berry_tree", "planted": True, "yield": 2}},
     )
     _patch_fork_index(monkeypatch, set())
 
     with pytest.raises(ValueError, match="contradictory sidecar"):
+        ap.run_berry_tree_pass(out, tmp_path / "fork", dry_run=False)
+
+
+def test_planted_with_bad_yield_fails_loud(tmp_path: Path, monkeypatch) -> None:
+    out = tmp_path / "out"
+    monkeypatch.setattr(ap, "SLICE_MAP_IDS", [33])
+    _write_template_fields(
+        out,
+        33,
+        {"100": {"berry_item": "ITEM_ORAN_BERRY", "kind": "berry_tree", "planted": True, "yield": None}},
+    )
+    _patch_fork_index(monkeypatch, {"ITEM_ORAN_BERRY"})
+
+    with pytest.raises(ValueError, match="yield"):
         ap.run_berry_tree_pass(out, tmp_path / "fork", dry_run=False)
 
 
@@ -90,7 +110,7 @@ def test_nonexistent_fork_constant_fails_loud(tmp_path: Path, monkeypatch) -> No
     _write_template_fields(
         out,
         33,
-        {"100": {"berry_item": "ITEM_MADE_UP_BERRY", "kind": "berry_tree", "planted": True}},
+        {"100": {"berry_item": "ITEM_MADE_UP_BERRY", "kind": "berry_tree", "planted": True, "yield": 2}},
     )
     # Fork index does NOT contain ITEM_MADE_UP_BERRY.
     _patch_fork_index(monkeypatch, {"ITEM_ORAN_BERRY"})
@@ -106,15 +126,15 @@ def test_output_byte_identical_across_two_runs(tmp_path: Path, monkeypatch) -> N
         out,
         33,
         {
-            "100": {"berry_item": "ITEM_ORAN_BERRY", "kind": "berry_tree", "planted": True},
-            "101": {"berry_item": None, "kind": "berry_tree", "planted": False},
-            "102": {"berry_item": "ITEM_ORAN_BERRY", "kind": "berry_tree", "planted": True},
+            "100": {"berry_item": "ITEM_ORAN_BERRY", "kind": "berry_tree", "planted": True, "yield": 2},
+            "101": {"berry_item": None, "kind": "berry_tree", "planted": False, "yield": None},
+            "102": {"berry_item": "ITEM_ORAN_BERRY", "kind": "berry_tree", "planted": True, "yield": 2},
         },
     )
     _write_template_fields(
         out,
         32,
-        {"5": {"berry_item": "ITEM_PECHA_BERRY", "kind": "berry_tree", "planted": True}},
+        {"5": {"berry_item": "ITEM_PECHA_BERRY", "kind": "berry_tree", "planted": True, "yield": 2}},
     )
     _patch_fork_index(monkeypatch, {"ITEM_ORAN_BERRY", "ITEM_PECHA_BERRY"})
 
@@ -142,7 +162,7 @@ def test_dry_run_does_not_write(tmp_path: Path, monkeypatch) -> None:
     _write_template_fields(
         out,
         33,
-        {"100": {"berry_item": "ITEM_ORAN_BERRY", "kind": "berry_tree", "planted": True}},
+        {"100": {"berry_item": "ITEM_ORAN_BERRY", "kind": "berry_tree", "planted": True, "yield": 2}},
     )
     _patch_fork_index(monkeypatch, {"ITEM_ORAN_BERRY"})
 

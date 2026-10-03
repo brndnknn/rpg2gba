@@ -1521,6 +1521,26 @@ def _validate_template_fields(
                     f"map {uid} EV{eid:03d}: berry_tree 'planted' must be a "
                     f"bool, got {planted!r}"
                 )
+            if "yield" not in payload:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: berry_tree missing 'yield' key"
+                )
+            berry_yield = payload["yield"]
+            if planted:
+                if (
+                    not isinstance(berry_yield, int)
+                    or isinstance(berry_yield, bool)
+                    or berry_yield < 1
+                ):
+                    raise ValueError(
+                        f"map {uid} EV{eid:03d}: planted berry_tree 'yield' "
+                        f"must be an int >= 1, got {berry_yield!r}"
+                    )
+            elif berry_yield is not None:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: bare-soil berry_tree 'yield' "
+                    f"must be null, got {berry_yield!r}"
+                )
             if berry_item is not None:
                 if not isinstance(berry_item, str) or not berry_item:
                     raise ValueError(

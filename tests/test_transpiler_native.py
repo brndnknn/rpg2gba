@@ -564,17 +564,41 @@ def _berry_tree_three_page_event(*, symbol: str = "HAFLIBERRY", qty: int = 3) ->
 
 def test_detect_berry_tree_pregrown_kind() -> None:
     event = _berry_tree_pregrown_event()
-    assert T.detect_berry_tree(event) == ("ORANBERRY", True)
+    assert T.detect_berry_tree(event) == ("ORANBERRY", True, 2)
 
 
 def test_detect_berry_tree_bare_soil_kind() -> None:
     event = _berry_tree_bare_soil_event()
-    assert T.detect_berry_tree(event) == (None, False)
+    assert T.detect_berry_tree(event) == (None, False, None)
 
 
 def test_detect_berry_tree_three_page_map117_variant() -> None:
     event = _berry_tree_three_page_event()
-    assert T.detect_berry_tree(event) == ("HAFLIBERRY", True)
+    assert T.detect_berry_tree(event) == ("HAFLIBERRY", True, 3)
+
+
+def test_detect_berry_tree_yield_parsed_from_pick_berry() -> None:
+    event = _berry_tree_pregrown_event(symbol="PECHABERRY", qty=1)
+    assert T.detect_berry_tree(event) == ("PECHABERRY", True, 1)
+
+
+def test_detect_berry_tree_non_literal_yield_fails_loud() -> None:
+    page = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "pbPickBerry(PBItems::ORANBERRY, rand(3))"]),
+        cmd(T.BRANCH_END),
+        cmd(0),
+    ]
+    event = make_event([page], id=100, name="BerryPlant")
+    with pytest.raises(ValueError, match="EV100"):
+        T.detect_berry_tree(event)
+
+
+def test_resolve_berry_tree_non_literal_yield_names_map() -> None:
+    ctx = _resolve_ctx()
+    page = [cmd(T.CONDITIONAL_BRANCH, [12, "pbPickBerry(PBItems::ORANBERRY, 0)"]), cmd(0)]
+    event = make_event([page], id=100, name="BerryPlant")
+    with pytest.raises(ValueError, match="Map033"):
+        T.resolve_native_object_template(33, event, ctx)
 
 
 def test_detect_berry_tree_absent_returns_none() -> None:
@@ -639,6 +663,7 @@ def test_resolve_native_object_template_berry_tree_pregrown() -> None:
     assert claimed is True
     assert ctx.template_fields[(33, 100)] == {
         "kind": "berry_tree", "berry_item": "ITEM_ORAN_BERRY", "planted": True,
+        "yield": 2,
     }
 
 
@@ -649,6 +674,7 @@ def test_resolve_native_object_template_berry_tree_bare_soil() -> None:
     assert claimed is True
     assert ctx.template_fields[(33, 101)] == {
         "kind": "berry_tree", "berry_item": None, "planted": False,
+        "yield": None,
     }
 
 
