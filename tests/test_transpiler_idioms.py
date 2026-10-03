@@ -1626,6 +1626,26 @@ def test_wrapped_pokemart_call_emits_native_shop_and_mart_block() -> None:
     assert res.unhandled == []
 
 
+def test_two_marts_on_one_page_get_distinct_labels() -> None:
+    """Map073 EV003 has one mart per branch arm; both used to be named
+    `<page>_Mart` and the assembler rejected the duplicate symbol. The first
+    keeps the bare label (every existing page byte-identical), the next is
+    `_Mart2`."""
+    ctx = _mart_ctx()
+    res = run_event(ctx, [[
+        cmd(T.SCRIPT, ["pbPokemonMart(["]),
+        cmd(T.SCRIPT_CONT, ["PBItems::POKeBALL,"]),
+        cmd(T.SCRIPT_CONT, ["PBItems::POTION])"]),
+        cmd(T.SCRIPT, ["pbPokemonMart(["]),
+        cmd(T.SCRIPT_CONT, ["PBItems::ANTIDOTE])"]),
+    ]], trigger=T.ACTION_BUTTON_TRIGGER, map_id=73, event_id=3)
+    assert "pokemart(Map073_EV003_Page1_Mart)" in res.text
+    assert "pokemart(Map073_EV003_Page1_Mart2)" in res.text
+    assert "mart Map073_EV003_Page1_Mart {\n    ITEM_POKE_BALL\n    ITEM_POTION\n}" in res.text
+    assert "mart Map073_EV003_Page1_Mart2 {\n    ITEM_ANTIDOTE\n}" in res.text
+    assert res.unhandled == []
+
+
 def test_wrapped_pokemart_unresolved_item_falls_through_to_queue() -> None:
     """One symbol (POTION) missing from ctx.items — no partial mart list, no
     pokemart( line; the whole joined call queues instead of guessing."""

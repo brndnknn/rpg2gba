@@ -3672,7 +3672,11 @@ class _PageEmitter:
                     break
                 consts.append(const)
             if consts:
-                mart_label = f"{self.page_label}_Mart"
+                # A page with several marts (one per branch arm, Map073 EV003)
+                # numbers the later ones; the first keeps the bare label.
+                n = sum(1 for b in self.aux_blocks
+                        if b.startswith(f"mart {self.page_label}_Mart"))
+                mart_label = f"{self.page_label}_Mart" + (str(n + 1) if n else "")
                 mart_inner = "\n".join(f"    {const}" for const in consts)
                 self.aux_blocks.append(f"mart {mart_label} {{\n{mart_inner}\n}}")
                 return [f"pokemart({mart_label})"]
