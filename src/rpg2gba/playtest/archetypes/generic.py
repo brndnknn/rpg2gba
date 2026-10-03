@@ -1799,10 +1799,22 @@ def seam_beat(
     def body(emu: "Emulator") -> None:
         assertions.require_map(emu, beat_name, map_constant)
         assertions.cross_arrow_warp(emu, beat_name, (x, y), direction, other_map_constant)
+        # Let each arrival settle, as transit hops do: ROM run 72 ended the
+        # chapter on the return crossing with the field still locked.
+        emu.settle_field()
         reverse_direction = _OPPOSITE_DIR.get(direction, str(params["other_direction"]))
+        # Come back over the cell PAIRED with the one crossed (seam_warps.json
+        # pairs cells_a[i] with cells_b[i]); index 0 was a wall's arrow on
+        # Route 2 (ROM run 71: forward over Kevlar (32,0), back from (20,55)).
+        here_cells = seam_cells(map_constant, to=other_map_constant)
         other_cells = seam_cells(other_map_constant, to=map_constant)
+        if (x, y) not in here_cells:
+            raise ScenarioError(f"{beat_name}: crossed at {(x, y)}, not a seam cell "
+                                f"of {row_id} ({here_cells})")
+        paired = here_cells.index((x, y))
         assertions.cross_arrow_warp(
-            emu, beat_name, other_cells[0], reverse_direction, map_constant)
+            emu, beat_name, other_cells[paired], reverse_direction, map_constant)
+        emu.settle_field()
 
     del body
 
