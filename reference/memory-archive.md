@@ -10,6 +10,10 @@
 
 ## Retired Session Summaries
 
+## Archived 2026-10-02 — Last Session Summary entry 2026-10-01b (chapter route viewer, built)
+
+**2026-10-01b (chapter route viewer, built):** The operator found the events view unusable for following generated beats: retraced tiles hid the order, and the labels were unreadable. A design was grilled, approved and built in one session (`reference/viewer/chapter_route_viewer.md`). It is a mobile-first `/chapter/<CHnn>` page: step group-by-group with badges numbered by group, to/from paths in blue/orange with arrows, parallel offset lines on shared tiles, a bottom-sheet beat card, and a Plan/Walk toggle. **Operator ruling:** hand suites are excluded from this page entirely. Pipeline additions: `beat_gen` writes a `CHnn.beats.json` sidecar, and observed-beats records carry `"suite"`. **Lessons:** the plan's beat names differ from the runtime names for one template call (`_arms` → `_spent`/`_retalk1`), so cards fall back to row/stem matching. Gen runs live in `output/playtest-gen/`, not `output/playtest/`. Viewer tests 19 + sidecar/runner/mappng green; operator-approved after review (incl. borrowed-map cropping); committed on `rederive-ch01-ch04` as "Viewer: chapter route viewer for generated beats". The 5 untracked `chapters_gen/ch0N.py` were deliberately left out (C9 gate).
+
 ## Archived 2026-10-02 — Last Session Summary entry 2026-10-01 (ROM runs 55–61, generated CH02 green)
 
 **2026-10-01 (ROM runs 55–61, generated CH02 green 185/185):** **Runner speed (operator-asked):**
