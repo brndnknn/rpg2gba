@@ -17,6 +17,16 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 123. `resolved_trigger_scripts` treats "the beat passed" as "the script ran"
+
+Moved from `REDERIVATION_PLAN.md` §4 at P10 (2026-10-03) so it survives the plan's
+archiving. `playtest/chapter.py` `resolved_trigger_scripts` (`a460e823`) marks a
+trigger script resolved once its beat passes. That holds for latching shapes, but
+not for a TEMP-switch page that re-arms on map re-entry: the walk oracle would
+treat a live trigger as spent. Documented, never fixed. **To close:** model
+re-arming (TEMP switches reset on map load) or fail loud when a resolved row's
+page is TEMP-switch gated and the walk re-enters its map.
+
 ### 122. C10 deferred to CH06: offline verdict head, offline checker, ROM sample selection
 
 `REDERIVATION_PLAN.md` §16.3 C10 (rulings R2/R3). Operator ruled 2026-10-03:
