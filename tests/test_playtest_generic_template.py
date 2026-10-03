@@ -1042,3 +1042,54 @@ def test_switch_write_with_both_values_possible_accepts_either(monkeypatch):
     on = Step("map050/ev019/p0", "switch_write", 0, (("switch_id", 35), ("value", True)))
     with pytest.raises(ScenarioError, match="reads False"):
         STEP_HANDLERS["switch_write"](_StateEmu(False), "B1", on)
+
+
+# --- a stuck approach walk: tolerated only for a walking NPC --------------------
+
+class _StuckWalkEmu(_AnyEmu):
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+
+    def walk_to(self, x, y, **_kw):
+        raise self.exc
+
+
+def _stuck_beat(monkeypatch, moves: bool, talks: list[tuple]):
+    from rpg2gba.playtest import assertions
+
+    monkeypatch.setattr(generic, "event_page_moves", lambda mc, ev, pg: moves)
+    monkeypatch.setattr(generic, "event_is_sight_trainer", lambda mc, ev: False)
+    monkeypatch.setattr(generic, "local_id", lambda mc, ev: 7)
+    monkeypatch.setattr(generic, "custom_route_loop", lambda mc, ev: None)
+    monkeypatch.setattr(generic, "_item_boxes", lambda emu, name, row: None)
+    monkeypatch.setattr(assertions, "require_map", lambda *a, **k: None)
+    monkeypatch.setattr(assertions, "talk_to_moving_npc",
+                        lambda emu, beat, lid, **kw: talks.append((beat, lid)))
+    for kind in generic.STEP_HANDLERS:
+        monkeypatch.setitem(generic.STEP_HANDLERS, kind, lambda emu, name, step: None)
+    b = _builder()
+    generic.generic_beat(b, chapter_id="CH05", beat_name="n", rows=(NPC,))
+    (beat,) = b.build().beats
+    return beat
+
+
+STUCK = "stuck after 8 step-aside attempts at (1, 1)"
+
+
+def test_a_stuck_approach_walk_falls_through_to_the_live_talk_for_a_walking_npc(monkeypatch):
+    from rpg2gba.playtest.errors import ScenarioError
+
+    talks: list[tuple] = []
+    beat = _stuck_beat(monkeypatch, True, talks)
+    beat.run(_StuckWalkEmu(ScenarioError(STUCK)))
+    assert talks == [("n", 7)]
+
+
+def test_a_stuck_approach_walk_still_fails_for_a_non_moving_target(monkeypatch):
+    from rpg2gba.playtest.errors import ScenarioError
+
+    talks: list[tuple] = []
+    beat = _stuck_beat(monkeypatch, False, talks)
+    with pytest.raises(ScenarioError, match="stuck after 8"):
+        beat.run(_StuckWalkEmu(ScenarioError(STUCK)))
+    assert talks == []

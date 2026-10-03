@@ -1349,7 +1349,20 @@ def generic_beat(
             emu.clear_mart_items()
         try:
             if not arrival and not sight_trainer:
-                emu.walk_to(x, y, absorb_wild=True)
+                try:
+                    emu.walk_to(x, y, absorb_wild=True)
+                except WalkInterrupted:
+                    raise
+                except ScenarioError:
+                    # A walking NPC tends to stand on its own spawn-derived
+                    # approach cell (ROM runs 76-77: Route 1 ev053 on
+                    # (17,10), Passage Cave 2F ev005 on (8,8)). The walk
+                    # still brings it on camera (object events exist only
+                    # there -- skipping it lost Moki ev012, run 78); the
+                    # live-position talk below takes over, and fails loud
+                    # itself if the NPC is truly unreachable.
+                    if walks_off is None:
+                        raise
         except WalkInterrupted:
             # An event-touch page can reach the player first (the trainer
             # template's `_approach` makes the same call); the steps below

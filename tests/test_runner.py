@@ -598,3 +598,31 @@ def test_install_drain_answers_queues_each_map_s_answers_in_beat_order() -> None
 
 def test_install_drain_answers_leaves_a_stub_emulator_alone() -> None:
     runner_mod._install_drain_answers(object(), [])   # no attribute: no error
+
+
+def test_walk_oracle_gen_suite_ignores_the_hand_route_plan(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """Operator ruling 2026-10-02: a committed route plan approves the HAND
+    suite's walks; a generated suite is not graded against it."""
+    import dataclasses
+
+    sentinel_plan = object()
+    loaded: list[str] = []
+
+    def fake_load(name: str):
+        loaded.append(name)
+        return sentinel_plan
+
+    monkeypatch.setattr(runner_mod, "load_plan_index_for_module", fake_load)
+    monkeypatch.setattr(runner_mod, "resolved_trigger_scripts",
+                        lambda chapter: {7: {"S"}})
+    base = make_chapter("CH99", [("a", ok)])
+
+    gen = runner_mod._WalkOracle.for_chapter(dataclasses.replace(base, suite="gen"))
+    assert gen.plan is None
+    assert loaded == []
+    assert gen._resolved_scripts == {7: {"S"}}
+
+    hand = runner_mod._WalkOracle.for_chapter(dataclasses.replace(base, suite="hand"))
+    assert hand.plan is sentinel_plan
+    assert loaded == ["CH99"]

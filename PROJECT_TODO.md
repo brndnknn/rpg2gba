@@ -17,6 +17,20 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 120. Generated suites have no route plan, so their walks go uncompared
+
+ROM run 76 (2026-10-02): generated CH05 failed at Hiker Nunes (map037/ev004)
+because the runner graded its walk against `reference/routes/CH05.route.json`,
+the HAND suite's approved route -- the gen beat approaches from the south over
+the trainer's own event-touch tile, which the hand plan never walks. Operator
+ruling: a gen suite loads no route plan (`runner._WalkOracle.for_chapter`), the
+same as CH01-CH04 gen already had. The cost is that a gen walk crossing a
+foreign trigger tile is no longer caught (CH04's B3 Larrie/Timothy shape).
+**To close:** have `beat_gen` record each beat's planned walk tiles (and declared
+crossings) in `CHnn.beats.json`, and load a `PlanIndex` from that for
+`suite == "gen"`. Note the beat's own target pages must be exempt during its own
+walk -- `mark_rows_resolved` only runs after a pass.
+
 ### 119. Surf work: re-check converter-dropped vehicle tiles against the native dismount
 
 `metadata_wiring.blank_touch_drop` (`DROP_BLANK_TRIGGER1`) drops every

@@ -372,6 +372,14 @@ class _WalkOracle:
         """
         if isinstance(chapter, str):
             return cls(chapter, plan=load_plan_index_for_module(chapter))
+        if chapter.suite == "gen":
+            # Operator ruling 2026-10-02: a route plan approves the HAND
+            # suite's walks; a generated suite picks its own approaches
+            # (CH05 gen meets Hiker Nunes from the south, over his own
+            # event-touch tile) and has no plan of its own yet, so its
+            # walks go uncompared rather than graded against the hand's.
+            return cls(chapter.name, plan=None,
+                       resolved_scripts=resolved_trigger_scripts(chapter))
         return cls(
             chapter.name,
             plan=load_plan_index_for_module(chapter.name),
