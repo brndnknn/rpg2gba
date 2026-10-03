@@ -198,3 +198,47 @@ def test_arrival_nudge_transit_uses_door_steps_when_the_route_picks_another_door
 
     transit = next(b for b in out if b.template == "transit")
     assert dict(transit.kwargs)["hops"] == (("back",), ("ev23",))
+
+
+# -- a seam hop must land on a cell the walker can leave -----------------------
+
+def _seam_route(monkeypatch, pairs):
+    """`_route_between` over a two-map synthetic seam, map 1 -> map 2. Each pair
+    is (event id, src cell, dst cell). Map 2's arrow cells are (6,5) -- the
+    twin of the pocketed arrival (5,5) -- and the open arrivals' own cells.
+    Reach: the pocketed arrival and its twin only; around the open arrival
+    (5,9) a walkable (5,10)."""
+    from types import SimpleNamespace
+
+    from rpg2gba.beat_gen import __main__ as bg
+
+    monkeypatch.setattr(bg, "seam_warp_cells", lambda dst, src: {(6, 5), (5, 9)})
+    monkeypatch.setattr(bg, "_map_constant_for", lambda m: f"MAP_{m}")
+    edges = [SimpleNamespace(kind="seam_warp", src_map=1, dst_map=2, event_id=ev,
+                             src_cell=src, dst_cell=dst) for ev, src, dst in pairs]
+    world = SimpleNamespace(edges_from=lambda m: edges if m == 1 else [])
+    graphs = {1: SimpleNamespace(warp_exits={}), 2: SimpleNamespace(warp_exits={})}
+    rooms = SimpleNamespace(place_of=lambda m, cell: (m, 0),
+                            landing_place=lambda e: (e.dst_map, 0))
+    reach = frozenset({(1, (0, 6)), (1, (0, 10)), (2, (5, 5)), (2, (6, 5)),
+                       (2, (5, 9)), (2, (5, 10))})
+    return bg._route_between(world, frozenset({1, 2}), reach, graphs, rooms=rooms)
+
+
+def test_seam_hop_whose_arrival_is_pocketed_by_its_twin_arrow_is_not_used(monkeypatch):
+    # 2026-10-02, ROM run 74 (Route 2 (20,56)): the arrival's only reachable
+    # neighbour is its twin arrow tile, which the walker never steps on.
+    pocketed = (10, (0, 5), (5, 5))
+    open_ = (11, (0, 9), (5, 9))
+    route, door_steps = _seam_route(monkeypatch, [pocketed, open_])
+
+    assert [step[3] for step in route((1, 0), (2, 0))] == [11]
+    assert set(door_steps) == {(1, 11)}
+
+
+def test_seam_with_only_a_pocketed_arrival_has_no_route(monkeypatch):
+    route, door_steps = _seam_route(monkeypatch, [(10, (0, 5), (5, 5))])
+
+    with pytest.raises(ValueError, match="no warp route"):
+        route((1, 0), (2, 0))
+    assert door_steps == {}

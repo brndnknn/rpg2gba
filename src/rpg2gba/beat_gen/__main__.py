@@ -110,6 +110,7 @@ from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch, classify_manifes
 from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
 from rpg2gba.playtest import chapters_gen as playtest_chapters_gen
 from rpg2gba.playtest.archetypes import load_chapter_rows, map_uranium_id
+from rpg2gba.playtest.cells import seam_warp_cells
 from rpg2gba.playtest.chapter import load_chapter
 from rpg2gba.routing.__main__ import (
     DEFAULT_CHAPTERS_PATH,
@@ -456,7 +457,17 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
 
     def lands_reachably(e) -> bool:  # noqa: ANN001
         """The arrival's LANDING is reachable (a door arrival's destination
-        cell is the solid door tile; the player stands one step off it)."""
+        cell is the solid door tile; the player stands one step off it).
+        A seam arrival lands ON its arrow tile, and `reach` floods through
+        warp tiles the live walker never steps on: it must have a reachable
+        non-warp neighbour to walk off by (ROM run 74: Route 2 (20,56) is
+        walled in except by its twin arrow (21,56))."""
+        if e.kind == "seam_warp":
+            exits = graphs[e.dst_map].warp_exits
+            arrows = set(seam_warp_cells(e.dst_map, e.src_map))
+            x, y = e.dst_cell
+            return any((e.dst_map, n) in reach and n not in arrows and n not in exits
+                       for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)))
         facing = next((w.dest_facing for w in graphs[e.src_map].warp_exits.get(e.src_cell, ())
                        if w.event_id == e.event_id), 0)
         try:

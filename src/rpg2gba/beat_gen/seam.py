@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from rpg2gba.chapter_manifest.schema import ManifestRow
+from rpg2gba.playtest.cells import seam_warp_cells
 from rpg2gba.routing.connections import MapConnection, _EDGE_TO_DIRECTION, crossing_cells
 from rpg2gba.traversal.direction import Direction
 from rpg2gba.traversal.graph import Cell, MapGraph
@@ -67,18 +68,29 @@ def seam_crossings(
 
     Legal = `crossing_cells` keeps the pair (both ends walkable) AND the
     landing is open: the cell one further step into `to_graph`, continuing
-    in the press direction, is walkable. An empty result is returned, not
-    raised; the caller turns it into a `Refusal(blocker="cell")`."""
+    in the press direction, is walkable. A pair joined by a seam_warps.json
+    arrow-warp substitution also requires the exit to be one of its arrow
+    cells (the rest of the edge does not warp on the ROM) with the cell
+    behind it walkable -- the crossing is a held press from that cell
+    (ROM run 74: Route 2 (20,56) sits under a wall). An empty result is
+    returned, not raised; the caller turns it into a
+    `Refusal(blocker="cell")`."""
     connection = connection_for(row)
     press = _PRESS[connection.direction]
     dx, dy = connection.direction.delta
+    arrows = seam_warp_cells(connection.from_map, connection.to_map)
 
     crossings: list[SeamCrossing] = []
     for exit_cell, entry_cell in crossing_cells(
         connection, from_graph=from_graph, to_graph=to_graph
     ):
         landing = (entry_cell[0] + dx, entry_cell[1] + dy)
-        if to_graph.is_walkable(landing):
-            crossings.append(SeamCrossing(exit_cell, entry_cell, press))
+        if not to_graph.is_walkable(landing):
+            continue
+        if arrows:
+            approach = (exit_cell[0] - dx, exit_cell[1] - dy)
+            if exit_cell not in arrows or not from_graph.is_walkable(approach):
+                continue
+        crossings.append(SeamCrossing(exit_cell, entry_cell, press))
 
     return tuple(sorted(crossings))

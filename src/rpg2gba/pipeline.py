@@ -62,6 +62,9 @@ def main(verbose: bool) -> None:
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
+    # Load before any subcommand parses: delegated groups (playtest, routing, ...)
+    # resolve envvar-backed options like --engine without calling this themselves.
+    _load_dotenv()
 
 
 class _LazyGroup(click.Group):

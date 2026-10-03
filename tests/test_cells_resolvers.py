@@ -184,3 +184,41 @@ def test_arrival_cell_still_fails_loud_when_landings_differ() -> None:
 
     with pytest.raises(ValueError, match="disambiguate with event_id="):
         arrival_cell("MAP_KEVLAR_TOWN", from_map="MAP_KEVLAR_TOWN_BUILDINGS")
+
+
+# --- seam_warp_cells / is_seam_crossing (injected tables, no build artifacts) --
+
+def _inject_seam_tables(monkeypatch) -> None:
+    import rpg2gba.playtest.cells as cells_mod
+
+    monkeypatch.setattr(cells_mod, "_SEAM_WARPS_CACHE", [
+        {"id": "synthetic", "map_a": 31, "map_b": 35,
+         "cells_a": [[31, 0], [32, 0]], "cells_b": [[20, 56], [21, 56]]}])
+    monkeypatch.setattr(cells_mod, "_MAP_CONST_INDEX", {
+        "MAP_A": 31, "MAP_B": 35, "MAP_C": 99})
+
+
+def test_seam_warp_cells_returns_each_sides_cells(monkeypatch) -> None:
+    from rpg2gba.playtest.cells import seam_warp_cells
+
+    _inject_seam_tables(monkeypatch)
+    assert seam_warp_cells(31, 35) == ((31, 0), (32, 0))
+    assert seam_warp_cells(35, 31) == ((20, 56), (21, 56))
+
+
+def test_seam_warp_cells_is_empty_for_an_unrelated_pair(monkeypatch) -> None:
+    from rpg2gba.playtest.cells import seam_warp_cells
+
+    _inject_seam_tables(monkeypatch)
+    assert seam_warp_cells(31, 99) == ()
+    assert seam_warp_cells(98, 99) == ()
+
+
+def test_is_seam_crossing_true_false_and_no_raise(monkeypatch) -> None:
+    from rpg2gba.playtest.cells import is_seam_crossing
+
+    _inject_seam_tables(monkeypatch)
+    assert is_seam_crossing("MAP_A", "MAP_B", (32, 0)) is True
+    assert is_seam_crossing("MAP_B", "MAP_A", (20, 56)) is True
+    assert is_seam_crossing("MAP_A", "MAP_B", (33, 0)) is False
+    assert is_seam_crossing("MAP_A", "MAP_C", (32, 0)) is False

@@ -1002,6 +1002,33 @@ def seam_cells(map_constant: str, *, to: str) -> tuple[Cell, ...]:
     return tuple((c[0], c[1]) for c in cells)
 
 
+def is_seam_crossing(map_constant: str, to: str, cell: Cell) -> bool:
+    """Whether `cell` on `map_constant` is an arrow-warp seam cell into `to`.
+
+    The non-raising question a caller asks before choosing HOW to cross --
+    a step onto a threshold, or a held press on an arrow tile. A pair with
+    no seam_warps.json entry between them answers False; `seam_cells`'
+    fail-loud cases are for callers that already assert a seam exists."""
+    cells = seam_warp_cells(
+        _uranium_id(map_constant, resolver="is_seam_crossing"),
+        _uranium_id(to, resolver="is_seam_crossing"))
+    return cell in cells
+
+
+def seam_warp_cells(map_id: int, other_map_id: int) -> tuple[Cell, ...]:
+    """`map_id`'s arrow cells across every seam_warps.json entry it shares
+    with `other_map_id` (Uranium ids); empty when the pair has no
+    substituted seam. Only these cells warp -- the rest of the shared edge
+    is not a crossing at all on the ROM."""
+    out: list[Cell] = []
+    for seam in _seam_warps():
+        if {seam["map_a"], seam["map_b"]} != {map_id, other_map_id}:
+            continue
+        cells = seam["cells_a"] if seam["map_a"] == map_id else seam["cells_b"]
+        out.extend((c[0], c[1]) for c in cells)
+    return tuple(out)
+
+
 def raw_cell(x: int, y: int, *, why: str) -> Cell:
     """The escape hatch: returns `(x, y)` unchanged, no derivation at all.
 

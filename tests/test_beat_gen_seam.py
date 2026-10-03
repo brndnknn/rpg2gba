@@ -116,4 +116,48 @@ def test_real_kevlar_seam_x31_closed_x32_open():
     exits = {c.exit_cell for c in got}
     assert (32, 0) in exits
     assert (31, 0) not in exits      # walkable pair, but the landing is walled
-    assert len(got) == 28
+    # Only the seam_warps.json arrow cells warp on the ROM: (31,0) has a
+    # walled landing, leaving exactly (32,0) (was 28 whole-edge crossings).
+    assert [c.exit_cell for c in got] == [(32, 0)]
+
+
+# --- arrow-warp seams (seam_warps.json substitution) --------------------------
+
+def _inject_arrow_seam(monkeypatch, cells_a, cells_b, *, map_a: int = 1, map_b: int = 2):
+    from rpg2gba.playtest import cells as cells_mod
+
+    monkeypatch.setattr(cells_mod, "_SEAM_WARPS_CACHE", [
+        {"id": "synthetic", "map_a": map_a, "map_b": map_b,
+         "cells_a": [list(c) for c in cells_a], "cells_b": [list(c) for c in cells_b]}])
+
+
+def test_arrow_seam_drops_exits_outside_the_arrow_list(monkeypatch):
+    _inject_arrow_seam(monkeypatch, [(0, 0), (1, 0)], [(0, 3), (1, 3)])
+    got = seam.seam_crossings(_row("N"), from_graph=_graph(1, 4, 4), to_graph=_graph(2, 4, 4))
+    # (2, 0) and (3, 0) are walkable with open landings but do not warp.
+    assert [c.exit_cell for c in got] == [(0, 0), (1, 0)]
+
+
+def test_arrow_seam_drops_cell_whose_approach_is_blocked(monkeypatch):
+    _inject_arrow_seam(monkeypatch, [(0, 0), (1, 0)], [(0, 3), (1, 3)])
+    # (0, 1) is the approach cell behind arrow (0, 0) when pressing UP.
+    got = seam.seam_crossings(_row("N"), from_graph=_graph(1, 4, 4, {(0, 1)}),
+                              to_graph=_graph(2, 4, 4))
+    assert [c.exit_cell for c in got] == [(1, 0)]
+
+
+def test_arrow_seam_applies_in_the_reverse_direction(monkeypatch):
+    # Route-2-like side: the arrow list is cells_b, direction S, approach is y - 1.
+    _inject_arrow_seam(monkeypatch, [(0, 0), (1, 0)], [(0, 3), (1, 3)])
+    got = seam.seam_crossings(_row("S", a=2, b=1), from_graph=_graph(2, 4, 4, {(0, 2)}),
+                              to_graph=_graph(1, 4, 4))
+    assert [c.exit_cell for c in got] == [(1, 3)]
+    assert {c.press for c in got} == {"DOWN"}
+
+
+def test_pair_without_a_seam_entry_keeps_whole_edge(monkeypatch):
+    # A seam entry exists, but for an unrelated pair: this pair is unfiltered.
+    _inject_arrow_seam(monkeypatch, [(0, 0)], [(0, 3)], map_a=7, map_b=8)
+    got = seam.seam_crossings(_row("N"), from_graph=_graph(1, 3, 4, {(0, 1)}),
+                              to_graph=_graph(2, 3, 4))
+    assert [c.exit_cell for c in got] == [(0, 0), (1, 0), (2, 0)]

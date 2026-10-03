@@ -123,6 +123,7 @@ from rpg2gba.playtest.cells import (
     event_is_sight_trainer,
     event_page_moves,
     native_berry_tree_id,
+    is_seam_crossing,
     local_id,
     seam_cells,
 )
@@ -1840,7 +1841,10 @@ def transit_beat(
     each is asserted by its own warp beat -- only the way between two
     beats, derived from the chapter's world graph. A hop stands on its
     approach cell and holds `press` until the map changes (the threshold
-    idiom `warp_beat` uses), then lets the arrival settle."""
+    idiom `warp_beat` uses), then lets the arrival settle. A hop whose
+    pressed-into cell is an arrow-warp seam cell (seam_warps.json) is held
+    on that tile instead: one step only lands on an arrow, it does not fire
+    it (ROM run 74, Kevlar (31,1) UP stood on (31,0) forever)."""
     if not hops:
         raise ValueError(f"transit_beat: {beat_name}: no hops")
     first_map, fx, fy, _, _ = hops[0]
@@ -1854,7 +1858,12 @@ def transit_beat(
     def body(emu: "Emulator") -> None:
         for map_constant, x, y, press, dest in hops:
             assertions.require_map(emu, beat_name, map_constant)
-            assertions.cross_threshold(emu, beat_name, (x, y), press, dest)
+            dx, dy = assertions._ARROW_APPROACH_DELTA[press]
+            tile = (x - dx, y - dy)
+            if is_seam_crossing(map_constant, dest, tile):
+                assertions.cross_arrow_warp(emu, beat_name, tile, press, dest)
+            else:
+                assertions.cross_threshold(emu, beat_name, (x, y), press, dest)
             emu.settle_field()
 
     del body
