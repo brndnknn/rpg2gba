@@ -210,8 +210,14 @@ first metro/Tandor-Underground station, and the Rock Smash grant").
 
 ### 6.2 Unmapped script heads
 
-14 heads — one more than this task's briefing listed (`pkmn` appears in the
-live re-run, absent from the brief; flagged in §7).
+*(Re-measured 2026-10-04: the census now reports **5** unmapped heads —
+`pbChoosePokemon`, `pbGetPokemon`, `pbMoveTutorChoose`, `pbPlayCry`,
+`pbStartTrade`. The other nine below have since been mapped (pokerus is now
+"display check, folded to the else arm"; `pbSetPokemonCenter` is the white-out
+respawn anchor; mystery gift is "stripped"). The table is the original
+14-head assessment, kept for its per-head reasoning.)*
+
+14 heads at authoring time.
 
 | Head | Assessment |
 |---|---|
@@ -253,15 +259,15 @@ live re-run, absent from the brief; flagged in §7).
 ## 7. Open items for the lead
 
 *(Restated 2026-10-04 as plain findings; the earlier wording corrected a "task
-briefing" that no longer exists. Numbers are the last census run recorded in
-this document; a re-run of `python -m rpg2gba.chapter_atlas census --chapter
-CH06` on 2026-10-04 failed to start — `ModuleNotFoundError: No module named
-'rpg2gba'`, because the system Python moved 3.12 → 3.14 under `.venv` — so they were not re-measured today. Re-run
-before treating them as final.)*
+briefing" that no longer exists. Re-measured the same day with
+`python -m rpg2gba.chapter_atlas census --chapter CH06`.)*
 
 - **§4.3 encounter tables:** 0 of 8 maps have a wild-encounter table (direct
   inspection and census agree).
-- **§6.2 unmapped heads:** 14, including `pkmn`. Events 206, commands 2180.
+- **Census totals (2026-10-04):** events 206, pages 279, commands 2180, trainer
+  battles 6, item grants 11, choices 21. Unmapped script heads **5**:
+  `pbChoosePokemon`, `pbGetPokemon`, `pbMoveTutorChoose`, `pbPlayCry`,
+  `pbStartTrade` (was 14 at authoring; §6.2).
 - **Metro mechanic has no ledger disposition** (§6.1/§6.3) — what would
   settle it: a ledger pass adding a named "metro fast travel" row, plus
   checking whether Burole/Legen/Bealbeach's own metro-arrival maps gate
@@ -284,7 +290,7 @@ before treating them as final.)*
 - `PROJECT_TODO.md` #121 — HM badge-count gates.
 - `PROJECT_TODO.md` #128 — `blocked:` as a clerical verdict, ruled "revisit at CH06".
 - `PROJECT_TODO.md` #111 — full-suite stall; uncapped-search hazard at CH06's map count.
-- Ledger gaps named in §6: `pbPokerus`, `pbMoveTutorChoose`, `pbStartTrade`, and the Metro mechanic.
+- Unmapped heads still open (§7 census): `pbChoosePokemon`/`pbGetPokemon` (trade + tutor), `pbMoveTutorChoose`, `pbStartTrade`, `pbPlayCry`; plus the Metro mechanic's ledger row.
 - Map 46 building-split question (§6.3) — a real Phase-5 risk.
 
 ---
