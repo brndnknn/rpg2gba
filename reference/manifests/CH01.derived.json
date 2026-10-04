@@ -1014,6 +1014,10 @@
     "disposition": "cosmetic",
     "derived_hash": "6c2d90d22489cb2a"
   },
+  "map049/ev020/p0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "33c86bf6f00ef1b6"
+  },
   "map049/ev020/p0/b0": {
     "disposition": "refused:story-state: unclassified_condition",
     "derived_hash": "85143620c70d0d21"
@@ -1146,6 +1150,10 @@
     "disposition": "beat:m050e005p0",
     "derived_hash": "055bd5e4de147126"
   },
+  "map050/ev005/p0/b2": {
+    "disposition": "beat:m050e005p2",
+    "derived_hash": "b6d1a70115177d7f"
+  },
   "map050/ev005/p0/b3": {
     "disposition": "beat:m050e005p0",
     "derived_hash": "d01b0c6700452939"
@@ -1194,6 +1202,18 @@
     "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "74490290038dbc23"
   },
+  "map050/ev005/p5/b0": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "7bf52fb1cc380310"
+  },
+  "map050/ev005/p5/b1": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "050f2e58ec3df08e"
+  },
+  "map050/ev005/p5/b10": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "06b5b7260d4db990"
+  },
   "map050/ev005/p5/b11": {
     "disposition": "refused:story-state: party_model",
     "derived_hash": "7acb7479a75e3495"
@@ -1206,9 +1226,17 @@
     "disposition": "refused:story-state: party_model",
     "derived_hash": "44a97422e808e15c"
   },
+  "map050/ev005/p5/b14": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "de0fc5299192ef48"
+  },
   "map050/ev005/p5/b15": {
     "disposition": "refused:story-state: party_model",
     "derived_hash": "92c9bbb53e2a4bcb"
+  },
+  "map050/ev005/p5/b16": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "cfa64a3c6df3e338"
   },
   "map050/ev005/p5/b17": {
     "disposition": "refused:story-state: party_model",
@@ -1226,9 +1254,17 @@
     "disposition": "refused:story-state: party_model",
     "derived_hash": "82090a557b711258"
   },
+  "map050/ev005/p5/b20": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "44db6f00cbd719bf"
+  },
   "map050/ev005/p5/b21": {
     "disposition": "refused:story-state: party_model",
     "derived_hash": "540d9b40584ea524"
+  },
+  "map050/ev005/p5/b22": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "9d725c2c5548c66a"
   },
   "map050/ev005/p5/b23": {
     "disposition": "refused:story-state: party_model",
@@ -1242,9 +1278,17 @@
     "disposition": "refused:story-state: party_model",
     "derived_hash": "f8d31e7fddff56ca"
   },
+  "map050/ev005/p5/b26": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "55bd976589e14abc"
+  },
   "map050/ev005/p5/b27": {
     "disposition": "refused:story-state: party_model",
     "derived_hash": "6b85629aa006f694"
+  },
+  "map050/ev005/p5/b28": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "d4f5d759829ea8fb"
   },
   "map050/ev005/p5/b29": {
     "disposition": "refused:story-state: party_model",
@@ -1270,17 +1314,33 @@
     "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "ac45cf602bc32c14"
   },
+  "map050/ev005/p5/b4": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "1c701e6e3bf79b31"
+  },
   "map050/ev005/p5/b5": {
     "disposition": "refused:story-state: party_model",
     "derived_hash": "c2e16bc965d75fcc"
+  },
+  "map050/ev005/p5/b6": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "6d9e858f0eac4075"
   },
   "map050/ev005/p5/b7": {
     "disposition": "refused:story-state: party_model",
     "derived_hash": "37651684b9d3f14e"
   },
+  "map050/ev005/p5/b8": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "e12619390143c211"
+  },
   "map050/ev005/p5/b9": {
     "disposition": "refused:story-state: party_model",
     "derived_hash": "f62a0e4b5c19aa30"
+  },
+  "map050/ev005/p6": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "d4ec06cb5dda8994"
   },
   "map050/ev005/p6/b0": {
     "disposition": "refused:story-state: party_model",
@@ -1357,6 +1417,10 @@
   "map050/ev018/p0": {
     "disposition": "cosmetic",
     "derived_hash": "2f3cf83eb2d92fc7"
+  },
+  "map050/ev019/p0": {
+    "disposition": "beat:m050e019p0",
+    "derived_hash": "cd82405f611bd33f"
   },
   "map050/ev019/p0/b0": {
     "disposition": "unreachable:beat_gen: the story model places it in no chapter",
@@ -1482,6 +1546,10 @@
     "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "b28da68dd1fcafa0"
   },
+  "map050/ev024/p0/b1": {
+    "disposition": "refused:C8: unparsed_state_write",
+    "derived_hash": "1a9bc654f919078e"
+  },
   "map050/ev024/p0/b2": {
     "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "037a676b56cd195a"
@@ -1505,6 +1573,10 @@
   "map050/ev026/p0/b1": {
     "disposition": "beat:m050e026p0",
     "derived_hash": "8cc5d065a226330f"
+  },
+  "map050/ev027/p0": {
+    "disposition": "refused:story-state: party_model",
+    "derived_hash": "a2605f58e2356f58"
   },
   "map050/ev027/p0/b0": {
     "disposition": "refused:story-state: party_model",
@@ -1673,6 +1745,10 @@
   "map172/ev001/p2": {
     "disposition": "cosmetic",
     "derived_hash": "e47789dc2130ceb0"
+  },
+  "map172/ev001/p3": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "d0e6119d9eb5376e"
   },
   "map172/ev001/p3/b0": {
     "disposition": "refused:story-state: unclassified_condition",

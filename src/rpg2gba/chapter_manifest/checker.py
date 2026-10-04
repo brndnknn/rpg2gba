@@ -747,7 +747,7 @@ def check_chapter(
         findings.extend(_check_row_verdict_rules(
             row, entry.to_disposition(row.row_id),
             capabilities=capabilities, approach=approach,
-            rows=rows, effective=effective))
+            rows=rows, effective=effective, generator_cited=True))
 
     for row_id, disp in dispositions.items():
         if row_id not in rows_by_id:
@@ -897,6 +897,7 @@ def _check_row_verdict_rules(
     approach: ApproachModel | None,
     rows: list[ManifestRow],
     effective: dict[str, Disposition],
+    generator_cited: bool = False,
 ) -> list[Finding]:
     """Every per-row verdict rule a disposition must satisfy, whether it is
     hand-authored or an accepted CLERICAL derived entry
@@ -916,7 +917,12 @@ def _check_row_verdict_rules(
     findings: list[Finding] = []
     row_id = row.row_id
 
-    if not row.is_dispositionable:
+    # `generator_cited`: an accepted derived entry. On a row owing a
+    # classification or citation, derivation admits ONLY the generator's
+    # verdict (`derivation._generator_cited_entry`), and that verdict is the
+    # citation (operator ruling 2026-10-04, #124) -- so the two rules below,
+    # which ask a HUMAN for one, do not apply to it.
+    if not row.is_dispositionable and not generator_cited:
         findings.append(Finding(
             row_id=row_id,
             rule=RULE_UNDISPOSITIONABLE_ROW_DECIDED,
@@ -988,7 +994,7 @@ def _check_row_verdict_rules(
                 severity="error",
             ))
 
-    if row.needs_citation and not disp.source:
+    if row.needs_citation and not disp.source and not generator_cited:
         findings.append(Finding(
             row_id=row_id,
             rule=RULE_MISSING_CITATION,

@@ -96,9 +96,10 @@ def derive_entry(
 
     Rules, in precedence order (`boundary > beat > blocked > cosmetic`):
 
-    1. `not row.is_dispositionable or row.needs_citation` -> None. A human
-       must classify an unrecognized head/code, or supply a citation; a
-       derived entry cannot carry either.
+    1. `not row.is_dispositionable or row.needs_citation` -> only the
+       GENERATOR's verdict (its beat claim, or its ELSEWHERE/REFUSED record)
+       stands in for the human classification/citation; otherwise None
+       (`_generator_cited_entry`, operator ruling 2026-10-04, #124).
     2. `boundary_model.is_forward_crossing(row.row_id)` -> `"boundary"`.
     3. `beat_model.claiming_beats(row.row_id)` non-empty -> reduce every
        claim to its family head (`_beat_family_head`); if all claims share
@@ -132,7 +133,8 @@ def derive_entry(
     `derived_hash` is always `row.content_hash`.
     """
     if not row.is_dispositionable or row.needs_citation:
-        return None
+        return _generator_cited_entry(row, beat_model=beat_model,
+                                      generator_status=generator_status)
 
     if boundary_model is not None and boundary_model.is_forward_crossing(row.row_id):
         return DerivedEntry(disposition="boundary", derived_hash=row.content_hash)
@@ -161,4 +163,36 @@ def derive_entry(
     if spec is not None:
         return DerivedEntry(disposition=spec, derived_hash=row.content_hash)
 
+    return None
+
+
+def _generator_cited_entry(
+    row: ManifestRow,
+    *,
+    beat_model: "BeatModel | None",
+    generator_status: "GeneratorStatus | None",
+) -> DerivedEntry | None:
+    """Rule 1's one way through: the GENERATOR's verdict on a row that owes a
+    human citation (unrecognized head, unclassified condition).
+
+    Operator ruling 2026-10-04 (PROJECT_TODO #124): when the generated module
+    claims such a row, or records it in ELSEWHERE/REFUSED, that verdict is
+    the citation -- the generator decided it from the row's RMXP source (its
+    floor, R11), or refused it under a named blocker. Only those two sources
+    count: `boundary`/`blocked:`/`cosmetic` are read off manifest structure,
+    which is exactly what this row's structure fails to determine, so a row
+    the generator says nothing about still returns None for a human. The
+    checker relies on this: a derived entry on a citation-owing row can only
+    have come from here (`checker._check_row_verdict_rules(generator_cited=)`).
+    """
+    claims = beat_model.claiming_beats(row.row_id) if beat_model is not None else ()
+    if claims:
+        heads = {_beat_family_head(claim) for claim in claims}
+        if len(heads) != 1:
+            return None
+        return DerivedEntry(disposition=f"beat:{next(iter(heads))}",
+                            derived_hash=row.content_hash)
+    spec = generator_status.spec_for(row.row_id) if generator_status is not None else None
+    if spec is not None:
+        return DerivedEntry(disposition=spec, derived_hash=row.content_hash)
     return None

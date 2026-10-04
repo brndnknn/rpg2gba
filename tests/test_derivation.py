@@ -146,9 +146,10 @@ def test_citation_owing_row_derives_nothing():
     assert derive_entry(row, beat_model=None, boundary_model=None) is None
 
 
-def test_needs_citation_gate_precedes_boundary_and_beat():
-    # A row that needs a citation derives nothing even if it would otherwise
-    # qualify for boundary/beat -- the gate is checked first.
+def test_needs_citation_gate_admits_only_the_generators_verdict():
+    # A row owing a citation derives only from the generator (#124, operator
+    # 2026-10-04): a beat claim stands in for the citation; a boundary read
+    # off manifest structure does not.
     row = _row(
         content_hash="h1", unhandled=0, effects=("warp",),
         condition_unclassified=("a || b",), script_typed_conditions=1)
@@ -156,7 +157,8 @@ def test_needs_citation_gate_precedes_boundary_and_beat():
         row,
         beat_model=_Beats({row.row_id: ("B4",)}),
         boundary_model=_Boundary({row.row_id}))
-    assert entry is None
+    assert entry is not None and entry.disposition == "beat:B4"
+    assert derive_entry(row, beat_model=None, boundary_model=_Boundary({row.row_id})) is None
 
 
 # --- beat family ambiguity ---------------------------------------------------
@@ -242,11 +244,14 @@ def test_generator_status_never_overrides_an_existing_verdict():
                         generator_status=status).disposition == "boundary"
 
 
-def test_generator_status_does_not_bypass_the_classification_gate():
+def test_generator_status_answers_the_classification_gate():
+    # #124 (operator 2026-10-04): the generator's record of an unrecognized-
+    # head row is its classification -- derived, clerical.
     row = _row(content_hash="h1", unhandled=0, unrecognized_heads=("pbSomething",))
     status = GeneratorStatus(specs={_RID: "refused:C8: ruby"})
-    assert derive_entry(row, beat_model=None, boundary_model=None,
-                        generator_status=status) is None
+    entry = derive_entry(row, beat_model=None, boundary_model=None, generator_status=status)
+    assert entry is not None and entry.disposition == "refused:C8: ruby"
+    assert derive_entry(row, beat_model=None, boundary_model=None) is None
 
 
 def test_generator_status_does_not_resolve_an_ambiguous_beat_claim():
