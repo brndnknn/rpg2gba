@@ -32,10 +32,12 @@ verdict the manifest itself supports.
 """
 from __future__ import annotations
 
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .schema import Disposition, ManifestRow
+from .schema import Disposition, DispositionError, ManifestRow, parse_blocked_argument
 
 if TYPE_CHECKING:
     # Protocols only -- this module never imports `checker` at runtime, same
@@ -90,6 +92,7 @@ def derive_entry(
     beat_model: "BeatModel | None",
     boundary_model: "BoundaryModel | None",
     generator_status: "GeneratorStatus | None" = None,
+    hand_dispositions: Mapping[str, Disposition] | None = None,
 ) -> DerivedEntry | None:
     """The machine verdict for `row`, or None if nothing can be derived and a
     human must decide.
@@ -119,7 +122,14 @@ def derive_entry(
        comment) -- so nothing about `requires`'s shape can ever encode an
        OR. The `blocked:` grammar's `+` (AND) is therefore the only
        operator this derivation ever needs; `|` (OR) has no source data to
-       come from here.
+       come from here. EXCEPTION (operator ruling 2026-10-04, #124): on a
+       BRANCH-ARM row (`.../bN`) whose parent page row carries a HAND
+       disposition with verdict `blocked` and a parsed argument equal to this
+       row's spec, the entry is CLERICAL (`proposed=False`) -- arms exist only
+       because C1 split a page the human already decided. Narrow carve-out of
+       the "a `blocked:` proposal is never accepted without a human" rule;
+       every other `blocked:` stays a proposal. `hand_dispositions` supplies
+       the parent lookup (None -> no carve-out).
     5. `row.may_be_derived` -> `"cosmetic"`, CLERICAL. (Already implies
        `requires` is empty and no citation is owed -- rule 4 above returns
        before this is ever reached when `requires` is non-empty.)
@@ -154,7 +164,9 @@ def derive_entry(
         # contains only valid capability tokens) -- fails loud rather than
         # writing a spec the dispositions loader would later reject.
         Disposition.parse(row.row_id, spec)
-        return DerivedEntry(disposition=spec, derived_hash=row.content_hash, proposed=True)
+        clerical = _parent_hand_blocked_matches(row.row_id, argument, hand_dispositions)
+        return DerivedEntry(disposition=spec, derived_hash=row.content_hash,
+                            proposed=not clerical)
 
     if row.may_be_derived:
         return DerivedEntry(disposition="cosmetic", derived_hash=row.content_hash)
@@ -164,6 +176,32 @@ def derive_entry(
         return DerivedEntry(disposition=spec, derived_hash=row.content_hash)
 
     return None
+
+
+_ARM_SUFFIX = re.compile(r"^(?P<parent>.+)/b\d+$")
+
+
+def _parent_hand_blocked_matches(
+    row_id: str,
+    argument: str,
+    hand_dispositions: Mapping[str, Disposition] | None,
+) -> bool:
+    """True iff `row_id` is a branch arm and its parent page row has a hand
+    `blocked` disposition whose parsed argument equals `argument` (compared as
+    alternative-sets, not text)."""
+    if not hand_dispositions:
+        return False
+    m = _ARM_SUFFIX.match(row_id)
+    if m is None:
+        return False
+    parent = hand_dispositions.get(m.group("parent"))
+    if parent is None or parent.verdict != "blocked" or not parent.argument:
+        return False
+    try:
+        return (frozenset(parse_blocked_argument(parent.argument))
+                == frozenset(parse_blocked_argument(argument)))
+    except DispositionError:
+        return False  # e.g. `tooling:` form: never a capability set
 
 
 def _generator_cited_entry(

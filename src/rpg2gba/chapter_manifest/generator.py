@@ -30,7 +30,7 @@ import json
 import logging
 import re
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -87,6 +87,7 @@ if TYPE_CHECKING:
     # its own Protocol seams stand in for).
     from rpg2gba.chapter_manifest.checker import BeatModel, BoundaryModel
     from rpg2gba.chapter_manifest.generator_status import GeneratorStatus
+    from rpg2gba.chapter_manifest.schema import Disposition
 
 logger = logging.getLogger(__name__)
 
@@ -1057,6 +1058,7 @@ def write_derived(
     beat_model: "BeatModel | None" = None,
     boundary_model: "BoundaryModel | None" = None,
     generator_status: "GeneratorStatus | None" = None,
+    hand_dispositions: "Mapping[str, Disposition] | None" = None,
 ) -> None:
     """Writes the machine-derived sidecar (format v2, `REDERIVATION_PLAN.md`
     §15.2 item 1, narrowed by the 2026-09-14 four-verdict ruling).
@@ -1093,7 +1095,8 @@ def write_derived(
         row.row_id: entry
         for row in sorted(rows, key=lambda r: row_id_sort_key(r.row_id))
         for entry in (derive_entry(row, beat_model=beat_model, boundary_model=boundary_model,
-                                   generator_status=generator_status),)
+                                   generator_status=generator_status,
+                                   hand_dispositions=hand_dispositions),)
         if entry is not None
     }
     payload: dict[str, Any] = {}

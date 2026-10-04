@@ -129,9 +129,10 @@ CHAPTER N / CHnn
       • then the module is committed as `src/rpg2gba/playtest/chapters_gen/chNN.py`.
         Beats are no longer hand-registered, and `routing plan --module …` is no
         longer a step of the loop (the generator calls the solver itself).
-      • `chapter_manifest check --chapter CHnn` is still keyed to the deleted hand
-        beat names — `PROJECT_TODO.md` #124, to be re-keyed before the next chapter
-        relies on it. Gen walks are not graded against a route plan
+      • then re-run `chapter_manifest generate --chapter CHnn` (the derived sidecar
+        reads the module's beats and its ELSEWHERE/REFUSED records) and `check`;
+        a generator refusal is a warning (`PROJECT_TODO.md` #124, done
+        2026-10-04). Gen walks are not graded against a route plan
         (`RULE_ROUTE_ORDER` / `route_model_unenforced` concern hand suites; #120).
  8. BOOT — run in mGBA; walk the section. This is the gate (see ROADMAP §9).
       • `rpg2gba playtest run --chapter CHnn --suite gen --output output/playtest-gen

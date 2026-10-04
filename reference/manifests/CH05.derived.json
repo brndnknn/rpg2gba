@@ -90,13 +90,11 @@
   },
   "map036/ev008/p0/b0": {
     "disposition": "blocked:surf",
-    "derived_hash": "1c1e29fe474e35ee",
-    "proposed": true
+    "derived_hash": "1c1e29fe474e35ee"
   },
   "map036/ev008/p0/b1": {
     "disposition": "blocked:surf",
-    "derived_hash": "a0449170993f5b87",
-    "proposed": true
+    "derived_hash": "a0449170993f5b87"
   },
   "map036/ev008/p1": {
     "disposition": "blocked:surf",
@@ -110,13 +108,11 @@
   },
   "map036/ev009/p0/b0": {
     "disposition": "blocked:surf",
-    "derived_hash": "1a046d40c9f6fc2b",
-    "proposed": true
+    "derived_hash": "1a046d40c9f6fc2b"
   },
   "map036/ev009/p0/b1": {
     "disposition": "blocked:surf",
-    "derived_hash": "2c6f1ce6f61cd707",
-    "proposed": true
+    "derived_hash": "2c6f1ce6f61cd707"
   },
   "map036/ev009/p1": {
     "disposition": "blocked:surf",

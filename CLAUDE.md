@@ -310,7 +310,7 @@ python -m rpg2gba.chapter_atlas validate | coverage | census
 
 # READ — generate and check the chapter's manifest
 python -m rpg2gba.chapter_manifest generate --chapter CHnn
-python -m rpg2gba.chapter_manifest check    --chapter CHnn   # still keyed to hand beat names: PROJECT_TODO #124
+python -m rpg2gba.chapter_manifest check    --chapter CHnn   # re-run `generate` after any beat_gen run
 
 # GENERATE — the chapter's suite (route solved inside); writes output/beats/
 python -m rpg2gba.beat_gen generate --chapter CHnn   # module + CHnn.review.md + CHnn.route.json

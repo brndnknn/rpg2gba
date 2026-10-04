@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from rpg2gba.chapter_manifest.derivation import DerivedEntry, derive_entry
 from rpg2gba.chapter_manifest.generator_status import GeneratorStatus
-from rpg2gba.chapter_manifest.schema import ManifestRow
+from rpg2gba.chapter_manifest.schema import Disposition, ManifestRow
 
 
 def _row(row_id: str = "map001/ev001/p0", **overrides) -> ManifestRow:
@@ -265,3 +265,51 @@ def test_generator_status_row_not_listed_derives_nothing():
     row = _row(content_hash="h1", unhandled=0, effects=("giveitem",))
     assert derive_entry(row, beat_model=None, boundary_model=None,
                         generator_status=GeneratorStatus(specs={})) is None
+
+
+# --- branch-arm carve-out (operator ruling 2026-10-04, #124) -----------------
+
+ARM = "map035/ev019/p0/b2"
+PARENT = "map035/ev019/p0"
+
+
+def _hand(spec: str) -> dict[str, Disposition]:
+    return {PARENT: Disposition.parse(PARENT, spec, affirmed_hash="x")}
+
+
+def test_arm_of_hand_blocked_parent_with_same_argument_is_clerical():
+    row = _row(ARM, content_hash="h1", unhandled=0, requires=("rock_smash", "strength"))
+    entry = derive_entry(row, beat_model=None, boundary_model=None,
+                         hand_dispositions=_hand("blocked:rock_smash+strength"))
+    assert entry == DerivedEntry(
+        disposition="blocked:rock_smash+strength", derived_hash="h1", proposed=False)
+
+
+def test_arm_with_different_parent_capability_stays_a_proposal():
+    row = _row(ARM, content_hash="h1", unhandled=0, requires=("rock_smash",))
+    entry = derive_entry(row, beat_model=None, boundary_model=None,
+                         hand_dispositions=_hand("blocked:surf"))
+    assert entry is not None and entry.proposed is True
+
+
+def test_arm_with_non_blocked_parent_stays_a_proposal():
+    row = _row(ARM, content_hash="h1", unhandled=0, requires=("rock_smash",))
+    entry = derive_entry(row, beat_model=None, boundary_model=None,
+                         hand_dispositions=_hand("boundary"))
+    assert entry is not None and entry.proposed is True
+
+
+def test_arm_with_no_hand_parent_stays_a_proposal():
+    row = _row(ARM, content_hash="h1", unhandled=0, requires=("rock_smash",))
+    for hand in (None, {}):
+        entry = derive_entry(row, beat_model=None, boundary_model=None,
+                             hand_dispositions=hand)
+        assert entry is not None and entry.proposed is True
+
+
+def test_non_arm_page_row_stays_a_proposal():
+    row = _row(PARENT, content_hash="h1", unhandled=0, requires=("rock_smash",))
+    # Even a hand entry on the row itself (or a "parent-like" sibling) is no carve-out.
+    entry = derive_entry(row, beat_model=None, boundary_model=None,
+                         hand_dispositions=_hand("blocked:rock_smash"))
+    assert entry is not None and entry.proposed is True

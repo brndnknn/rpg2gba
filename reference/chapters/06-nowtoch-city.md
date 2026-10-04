@@ -284,7 +284,7 @@ briefing" that no longer exists. Re-measured the same day with
 
 ### Before the branch opens / carried into CH06
 
-- `PROJECT_TODO.md` #124 — re-key the manifest layer (still keyed to the deleted hand beat names).
+- ~~`PROJECT_TODO.md` #124 — re-key the manifest layer~~ — DONE 2026-10-04; `chapter_manifest check` is 0 errors on CH01–CH05.
 - `PROJECT_TODO.md` #122 — C10 (offline verdict head / flavour-NPC checker / ROM sample) deferred to CH06.
 - `PROJECT_TODO.md` #92 remainder — capability model (moves/items/requirement groups); CH06 has the Rock Smash grant.
 - `PROJECT_TODO.md` #121 — HM badge-count gates.

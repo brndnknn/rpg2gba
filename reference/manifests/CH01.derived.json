@@ -257,23 +257,19 @@
   },
   "map032/ev014/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "c4620541050f877a",
-    "proposed": true
+    "derived_hash": "c4620541050f877a"
   },
   "map032/ev014/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "1218a24522ee04c1",
-    "proposed": true
+    "derived_hash": "1218a24522ee04c1"
   },
   "map032/ev014/p0/b2": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "4d6b135dcff956f3",
-    "proposed": true
+    "derived_hash": "4d6b135dcff956f3"
   },
   "map032/ev014/p0/b3": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "35859e2e37bc46d5",
-    "proposed": true
+    "derived_hash": "35859e2e37bc46d5"
   },
   "map032/ev014/p1": {
     "disposition": "blocked:rock_smash",
@@ -286,23 +282,19 @@
   },
   "map032/ev015/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "c4620541050f877a",
-    "proposed": true
+    "derived_hash": "c4620541050f877a"
   },
   "map032/ev015/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "1218a24522ee04c1",
-    "proposed": true
+    "derived_hash": "1218a24522ee04c1"
   },
   "map032/ev015/p0/b2": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "4d6b135dcff956f3",
-    "proposed": true
+    "derived_hash": "4d6b135dcff956f3"
   },
   "map032/ev015/p0/b3": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "35859e2e37bc46d5",
-    "proposed": true
+    "derived_hash": "35859e2e37bc46d5"
   },
   "map032/ev015/p1": {
     "disposition": "blocked:rock_smash",
@@ -423,23 +415,19 @@
   },
   "map032/ev033/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "c4620541050f877a",
-    "proposed": true
+    "derived_hash": "c4620541050f877a"
   },
   "map032/ev033/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "1218a24522ee04c1",
-    "proposed": true
+    "derived_hash": "1218a24522ee04c1"
   },
   "map032/ev033/p0/b2": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "4d6b135dcff956f3",
-    "proposed": true
+    "derived_hash": "4d6b135dcff956f3"
   },
   "map032/ev033/p0/b3": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "35859e2e37bc46d5",
-    "proposed": true
+    "derived_hash": "35859e2e37bc46d5"
   },
   "map032/ev033/p1": {
     "disposition": "blocked:rock_smash",

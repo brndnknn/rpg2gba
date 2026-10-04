@@ -702,7 +702,8 @@ def check_chapter(
             continue
 
         recomputed = derive_entry(row, beat_model=beat_model, boundary_model=boundary_model,
-                                  generator_status=generator_status)
+                                  generator_status=generator_status,
+                                  hand_dispositions=dispositions)
         if (recomputed is None
                 or recomputed.disposition != entry.disposition
                 or recomputed.proposed != entry.proposed):
@@ -1186,7 +1187,8 @@ def _effective_dispositions(
         if entry.proposed:
             continue
         recomputed = derive_entry(row, beat_model=beat_model, boundary_model=boundary_model,
-                                  generator_status=generator_status)
+                                  generator_status=generator_status,
+                                  hand_dispositions=dispositions)
         if (recomputed is None
                 or recomputed.disposition != entry.disposition
                 or recomputed.proposed != entry.proposed):

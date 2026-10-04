@@ -113,13 +113,11 @@
   },
   "map035/ev014/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "c4620541050f877a",
-    "proposed": true
+    "derived_hash": "c4620541050f877a"
   },
   "map035/ev014/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "9689b7cffeb3327b",
-    "proposed": true
+    "derived_hash": "9689b7cffeb3327b"
   },
   "map035/ev014/p1": {
     "disposition": "blocked:rock_smash",
@@ -133,13 +131,11 @@
   },
   "map035/ev015/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "c4620541050f877a",
-    "proposed": true
+    "derived_hash": "c4620541050f877a"
   },
   "map035/ev015/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "9689b7cffeb3327b",
-    "proposed": true
+    "derived_hash": "9689b7cffeb3327b"
   },
   "map035/ev015/p1": {
     "disposition": "blocked:rock_smash",
@@ -153,13 +149,11 @@
   },
   "map035/ev016/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "c4620541050f877a",
-    "proposed": true
+    "derived_hash": "c4620541050f877a"
   },
   "map035/ev016/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "9689b7cffeb3327b",
-    "proposed": true
+    "derived_hash": "9689b7cffeb3327b"
   },
   "map035/ev016/p1": {
     "disposition": "blocked:rock_smash",
@@ -172,13 +166,11 @@
   },
   "map035/ev017/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "c4620541050f877a",
-    "proposed": true
+    "derived_hash": "c4620541050f877a"
   },
   "map035/ev017/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "9689b7cffeb3327b",
-    "proposed": true
+    "derived_hash": "9689b7cffeb3327b"
   },
   "map035/ev017/p1": {
     "disposition": "blocked:rock_smash",
@@ -192,13 +184,11 @@
   },
   "map035/ev018/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "c4620541050f877a",
-    "proposed": true
+    "derived_hash": "c4620541050f877a"
   },
   "map035/ev018/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "9689b7cffeb3327b",
-    "proposed": true
+    "derived_hash": "9689b7cffeb3327b"
   },
   "map035/ev018/p1": {
     "disposition": "blocked:rock_smash",
@@ -212,33 +202,27 @@
   },
   "map035/ev019/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "4532d230b26564e2",
-    "proposed": true
+    "derived_hash": "4532d230b26564e2"
   },
   "map035/ev019/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "8cc5d065a226330f",
-    "proposed": true
+    "derived_hash": "8cc5d065a226330f"
   },
   "map035/ev019/p0/b2": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "ac7b0ac260ec0dde",
-    "proposed": true
+    "derived_hash": "ac7b0ac260ec0dde"
   },
   "map035/ev019/p0/b3": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "eab90722c97b6f61",
-    "proposed": true
+    "derived_hash": "eab90722c97b6f61"
   },
   "map035/ev019/p0/b4": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "e6059be4531c2be7",
-    "proposed": true
+    "derived_hash": "e6059be4531c2be7"
   },
   "map035/ev019/p0/b5": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "9098dfd5a3ee8024",
-    "proposed": true
+    "derived_hash": "9098dfd5a3ee8024"
   },
   "map035/ev019/p1": {
     "disposition": "blocked:rock_smash",
@@ -282,13 +266,11 @@
   },
   "map035/ev023/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "ba56f52b1f6d7856",
-    "proposed": true
+    "derived_hash": "ba56f52b1f6d7856"
   },
   "map035/ev023/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "c4fc58d8f60268bb",
-    "proposed": true
+    "derived_hash": "c4fc58d8f60268bb"
   },
   "map035/ev023/p1": {
     "disposition": "blocked:rock_smash",
@@ -297,23 +279,19 @@
   },
   "map035/ev023/p1/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "eb84c3b6d81c6fee",
-    "proposed": true
+    "derived_hash": "eb84c3b6d81c6fee"
   },
   "map035/ev023/p1/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "bc69787fe0c9095d",
-    "proposed": true
+    "derived_hash": "bc69787fe0c9095d"
   },
   "map035/ev023/p1/b2": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "e91d917d8267f06c",
-    "proposed": true
+    "derived_hash": "e91d917d8267f06c"
   },
   "map035/ev023/p1/b3": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "d026fc46b878144f",
-    "proposed": true
+    "derived_hash": "d026fc46b878144f"
   },
   "map035/ev023/p2": {
     "disposition": "blocked:rock_smash",
@@ -322,13 +300,11 @@
   },
   "map035/ev023/p2/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "6278ffcacc780ab5",
-    "proposed": true
+    "derived_hash": "6278ffcacc780ab5"
   },
   "map035/ev023/p2/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "1bb496eda0d14745",
-    "proposed": true
+    "derived_hash": "1bb496eda0d14745"
   },
   "map035/ev024/p0": {
     "disposition": "blocked:rock_smash",
@@ -337,13 +313,11 @@
   },
   "map035/ev024/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "54a938fa7047132d",
-    "proposed": true
+    "derived_hash": "54a938fa7047132d"
   },
   "map035/ev024/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "3063780b6eb2a932",
-    "proposed": true
+    "derived_hash": "3063780b6eb2a932"
   },
   "map035/ev024/p1": {
     "disposition": "blocked:rock_smash",
@@ -357,13 +331,11 @@
   },
   "map035/ev025/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "df9e59b053bc9b1f",
-    "proposed": true
+    "derived_hash": "df9e59b053bc9b1f"
   },
   "map035/ev025/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "a94ef1de37c7df45",
-    "proposed": true
+    "derived_hash": "a94ef1de37c7df45"
   },
   "map035/ev025/p1": {
     "disposition": "blocked:rock_smash",
@@ -377,13 +349,11 @@
   },
   "map035/ev026/p0/b0": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "2475c26a02655a51",
-    "proposed": true
+    "derived_hash": "2475c26a02655a51"
   },
   "map035/ev026/p0/b1": {
     "disposition": "blocked:rock_smash",
-    "derived_hash": "ba04b0bee7374bb2",
-    "proposed": true
+    "derived_hash": "ba04b0bee7374bb2"
   },
   "map035/ev026/p1": {
     "disposition": "blocked:rock_smash",

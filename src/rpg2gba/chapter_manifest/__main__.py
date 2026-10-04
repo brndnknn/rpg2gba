@@ -272,8 +272,12 @@ def generate_cmd(chapter: str, manifest: Path | None, derived_path_opt: Path | N
             "elsewhere:/refused:/unreachable: entries will not be derived this run",
             chapter, exc)
         generator_status = None
+    # Hand dispositions, beside the manifest like the sidecar: a branch arm
+    # of a hand-`blocked:` page derives CLERICAL (#124 ruling 2026-10-04).
+    hand_file = disposition_path(chapter, root=manifest_file.parent)
+    hand_dispositions = load_dispositions(hand_file) if hand_file.exists() else {}
     write_derived(rows, derived_file, beat_model=beat_model, boundary_model=boundary_model,
-                  generator_status=generator_status)
+                  generator_status=generator_status, hand_dispositions=hand_dispositions)
 
     undispositionable = sum(1 for row in rows if not row.is_dispositionable)
     needs_citation = sum(1 for row in rows if row.needs_citation)
@@ -281,7 +285,8 @@ def generate_cmd(chapter: str, manifest: Path | None, derived_path_opt: Path | N
         entry
         for row in rows
         for entry in (derive_entry(row, beat_model=beat_model, boundary_model=boundary_model,
-                                   generator_status=generator_status),)
+                                   generator_status=generator_status,
+                                   hand_dispositions=hand_dispositions),)
         if entry is not None
     ]
     verdict_counts: dict[str, int] = {}

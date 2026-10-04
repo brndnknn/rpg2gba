@@ -1660,3 +1660,21 @@ def test_render_covers_every_schema_verdict():
     from rpg2gba.chapter_manifest.schema import _VERDICTS
 
     assert render._RENDERED_VERDICTS == _VERDICTS
+
+
+def test_branch_arm_of_hand_blocked_parent_is_accepted_without_derived_unaffirmed():
+    from rpg2gba.chapter_manifest.checker import (
+        RULE_DERIVED_UNAFFIRMED,
+        RULE_DERIVED_VERDICT_MISMATCH,
+    )
+    from rpg2gba.chapter_manifest.derivation import DerivedEntry
+
+    parent = "map035/ev019/p0"
+    arm = _row(f"{parent}/b2", requires=("rock_smash",), unhandled=0)
+    dispositions = {parent: _disp(parent, "blocked:rock_smash", affirmed_hash="x")}
+    derived = {arm.row_id: DerivedEntry(
+        disposition="blocked:rock_smash", derived_hash=arm.content_hash, proposed=False)}
+    findings = [f for f in check_chapter([arm], dispositions, derived=derived)
+                if f.row_id == arm.row_id]
+    assert not any(f.rule in (RULE_DERIVED_UNAFFIRMED, RULE_DERIVED_VERDICT_MISMATCH,
+                              RULE_UNDISPOSITIONED) for f in findings)

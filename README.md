@@ -20,8 +20,8 @@ python -m rpg2gba.chapter_manifest generate --chapter CHnn
 python -m rpg2gba.chapter_manifest check    --chapter CHnn
 ```
 
-*(Caveat: `chapter_manifest check` is still keyed to the deleted hand-suite beat names —
-`PROJECT_TODO.md` #124, to be re-keyed before the next chapter relies on it.)*
+*(The sidecar `CHnn.derived.json` reads the generated module, so re-run `chapter_manifest
+generate` after `beat_gen generate`, then `check` — `PROJECT_TODO.md` #124, done 2026-10-04.)*
 
 Then the build/assembly steps (transpile, stage, art, assemble, `make modern`) as named in
 `BUILD_PLAN.md` §2 steps 2–6 — not repeated here. Then generate the playtest suite and boot:
