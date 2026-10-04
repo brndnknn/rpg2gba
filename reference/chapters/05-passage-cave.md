@@ -82,7 +82,7 @@ the self-switch-gated (once-only) pickups/battles along it.
 | Beat | Map | Gate | Player action (test) | Expected effect (observable) |
 |---|---|---|---|---|
 | B1 | 36→35→35 | — | cross cave's own exit warp (`map036/ev001/p0`) to Route 2, via the DERIVED reciprocal `pbCaveEntrance` (`map035/ev001/p0`, claimed by `B1_in`, not here) | `pbCaveExit`, mirrored: reciprocal Route 2→cave first, then the claimed cave→Route 2 crossing; ends on Route 2 (20,33) |
-| B1_nudge | 35 | arrival autorun | observe the nudge that fires landing on (20,33) from the cave | claims `map035/ev001/p1` (CH04's own map, claimed here per REDERIVATION_PLAN.md §10 R2/R3 — only CH05's walk can trigger it); player displaced one tile off (20,33) |
+| B1_nudge | 35 | arrival autorun | observe the nudge that fires landing on (20,33) from the cave | claims `map035/ev001/p1` (CH04's own map, claimed here per reference/archive/REDERIVATION_PLAN.md §10 R2/R3 — only CH05's walk can trigger it); player displaced one tile off (20,33) |
 | B1_in | 35→36 | — | enter cave from Route 2 | `pbCaveEntrance`, claims `map035/ev001/p0` directly, warp to Map036 (17,39) |
 | B2 | 36 | self-switch A off | walk to (10,35) | EV003: `pbItemBall(ESCAPEROPE)` (`Map036.json:5765-5771`); self-switch A set |
 | B3 | 36 | event sight | approach Trainer(5) (18,29) | `pbTrainerBattle(HIKER,"Manny")` (`:6008-6014`); self-switch A after |
@@ -98,7 +98,7 @@ the self-switch-gated (once-only) pickups/battles along it.
 Four Map037 events (ids 3,6,7,8, all "Stairs") write no state, so they
 carry no beat in the table above — but they are **not** inert, and the
 2026-08-28 CH05 dry-run corrects this document on that point
-(`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.2/§5.9). Each is the diagonal-
+(`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.2/§5.9). Each is the diagonal-
 staircase idiom already met on Map033: a player-touch, `through=false`
 event whose `code 111` character-direction branch reads the player's
 facing and force-moves them one tile **diagonally** (ev3/ev6 at (20,10)/
@@ -264,7 +264,7 @@ settled here when the CH05 branch opens.
    shipped as a lit room through CH03's §9 boot-walk gate, unremarked.
    `DarkMap` is a *map property* — a capability surface that is neither a
    page, a seam, nor a terrain tag, and therefore invisible to the
-   manifest. (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.3.)
+   manifest. (`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.3.)
 2. **The engine map names for 36 and 37 — RESOLVED 2026-08-31 (operator
    ruling).** Map 36 is **"Passage Cave 1F"**, map 37 is **"Passage Cave
    2F"** — floor labels, in the shape map 19's "Passage Cave Grott-Hole"
@@ -276,7 +276,7 @@ settled here when the CH05 branch opens.
    collision with map 19's `MAP_PASSAGE_CAVE_GROTT_HOLE`. §2's table above
    is updated. The earlier `PassageCave` / `PassageCave2` proposal is
    dropped — the bare `2` carried no meaning to a player or a reader.
-   (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.5.)
+   (`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.5.)
 3. **The two unresolved cross-references**, carried forward from §7.3
    below because they also want an operator call, not just a note: (a)
    Sableyeite here versus `00-atlas.md` crediting CH40 with the "first
@@ -299,7 +299,7 @@ Work the CH05 build inherits, not open questions:
   byte-identical fingerprint to CH04's `map035/ev001/p1`, which carries
   `beat:B8`; 324 instances across 73 maps) is missing from the Tier-1
   template build set and CH05 needs it authored.
-  (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.6.)
+  (`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.6.)
 - Two mechanical fail-loud repairs land with this chapter: the
   `unhandled: 0`-versus-null distinction, and `requires_flash` reading its
   parsed metadata instead of the hardcoded literal. Both are tracked in
@@ -307,7 +307,7 @@ Work the CH05 build inherits, not open questions:
 - Standing guardrail: **a green CH05 §9 boot-walk gate is not evidence**
   that slice 2, the capability model, or the mart/Poké Center/PC templates
   are correct — CH05 measures zero exposure to all three
-  (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.8).
+  (`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.8).
 - The decided-but-unbuilt **re-disposition of the whole built corpus**
   during CH05's build, with its ordering safeguard: freeze the expected
   answers first, then derive, then diff, then write.
@@ -316,7 +316,7 @@ Work the CH05 build inherits, not open questions:
   fail-loud before slice 1's stair model would make every stair-crossing
   leg on Map037 raise, since a leg reachable only across a sideways
   staircase is unroutable by the 4-neighbour planner
-  (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.9). Slice 1 landed in commits
+  (`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.9). Slice 1 landed in commits
   `f780a972`..`46bd2efe` and the fail-loud landed after it in `f705b642`,
   all on 2026-08-28 — so the graph and the fail-loud are both in place and
   the chapter is routable. No action needed here.
@@ -347,7 +347,7 @@ Work the CH05 build inherits, not open questions:
   Its fingerprint is byte-identical to CH04's `map035/ev001/p1` (which
   carries `beat:B8`), and the idiom occurs **324 times across 73 maps** —
   a corpus archetype, not a template left behind
-  (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.6).
+  (`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.6).
 - **Two cross-references flagged but not resolved in this document**:
   Sableyeite vs `00-atlas.md`'s "first Mega Stone" credit to CH40 (§6), and
   Grott-Hole's HM04 Strength gate vs Map019's CH03/A1 binding (§5 #4,

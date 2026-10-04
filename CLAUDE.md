@@ -79,8 +79,9 @@ your bearings. It is deliberately *not* a directory tree — a hand-drawn tree l
   (RMXP `.rxdata` → JSON, via Ruby), `conversion_agent/` (**the deterministic event→Poryscript
   transpiler lives here**, despite the name — plus the flag registry and the hand-invoked LLM
   tail tool), and `tileset_converter/` (graphics, layout, and map assembly). The chapter loop's
-  own packages — `chapter_atlas/`, `chapter_manifest/`, `routing/`, `playtest/` — are listed
-  with their commands in §7.
+  own packages — `chapter_atlas/`, `chapter_manifest/`, `beat_gen/`, `playtest/` — are listed
+  with their commands in §7. `beat_gen/` generates each chapter's playtest suite and leans on
+  `story_state/`, `beat_floor/`, `ruby_subset/` and `routing/` (the solver) underneath.
 - **`reference/`** — hand-authored docs and the source-of-truth JSONs (§4.3). `guides/` is
   pipeline knowledge, `chapters/` is the per-chapter corpus plan, `archive/` is retired docs
   (read `reference/archive/README.md` first — it maps each archived doc to where its live
@@ -301,7 +302,7 @@ code identifiers (`SLICE_MAP_IDS`) — deliberately not renamed.
 **The `rpg2gba` console script is not the whole CLI, and reading `pipeline.py` alone will
 mislead you.** It registers the pipeline *stages* (`phase2`, `phase3`, `phase4`, `phase5`,
 `convert-map`, `convert-common-events`, `transpile-events`). The **chapter loop** — the way
-work actually gets done now — lives in four separate packages, invoked as modules:
+work actually gets done now — lives in separate packages, invoked as modules:
 
 ```bash
 # SELECT — which chapter, and does the atlas agree it is coherent?
@@ -309,21 +310,26 @@ python -m rpg2gba.chapter_atlas validate | coverage | census
 
 # READ — generate and check the chapter's manifest
 python -m rpg2gba.chapter_manifest generate --chapter CHnn
-python -m rpg2gba.chapter_manifest check    --chapter CHnn   # enforces RULE_ROUTE_ORDER
+python -m rpg2gba.chapter_manifest check    --chapter CHnn   # still keyed to hand beat names: PROJECT_TODO #124
 
-# ROUTE — solve the visit order, then write the plan
-python -m rpg2gba.routing plan --chapter CHnn --module <mod> --dry-run
-python -m rpg2gba.routing plan --chapter CHnn --module <mod>   # writes reference/routes/CHnn.route.json
+# GENERATE — the chapter's suite (route solved inside); writes output/beats/
+python -m rpg2gba.beat_gen generate --chapter CHnn   # module + CHnn.review.md + CHnn.route.json
+#   operator approves CHnn.review.md (§9), then commit as src/rpg2gba/playtest/chapters_gen/chNN.py
 
 # BOOT — the §9 gate
-python -m rpg2gba.playtest run  --chapter CHnn
-python -m rpg2gba.playtest walk --chapter CHnn --at-beat B7
+rpg2gba playtest run  --chapter CHnn --suite gen --output output/playtest-gen
+rpg2gba playtest walk --chapter CHnn --at-beat <beat>
 ```
 
-Each is also an `rpg2gba` subcommand (added 2026-09-08): `rpg2gba chapter-atlas`,
-`chapter-manifest`, `routing`, `playtest` — hyphenated, same subcommands underneath. Both
-forms work and delegate to the same click groups. The full loop with its build/assembly steps
-is `BUILD_PLAN.md §2`; the runnable end-to-end recipe is `README.md`.
+Generate in chain order: CHn reads CHn-1's generated module for cross-chapter story seeds.
+*(Corrected 2026-10-04: this block used to give a ROUTE step, `routing plan --module <mod>`,
+which named a hand-written suite. Hand suites are deleted, `--suite` defaults to `gen`, and a
+gen suite loads no route plan — `reference/routes/` holds only CH05's hand-era plan.)*
+
+`chapter-atlas`, `chapter-manifest`, `routing`, `playtest` are also `rpg2gba` subcommands
+(added 2026-09-08), hyphenated, delegating to the same click groups; `beat_gen` is module-form
+only. The full loop with its build/assembly steps is `BUILD_PLAN.md §2`; the runnable recipe
+is `README.md` → "Chapter loop".
 
 ---
 
@@ -362,7 +368,7 @@ Fix the failure. Do not skip, mark xfail, or comment out failing tests without e
 There are three points where you must stop and wait for the user, even if everything appears to be working:
 
 1. **End of Phase 2** — before any PBS-generated content is committed to the pokeemerald-expansion fork, the user reviews the generated C output and the unfixed-issues list
-2. **Per-chapter boot gate** — a chapter is not "done" until its ROM boots in mGBA and the section is genuinely playable (warps fire, NPCs sane, layout legible — *art included*, not deferred). The user walks each chapter before the frontier widens. (Replaces the retired end-of-Phase-4 frozen-prompt/bulk-run gate.) **For a generated chapter, the gate starts with the review doc** (added 2026-09-18, `C6_GENERATOR_PLAN.md` C2). The user reads and approves `CHnn.review.md` before the generated module is committed as `playtest/chapters_gen/chNN.py` (C9) and before the walk. *(Corrected 2026-09-24: C9 lands the generated suite **beside** the hand `chNN.py`, never over it; removing the hand suite is a separate operator-gated step — `REDERIVATION_PLAN.md` §16.3 "C9 rulings".)* *(Corrected 2026-10-03: that step is done — CH01–CH05's hand suites are deleted, `playtest/chapters/` is empty, and every loader and `--suite` default to `gen`.)* That doc is the only human-visible record of the route solver's picks: seam cell, stair starting end, warp press side, event approach side and order-dependent writes.
+2. **Per-chapter boot gate** — a chapter is not "done" until its ROM boots in mGBA and the section is genuinely playable (warps fire, NPCs sane, layout legible — *art included*, not deferred). The user walks each chapter before the frontier widens. (Replaces the retired end-of-Phase-4 frozen-prompt/bulk-run gate.) **Every chapter's gate starts with its review doc** — suites are generated, not hand-written. The user reads and approves `output/beats/CHnn.review.md` before the generated module is committed as `src/rpg2gba/playtest/chapters_gen/chNN.py`, and before the walk. *(Collapsed 2026-10-04: the hand suites this used to be contrasted with were deleted 2026-10-03; history in `reference/archive/C6_GENERATOR_PLAN.md` C2 and `reference/archive/REDERIVATION_PLAN.md` §16.3 "C9 rulings".)* That doc is the only human-visible record of the route solver's picks: seam cell, stair starting end, warp press side, event approach side and order-dependent writes.
 3. **End of Phase 7** — before declaring the ROM "playable," the user does a manual playthrough of the success-criteria scenarios
 
 These gates exist because each one is a place where systematic errors propagate cheaply to fix early and expensively to fix late. Do not push past them on autopilot.

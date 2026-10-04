@@ -24,15 +24,15 @@ Ask one question of the data, not of the user: **is the target reachable by
 beats that already exist?**
 
 ```
-python -m rpg2gba.playtest list                 # chapters + their beats
-python -m rpg2gba.playtest seeds --chapter <ch> # states available on THIS build
+python -m rpg2gba.playtest list                 # chapters + their beats (gen suite)
+python -m rpg2gba.playtest seeds --chapter <ch> --suite gen --output output/playtest-gen --engine engine  # states on THIS build
 ```
 
 | Situation | Mechanism |
 |---|---|
 | Target sits at/behind an existing beat | **Seed blob** — `walk --at-beat` |
 | Target is just past the end of a converted chapter | **Seed blob** — `walk --at-end` |
-| Target is deep in content with no beats yet | **Write the beats first**, then seed |
+| Target is deep in content with no beats yet | **Generate the beats first**, then seed |
 | State the game cannot produce (test party, badge/HM grant, forced loss path) | **`new_game.c` rung** |
 
 The blob path is strongly preferred: no rebuild, and the state is *real* —
@@ -47,15 +47,16 @@ The runner drops a seed blob at **every beat boundary** during a run, keyed
 to the ROM's sha256. One green run arms every start point in the chapter.
 
 ```bash
-# 1. produce the blobs (also the regression check — must be green)
-python -m rpg2gba.playtest run --chapter <ch> --engine engine
+# 1. produce the blobs (also the regression check — must be green).
+#    --from-beat X (iteration only) needs that chapter's own green blobs.
+python -m rpg2gba.playtest run --chapter <ch> --suite gen --output output/playtest-gen --engine engine
 
 # 2. what states does this build have?
-python -m rpg2gba.playtest seeds --chapter <ch> --engine engine
+python -m rpg2gba.playtest seeds --chapter <ch> --suite gen --output output/playtest-gen --engine engine
 
 # 3. build the walk ROM
-python -m rpg2gba.playtest walk --chapter <ch> --at-beat B10 --engine engine
-python -m rpg2gba.playtest walk --chapter <ch> --at-end     --engine engine
+python -m rpg2gba.playtest walk --chapter <ch> --at-beat B10 --suite gen --output output/playtest-gen --engine engine
+python -m rpg2gba.playtest walk --chapter <ch> --at-end --suite gen --output output/playtest-gen --engine engine
 ```
 
 Semantics that bite if misread:
@@ -74,59 +75,32 @@ Semantics that bite if misread:
 
 Deliver with `tailscale file cp <rom> iphone182:`.
 
-## Phase 2 — No beats yet? Write them, don't reach for C
+## Phase 2 — No beats yet? Generate them, don't reach for C
 
 New content with no beats is the common case at the frontier, and the answer
 is to extend the chapter, because beats pay off twice: they seed the walk
 ROM *and* they become the regression floor that stops the user re-walking
-this area after every later fix.
+this area after every later fix. Nobody hand-writes beats any more — suites
+are generated.
 
-1. Chapter doc first (`reference/chapters/NN-*.md`), rxdata-first with the
-   wiki as cross-check. Every gate gets a positive beat and, where the data
-   shows a refusal page, a negative beat asserting no state advanced.
-2. Beats in `src/rpg2gba/playtest/chapters/<ch>.py`, ids matching the doc's
-   rows so a failure names a doc row.
-3. **Insert each beat where the playthrough already puts the player — do not
-   append to the end.** A chapter is one continuous run, so registration
-   order is playthrough order and **ids are labels, not ordering** (B26 runs
-   between B4 and B7 on purpose). Put a new beat immediately after the beat
-   that already produces the state it needs, so it asserts with zero or
-   trivial movement. Appending it instead makes it re-navigate across the map
-   to a tile an earlier beat already stood on — and `at=` will NOT rescue
-   you: it is map-viewer metadata and does not move the player, so a beat in
-   the wrong place silently inherits the previous beat's position and fails
-   later as a misleading `walk_to` "stuck" error near the target. Two traps
-   that follow (both cost a red chapter run on 2026-08-19, CH03 B27–B33):
-   `ON_WARP_INTO_MAP` compares `getplayerxy` EXACTLY and falls through to
-   `DIR_SOUTH` on a miss, so landing one tile off breaks an arrival-facing
-   check and an `_assert_near` tolerance hides it; and the LAST registered
-   beat sets the chapter's end state, which must leave field controls
-   released or the chapter-complete stamp fails
-   (`stamp.dump_save_blocks` refuses a mid-script state) and takes the walk
-   ROM with it.
-4. Late-bind every symbol — flag/var ids, coords, species — from the build's
-   own artifacts. A hardcoded flag number is a regression bomb the next time
-   the registry renumbers.
-5. Beats that move NPCs want **two** waypoints: `mark_frame()` right after
-   the movement resolves, plus the normal end-of-beat capture. The default
-   capture rule lands on the dialogue frame or the fully-settled frame —
-   neither shows a mid-cutscene positioning bug.
-6. **A hardcoded APPROACH constant can be dead code with a valid-looking
-   name.** `ch03.py`'s B8 (2026-08-14) declared `MAWULI_APPROACH = (3, 16)`
-   but every actual call routed through `_approach_patrol_npc`, which
-   computes its own approach from the NPC's *live* position and never
-   touches the constant — so nothing ever exercised it. The constant turned
-   out to be a genuinely collision-blocked tile (verified against
-   `_plan_route`'s own Dijkstra, not eyeballed) — `walk_to` degrades a
-   `None` route to "bare target, greedy walker tries anyway"
-   (`_route_waypoints`), so the failure surfaced as a misleading
-   step-aside-exhausted "stuck" error near the target, not an immediate
-   "target unreachable." Same root cause, either way it's caught: pick the
-   approach helper that matches the NPC's real `movement_type` (a static
-   `MOVEMENT_TYPE_FACE_*` NPC wants a plain `walk_to`/`face`/`interact`, not
-   the patrol-position tracker built for `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE`)
-   so every declared coordinate is actually on the path a beat walks, not
-   sitting unused beside a helper that silently recomputes its own.
+1. Chapter doc first (`reference/chapters/NN-*.md`) and the chapter entry in
+   `reference/chapters.json`, rxdata-first with the wiki as cross-check.
+2. Generate: `python -m rpg2gba.beat_gen generate --chapter CHnn`. Output
+   lands in `output/beats/` (the module, `CHnn.review.md`, the route json).
+3. **Operator gate (CLAUDE.md §9):** the user reads and approves
+   `CHnn.review.md` — the only human-visible record of the route solver's
+   picks. Only then commit the module as
+   `src/rpg2gba/playtest/chapters_gen/chNN.py`. Do not commit before approval.
+4. If a beat is wrong, fix the generator (`src/rpg2gba/beat_gen/`) or its
+   inputs and regenerate — never hand-edit the generated module.
+5. Historical note: the old hand-authoring traps (append-vs-insert order,
+   dead APPROACH constants, `at=` not moving the player) lived in the deleted
+   `playtest/chapters/*.py` suites. Beat order and approach tiles are now the
+   route solver's job; if a generated beat shows those symptoms, that is a
+   `beat_gen` bug. One trap still applies: the LAST beat sets the chapter's
+   end state, which must leave field controls released or the
+   chapter-complete stamp fails (`stamp.dump_save_blocks` refuses a
+   mid-script state) and takes the walk ROM with it.
 
 Only after the chapter runs green do you have seeds.
 
@@ -155,7 +129,7 @@ Whichever path produced the ROM:
 - The suite must be **green on that exact build** before anything is
   taildropped. No exceptions — a walk ROM whose build fails the suite wastes
   the user's walk on a known bug.
-- Send the contact sheet with it (`output/playtest/review/<ch>-sheet.png`).
+- Send the contact sheet with it (`output/playtest-gen/review/<ch>-sheet.png`; built as `<--output>/review/`, so `output/playtest/review/` if `--output` is omitted).
   It covers the by-eye categories by scanning images instead of playing, and
   you can read it too — that is the only mechanism here that catches "logic
   out what's on screen and something is wrong."
@@ -167,7 +141,7 @@ Whichever path produced the ROM:
 
 - Hand-edit blob metadata to dodge a hash refusal.
 - Ship a walk ROM with `--no-verify`.
-- Reach for a `new_game.c` rung because writing beats felt like more work —
+- Reach for a `new_game.c` rung because generating/regenerating beats felt like more work —
   the beats are the deliverable that stops the next ten re-walks.
 - Call a chapter walkable while deferring art. Playable includes real
   quantized art (§9).

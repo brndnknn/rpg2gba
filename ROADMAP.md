@@ -469,7 +469,9 @@ is not "done" while it defers anything a player sees. **Guardrail:** every conve
 stays general, idempotent, and config/data-driven — *slice 2 must need data changes,
 not code changes*. This supersedes strict phase ordering for the conversion campaign;
 Phases 4/5/6 work interleaves within each slice. First slice = the pathfinder
-(Maps 49/48/32). See `BUILD_PLAN.md`.
+(Maps 49/48/32). See `BUILD_PLAN.md`. *(Note 2026-10-04: since 2026-08-05 "slice" ≡
+"chapter" — chapter ≡ slice ≡ one §9 boot gate ≡ one ROM-test scenario, `00-atlas.md` §1;
+"slice" survives only in code identifiers such as `SLICE_MAP_IDS`.)*
 
 ### Cross-cutting: fork-index verification guard
 
@@ -481,9 +483,16 @@ constant doesn't resolve (catches invented symbols before `make modern`), and a
 **reverse gate** forbids queuing anything "needs custom C" without a fork-search
 entry proving no native analog exists (catches over-queuing — e.g. `HealPlayerParty`
 was a defined special the whole time). Native-analog ledger:
-`reference/guides/essentials_to_emerald_map.md`.
+`reference/guides/command_pokeemerald_map.md`. *(Corrected 2026-10-04: this used to point
+at `essentials_to_emerald_map.md`, which is the flag/var pre-seed table for the registry,
+not a capability ledger.)*
 
 ### Architecture
+
+> *(Flagged 2026-10-04: **4.1 is live; 4.2–4.5 and "Bulk-run mechanics" below describe the
+> retired LLM bulk run** (pivoted away 2026-06-18, `BUILD_PLAN.md` §3). Kept as history. The
+> live equivalents are the deterministic transpiler and its unhandled queue, and the
+> per-chapter loop in `BUILD_PLAN.md` §2.)*
 
 **4.1 Flag/variable registry (deterministic, backend-agnostic)**
 - Build `flag_registry.py`: a stateful service that, given a switch ID, returns either an existing `FLAG_*` name or assigns a new one
@@ -540,6 +549,14 @@ was a defined special the whole time). Native-analog ledger:
 - Run a ~10% random-sample manual review of bulk output between rounds — don't trust any backend blindly
 
 ### Phase 4 Exit Criteria
+
+> *(Banner added 2026-10-04: the checklist below is the **retired LLM bulk-run gate**,
+> superseded 2026-06-18 by the deterministic transpiler — `BUILD_PLAN.md` §3. The live
+> gate is the **per-chapter §9 boot gate** (CLAUDE.md §9): a chapter is done when its ROM
+> boots and is genuinely playable, art included, with its playtest suite **generated** by
+> `python -m rpg2gba.beat_gen generate --chapter CHnn` and its `CHnn.review.md` approved by
+> the operator (`BUILD_PLAN.md` §2). Items below are kept as history; do not tick them as
+> frontier status.)*
 
 - [ ] Conversion agent implementation is complete (ClaudeCodeBackend production path + deterministic pre-filter; Ollama fallback optional)
 - [ ] All maps have generated `.pory` files

@@ -113,24 +113,43 @@ CHAPTER N / CHnn
       • a verdict-definition error found here is fixed as a definition and
         re-reviewed across every row of that kind, not patched on the one row.
  6. BUILD — assemble into the fork; `make modern` must exit 0.
- 7. ROUTE — solve the chapter's walk and get it approved BEFORE the beats are
-      written. Needs BUILD's staged maps, not a ROM. (Moved after BUILD on
-      2026-09-09; it sat at 6 until then. See "Why ROUTE sits after BUILD".)
-      • `python -m rpg2gba.routing plan --chapter CHnn --module <mod> --dry-run`
-        → read the summary; any CROSSING line is a beat that will fire the wrong
-        event, and is fixed here, not after the walk goes wrong.
-      • operator approves the ORDER, not just the beat set — then drop --dry-run
-        to write reference/routes/CHnn.route.json.
-      • register the chapter module's beat groups in that order, and
-        `chapter_manifest check --chapter CHnn` enforces the two agree from then
-        on (RULE_ROUTE_ORDER). No plan on disk = the rule cannot run, and says
-        so as a route_model_unenforced warning — do not read that as a pass.
+ 7. GENERATE — the playtest suite is generated, not hand-written, and the route is
+      solved inside the generator. Needs BUILD's staged maps, not a ROM.
+      (*Rewritten 2026-10-04; this step was ROUTE — a hand-driven
+      `routing plan --module <mod>` solve, operator approval of the order, then
+      hand-registered beat groups — until the CH01–CH05 re-derivation replaced it.*)
+      • `python -m rpg2gba.beat_gen generate --chapter CHnn` writes, under
+        `output/beats/`: the module, `CHnn.review.md`, and `CHnn.route.json` (the
+        solver's route — gitignored, regenerated every run). Generating CHn needs
+        CHn-1's generated module present first when a story key crosses the boundary.
+        CH03-sized chapters take ~9 minutes: run it in the background.
+      • the operator reads and approves `output/beats/CHnn.review.md` (CLAUDE.md §9).
+        It is the ONLY human-visible record of the solver's picks: seam cell, stair
+        starting end, warp press side, event approach side, and order-dependent writes.
+      • then the module is committed as `src/rpg2gba/playtest/chapters_gen/chNN.py`.
+        Beats are no longer hand-registered, and `routing plan --module …` is no
+        longer a step of the loop (the generator calls the solver itself).
+      • `chapter_manifest check --chapter CHnn` is still keyed to the deleted hand
+        beat names — `PROJECT_TODO.md` #124, to be re-keyed before the next chapter
+        relies on it. Gen walks are not graded against a route plan
+        (`RULE_ROUTE_ORDER` / `route_model_unenforced` concern hand suites; #120).
  8. BOOT — run in mGBA; walk the section. This is the gate (see ROADMAP §9).
+      • `rpg2gba playtest run --chapter CHnn --suite gen --output output/playtest-gen
+        [--from-beat X]` (`gen` is the default `--suite`; the hand suites in
+        `playtest/chapters/` are deleted and that dir holds only `__init__.py`).
+      • `rpg2gba playtest walk --chapter CHnn --at-beat B7` for a single-beat walk.
  9. FIX — cluster any systematic defect; fix the *converter*, re-run. Never hand-edit
       output.
 10. RECORD — MEMORY Current Phase + Decisions; commit one logical unit.
  → widen the frontier: next chapter in the chain.
 ```
+
+> *(Note 2026-10-04: the next two essays — "Why READ sits at 5" and "Why ROUTE sits after
+> BUILD" — are **hand-suite-era rationale**, superseded 2026-10-03 when generated suites
+> replaced hand-written ones. Step 7 is now GENERATE (above); there is no separate ROUTE step,
+> no `reference/routes/` plan to approve and no beat registration. Kept as history; the READ
+> argument still holds in spirit (the review doc is approved against a manifest that was read
+> first), the ROUTE ordering argument is moot.)*
 
 **Why READ sits at 5, before ROUTE.** It needs step 4's generated manifest and
 authored dispositions, so it cannot run before WIRE — but it must run before ROUTE's
@@ -147,8 +166,9 @@ The constraint that was always honoured: ROUTE must run **before the chapter mod
 beats are registered**, because registration order *is* playthrough order and the plan
 is what the operator approves. Solving after the beats are written inverts that — the
 solver then just grades an order nobody can change without reopening the chapter. That
-is exactly the state CH01–CH04 are in (`PROJECT_TODO.md` #67), and why the rule is
-enforced forward from CH05 rather than retroactively.
+is exactly the state CH01–CH04's hand suites were in (`PROJECT_TODO.md` #67), and why the rule
+was enforced forward from CH05 rather than retroactively. *(Those hand suites are deleted;
+the CH01–CH05 suites are generated, 2026-10-03.)*
 
 The constraint that was missed: ROUTE reads the *emitted* map data, and slice 2's
 trigger overlay is built from the staged pokeemerald JSON (`engine/data/maps`) rather
@@ -159,7 +179,8 @@ bitten by exactly this: its first solve reported a clean 155-tile route, and onc
 object events existed the same order entered trainer sight cones in five places.
 
 BUILD does not read the route plan, so moving ROUTE after it introduces no cycle, and
-beats are not registered until step 8 — both constraints hold at once. The belt-and-
+beats were not registered until after ROUTE — both constraints held at once *(in the hand-suite
+era; beats are now generated at step 7 and never registered, 2026-10-04)*. The belt-and-
 braces half is `RULE_TRIGGER_OVERLAY_VACUOUS` (#75): if a chapter's dispositions carry
 trainer rows and the overlay yields no `TRAINER_SIGHT` tiles on those maps, the solve
 fails loud rather than reporting a clean route. That rule is what keeps this ordering
@@ -181,7 +202,7 @@ the far side** (operator ruling, 2026-09-04; promoted here 2026-09-12 from a
 free text). One beat per warp **pair**, claiming both manifest rows. Rationale: a one-way
 crossing proves the forward warp fired and nothing else — it cannot see a return warp
 pointing at the wrong cell, and the return leg is where arrival nudges actually fire. The
-worked shape, CH05's B1: Route 2 (20,34) → step (20,33) → arrive 1F (17,39) → walk (17,40)
+worked shape, the (now-deleted) CH05 hand suite's B1: Route 2 (20,34) → step (20,33) → arrive 1F (17,39) → walk (17,40)
 → arrive Route 2 (20,33), nudge fires → step back onto (20,33) → end inside the cave.
 
 *(Amended 2026-09-28, operator ruling — `investigations/warp-round-trips-and-gated-doors.md`
@@ -192,19 +213,26 @@ warp is still asserted, at its exact landing, by its own beat. Ordering does the
 dead-end region's exit warps come after its first-visit beats (enter, do the map, leave), and an
 arrival nudge comes after the warp landing on it. A reverse warp the route never crosses
 naturally (a through map, CH05's Passage Cave) keeps a local F,B. A transit may cross a gated
-door only after that door's own warp beat. Hand-authored CH05 keeps the rule below as written.)*
+door only after that door's own warp beat. The round-trip rule above applied only to the hand
+suites.)*
+
+*(Corrected 2026-10-04: the previous sentence said "Hand-authored CH05 keeps the rule below as
+written." The CH05 hand suite was deleted 2026-10-03 and every chapter's suite is generated, so
+**one-way is the only live rule**; the round-trip text and the B1/B11/B13/B14 worked examples
+below describe the deleted hand suites and are kept as history. Warp beats in generated chapters
+cross ONE-WAY — ruled 2026-09-28.)*
 
 Two corollaries:
 
 - **One physical thing owns both its rows.** Same shape as the sideways staircases
-  (CH05 B13/B14): you are never *on* a sideways staircase — an E/W press is displaced
+  (hand-suite CH05 B13/B14, deleted; the generator keeps the one-observable-per-staircase shape): you are never *on* a sideways staircase — an E/W press is displaced
   diagonally across it (`traversal/graph.py:221-225`) — so one crossing exercises both
   cells and there is one observable per staircase, not per cell.
 - **A forward boundary warp is the one warp that cannot use this idiom**, because under the
   convention above the neighbour is unstaged, so there is no warp to cross and nothing to
   come back from. Such a beat asserts only that the player *reaches* the boundary, and the
   arriving chapter writes the round trip when it stages the far map. CH05's B11 is the
-  worked case.
+  worked case (hand-suite example, deleted 2026-10-03).
 
 ---
 

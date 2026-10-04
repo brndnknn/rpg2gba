@@ -90,7 +90,7 @@ drops any `code 201` whose destination is out of slice —
 removes its `.pory` body. The cave-mouth tile therefore compiles as blocked
 terrain. This is documented frontier behaviour, not a defect
 (`reference/guides/slice_expansion_runbook.md` §5), and it is the same shape CH02
-used for its own unstaged exit: `playtest/chapters/ch02.py` B17 walks to the
+used for its own unstaged exit: the (deleted) hand suite `playtest/chapters/ch02.py` B17 (now generated: `playtest/chapters_gen/ch02.py`) walked to the
 approach tiles, asserts the boundary reads BLOCKED, and defers the crossing to
 the chapter that stages the destination. The three alternatives — pulling map 36
 into CH04, or stubbing it — were both rejected as absorbing CH05's scope. Retire

@@ -11,16 +11,21 @@ tier that decays with distance from the build frontier.
    mechanics inventory (§5), which binds to the capability ledger
    `reference/guides/command_pokeemerald_map.md` rather than re-deriving verdicts.
 3. *What does a ROM test for this section assert?* → each chapter document's
-   beat table, which `src/rpg2gba/playtest/chapters/` mirrors beat-for-beat.
+   beat table. *(Corrected 2026-10-04: the table used to be mirrored beat-for-beat
+   by hand-written suites in `src/rpg2gba/playtest/chapters/`; those are deleted.
+   The suite is now **generated** by `python -m rpg2gba.beat_gen generate --chapter
+   CHnn` from the manifest and committed as `src/rpg2gba/playtest/chapters_gen/chNN.py`.
+   Generated beat names are derived, so the docs' B-ids are documentation/spec
+   anchors, not suite identifiers.)*
 
 **How this document relates to the work checklist.** This atlas and each
 chapter document (`NN-slug.md`) are the **plan and spec** — map rosters, story
 beats, coverage targets. They do not track task status. The active chapter's
-live **work checklist** is a root-level `CHnn_TODO.md` (currently
-`CH02_TODO.md`) — open items, in-progress notes, done log. Once that chapter's
-§9 boot gate passes, its TODO is archived to `reference/archive/` rather than
-deleted, as happened with the slice-1 checklist, now at
-`reference/archive/SLICE1_TODO.md`. Cross-cutting work not scoped to any one
+live **work checklist**, when one is open, is a root-level `CHnn_TODO.md` — open
+items, in-progress notes, done log. Once that chapter's §9 boot gate passes, its
+TODO is archived to `reference/archive/` rather than deleted (e.g.
+`reference/archive/SLICE1_TODO.md`, `reference/archive/CH02_TODO.md` …
+`CH05_TODO.md`). Current status lives only in `MEMORY.md`. Cross-cutting work not scoped to any one
 chapter lives in `PROJECT_TODO.md`.
 
 **Sources, and which one wins.** Act and chapter *identity, naming and ordering*
@@ -63,7 +68,7 @@ visited, so "new maps" sums to 187 and revisit chapters contribute 0 new maps.
 | Act | Title | Ch | New maps | Revisited | Events | Commands | Trainers | Item grants | Enc maps |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|
 | A1 | Moki Town → Gym #1 (Nowtoch City) | 6 | 26 | 0 | 514 | 7187 | 28 | 38 | 5 |
-| A2 | Returning to Moki Town → Gym #2 (Burole Town) | 4 | 13 | 9 | 209 | 2480 | 16 | 12 | 1 |
+| A2 | Returning to Moki Town → Gym #2 (Burole Town) | 5 | 13 | 9 | 209 | 2480 | 16 | 12 | 1 |
 | A3 | Route 4 → Gym #3 (Bealbeach City) | 9 | 39 | 0 | 885 | 10988 | 62 | 97 | 11 |
 | A4 | Bealbeach City → Gym #4 (Vinoville Town) | 4 | 12 | 4 | 392 | 5745 | 28 | 24 | 2 |
 | A5 | Legen Town → Gym #5 (Amatree Town) | 7 | 21 | 11 | 706 | 6674 | 30 | 85 | 5 |
@@ -72,7 +77,7 @@ visited, so "new maps" sums to 187 and revisit chapters contribute 0 new maps.
 | A8 | Return to Silverport → Venesi → Route 14 → Gym #8 (Tsukinami) | 4 | 8 | 10 | 389 | 4975 | 26 | 19 | 2 |
 | A9 | Nuclear Plant Omicron → Zeta → Victory Road → Championship | 9 | 25 | 29 | 728 | 8355 | 46 | 56 | 10 |
 | A10 | End Game (postgame) | 1 | 13 | 0 | 498 | 9073 | 4 | 0 | 7 |
-| | **total** | **59** | **187** | **94** | **5232** | **67249** | **317** | **419** | **50** |
+| | **total** | **60** | **187** | **94** | **5232** | **67249** | **317** | **419** | **50** |
 
 Reading notes:
 
@@ -84,6 +89,9 @@ Reading notes:
   holds up in A2.
 * **A10 (Dream World) is 13 maps and 9,073 commands in one chapter** — the
   densest single chapter in the game, and entirely optional.
+* *(Corrected 2026-10-04: the Ch column's A2 row and the total were still 4 / 59 —
+  they now read 5 / 60, matching `reference/chapters.json`: 60 chapter entries
+  incl. CH07A. The other A2 columns remain pre-insertion.)*
 * **A2 is now 5 chapters, not 4** — CH07A was inserted 2026-08-29 (§7). Its two
   maps (33, 81) were already bound to CH02 in A1, so they add nothing to A2's
   "new maps" count under the de-dup rule; the rest of this table's A2 row
@@ -96,10 +104,10 @@ Tier legend: **F** full, **M** medium, **T** thin. Status is from the binding.
 
 | # | Chapter | Act | Tier | Maps | Trainers | Items | Notes |
 |---|---|---|:-:|--:|--:|--:|---|
-| CH01 | Moki Town | A1 | F | 8 | 1 | 7 | **§9 boot-walk gate passed 2026-08-04** — `01-moki.md` |
-| CH02 | Route 1 | A1 | F | 2 | 9 | 7 | **built** — §9 gate passed 2026-08-12, suite 29/29; `02-route-1.md` (spec), `reference/archive/CH02_TODO.md` (retired checklist) |
-| CH03 | Kevlar Town | A1 | M | 5 | 5 | 5 | **built** — §9 gate passed 2026-08-19, suite 60/60; bike; map 19 bound here, see §6 |
-| CH04 | Route 2 | A1 | M | 1 | 4 | 3 | **built** — §9 gate passed 2026-08-27, suite 74/74; rockslide gate; `04-route-2.md` (spec), `reference/archive/CH04_TODO.md` (retired) |
+| CH01 | Moki Town | A1 | F | 8 | 1 | 7 | `01-moki.md` |
+| CH02 | Route 1 | A1 | F | 2 | 9 | 7 | `02-route-1.md` (spec), `reference/archive/CH02_TODO.md` (retired checklist) |
+| CH03 | Kevlar Town | A1 | M | 5 | 5 | 5 | bike; map 19 bound here, see §6 |
+| CH04 | Route 2 | A1 | M | 1 | 4 | 3 | rockslide gate; `04-route-2.md` (spec), `reference/archive/CH04_TODO.md` (retired) |
 | CH05 | Passage Cave | A1 | M | 2 | 3 | 5 | first dungeon |
 | CH06 | Nowtoch City | A1 | M | 8 | 6 | 11 | **Gym 1**, first metro, Rock Smash |
 | CH07 | Route 2 (revisit) | A2 | T | 1 | 4 | 3 | overland seam opens |
@@ -230,7 +238,7 @@ data wins.**
 
 ## 7. Slice-1 coverage audit (2026-08-29)
 
-`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Q11 bound a chain re-check as a **slice-1
+`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Q11 bound a chain re-check as a **slice-1
 exit criterion**: the chapter chain had been authored against `connections.json`'s
 14 overland rows, and was to be re-audited exactly once against the full
 warp/door connectivity graph. That graph now exists —
@@ -328,7 +336,9 @@ Only the **CH07→CH08 leg** strands content in that strict sense — the walk i
 them back up. Every other leg's "STRANDED" rows are transit maps covered by
 some *earlier* chapter only — which is a stranding claim only if the leg newly
 unblocks content there, and that is **not derivable today**, because
-`reference/manifests/` holds dispositions for CH04 alone. Those 12 other legs
+`reference/manifests/` held dispositions for CH04 alone *(Corrected 2026-10-04: it
+now holds manifest/dispositions/derived for CH01–CH05; the other legs' re-check
+remains as stated)*. Those 12 other legs
 are recorded as countable debt, re-checked once each chapter carries its own
 manifest.
 

@@ -50,7 +50,7 @@ above, before CH06's `chapter_manifest check` is relied on.
 
 ### 123. `resolved_trigger_scripts` treats "the beat passed" as "the script ran"
 
-Moved from `REDERIVATION_PLAN.md` §4 at P10 (2026-10-03) so it survives the plan's
+Moved from `reference/archive/REDERIVATION_PLAN.md` §4 at P10 (2026-10-03) so it survives the plan's
 archiving. `playtest/chapter.py` `resolved_trigger_scripts` (`a460e823`) marks a
 trigger script resolved once its beat passes. That holds for latching shapes, but
 not for a TEMP-switch page that re-arms on map re-entry: the walk oracle would
@@ -60,7 +60,7 @@ page is TEMP-switch gated and the walk re-enters its map.
 
 ### 122. C10 deferred to CH06: offline verdict head, offline checker, ROM sample selection
 
-`REDERIVATION_PLAN.md` §16.3 C10 (rulings R2/R3). Operator ruled 2026-10-03:
+`reference/archive/REDERIVATION_PLAN.md` §16.3 C10 (rulings R2/R3). Operator ruled 2026-10-03:
 defer past the `rederive-ch01-ch04` merge. Only the eligibility flag exists
 (`beat_floor/assertion.py` `RowFloor.offline_eligible`, surfaced as the review
 docs' `-- offline`/`-- ROM` labels). Not built: an `offline:<archetype>` verdict
@@ -127,27 +127,6 @@ face a direction; it only mislabels a failure that already happened.
 **Operator call: defer until it actually causes a problem.** Fix when needed:
 `face()` skips the press when the facing already matches.
 
-### 117. Two-visit events: a route walks only one of two page-ending choice arms -- DONE 2026-09-29
-
-**Resolved the same day** (operator re-ruled: walk the hand's round trip).
-`beat_gen/round_trip.py::find_round_trip` derives it: for an autorun page with exactly two
-page-ending arms, answer the losing arm X, find the live page Q, and find a claimed arm of
-Q that makes the page live again and re-fires into Y. `split_choice_arms` then walks X and
-moves Y's rows into Q's beat. CH01 now runs p0 No (#41), p2 re-offer (#48), p2 Yes riding
-the quiz (#49), then p1 (#50). Grade is clean. Only ev005 matches in CH01–CH05. Left open:
-p2's facing arms b1–b4 are `unselected_arm` (new `self_ended` verdict), none frozen. The
-original entry follows.
-
-The professor (`map050/ev005`) asks "ready for the Trainer Aptitude Test?". "Yes"
-(`p0/b2`) runs the quiz and starter selector and sets self switch C, which makes p1
-live. "No" (`p0/b3`) sets D, which makes p2 live, and p2 re-asks the question;
-`p2/b0` then re-opens p0's "Yes" path. Both arms end the page, so ruling 19 walks
-one. Since `\ch` parsing (2026-09-29) CH01 walks "Yes", the story path, and p2's
-7 rows are `arm_gated` (reachable on the ROM through the unwalked arm, not walked).
-Covering both needs the solver and ruling 19 to express a revisit: No → p2 → p2/b0
-→ Yes → p1. This is the same shape as the one story edge `_acyclic_story_edges`
-skips corpus-wide. Operator: deferred 2026-09-29 (walk Yes, relabel p2).
-
 ### 116. The lab starter scene is refused, so var 101's `+1` is invisible to the walk
 
 `map050/ev019/p0` (the starter scene, `addvar VAR_QUEST_LOG, 1` at
@@ -166,7 +145,7 @@ species var) so the rest of the page's writes survive. Operator: deferred
 ### 115. Collapsed warp events still emit a dead Poryscript body
 
 Found 2026-09-18 while inventorying script warps for the warp-facing design
-(`WARP_RETAIN_FACING_PROPOSAL.md` §0). When `classify_event`
+(`reference/archive/WARP_RETAIN_FACING_PROPOSAL.md` §0). When `classify_event`
 (`src/rpg2gba/tileset_converter/metadata_wiring.py`) collapses an event into a
 native `warp_event`, it drops the `object_event` — but the transpiler still emits
 that event's script body into `output/uranium-build/scripts/Map*.pory`, and no
@@ -351,43 +330,6 @@ suite in two halves as separate processes (`ls tests/test_*.py`, split, one
 Worth bounding the search itself regardless: an exponential subset enumeration
 with no cap is a latent hazard at CH06's map count.
 
-### 109. `text_source` rejects the straight quote that staging normalizes, so 12 T2 rows have no oracle -- DONE 2026-09-24
-
-Fixed by extracting `assembly.apply_dialogue_char_substitutions` (the open/close
-quote toggle + `*`/`[`/`]` subs) out of `_normalize_string_content` as the one
-shared implementation, and having `text_source.page_messages` call it
-(`quote_escaped=False`) before `_canonicalize_chars`; `normalize_pory` is
-byte-identical. All previously-refusing rows now resolve.
-
-Surfaced 2026-09-15 while probing whether T2's `flavour_npc_beat` could be
-applied mechanically to the CH01-CH03 residue. Of 96 candidate rows, 84 resolve
-a source oracle and **12 fail loud** with:
-
-> `text_source: character U+0022 '"' has no engine/charmap.txt entry -- unrepresentable on the ROM's font`
-
-**This is an oracle gap, not a ROM bug, and the distinction is the whole item.**
-`engine/charmap.txt` genuinely has no `U+0022` entry -- it has `“` (B1) and `”`
-(B2) only. But `tileset_converter.assembly.normalize_pory` already converts `\"`
-to typographic `“`/`”` on an open/close toggle at staging (`assembly.py:475-476`,
-and its docstring at :549), so **the ROM text is correct**. It is
-`playtest.text_source._canonicalize_chars` -- the path a beat uses to derive
-expected text -- that does not apply the same substitution and therefore cannot
-read a page the pipeline converts fine.
-
-Rows affected (all `flavour_npc`, all otherwise mechanical): `map032/ev001/p0`,
-`map049/ev006/p0`, `map049/ev015/p0`, `map049/ev016/p0`, `map050/ev010/p0`, and
-7 more -- re-derive with the probe rather than trusting this list to stay current.
-
-**Fix shape, and the constraint on it:** `text_source` should apply the same
-open/close toggle, **reusing `assembly`'s implementation rather than
-re-implementing it** (§4.3 -- two independent quote-toggling state machines that
-must agree is exactly the drift this repo consolidated five `*_constant` helpers
-to avoid). The toggle is stateful across a string, so a naive `replace('"', '“')`
-is wrong and would silently mis-render every closing quote.
-
-Worth doing before T2's application pass: it is 12 of 96 rows, and every one of
-them is otherwise ready.
-
 ### 110. Five of eleven `toggling` flavour NPCs have no page at `page_idx + 1`
 
 Same 2026-09-15 probe. `flavour_npc_beat`'s `toggling` variant registers a second
@@ -456,8 +398,10 @@ requires a forward crossing. Needs an operator ruling. Not done either: Uranium'
 
 ### 99. `_resolve_threshold` cannot fold increment writes, so reachable thresholds read as undetermined
 
-*Filed 2026-09-12 out of `REDERIVATION_PLAN.md` §14.11. Not P8b work — P8b hand-annotates
+*Filed 2026-09-12 out of `reference/archive/REDERIVATION_PLAN.md` §14.11. Not P8b work — P8b hand-annotates
 around it.*
+
+*(2026-10-04: still open. P8b closed 2026-10-03 without it; `_resolve_threshold` in `capability_sites.py` still reads only constant writes and returns undetermined when computed writes exist. CH06's gym (`Map042 ev3/p0`) is one of the incrementing writers, so this bites at CH06.)*
 
 `capability_sites._resolve_threshold` answers a `<variable>_<threshold>` token from **constant**
 `code 122` writes only. When no constant write reaches the threshold but the variable also has
@@ -480,32 +424,9 @@ reached by incrementing" has this shape, so this is the difference between a der
 hand-annotated capability across the whole corpus — directly relevant to the cross-game goal,
 where hand annotation does not transfer.
 
-### 98. The transpile queue is 1-based on `page`; manifest row ids are 0-based
-
-**IN SCOPE FOR P8b** (`REDERIVATION_PLAN.md` §14.8 ruling 2) — filed so it is greppable if
-P8b slips, not as deferred work.
-
-`output/uranium-build/transpile_unhandled.jsonl` writes `page` **1-based**; a manifest
-`row_id`'s `pN` suffix is **0-based**. Verified against page counts: `map050/ev004` has 3
-pages and the queue reports page 3 (= manifest `p2`); `map050/ev005` has 8 pages and the queue
-reports 6 and 7 (= `p5`, `p6`).
-
-Two failure modes, both silent:
-
-- a queue entry is attributed to the page *before* the one it came from;
-- **manifest `p0` can never match a queue entry at all**, so a genuinely-queued first page
-  reads as clean.
-
-This is how three rows were attributed to a label bug they do not have (§14.8 table). Fix:
-normalize the **queue writer** to 0-based — manifest `row_id`s are load-bearing inside
-committed `.dispositions.json` files and must not move, while the queue is regenerated output.
-
-Third instance of the standing lesson that a measurement taken through a generator attributes
-its own bugs to whatever it was measuring (cf. #95, #97).
-
 ### 96. Pokémon Centers heal but never become the respawn point
 
-**Found 2026-09-11 while walking `REDERIVATION_PLAN.md` §14's Q1. Found ONCE BEFORE and
+**Found 2026-09-11 while walking `reference/archive/REDERIVATION_PLAN.md` §14's Q1. Found ONCE BEFORE and
 never filed** — `src/rpg2gba/playtest/chapters/ch03.py:83-88` finding #7 recorded it at
 chapter scope (*"No healing-location/respawn metadata write anywhere — `grep -i respawn`
 over the Center's whole compiled output: zero hits"*) and it never left that file. This
@@ -534,12 +455,12 @@ Work: mint a `HEAL_LOCATION_*` entry per Uranium Center into
 `engine/src/data/heal_locations.json` (it generates `include/constants/heal_locations.h`),
 and emit `setrespawn` from the nurse idiom instead of stripping the call. Currently blocks
 manifest row `map068/ev001/p0` (CH03, Kevlar's Center) and is item 3 of
-`REDERIVATION_PLAN.md` §14.1's ten.
+`reference/archive/REDERIVATION_PLAN.md` §14.1's ten.
 
 **Why a §9 boot walk never caught it:** a missing respawn anchor is only observable if the
 walk white-outs, and no beat does. Gate-passed chapters ship this.
 
-**RULED IN 2026-09-12 (`REDERIVATION_PLAN.md` §14.7): build the generic emitter, not two
+**RULED IN 2026-09-12 (`reference/archive/REDERIVATION_PLAN.md` §14.7): build the generic emitter, not two
 hand-minted constants.** The derivation source is already parsed and unconsumed — measured 22
 maps carry `HealingSpot`, all Center interiors pointing at outdoor coords (maps 49/50 →
 `[32,28,32]` Moki, 68 → `[31,20,13]` Kevlar), a 1:1 fit for a `heal_locations.json` entry.
@@ -561,49 +482,6 @@ one that establishes or changes an anchor — initial Moki anchor (CH01) is asse
 the Kevlar Center anchor (CH03) in **CH04**, and every future chapter with a Center owes its
 successor the same. CH02's beat doubles as the regression test for the Petalburg bug and is
 expected to FAIL until the `new_game.c` fix lands.
-
-### 97. Recognition and emission are two unlinked layers, so rows are flagged for work already done
-
-**Root-caused 2026-09-11** (`REDERIVATION_PLAN.md` §14.1). A manifest row's
-`unrecognized_heads` / `other_codes` — and therefore `ManifestRow.is_dispositionable`
-(`chapter_manifest/schema.py:407-414`) — are judged **only** against two small,
-hand-maintained tables local to the manifest tool:
-
-- `_CODE_EFFECT` (`src/rpg2gba/chapter_manifest/generator.py:82-107`) for RMXP command codes
-- `MECHANIC_BY_HEAD` (`src/rpg2gba/chapter_atlas/census.py:78-135`) for Ruby script heads
-
-Neither is ever checked against `src/rpg2gba/conversion_agent/transpiler.py`, which is the
-actual conversion spine. `generator.py:600-604` documents the gap in passing. So a
-code/head the transpiler handles perfectly still reads as un-dispositionable until someone
-remembers to add it to a second table in a different package.
-
-**Measured blast radius on CH01+CH03 alone: 6 of the 28 undispositionable rows, plus part
-of 2 more, were flagged for work already done** — codes 104 (`_STRIP_CODES`,
-`transpiler.py:114`), 116 (`removeobject`, `:1898-1900`), 221/222 (`fadescreen`,
-`:1945-1950`), and the heads `pbPokerus` (predicate hard-folded at `:567-577`) and
-`pbNextMysteryGiftID` (`_emit_mystery_gift_id_strip`, `:2338-2358`, a user-approved strip
-dated 2026-08-19). Adding a head today takes four edits across two packages and step four
-is the one that gets forgotten.
-
-Fix direction: derive the recognition vocabulary from the transpiler, or make divergence
-fail loud — a test that asserts every head/code the transpiler handles is present in the
-manifest tables, and vice versa. §14.1 item 1 does the minimum (adds the missing entries);
-this item is the structural fix so the drift cannot silently return.
-
-**The corpus's largest instance of this item is in page CONDITIONS, not command bodies
-(measured 2026-09-12, `REDERIVATION_PLAN.md` §14.6).** 110 of the 128 citation-owing rows owe
-their citation *solely* to `script_typed_conditions > 0`, and the heads inside those
-conditions — `get_character`, `pbItemBall`, `pbTrainerBattle`, `pbRockSmash`, `pbPickBerry`,
-`pbHasSpecies`, `pbPhoneBattleCount` — are **already in the transpiler's recognized set**.
-`generator.py:575-580` counts a code-111 / `COND_TYPE_SCRIPT` condition and discards
-`params[1]`, so the recognition that exists is never applied to the text. The 147 instances
-collapse to 14 idiom families, 10 of them judgment-free. P8b's ruling-2 classifier
-(§14.6) is the fix for this half; this item remains the structural fix for the tables
-themselves.
-
-Also found while inventorying: `MECHANIC_BY_HEAD` declares `"pbRockSmash"` twice
-(`census.py:90` and `:109`), the second silently shadowing the first — same value, so no
-behaviour change, but a duplicate-key guard belongs in this item's fail-loud test.
 
 ### 2. Locate the Nuclear type's 1/8-HP-per-turn out-of-battle effect
 
@@ -828,7 +706,7 @@ silence, or build the ~15-row substitution table (recommended). Not
 slice-specific — applies to every future slice until decided. Migrated from
 SLICE1_TODO #7, 2026-08-04.
 
-**2026-09-18:** the P8c BGM extractor is deferred to this item (`REDERIVATION_PLAN.md`
+**2026-09-18:** the P8c BGM extractor is deferred to this item (`reference/archive/REDERIVATION_PLAN.md`
 §16.3 residue rulings). Every built map header is `MUS_LITTLEROOT`, so the hand BGM beats
 are vacuous until this lands; when it does, add the floor extractor (header music =
 `audio_map.json`[RMXP BGM]) in the same change. Operator: this item may stay open
@@ -937,6 +815,8 @@ vice versa) in map.json; crossing the seam in mGBA shows continuous art with
 no palette snap and no garbage strip; collision at the boundary is sane.
 
 ### 28. Time-of-day encounter tables are dropped corpus-wide (Cave half RESOLVED 2026-09-02)
+
+*(2026-10-04: the day/night flags themselves are #126.)*
 
 The encounter emitter (`tileset_converter/wild_encounters.py`, landed 2026-08-09,
 CH02_TODO #15) fills the fork's four native fields and drops everything else
@@ -1264,7 +1144,7 @@ not a CH04 miss.
 
 *Filed 2026-08-29 out of the corpus-wide world-graph audit
 (`src/rpg2gba/traversal/world.py`, `python -m rpg2gba.traversal world`) that
-closed Q13 slice 1 (`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`) — 199 maps, 1108
+closed Q13 slice 1 (`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`) — 199 maps, 1108
 edges (1076 warp, 28 connection, 4 seam_warp) against the 14 overland rows
 `connections.json` was originally authored with. The audit walks each
 chapter's predecessor chain (shortest path, predecessor `outdoor` map →
@@ -1335,7 +1215,7 @@ reports 2 warnings of this kind by design; do not silence them.
 capability model is supplied, and none can honestly be written against the current
 Protocol. `grants_capability(name) -> chapter_id | None` assumes a capability is a
 boolean granted by exactly one chapter. The Part 4c census
-(`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`, "AMENDED 2026-08-27") found otherwise:
+(`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`, "AMENDED 2026-08-27") found otherwise:
 capabilities are **predicates over player state**, and Uranium grants every field
 move by **two disjoint routes** — `rock_smash` is `numbadges >= 1 AND (knows
 ROCKSMASH OR holds BOXINGGLOVES)`, and the same move-or-gadget shape holds for
@@ -1396,7 +1276,7 @@ reasons, and only the second is a defect:
 **Consequence: slice 3 is validated forward, from CH05, not retroactively.**
 This is the one place slice 3 differs from slice 2, whose retroactive
 re-derivation over CH01-CH04 was an explicit part of its build
-(`PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`, "Validation -- CH05 is not
+(`reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md`, "Validation -- CH05 is not
 sufficient evidence"). Slice 3 has no equivalent, and the reason is
 structural: slice 2 re-derived a *fact about the world* that a gated chapter
 already recorded the right answer to, whereas slice 3 proposes an *ordering
@@ -1498,49 +1378,6 @@ leaked fixture keys in the same commit.
 
 *Found 2026-09-01 while migrating the file's keys for #66.*
 
-### 107. Warp retain-facing tier 3 should test second-order reachability
-
-**CLOSED 2026-09-18 — C5b landed.** Tier 3 is deleted (retain-facing and departure-side
-direction moved into the engine — `WARP_RETAIN_FACING_PROPOSAL.md` §0, `REDERIVATION_PLAN.md`
-§16.3 C5b). The rule below was never implemented in `metadata_wiring`; its idea survives as
-the approach model of `tests/test_warp_facing_invariant.py`, which floods `traversal.graph`
-reachability from every way into a map (warp cells as barriers, door landings seeded to a fixed
-point) — and under that model all three former hand overrides follow from the source data
-(`test_former_hand_overrides_now_follow_from_retain`).
-
-`metadata_wiring.compute_arrival_facings` tier 3 derives a `dest_dir=0`
-("retain facing") arrival by finding the source warp's single open,
-non-sibling, unblocked neighbour (`metadata_wiring.py:3025-3040`). It looks
-only one tile out, so it counts a neighbour as a candidate approach even when
-nothing can reach that neighbour except the warp tile itself. Two vertically
-opposed open tiles then read as ambiguous and it raises, pushing the case to
-`reference/warp_facing_overrides.json` as a hand decision.
-
-**The rule it is missing** (operator's, 2026-09-04): a tier-3 survivor is a
-genuine approach tile only if *it* has an open neighbour other than the warp
-tile — otherwise you could never have stood there to walk in.
-
-**Measured against the current slice**, applying that second-order check to
-every ambiguous retain-facing warp:
-
-| warp | tier 3 survivors | second-order |
-|---|---|---|
-| map35 (20,33) -> `36:17:39` | (20,32), (20,34) | **unique** -> `DIR_NORTH` |
-| map36 (17,4) -> `37:16:26` | (17,3), (17,5) | **unique** -> `DIR_NORTH` |
-| map33 (70,12) -> `32:8:43` | (69,12), (71,12) | still ambiguous |
-| map33 (70,11) -> `32:8:43` | (70,10), (69,11), (71,11) | still ambiguous |
-
-So it resolves both CH05 cases and neither CH03 one — a real reduction in hand
-overrides, **not** a complete replacement for the file. Both CH05 rows were
-hand-entered during CH05 (`DIR_NORTH` each) and agree with what the rule
-derives, so implementing this must reproduce them exactly; that agreement is
-the regression test.
-
-**Do not** delete `warp_facing_overrides.json` when this lands — the map33 pair
-still needs it, and per its own `_comment` the file remains the source of truth
-for a corrected facing. Prototype scan lives in this item's history; re-derive
-rather than trusting a pasted table.
-
 ### 71. `BUILD_PLAN.md:94`'s ART step has no owning command
 
 `BUILD_PLAN.md`'s canonical per-chapter loop lists step 3 as `ART — quantize
@@ -1584,7 +1421,7 @@ the successor chapter's registered `Beat.rows` actually claim it. See
 
 **Still open:** `map035/ev001/p1` continues to report `unregistered_beat`,
 because nothing has switched CH04's disposition to `boundary` — those
-dispositions are re-derived under `REDERIVATION_PLAN.md`'s P7 freeze and
+dispositions are re-derived under `reference/archive/REDERIVATION_PLAN.md`'s P7 freeze and
 editing them early would corrupt it. Two further facts for whoever does:
 only **`p0`** is a valid `boundary` candidate (`p1` is an arrival-nudge autorun,
 not a transfer, and `is_forward_crossing` rejects it), and **CH04 and CH05
@@ -1745,25 +1582,15 @@ became crossable after that chapter was authored. Until it exists, no gated
 chapter's seam boundary has been audited and "slice-growth is clean" must not be
 quoted as though it covered them.
 
-Tracked as **P2b** in `REDERIVATION_PLAN.md`; a prerequisite for that document's
+Tracked as **P2b** in `reference/archive/REDERIVATION_PLAN.md`; a prerequisite for that document's
 freeze step for the same reason the `code 201` half was.
 
-## Parked until the CH05 branch is cut (do not raise before then)
 
-These are real, tracked work items, scoped entirely to CH05. They are not open
-questions and not blockers on any work that precedes CH05. **Operator
-instruction, 2026-08-29:** stop raising them in status reports or "what's
-next" summaries — they were being resurfaced every session even though the
-call on when to act on them is deliberately deferred until CH05's branch is
-open and the chapter is actually in front of him (this project cuts branches
-for chapter builds only; everything in between commits straight to main).
-Nothing here is decided or dropped by being parked. `reference/chapters/
-05-passage-cave.md` §7 is the chapter-local home for the same items; that
-section and this one must stay in sync. **Trigger to unpark: the CH05 branch
-is cut.** At that point this whole section becomes the CH05 build's opening
-worklist.
+*(2026-10-04: the former "Parked until the CH05 branch is cut" section was dissolved. Its trigger passed; #51 and #62 now sit here, followed by items moved back from the Done section and newly filed items.)*
 
 ### 51. Q5.1 citation-verification experiment — run across CH04 + CH05
+
+*(2026-10-04: the CH05 branch was cut and merged long ago, so the trigger that parked this has passed. Whether CH05's pass was ever run is not recorded here; check before treating the experiment as done or dropped.)*
 
 Migrated from `CH04_TODO.md`. A blind second-agent pass over citation-triggered
 disposition rows only, scoped to run on CH04 and CH05; kept as standing
@@ -1771,9 +1598,11 @@ practice if it catches at least one silent pass across both chapters. CH04's
 pass is done; **CH05's pass, and the decision it feeds, wait on the CH05
 branch being cut.**
 
-### 62. CH05-scoped items scattered across `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Part 5 with no tracked home
+### 62. CH05-scoped items scattered across `reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Part 5 with no tracked home
 
-Filed 2026-08-29 out of an audit of `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Part 5
+*(2026-10-04: unparked. CH05 is built and merged; the bullets below are historical except the parts already marked DONE or folded into #65/#67. The re-disposition it asked for is covered by the re-derivation, which closed 2026-10-03.)*
+
+Filed 2026-08-29 out of an audit of `reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` Part 5
 (the CH05 dry run) that found several concrete findings never landed in either
 this file or `reference/chapters/05-passage-cave.md` §7. Parked here as CH05-build
 work, not open questions:
@@ -1828,7 +1657,7 @@ work, not open questions:
   CH05's build**, with its ordering safeguard: freeze the expected answers,
   derive, diff, then write — do not derive-and-write in one pass, or a
   regression in the derivation logic reads as a correct re-disposition. Cross-
-  referenced by `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.6, §5.7, §5.8, Q3 and
+  referenced by `reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.6, §5.7, §5.8, Q3 and
   Q13.
 
   **2026-09-06 — parts 3-4 (the corpus re-disposition) were folded into #65
@@ -1838,6 +1667,389 @@ work, not open questions:
   lost in that move:** freeze the expected answers, derive, diff, then
   write — never derive-and-write in one pass, or a regression in the
   derivation logic reads as a correct re-disposition.
+
+### 39. `pbPushThisBoulder` is unconverted — due in CH25, the chapter that grants Strength
+
+*(2026-10-04: still open; due CH25 as scoped. Moved back from the Done section, where it had been filed by position only.)*
+
+*Reclassified out of `CH03_TODO.md` #20 on 2026-08-17, where it had been logged
+as Kevlar Town's biggest blocker. It never blocked CH03.*
+
+`pbPushThisBoulder` (`reference/scripts_dump/101__PField_Field.rb:2850`) pushes
+only `if $PokemonMap.strengthUsed`, and returns false otherwise — the standard
+series mechanic. So an unpushable boulder in a pre-Strength chapter is the
+design working, and converting this function would not have changed any beat's
+outcome in CH03.
+
+**Due in CH25 (Route 11)** — the chapter that *grants* HM04 (`00-atlas.md`
+line 116), not the chapter before it. It should land alongside the mechanic it
+enables, where a beat can actually exercise a push; shipping it earlier means
+committing an unverifiable conversion.
+
+**Scope when it comes up** — 5 queue entries, plus the content they gate:
+
+| Map | Entries | What |
+|---|---|---|
+| 19 (Passage Cave Grott-Hole) | 17 (all of them) | 3 boulders + the Biker encounters: 3 `pbTrainerIntro(:BIKER)`, 3 `Kernel.pbNoticePlayer`, 3 `pbTrainerEnd`, 4 `pbTrainerBattle` conditionals (Lou/Joe/Richard), 1 warp back to map31 |
+| 31 (Kevlar Town) | 2 of 17 | the two outdoor boulders, `EV001` (10,16) and `EV037` (12,16) |
+
+Map019 **stays in `SLICE_MAP_IDS` now** (user call, 2026-08-17) so the cave is
+built and art-checked well before Strength arrives — only its beats are
+deferred.
+
+**Implementation note already settled:** the push is **object-driven** —
+`OBJ_EVENT_GFX_PUSHABLE_BOULDER`, **not** `MB_PUSHABLE_BOULDER`
+(`reference/chapters/03-kevlar-town.md` §6.1 — "corrected in the ledger, do not
+re-invert").
+
+The same CH25 work unblocks the **Cry Boy sidequest** in Kevlar Town, which is
+the same return trip: *"After getting HM04 in Legen Town, come back and speak to
+the boy crying just outside of the entrance of the Poké Mart"*
+(`Kevlar_Town.wiki:30`). CH03's B18 correctly observes only the pre-Strength
+idle page today.
+
+### 40. Commands stranded after a `Transfer Player` warp — 176 rows, two unrelated classes
+
+*(2026-10-04: still open (40a cosmetic tail, 40b Theo cutscene due CH58). Moved back from the Done section, where it sat by position only.)*
+
+*Filed 2026-08-17 after CH03's queue triage. The single queue signature —
+"command follows a Transfer Player warp: pokeemerald halts the script at the
+warp (ScrCmd_warp/DoWarp), unlike RMXP which keeps running the page" — covers
+two problems with nothing in common. Do not size them as one job.*
+
+RMXP keeps executing an event page after code 201; pokeemerald halts the script
+at the warp. Anything after the transfer is therefore unreachable in the port,
+and the transpiler queues it instead of dropping it silently (correct — §4.5).
+
+**Distribution:** map172 **132**, map32 13, map31 12, map33 11, map49 3, map81 2,
+map48/50/89 1 each. 176 total, over 9 maps. That shape is the whole story: one
+map is a real problem, the rest are choreography.
+
+#### 40a. The cosmetic tail — 44 rows, everything except map172's cutscene
+
+31× code 223 `CHANGE_TONE`, 11× code 204 `CHANGE_MAP_SETTINGS`, 2× code 241
+`PLAY_BGM`.
+
+**The 223s cost nothing.** Every one observed is `Tone rgba [0,0,0,0]` over ~6
+frames — *neutral*, i.e. the fade back **in** that closes a fade-out/fade-in pair
+around the transfer. The transpiler already strips the opening half as subsumed
+by the native warp (`transpiler.py:242-249`, the `pbCaveEntrance` note: "the GBA
+warp performs its own map-transition fade"). This is the same argument from the
+other side. Stripping them is a no-op that quiets ~2/3 of this signature.
+
+The 204s are fog (subtype 1 — e.g. `"004-Shade02"`, opacity 60, zoom 250): a
+real but minor visual loss with precedent for accepting it (the Map033 "Luz"
+ambient-light strip, `CH02_TODO` #11/#12). The 241s are destination BGM, largely
+moot while audio is still substitution-based with slice maps on `MUS_LITTLEROOT`
+(the per-map `reference/audio_map.json` wiring from
+`audio_decision_2026-07-14.md` was never built).
+
+**Action:** strip 223-to-neutral after a warp as a recognized breadcrumb, and
+rule on fog/BGM as accepted debt. Cheap, and it stops this signature from
+looking like 176 rows of lost logic.
+
+#### 40b. Map172's Theo cutscene — 131 rows, genuinely dropped, due CH58
+
+**131 of map172's 132 rows belong to one event: `EV4 'Theo'` page 3.** The codes
+are real content, not choreography: 40× 101 `SHOW_TEXT`, 19× 106 `WAIT`, 14× 355
+`SCRIPT`, 9× 209 `MOVE_ROUTE`, 4× 223, 2× 202 `SET_EVENT_LOCATION`, 2× 207, 1×
+111 `COND_BRANCH`, and 1 nested 201 `TRANSFER`. (The 34× 509 rows are the
+editor's per-step display duplicates of the 209s — `transpiler.py:95` — not
+independent logic.) A whole cutscene sits after the page's warp.
+
+**Not near-term.** Page 3's condition is `switch1_id 125, switch1_valid true` —
+switch 125 is the "FINAL EVENT" **postgame** gate. `chapters.json` already names
+this exact case: CH58 (Moki Town postgame, A9) is "where the postgame pages on
+slice-1 maps finally fire ... the switch-125 'FINAL EVENT' grants that
+01-moki.md §4.2 rules out of CH01 (Lava Cookie on 49, Poke Radar on 50, **HM07
+Waterfall on 172**)". So this is CH58 work, and **CH08's visit-2 return to
+map172 is unaffected** — page 3 cannot fire there.
+
+**This one needs a structural fix, not a strip.** The content has to run at the
+destination, since the source page cannot continue past its own warp: split the
+tail into a script that fires on arrival (a map-script `ON_TRANSITION`/
+`ON_FRAME` on the destination, gated so it runs once), rather than trying to
+keep executing at the source. Worth designing when CH58 is written — and worth
+checking then whether any other page-3-style postgame page hides the same shape.
+
+### 41. 106 items the id map names and the fork does not define — plus Phase 2's item output is a dead end
+
+*(2026-10-04: still open. Moved back from the Done section, where it sat by position only.)*
+
+*Filed 2026-08-19 out of `CH03_TODO.md` #27, where it was surfaced by CH03's
+item-grant fix. Not chapter-blocking; it will keep surfacing one chapter at a
+time until it is done properly.*
+
+`reference/uranium_id_map.json` maps 607 Uranium items to `ITEM_*` constants and
+already precomputes the shortfall in its own `needs_engine.items`: **111 of them
+do not exist in `engine/include/constants/items.h`.** Five were added by hand for
+CH03 (the four Uranium berries + Sprinklotad, `67fd0435`); **106 remain**,
+including Uranium-original held items, mega stones, key items and mail.
+
+Every one is an item grant, mart entry or held item that will fail the §4.7
+forward gate and queue when its map is converted.
+
+**The compounding half is the real finding: Phase 2's item converter output never
+reaches the engine.** `pbs_converter/items.py` emits both
+`include/constants/items.h` and a `gItemsInfo[]` table into
+`output/uranium-build/`, and **nothing includes or copies them into `engine/`**.
+Compare the flags and map-alias hooks (`engine/data/event_scripts.s:1743`,
+`map_events.s:27`) — there is no items equivalent, so that output is currently
+written and discarded.
+
+**Scope it as a Phase-2→engine integration, not 106 hand edits.** It also needs a
+decision the five berries dodged: those were vanilla-equivalent, so their data
+could be copied from a twin. An original held item or mega stone has no twin and
+needs real hold-effect data from Uranium's `item_field_codes` worklist
+(`items.py:308-321`, already generated and never read).
+
+### 42. Shape-C item grants with a non-empty then-body — 60 of 150 sites still queue
+
+*(2026-10-04: still open. Moved back from the Done section, where it sat by position only.)*
+
+*Filed 2026-08-19 out of `CH03_TODO.md` #25 item 2, which is otherwise closed.*
+
+Uranium grants items three ways. Shape C is the awkward one: a `code-111`
+type-12 conditional whose **test expression is the grant itself**, because
+`Kernel.pbReceiveItem` returns whether the item was accepted, and the then-body
+is the success path. 152 sites / 56 maps corpus-wide.
+
+`43aa482e` handles the common case — an **empty** then-body, i.e. a pure
+side-effect wrapper — by emitting `giveitem`. **60 sites with a non-empty
+then-body still queue**, most of them on items the fork does not define (#41),
+which is why the two want planning together.
+
+Do **not** approximate the success path. Emerald's `giveitem` already sets
+`VAR_RESULT`, so the faithful mapping is plausible and cheap to verify against
+`engine/` (§4.7) — but the bag-full / refusal semantics have to be checked
+before a then-body is wired to it, not assumed.
+
+Worth remembering why this class was invisible for so long: **the queue entry
+names the conditional, not the grant hiding inside its test expression** — the
+same lesson as `CH03_TODO.md` #26(b).
+
+### 43. Beat classes the manifest cannot see, and the `cosmetic` rule
+
+*(2026-10-04: still open (part (a) undecided; part (b) encoded as `is_player_observable`). Moved back from the Done section, where it sat by position only.)*
+
+*Filed 2026-08-25 out of the operator's read of CH04's beat list, which found
+four gaps in a chapter that had already been fully dispositioned.*
+
+Two findings, both corpus-wide, both structural rather than CH04-specific.
+
+**(a) The manifest enumerates event pages and overland seams — nothing else.**
+An encounter table is neither, so no generated row can ever represent one.
+CH04 had no beat covering "walk in the tall grass, get a wild battle" because
+nothing in the approval object could prompt for it. The same hole applies to
+any beat class that is not an event page: encounter tables, tileset behaviour
+(counters, ledges, water), connection-only seams, field-move surfaces. Either
+the generator grows non-page row kinds, or every chapter doc needs a
+hand-authored "beats with no manifest row" section that a reviewer is
+required to fill. Decide which before the next chapter is authored — CH04 got
+its B15 by hand (`04-route-2.md` §3.1).
+
+**(b) `cosmetic` was being decided on state writes, not observability.**
+The rule actually applied was *does this page write state?* That made Larrie's
+defeated re-talk a beat (it rides on `pbPhoneRegisterBattle`) while Timothy's
+identical-in-kind re-talk was `cosmetic`, and it dropped a talk-triggered NPC
+with an emote bubble, a cry SE and a line of dialogue. None of those write
+state; all three break independently. The rule is now *is there anything a
+player can press A on and observe?* — `cosmetic` means decoration with no
+trigger.
+
+CH04 was re-swept under (b): `ev009/p1`, `ev011/p0`, `ev012/p1` became
+`beat:B12`/`B13`/`B14`. **CH01–CH03 have not been re-swept** and passed their
+§9 gates under the old rule, so each may be carrying interactive rows filed as
+cosmetic. The sweep is mechanical — cross-reference trigger against
+disposition, flag action-trigger rows dispositioned `cosmetic` — and the
+checker cannot catch it, since `cosmetic` on a state-free row is legal by
+construction.
+
+**The sweep was run 2026-08-25; results and remediation are §44.** It could not
+be mechanical after all — CH01–CH03 have no manifest to cross-reference.
+
+*(2026-09-15: the rule never reached the generator — P8b's derived `cosmetic` used
+"no state-writing tag" and waved through 100 CH01–CH03 talk rows. Now encoded as
+`ManifestRow.is_player_observable`; `reference/archive/REDERIVATION_PLAN.md` §15.8.)*
+
+### 44. CH01/CH03 flavor interiors shipped untested — DEFERRED to the end of Act 1
+
+*(2026-10-04: still deferred. `moki.py` / `kevlar.py` were deleted with the hand suites 2026-10-03 and the suites are now generated by `beat_gen`, so the remediation described below is stale in form; re-check whether the generated CH01/CH03 suites cover the listed flavour-interior rows before actioning. Not verified here. Moved back from the Done section.)*
+
+*Filed 2026-08-25 from the §43(b) re-sweep of CH01–CH03 under the new
+observability rule. **Deferred by the operator until the first chapter group
+(Act 1, CH01–CH06) is complete** — do not action before CH06's §9 gate passes.*
+
+**Deferral rationale.** Neither chapter is the frontier, both already hold a
+passed §9 gate, and Act 2 opens with revisit chapters that re-enter this exact
+content — CH08 is Moki Town (revisit), the first test of the revisit model, and
+is the natural place CH01's interiors get walked again. Doing the remediation
+then folds it into work already scheduled instead of reopening two closed gates
+mid-Act-1.
+
+**The sweep could not be mechanical.** §43(b) assumed a trigger-vs-disposition
+cross-reference. There is nothing to cross-reference: `reference/manifests/`
+holds only `CH04.*` — CH01–CH03 predate the manifest system and have **no
+manifest and no dispositions file**. The assessment was made against the prose
+specs and the playtest scenarios instead. Corollary worth carrying: the checker
+is structurally blind to every pre-CH04 chapter, so any future corpus-wide
+disposition rule change has the same hole.
+
+**Findings — 12 rows would flip to `beat:`, 3 need a human ruling, 0 are
+incidentally covered by the existing scenarios.**
+
+- **CH02 is clean.** Its beat table already treats flavor NPCs as first-class
+  beats regardless of state writes (B3 Chyinmunk sprite, B4 hint NPC, B34
+  brother NPC, B35 sign) — exactly the rows the old rule would have discarded.
+  Nothing to do. Not a coincidence worth ignoring: the author's instinct was
+  the new rule two chapters early.
+- **CH01 — 8 flips.** `01-moki.md` labels Map064, Map065 and Map089 "Flavor
+  interior, no chain beats", and `moki.py` never enters any of them. Map064:
+  ev001/p0 and ev002/p0 (talk-trigger dialogue NPCs), plus the Chyinmunk
+  (`pbCallBub` emote + cry SE + line — literally the Barewl pattern §43(b)
+  flipped). Map065: ev001/p0, ev002/p0. Map089: EV003, EV004, EV005, EV006,
+  EV007 (all talk-trigger flavor lines). The `p1` twins of the Map064/065 NPCs
+  stay cosmetic — switch-125-gated postgame, unreachable in-chapter.
+- **CH03 — 4 flips.** `kevlar.py`'s B16 does door-in/door-out warp checks on
+  Maury's apartment and the couple's house and never talks to anyone inside.
+  Map073: EV005/p0 (Maury, "have you gotten my wallet back?"), EV010 and EV011
+  (the couple), and **EV008, a boutique-interior NPC absent from the beat table
+  entirely**.
+- **Needs a human ruling before beats are written, because it sets the count:**
+  Map089 EV002 (touch-trigger, `code 209/509` picture display, no text — cannot
+  tell from codes whether the player observes anything) and Maury's EV005 pages
+  1 and 2 (self-switch-gated variants whose in-chapter reachability is unclear).
+
+**Remediation when it comes due:** ~5 new beats in `moki.py` (three interiors,
+collapsing the postgame-gated twins) and ~3–5 in `kevlar.py` (Map073's
+interiors), same shape as CH04's B12–B14 — enter, talk, assert the box opens and
+closes. Update `01-moki.md` / `03-kevlar-town.md` beat tables to match; the
+"flavor interior, no chain beats" labels are what caused this and should go.
+
+**Caveat on provenance:** the row list is a sub-agent's judgment read of the
+deserialized event data, not a row-by-row human verification. Re-confirm each
+row against `output/uranium-build/maps/Map0{64,65,73,89}.json` when the work is
+picked up.
+
+### 92. The capability model cannot see field capabilities, because Uranium has no HMs
+
+*(2026-10-04: still open (point 1 and the CH06 remainder). Moved back from the Done section, where it sat by position only. #128 cross-links the `blocked:` revisit that waits on its requirement groups.)*
+
+*Filed 2026-09-10, out of building `src/rpg2gba/capability_sites.py` (`714d8832`).*
+
+`capability_sites.py` derives a capability's grant sites by scanning every map
+for `code 121` (Control Switches) and `code 122` (Control Variables) writes.
+That resolves story gates cleanly — `final_event` → `map199/ev001/p0` (CH57),
+`gym_1_defeated` → `map042/ev003/p0` (CH06), `quest_log_4` → `map032/ev009/p2`
+(CH01). It resolves **`rock_smash` and `surf` to nothing at all**, so CH04's 28
+`blocked:rock_smash` rows and CH05's 4 `blocked:surf` rows still report
+`capability_model_unenforced` — now for a computed reason rather than for want
+of a model, but unenforced either way.
+
+**Why (operator, 2026-09-10): there are no HMs in this game.** Completing a gym
+unlocks the move, and the badge is what permits using it in the field. For at
+least some capabilities there is **also an item** granting the same ability. The
+real gate on a Rock Smash boulder is therefore **the badge AND (the move OR the
+item)**.
+
+Two things follow, and the second is the harder one:
+
+1. **The grant source is not a switch/variable write**, so no amount of
+   extending the `code 121`/`122` scan will find it. It needs a different
+   source — badge state, move/item possession, or whatever Uranium actually
+   records — identified before anything is built.
+2. **`blocked:<token>` cannot express a conjunction.** The verdict's argument is
+   a flat set of capability tokens (`blocked:a|b`, meaning all of them), so
+   `badge AND (move OR item)` has no representation: the `|` separator already
+   means AND-of-a-set, and there is no OR. Modelling this honestly means either
+   a compound grammar or a decision that the disjunction collapses (e.g. treat
+   "can rock smash" as one derived capability whose grant sites are the union of
+   the move-unlock and the item, gated on the badge). **That is a vocabulary
+   decision and belongs to the operator**, not to whoever implements it.
+
+Until then `blocked:rock_smash`/`blocked:surf` staying *unenforced* is the
+correct state — it is an honest "not checked", not a silent pass. Do not make it
+green by inventing a grant site.
+
+**POINT 2 RULED 2026-09-12 (`reference/archive/REDERIVATION_PLAN.md` §14.9): collapse the token, structure the
+model.** No compound grammar. `rock_smash` stays one token meaning "can rock smash in the
+field"; the conjunction becomes **requirement groups** on `CapabilityDerivation` — one group
+per conjunct, alternatives within a group (`{badge_1}` AND `{move_unlock, boxinggloves}`), with
+the route-order grant point being `max` over groups of `min` over alternatives. A compound
+verdict string was rejected because it churns every committed `blocked:rock_smash`, gives the
+checker a parser to maintain, and encodes a distinction no beat can assert — a negative beat
+observes a refusal, never which conjunct caused it. Every disposition authored to date is
+already correct under this reading.
+
+`CapabilitySite` (`capability_sites.py:238-248`) needs one addition: the flat
+`(token, row_id, map_id, chapter_id, detail)` tuple can only express a union of sites, i.e.
+OR-semantics, so it cannot say "the badge is also required." Requirement groups are derived
+where possible and **hand-annotated where not** — #64's `old_rod` (`var[103] >= 5`, variable
+named "Battle Var01", meaning stated only in dialogue) is why the annotation path is mandatory.
+
+Point 1 (identifying the non-switch grant source) remains open. The prohibition above stands
+unchanged.
+
+**PARTIAL 2026-09-13 — badge half only (`reference/archive/REDERIVATION_PLAN.md` §15.2 item 4).** The badge
+conjunct is a count ladder (`numbadges >= BADGEFOR<X>`), sourced from `$Trainer.badges[N]=true`
+script writes; modelled as necessary-not-sufficient (met ⇒ undetermined, never granted). This
+settles CH01–CH05, where no badge is held. **Remaining, filed against CH06** (first chapter with
+a badge in its chain): the move alternative (`pbCheckMove` scans live party movesets; Gym 1's
+TM27 is Return, so "the gym unlocks the move" does not hold for Rock Smash and the source is
+still unidentified), the Map167 gadget items (script branches on `numbadges >= BADGEFOR<X>+1`),
+requirement groups proper, route-order granularity, and the annotation path.
+
+See `MEMORY.md` → Uranium-Specific Discoveries for the mechanic itself.
+
+### 126. Day/night flags 105/106 are unimplemented; the first real reader must implement CE 51 from the RTC
+
+Flags 105/106 (Uranium's day/night state, written by common event 51) have no implementation.
+All CH01-CH05 readers are no-port `Luz` lamps (map032's 11 are strip-listed), so nothing has needed
+them. The first chapter with a real reader implements CE 51 from the RTC (day = 6 <= hour < 20).
+CH06 may already carry two or more night/clock-gated `Luz` rows. Related: #28 (time-of-day encounter
+tables dropped corpus-wide) and #36 (Luz strip). Source: `reference/archive/REDERIVATION_PLAN.md` §16.3 "C3 closed".
+
+### 127. No real party/dex model: the `party_model` refusal blocks 68+ CH01 rows
+
+The generator refuses rows that read party or Pokedex state with a `party_model` blocker. CH01 has
+68+ such refused rows. C8 ruling (b) deferred the model to "the first chapter that needs those rows
+green". Graphics-only vars 43 and 131 are already exempt via `story_state/graphics_vars.py`; the rest
+still refuse. Source: `reference/archive/REDERIVATION_PLAN.md` §16.3 "C8 shape".
+
+### 128. `blocked:` is held back from clerical derivation; revisit at CH06
+
+`blocked:<spec>` is a proposal only and never dispositions a row until a human copies it into the
+dispositions file (the one negative claim, with a false-positive history on obstacle rows, #95). The
+operator ruling says to revisit when requirement groups make the capability model real, at CH06.
+That work is #92's remaining half (move alternative, Map167 gadget items, requirement groups proper),
+so this item closes or moves with it. Source: `reference/archive/REDERIVATION_PLAN.md` §15.7.
+
+### 129. `map033/ev024/p0` `pbCaveExit` leaves three `# UNHANDLED` lines
+
+A transpiler gap: `pbCaveExit` on this page queues three `# UNHANDLED` commands. Once the
+transpiler handles it, the row becomes an ordinary `warp` beat. T11/X3 in the plan count it as
+"partially handled" (CH05's B1 crosses one). Source: `reference/archive/REDERIVATION_PLAN.md` §16.4, §13.3 T11/X3.
+
+### 130. `^` in `map207/ev011/p0` has no staging substitution; possible real ROM text defect
+
+Staging substitutes the charmap characters it knows (`assembly._CHARMAP_SUBS`) and has no entry for
+`^`. This may be a genuine ROM text defect rather than only an oracle gap. Check what the compiled
+text actually shows before assuming either. Source: `reference/archive/REDERIVATION_PLAN.md` §16.4.
+
+### 131. Five untranslatable control codes in flavour dialogue
+
+Five flavour-dialogue strings carry control codes the text path cannot translate; `map052/ev003/p1`
+is one example. The generator refuses those rows until the codes are handled or ruled strippable
+(a content-fidelity call under CLAUDE.md §10 if any is dropped). The other four are not listed in
+the plan. Source: `reference/archive/REDERIVATION_PLAN.md` §16.4.
+
+### 132. `stage_slice_scripts.py --write` skips all staging when the existence check fails
+
+Residue of #29. The `--write` block (`scripts/stage_slice_scripts.py`, after the existence check's
+`return 1`) is only reached when the check passes, so a genuine dangling-reference failure writes no
+`.pory` and `assemble_pathfinder` then builds from a previous run's scripts (a mixed build, ROM
+`5d4a7622` vs `360e8506`). #29 fixed the false alarm only. Fix: make the write unconditional or the
+failure an exception so a red gate never leaves a half-staged tree.
 
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
@@ -1852,7 +2064,9 @@ work, not open questions:
   see Group C cleanup, `reference/guides/engine_gotchas.md` is not the home for
   this, `ROM_TEST_DEV.md`'s "new_game.c debug-harness re-arm technique" section is.
 
-### 69. `chapters.json` credits CH30 with the HM03 Surf grant; the corpus says map 143
+### 125. `chapters.json` credits CH30 with the HM03 Surf grant; the corpus says map 143 (was mis-numbered #69)
+
+*(2026-10-04: renumbered from a second `### 69`, which collided with "A green test run writes synthetic chapter names..." above. References to "#69" meaning this item now read #125; MEMORY.md's 2026-09-01c entry still says #69.)*
 
 Found while building B2 (2026-09-01). `reference/chapters.json`'s CH30 (Amatree
 Town, maps 151/170/171/69) carries the note *"the HM03 Surf grant -- the single
@@ -1872,7 +2086,6 @@ chapter, not to Amatree Town.
 choice — the grant sits on a map both chapters contain. Needs the atlas
 maintainer. Evidence is recorded in
 `reference/frozen/ch05_surf_expectations.json`'s `granting_chapter` block.
-
 
 ## Done
 
@@ -1980,7 +2193,7 @@ maintainer. Evidence is recorded in
   step, with the derived answer already sitting on the rows. Also unenforced by
   design: `blocked:surf` will raise `capability_model_unenforced` exactly as
   CH04's 28 `blocked:rock_smash` rows do — no `CapabilityModel` implementation
-  exists and `chapters.json` has no structured grants field (see #69).
+  exists and `chapters.json` has no structured grants field (see #125).
 
   Suite **2792 passed, 19 skipped** (was 2787/19).
 
@@ -2116,7 +2329,7 @@ maintainer. Evidence is recorded in
   keep their original text. `build_map_constants` over {19,31,35,36,37} now
   mints `MAP_PASSAGE_CAVE_1F`/`PassageCave1F` and
   `MAP_PASSAGE_CAVE_2F`/`PassageCave2F` clean. `05-passage-cave.md` §2 table and
-  §7.1 item 2 updated. `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.5.
+  §7.1 item 2 updated. `reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.5.
 
 - **55. Command code 408 (Comment continuation) missing from `_CODE_IGNORED`**
   (fixed `511ef4af`, 2026-08-28) — `generator.py:107` ignored 108 (Comment) but
@@ -2126,7 +2339,7 @@ maintainer. Evidence is recorded in
   reads `frozenset({0, 509, 106, 108, 408, 413})` — verified current at
   `src/rpg2gba/chapter_manifest/generator.py:107`, with 408 treated as a
   structural rider on 108, same as 413 is on 412. `PROJECT_TODO` #55;
-  `PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.10. Landed before the CH01-CH03
+  `reference/archive/PLAYTEST_AUTHORING_IMPROVEMENT_V2.md` §5.10. Landed before the CH01-CH03
   manifests are generated, since it changes what they say; `pytest -k
   manifest`: 109 passed. The CH05 dry-run doc and this file's own record of
   the finding were not updated at the time the fix landed.
@@ -2142,7 +2355,7 @@ maintainer. Evidence is recorded in
 
 ### 87. DONE 2026-09-15 — `CommonEvents.pory` harvested against the oracle; 0 transpiler bugs, and the oracle archive is now inert
 
-**Prerequisite for CH06.** Filed 2026-09-08 out of the post-CH05 review walkthrough,
+**Prerequisite for CH06.** *(2026-10-04: satisfied, DONE 2026-09-15 as the heading says.)* Filed 2026-09-08 out of the post-CH05 review walkthrough,
 splitting off the one obligation #86's harvest deliberately left open.
 `reference/findings/oracle_harvest_2026-07-02.md` retired the frozen-Opus oracle for
 maps, with one explicit exception:
@@ -2244,7 +2457,7 @@ and quietly re-break doors. Fix: derive `WARP_OVERRIDES` from
 `build_slice_maps`'s computed set instead of hand-listing it. Migrated from
 `reference/findings/gated_door_collapse_2026-07-26.md` §7, 2026-08-04.
 
-**Fixed 2026-09-08** (`POST_CH05_REVIEW.md` G2), by persistence rather than
+**Fixed 2026-09-08** (`reference/archive/POST_CH05_REVIEW.md` G2), by persistence rather than
 reimplementation. `build_slice_maps` already computed the authoritative set;
 the problem was that `assemble_pathfinder.py` runs in a separate process one
 runbook step later and could not see it. So runbook step 4
@@ -2442,7 +2655,7 @@ in `traversal.graph.build_map_graph`'s real edges — for the routing side. A
 `stair_approach` resolver in `cells.py` would be a port of that function into
 the beat-authoring vocabulary, not new derivation work.
 
-**Built 2026-09-08** (`POST_CH05_REVIEW.md` G4) — but **"a port, not new
+**Built 2026-09-08** (`reference/archive/POST_CH05_REVIEW.md` G4) — but **"a port, not new
 derivation work" was wrong**, and measuring that was the useful part.
 
 `_stair_approach`'s rule (the E/W neighbour owning a `stair_diagonal` edge)
@@ -2499,7 +2712,7 @@ failure shouldn't block battles and vice versa); the battle half specifically
 should either stage per-trainer (skip only the failing one, loudly) or abort
 the whole run rather than silently zeroing it.
 
-**Fixed 2026-09-08** (`POST_CH05_REVIEW.md` G3): abort, not skip-per-trainer.
+**Fixed 2026-09-08** (`reference/archive/POST_CH05_REVIEW.md` G3): abort, not skip-per-trainer.
 `stage_slice` still runs the pic half first and still writes the manifest —
 the pics genuinely stand alone and there is no reason to throw that work away
 — but it then raises `TrainerStagingError` carrying every offending trainer.
@@ -2546,7 +2759,7 @@ harvest deliberately held open is now filed separately as **#87**.
 
 ### 88. DONE 2026-09-08 — the four pinned lists have a completeness check (`rpg2gba slice-pins`)
 
-`POST_CH05_REVIEW.md` G1. Four lists must move together when a chapter joins
+`reference/archive/POST_CH05_REVIEW.md` G1. Four lists must move together when a chapter joins
 `SLICE_MAP_IDS`; exactly one was guarded (`test_chapter_atlas.py` pins
 `SLICE_MAP_IDS` itself against the atlas). `test_trainer_battles.py` and
 `test_species_gate.py` checked that present entries are *valid*, never that the
@@ -2617,7 +2830,9 @@ correctly resolves east to `(54,43)` instead of returning unwalkable `(52,43)`.
 **Why this mattered for sequencing:** it is the concrete reason G4 belonged
 before the CH01–CH03 re-derivation rather than during it.
 
-### 29. `stage_slice_scripts` existence check is blind to engine-defined labels
+### 29. `stage_slice_scripts` existence check is blind to engine-defined labels -- FIXED 2026-08-09
+
+*(2026-10-04: the label check is fixed; the write-ordering trap described at the end is still live and is filed as #132.)*
 
 Found 2026-08-09 while rebuilding CH02. `stage_slice_scripts.py --write` exits
 1 with `FAIL: 2 undefined script reference(s): BerryTreeScript,
@@ -2676,200 +2891,6 @@ closed this by making the gate pass, but the ordering is still a trap — a
 genuine future failure would skip the writes the same way. Worth making the
 write unconditional (or the failure an exception) so a red gate can never leave
 a half-staged tree behind; not done here.
-
-### 39. `pbPushThisBoulder` is unconverted — due in CH25, the chapter that grants Strength
-
-*Reclassified out of `CH03_TODO.md` #20 on 2026-08-17, where it had been logged
-as Kevlar Town's biggest blocker. It never blocked CH03.*
-
-`pbPushThisBoulder` (`reference/scripts_dump/101__PField_Field.rb:2850`) pushes
-only `if $PokemonMap.strengthUsed`, and returns false otherwise — the standard
-series mechanic. So an unpushable boulder in a pre-Strength chapter is the
-design working, and converting this function would not have changed any beat's
-outcome in CH03.
-
-**Due in CH25 (Route 11)** — the chapter that *grants* HM04 (`00-atlas.md`
-line 116), not the chapter before it. It should land alongside the mechanic it
-enables, where a beat can actually exercise a push; shipping it earlier means
-committing an unverifiable conversion.
-
-**Scope when it comes up** — 5 queue entries, plus the content they gate:
-
-| Map | Entries | What |
-|---|---|---|
-| 19 (Passage Cave Grott-Hole) | 17 (all of them) | 3 boulders + the Biker encounters: 3 `pbTrainerIntro(:BIKER)`, 3 `Kernel.pbNoticePlayer`, 3 `pbTrainerEnd`, 4 `pbTrainerBattle` conditionals (Lou/Joe/Richard), 1 warp back to map31 |
-| 31 (Kevlar Town) | 2 of 17 | the two outdoor boulders, `EV001` (10,16) and `EV037` (12,16) |
-
-Map019 **stays in `SLICE_MAP_IDS` now** (user call, 2026-08-17) so the cave is
-built and art-checked well before Strength arrives — only its beats are
-deferred.
-
-**Implementation note already settled:** the push is **object-driven** —
-`OBJ_EVENT_GFX_PUSHABLE_BOULDER`, **not** `MB_PUSHABLE_BOULDER`
-(`reference/chapters/03-kevlar-town.md` §6.1 — "corrected in the ledger, do not
-re-invert").
-
-The same CH25 work unblocks the **Cry Boy sidequest** in Kevlar Town, which is
-the same return trip: *"After getting HM04 in Legen Town, come back and speak to
-the boy crying just outside of the entrance of the Poké Mart"*
-(`Kevlar_Town.wiki:30`). CH03's B18 correctly observes only the pre-Strength
-idle page today.
-
-### 40. Commands stranded after a `Transfer Player` warp — 176 rows, two unrelated classes
-
-*Filed 2026-08-17 after CH03's queue triage. The single queue signature —
-"command follows a Transfer Player warp: pokeemerald halts the script at the
-warp (ScrCmd_warp/DoWarp), unlike RMXP which keeps running the page" — covers
-two problems with nothing in common. Do not size them as one job.*
-
-RMXP keeps executing an event page after code 201; pokeemerald halts the script
-at the warp. Anything after the transfer is therefore unreachable in the port,
-and the transpiler queues it instead of dropping it silently (correct — §4.5).
-
-**Distribution:** map172 **132**, map32 13, map31 12, map33 11, map49 3, map81 2,
-map48/50/89 1 each. 176 total, over 9 maps. That shape is the whole story: one
-map is a real problem, the rest are choreography.
-
-#### 40a. The cosmetic tail — 44 rows, everything except map172's cutscene
-
-31× code 223 `CHANGE_TONE`, 11× code 204 `CHANGE_MAP_SETTINGS`, 2× code 241
-`PLAY_BGM`.
-
-**The 223s cost nothing.** Every one observed is `Tone rgba [0,0,0,0]` over ~6
-frames — *neutral*, i.e. the fade back **in** that closes a fade-out/fade-in pair
-around the transfer. The transpiler already strips the opening half as subsumed
-by the native warp (`transpiler.py:242-249`, the `pbCaveEntrance` note: "the GBA
-warp performs its own map-transition fade"). This is the same argument from the
-other side. Stripping them is a no-op that quiets ~2/3 of this signature.
-
-The 204s are fog (subtype 1 — e.g. `"004-Shade02"`, opacity 60, zoom 250): a
-real but minor visual loss with precedent for accepting it (the Map033 "Luz"
-ambient-light strip, `CH02_TODO` #11/#12). The 241s are destination BGM, largely
-moot while audio is still substitution-based with slice maps on `MUS_LITTLEROOT`
-(the per-map `reference/audio_map.json` wiring from
-`audio_decision_2026-07-14.md` was never built).
-
-**Action:** strip 223-to-neutral after a warp as a recognized breadcrumb, and
-rule on fog/BGM as accepted debt. Cheap, and it stops this signature from
-looking like 176 rows of lost logic.
-
-#### 40b. Map172's Theo cutscene — 131 rows, genuinely dropped, due CH58
-
-**131 of map172's 132 rows belong to one event: `EV4 'Theo'` page 3.** The codes
-are real content, not choreography: 40× 101 `SHOW_TEXT`, 19× 106 `WAIT`, 14× 355
-`SCRIPT`, 9× 209 `MOVE_ROUTE`, 4× 223, 2× 202 `SET_EVENT_LOCATION`, 2× 207, 1×
-111 `COND_BRANCH`, and 1 nested 201 `TRANSFER`. (The 34× 509 rows are the
-editor's per-step display duplicates of the 209s — `transpiler.py:95` — not
-independent logic.) A whole cutscene sits after the page's warp.
-
-**Not near-term.** Page 3's condition is `switch1_id 125, switch1_valid true` —
-switch 125 is the "FINAL EVENT" **postgame** gate. `chapters.json` already names
-this exact case: CH58 (Moki Town postgame, A9) is "where the postgame pages on
-slice-1 maps finally fire ... the switch-125 'FINAL EVENT' grants that
-01-moki.md §4.2 rules out of CH01 (Lava Cookie on 49, Poke Radar on 50, **HM07
-Waterfall on 172**)". So this is CH58 work, and **CH08's visit-2 return to
-map172 is unaffected** — page 3 cannot fire there.
-
-**This one needs a structural fix, not a strip.** The content has to run at the
-destination, since the source page cannot continue past its own warp: split the
-tail into a script that fires on arrival (a map-script `ON_TRANSITION`/
-`ON_FRAME` on the destination, gated so it runs once), rather than trying to
-keep executing at the source. Worth designing when CH58 is written — and worth
-checking then whether any other page-3-style postgame page hides the same shape.
-
-### 41. 106 items the id map names and the fork does not define — plus Phase 2's item output is a dead end
-
-*Filed 2026-08-19 out of `CH03_TODO.md` #27, where it was surfaced by CH03's
-item-grant fix. Not chapter-blocking; it will keep surfacing one chapter at a
-time until it is done properly.*
-
-`reference/uranium_id_map.json` maps 607 Uranium items to `ITEM_*` constants and
-already precomputes the shortfall in its own `needs_engine.items`: **111 of them
-do not exist in `engine/include/constants/items.h`.** Five were added by hand for
-CH03 (the four Uranium berries + Sprinklotad, `67fd0435`); **106 remain**,
-including Uranium-original held items, mega stones, key items and mail.
-
-Every one is an item grant, mart entry or held item that will fail the §4.7
-forward gate and queue when its map is converted.
-
-**The compounding half is the real finding: Phase 2's item converter output never
-reaches the engine.** `pbs_converter/items.py` emits both
-`include/constants/items.h` and a `gItemsInfo[]` table into
-`output/uranium-build/`, and **nothing includes or copies them into `engine/`**.
-Compare the flags and map-alias hooks (`engine/data/event_scripts.s:1743`,
-`map_events.s:27`) — there is no items equivalent, so that output is currently
-written and discarded.
-
-**Scope it as a Phase-2→engine integration, not 106 hand edits.** It also needs a
-decision the five berries dodged: those were vanilla-equivalent, so their data
-could be copied from a twin. An original held item or mega stone has no twin and
-needs real hold-effect data from Uranium's `item_field_codes` worklist
-(`items.py:308-321`, already generated and never read).
-
-### 42. Shape-C item grants with a non-empty then-body — 60 of 150 sites still queue
-
-*Filed 2026-08-19 out of `CH03_TODO.md` #25 item 2, which is otherwise closed.*
-
-Uranium grants items three ways. Shape C is the awkward one: a `code-111`
-type-12 conditional whose **test expression is the grant itself**, because
-`Kernel.pbReceiveItem` returns whether the item was accepted, and the then-body
-is the success path. 152 sites / 56 maps corpus-wide.
-
-`43aa482e` handles the common case — an **empty** then-body, i.e. a pure
-side-effect wrapper — by emitting `giveitem`. **60 sites with a non-empty
-then-body still queue**, most of them on items the fork does not define (#41),
-which is why the two want planning together.
-
-Do **not** approximate the success path. Emerald's `giveitem` already sets
-`VAR_RESULT`, so the faithful mapping is plausible and cheap to verify against
-`engine/` (§4.7) — but the bag-full / refusal semantics have to be checked
-before a then-body is wired to it, not assumed.
-
-Worth remembering why this class was invisible for so long: **the queue entry
-names the conditional, not the grant hiding inside its test expression** — the
-same lesson as `CH03_TODO.md` #26(b).
-
-### 43. Beat classes the manifest cannot see, and the `cosmetic` rule
-
-*Filed 2026-08-25 out of the operator's read of CH04's beat list, which found
-four gaps in a chapter that had already been fully dispositioned.*
-
-Two findings, both corpus-wide, both structural rather than CH04-specific.
-
-**(a) The manifest enumerates event pages and overland seams — nothing else.**
-An encounter table is neither, so no generated row can ever represent one.
-CH04 had no beat covering "walk in the tall grass, get a wild battle" because
-nothing in the approval object could prompt for it. The same hole applies to
-any beat class that is not an event page: encounter tables, tileset behaviour
-(counters, ledges, water), connection-only seams, field-move surfaces. Either
-the generator grows non-page row kinds, or every chapter doc needs a
-hand-authored "beats with no manifest row" section that a reviewer is
-required to fill. Decide which before the next chapter is authored — CH04 got
-its B15 by hand (`04-route-2.md` §3.1).
-
-**(b) `cosmetic` was being decided on state writes, not observability.**
-The rule actually applied was *does this page write state?* That made Larrie's
-defeated re-talk a beat (it rides on `pbPhoneRegisterBattle`) while Timothy's
-identical-in-kind re-talk was `cosmetic`, and it dropped a talk-triggered NPC
-with an emote bubble, a cry SE and a line of dialogue. None of those write
-state; all three break independently. The rule is now *is there anything a
-player can press A on and observe?* — `cosmetic` means decoration with no
-trigger.
-
-CH04 was re-swept under (b): `ev009/p1`, `ev011/p0`, `ev012/p1` became
-`beat:B12`/`B13`/`B14`. **CH01–CH03 have not been re-swept** and passed their
-§9 gates under the old rule, so each may be carrying interactive rows filed as
-cosmetic. The sweep is mechanical — cross-reference trigger against
-disposition, flag action-trigger rows dispositioned `cosmetic` — and the
-checker cannot catch it, since `cosmetic` on a state-free row is legal by
-construction.
-
-**The sweep was run 2026-08-25; results and remediation are §44.** It could not
-be mechanical after all — CH01–CH03 have no manifest to cross-reference.
-
-*(2026-09-15: the rule never reached the generator — P8b's derived `cosmetic` used
-"no state-writing tag" and waved through 100 CH01–CH03 talk rows. Now encoded as
-`ManifestRow.is_player_observable`; `REDERIVATION_PLAN.md` §15.8.)*
 
 ### 45. Defeated Larrie faces you and says nothing — ROOT-CAUSED, FIXED, AND CONFIRMED IN PLAY 2026-08-27
 
@@ -3092,134 +3113,9 @@ command. Wrapping it made the engine read garbage as a trainer id;
 the live suite. The comment recording this now lives at the classifier's
 post-battle-script construction.
 
-### 44. CH01/CH03 flavor interiors shipped untested — DEFERRED to the end of Act 1
-
-*Filed 2026-08-25 from the §43(b) re-sweep of CH01–CH03 under the new
-observability rule. **Deferred by the operator until the first chapter group
-(Act 1, CH01–CH06) is complete** — do not action before CH06's §9 gate passes.*
-
-**Deferral rationale.** Neither chapter is the frontier, both already hold a
-passed §9 gate, and Act 2 opens with revisit chapters that re-enter this exact
-content — CH08 is Moki Town (revisit), the first test of the revisit model, and
-is the natural place CH01's interiors get walked again. Doing the remediation
-then folds it into work already scheduled instead of reopening two closed gates
-mid-Act-1.
-
-**The sweep could not be mechanical.** §43(b) assumed a trigger-vs-disposition
-cross-reference. There is nothing to cross-reference: `reference/manifests/`
-holds only `CH04.*` — CH01–CH03 predate the manifest system and have **no
-manifest and no dispositions file**. The assessment was made against the prose
-specs and the playtest scenarios instead. Corollary worth carrying: the checker
-is structurally blind to every pre-CH04 chapter, so any future corpus-wide
-disposition rule change has the same hole.
-
-**Findings — 12 rows would flip to `beat:`, 3 need a human ruling, 0 are
-incidentally covered by the existing scenarios.**
-
-- **CH02 is clean.** Its beat table already treats flavor NPCs as first-class
-  beats regardless of state writes (B3 Chyinmunk sprite, B4 hint NPC, B34
-  brother NPC, B35 sign) — exactly the rows the old rule would have discarded.
-  Nothing to do. Not a coincidence worth ignoring: the author's instinct was
-  the new rule two chapters early.
-- **CH01 — 8 flips.** `01-moki.md` labels Map064, Map065 and Map089 "Flavor
-  interior, no chain beats", and `moki.py` never enters any of them. Map064:
-  ev001/p0 and ev002/p0 (talk-trigger dialogue NPCs), plus the Chyinmunk
-  (`pbCallBub` emote + cry SE + line — literally the Barewl pattern §43(b)
-  flipped). Map065: ev001/p0, ev002/p0. Map089: EV003, EV004, EV005, EV006,
-  EV007 (all talk-trigger flavor lines). The `p1` twins of the Map064/065 NPCs
-  stay cosmetic — switch-125-gated postgame, unreachable in-chapter.
-- **CH03 — 4 flips.** `kevlar.py`'s B16 does door-in/door-out warp checks on
-  Maury's apartment and the couple's house and never talks to anyone inside.
-  Map073: EV005/p0 (Maury, "have you gotten my wallet back?"), EV010 and EV011
-  (the couple), and **EV008, a boutique-interior NPC absent from the beat table
-  entirely**.
-- **Needs a human ruling before beats are written, because it sets the count:**
-  Map089 EV002 (touch-trigger, `code 209/509` picture display, no text — cannot
-  tell from codes whether the player observes anything) and Maury's EV005 pages
-  1 and 2 (self-switch-gated variants whose in-chapter reachability is unclear).
-
-**Remediation when it comes due:** ~5 new beats in `moki.py` (three interiors,
-collapsing the postgame-gated twins) and ~3–5 in `kevlar.py` (Map073's
-interiors), same shape as CH04's B12–B14 — enter, talk, assert the box opens and
-closes. Update `01-moki.md` / `03-kevlar-town.md` beat tables to match; the
-"flavor interior, no chain beats" labels are what caused this and should go.
-
-**Caveat on provenance:** the row list is a sub-agent's judgment read of the
-deserialized event data, not a row-by-row human verification. Re-confirm each
-row against `output/uranium-build/maps/Map0{64,65,73,89}.json` when the work is
-picked up.
-
-### 92. The capability model cannot see field capabilities, because Uranium has no HMs
-
-*Filed 2026-09-10, out of building `src/rpg2gba/capability_sites.py` (`714d8832`).*
-
-`capability_sites.py` derives a capability's grant sites by scanning every map
-for `code 121` (Control Switches) and `code 122` (Control Variables) writes.
-That resolves story gates cleanly — `final_event` → `map199/ev001/p0` (CH57),
-`gym_1_defeated` → `map042/ev003/p0` (CH06), `quest_log_4` → `map032/ev009/p2`
-(CH01). It resolves **`rock_smash` and `surf` to nothing at all**, so CH04's 28
-`blocked:rock_smash` rows and CH05's 4 `blocked:surf` rows still report
-`capability_model_unenforced` — now for a computed reason rather than for want
-of a model, but unenforced either way.
-
-**Why (operator, 2026-09-10): there are no HMs in this game.** Completing a gym
-unlocks the move, and the badge is what permits using it in the field. For at
-least some capabilities there is **also an item** granting the same ability. The
-real gate on a Rock Smash boulder is therefore **the badge AND (the move OR the
-item)**.
-
-Two things follow, and the second is the harder one:
-
-1. **The grant source is not a switch/variable write**, so no amount of
-   extending the `code 121`/`122` scan will find it. It needs a different
-   source — badge state, move/item possession, or whatever Uranium actually
-   records — identified before anything is built.
-2. **`blocked:<token>` cannot express a conjunction.** The verdict's argument is
-   a flat set of capability tokens (`blocked:a|b`, meaning all of them), so
-   `badge AND (move OR item)` has no representation: the `|` separator already
-   means AND-of-a-set, and there is no OR. Modelling this honestly means either
-   a compound grammar or a decision that the disjunction collapses (e.g. treat
-   "can rock smash" as one derived capability whose grant sites are the union of
-   the move-unlock and the item, gated on the badge). **That is a vocabulary
-   decision and belongs to the operator**, not to whoever implements it.
-
-Until then `blocked:rock_smash`/`blocked:surf` staying *unenforced* is the
-correct state — it is an honest "not checked", not a silent pass. Do not make it
-green by inventing a grant site.
-
-**POINT 2 RULED 2026-09-12 (`REDERIVATION_PLAN.md` §14.9): collapse the token, structure the
-model.** No compound grammar. `rock_smash` stays one token meaning "can rock smash in the
-field"; the conjunction becomes **requirement groups** on `CapabilityDerivation` — one group
-per conjunct, alternatives within a group (`{badge_1}` AND `{move_unlock, boxinggloves}`), with
-the route-order grant point being `max` over groups of `min` over alternatives. A compound
-verdict string was rejected because it churns every committed `blocked:rock_smash`, gives the
-checker a parser to maintain, and encodes a distinction no beat can assert — a negative beat
-observes a refusal, never which conjunct caused it. Every disposition authored to date is
-already correct under this reading.
-
-`CapabilitySite` (`capability_sites.py:238-248`) needs one addition: the flat
-`(token, row_id, map_id, chapter_id, detail)` tuple can only express a union of sites, i.e.
-OR-semantics, so it cannot say "the badge is also required." Requirement groups are derived
-where possible and **hand-annotated where not** — #64's `old_rod` (`var[103] >= 5`, variable
-named "Battle Var01", meaning stated only in dialogue) is why the annotation path is mandatory.
-
-Point 1 (identifying the non-switch grant source) remains open. The prohibition above stands
-unchanged.
-
-**PARTIAL 2026-09-13 — badge half only (`REDERIVATION_PLAN.md` §15.2 item 4).** The badge
-conjunct is a count ladder (`numbadges >= BADGEFOR<X>`), sourced from `$Trainer.badges[N]=true`
-script writes; modelled as necessary-not-sufficient (met ⇒ undetermined, never granted). This
-settles CH01–CH05, where no badge is held. **Remaining, filed against CH06** (first chapter with
-a badge in its chain): the move alternative (`pbCheckMove` scans live party movesets; Gym 1's
-TM27 is Return, so "the gym unlocks the move" does not hold for Rock Smash and the source is
-still unidentified), the Map167 gadget items (script branches on `numbadges >= BADGEFOR<X>+1`),
-requirement groups proper, route-order granularity, and the annotation path.
-
-See `MEMORY.md` → Uranium-Specific Discoveries for the mechanic itself.
-
 ### 94. DONE 2026-09-10 — the archetype classifier is not open for extension
 
-*Filed 2026-09-10. Prerequisite for `REDERIVATION_PLAN.md` §13.3's template program.*
+*Filed 2026-09-10. Prerequisite for `reference/archive/REDERIVATION_PLAN.md` §13.3's template program.*
 
 `classify_event` (`chapter_manifest/archetypes.py`) dispatched through a
 hand-written `if`/`elif` sequence, and `ARCHETYPE_NAMES` is a literal set. Adding
@@ -3258,13 +3154,13 @@ to know about it.** Event-level entries run in registry order and **once any
 event-level entry claims rows, no later event-level entry gets a turn** — so a
 third event-level archetype would be silently skipped on every event a trainer
 already matched. Today's four entries hide this (only `trainer` and `item_ball`
-are event-level and they do not overlap). `REDERIVATION_PLAN.md` §13.3's T1 third
+are event-level and they do not overlap). `reference/archive/REDERIVATION_PLAN.md` §13.3's T1 third
 item — `pbReceiveItem` NPC gifts — is the first candidate that would be
 event-level and make this load-bearing.
 
 ### 95. DONE 2026-09-11 — `derive_blocked_verdict` asks the wrong question about obstacle rows
 
-*Filed 2026-09-10, measured while ruling `REDERIVATION_PLAN.md` §13.*
+*Filed 2026-09-10, measured while ruling `reference/archive/REDERIVATION_PLAN.md` §13.*
 
 It asks whether a tile **adjacent to the event** is reachable. For an obstacle
 event — a Rock Smash rock, a Strength boulder — that is the wrong question: you
@@ -3326,7 +3222,7 @@ test already asserted before this change. Whatever kept the seam row from
 reproducing in §13's measurement is a **disposition-generator** concern, not this
 derivation's, and is still open going into P8b.
 
-### 93. Five capability base tokens name both a switch and a variable
+### 93. Five capability base tokens name both a switch and a variable -- RESOLVED 2026-09-10
 
 *Filed 2026-09-10, same commit as #92.*
 
@@ -3364,7 +3260,7 @@ the fix, which is a naming decision:
 Worth settling before CH01–CH03's dispositions are authored, since that is the
 first work to write `blocked:` tokens at volume.
 
-**RESOLVED 2026-09-10** (operator ruling; full argument in `REDERIVATION_PLAN.md`
+**RESOLVED 2026-09-10** (operator ruling; full argument in `reference/archive/REDERIVATION_PLAN.md`
 §10 R1). **Prefix variable-derived tokens with `var_`; switch-derived tokens keep
 the bare slug** — `blocked:got_pokemon` is a switch, `blocked:var_quest_log_4` is
 variable 101 at threshold 4. The five bases stop colliding by construction, and the
@@ -3385,3 +3281,171 @@ silently rename an existing *switch*'s token.
 to a leading `var_` re-opens the collision, so `token_for_label` must fail loud on
 that rather than mint it (CLAUDE.md §4.5). Nothing in the current label set does,
 which is why this is a guard and not a rename.
+
+### 109. `text_source` rejects the straight quote that staging normalizes, so 12 T2 rows have no oracle -- DONE 2026-09-24
+
+Fixed by extracting `assembly.apply_dialogue_char_substitutions` (the open/close
+quote toggle + `*`/`[`/`]` subs) out of `_normalize_string_content` as the one
+shared implementation, and having `text_source.page_messages` call it
+(`quote_escaped=False`) before `_canonicalize_chars`; `normalize_pory` is
+byte-identical. All previously-refusing rows now resolve.
+
+Surfaced 2026-09-15 while probing whether T2's `flavour_npc_beat` could be
+applied mechanically to the CH01-CH03 residue. Of 96 candidate rows, 84 resolve
+a source oracle and **12 fail loud** with:
+
+> `text_source: character U+0022 '"' has no engine/charmap.txt entry -- unrepresentable on the ROM's font`
+
+**This is an oracle gap, not a ROM bug, and the distinction is the whole item.**
+`engine/charmap.txt` genuinely has no `U+0022` entry -- it has `“` (B1) and `”`
+(B2) only. But `tileset_converter.assembly.normalize_pory` already converts `\"`
+to typographic `“`/`”` on an open/close toggle at staging (`assembly.py:475-476`,
+and its docstring at :549), so **the ROM text is correct**. It is
+`playtest.text_source._canonicalize_chars` -- the path a beat uses to derive
+expected text -- that does not apply the same substitution and therefore cannot
+read a page the pipeline converts fine.
+
+Rows affected (all `flavour_npc`, all otherwise mechanical): `map032/ev001/p0`,
+`map049/ev006/p0`, `map049/ev015/p0`, `map049/ev016/p0`, `map050/ev010/p0`, and
+7 more -- re-derive with the probe rather than trusting this list to stay current.
+
+**Fix shape, and the constraint on it:** `text_source` should apply the same
+open/close toggle, **reusing `assembly`'s implementation rather than
+re-implementing it** (§4.3 -- two independent quote-toggling state machines that
+must agree is exactly the drift this repo consolidated five `*_constant` helpers
+to avoid). The toggle is stateful across a string, so a naive `replace('"', '“')`
+is wrong and would silently mis-render every closing quote.
+
+Worth doing before T2's application pass: it is 12 of 96 rows, and every one of
+them is otherwise ready.
+
+### 117. Two-visit events: a route walks only one of two page-ending choice arms -- DONE 2026-09-29
+
+**Resolved the same day** (operator re-ruled: walk the hand's round trip).
+`beat_gen/round_trip.py::find_round_trip` derives it: for an autorun page with exactly two
+page-ending arms, answer the losing arm X, find the live page Q, and find a claimed arm of
+Q that makes the page live again and re-fires into Y. `split_choice_arms` then walks X and
+moves Y's rows into Q's beat. CH01 now runs p0 No (#41), p2 re-offer (#48), p2 Yes riding
+the quiz (#49), then p1 (#50). Grade is clean. Only ev005 matches in CH01–CH05. Left open:
+p2's facing arms b1–b4 are `unselected_arm` (new `self_ended` verdict), none frozen. The
+original entry follows.
+
+The professor (`map050/ev005`) asks "ready for the Trainer Aptitude Test?". "Yes"
+(`p0/b2`) runs the quiz and starter selector and sets self switch C, which makes p1
+live. "No" (`p0/b3`) sets D, which makes p2 live, and p2 re-asks the question;
+`p2/b0` then re-opens p0's "Yes" path. Both arms end the page, so ruling 19 walks
+one. Since `\ch` parsing (2026-09-29) CH01 walks "Yes", the story path, and p2's
+7 rows are `arm_gated` (reachable on the ROM through the unwalked arm, not walked).
+Covering both needs the solver and ruling 19 to express a revisit: No → p2 → p2/b0
+→ Yes → p1. This is the same shape as the one story edge `_acyclic_story_edges`
+skips corpus-wide. Operator: deferred 2026-09-29 (walk Yes, relabel p2).
+
+### 107. Warp retain-facing tier 3 should test second-order reachability -- CLOSED 2026-09-18
+
+**CLOSED 2026-09-18 — C5b landed.** Tier 3 is deleted (retain-facing and departure-side
+direction moved into the engine — `reference/archive/WARP_RETAIN_FACING_PROPOSAL.md` §0, `reference/archive/REDERIVATION_PLAN.md`
+§16.3 C5b). The rule below was never implemented in `metadata_wiring`; its idea survives as
+the approach model of `tests/test_warp_facing_invariant.py`, which floods `traversal.graph`
+reachability from every way into a map (warp cells as barriers, door landings seeded to a fixed
+point) — and under that model all three former hand overrides follow from the source data
+(`test_former_hand_overrides_now_follow_from_retain`).
+
+`metadata_wiring.compute_arrival_facings` tier 3 derives a `dest_dir=0`
+("retain facing") arrival by finding the source warp's single open,
+non-sibling, unblocked neighbour (`metadata_wiring.py:3025-3040`). It looks
+only one tile out, so it counts a neighbour as a candidate approach even when
+nothing can reach that neighbour except the warp tile itself. Two vertically
+opposed open tiles then read as ambiguous and it raises, pushing the case to
+`reference/warp_facing_overrides.json` as a hand decision.
+
+**The rule it is missing** (operator's, 2026-09-04): a tier-3 survivor is a
+genuine approach tile only if *it* has an open neighbour other than the warp
+tile — otherwise you could never have stood there to walk in.
+
+**Measured against the current slice**, applying that second-order check to
+every ambiguous retain-facing warp:
+
+| warp | tier 3 survivors | second-order |
+|---|---|---|
+| map35 (20,33) -> `36:17:39` | (20,32), (20,34) | **unique** -> `DIR_NORTH` |
+| map36 (17,4) -> `37:16:26` | (17,3), (17,5) | **unique** -> `DIR_NORTH` |
+| map33 (70,12) -> `32:8:43` | (69,12), (71,12) | still ambiguous |
+| map33 (70,11) -> `32:8:43` | (70,10), (69,11), (71,11) | still ambiguous |
+
+So it resolves both CH05 cases and neither CH03 one — a real reduction in hand
+overrides, **not** a complete replacement for the file. Both CH05 rows were
+hand-entered during CH05 (`DIR_NORTH` each) and agree with what the rule
+derives, so implementing this must reproduce them exactly; that agreement is
+the regression test.
+
+**Do not** delete `warp_facing_overrides.json` when this lands — the map33 pair
+still needs it, and per its own `_comment` the file remains the source of truth
+for a corrected facing. Prototype scan lives in this item's history; re-derive
+rather than trusting a pasted table.
+
+### 97. Recognition and emission are two unlinked layers, so rows are flagged for work already done -- DONE 2026-09-12
+
+*(2026-10-04: closed. The manifest-vs-transpiler drift guard is `tests/test_manifest_transpiler_divergence.py` (`ea7e6eef`, 2026-09-12); the page-condition script text is now classified in `chapter_manifest/generator.py` (`script_condition_texts`, P8b ruling 2, P8b closed 2026-10-03); the `pbRockSmash` duplicate key is gone. Verified in code, not by a fresh run. The increment half of that family is #99, still open.)*
+
+**Root-caused 2026-09-11** (`reference/archive/REDERIVATION_PLAN.md` §14.1). A manifest row's
+`unrecognized_heads` / `other_codes` — and therefore `ManifestRow.is_dispositionable`
+(`chapter_manifest/schema.py:407-414`) — are judged **only** against two small,
+hand-maintained tables local to the manifest tool:
+
+- `_CODE_EFFECT` (`src/rpg2gba/chapter_manifest/generator.py:82-107`) for RMXP command codes
+- `MECHANIC_BY_HEAD` (`src/rpg2gba/chapter_atlas/census.py:78-135`) for Ruby script heads
+
+Neither is ever checked against `src/rpg2gba/conversion_agent/transpiler.py`, which is the
+actual conversion spine. `generator.py:600-604` documents the gap in passing. So a
+code/head the transpiler handles perfectly still reads as un-dispositionable until someone
+remembers to add it to a second table in a different package.
+
+**Measured blast radius on CH01+CH03 alone: 6 of the 28 undispositionable rows, plus part
+of 2 more, were flagged for work already done** — codes 104 (`_STRIP_CODES`,
+`transpiler.py:114`), 116 (`removeobject`, `:1898-1900`), 221/222 (`fadescreen`,
+`:1945-1950`), and the heads `pbPokerus` (predicate hard-folded at `:567-577`) and
+`pbNextMysteryGiftID` (`_emit_mystery_gift_id_strip`, `:2338-2358`, a user-approved strip
+dated 2026-08-19). Adding a head today takes four edits across two packages and step four
+is the one that gets forgotten.
+
+Fix direction: derive the recognition vocabulary from the transpiler, or make divergence
+fail loud — a test that asserts every head/code the transpiler handles is present in the
+manifest tables, and vice versa. §14.1 item 1 does the minimum (adds the missing entries);
+this item is the structural fix so the drift cannot silently return.
+
+**The corpus's largest instance of this item is in page CONDITIONS, not command bodies
+(measured 2026-09-12, `reference/archive/REDERIVATION_PLAN.md` §14.6).** 110 of the 128 citation-owing rows owe
+their citation *solely* to `script_typed_conditions > 0`, and the heads inside those
+conditions — `get_character`, `pbItemBall`, `pbTrainerBattle`, `pbRockSmash`, `pbPickBerry`,
+`pbHasSpecies`, `pbPhoneBattleCount` — are **already in the transpiler's recognized set**.
+`generator.py:575-580` counts a code-111 / `COND_TYPE_SCRIPT` condition and discards
+`params[1]`, so the recognition that exists is never applied to the text. The 147 instances
+collapse to 14 idiom families, 10 of them judgment-free. P8b's ruling-2 classifier
+(§14.6) is the fix for this half; this item remains the structural fix for the tables
+themselves.
+
+Also found while inventorying: `MECHANIC_BY_HEAD` declares `"pbRockSmash"` twice
+(`census.py:90` and `:109`), the second silently shadowing the first — same value, so no
+behaviour change, but a duplicate-key guard belongs in this item's fail-loud test.
+
+### 98. The transpile queue is 1-based on `page`; manifest row ids are 0-based -- DONE 2026-09-12
+
+**DONE 2026-09-12** (`7e2e2668`; was in scope for P8b, `reference/archive/REDERIVATION_PLAN.md` §14.8 ruling 2). *(2026-10-04: verified — the queue writer now emits 0-based pages; `chapter_manifest/generator.py::_load_unhandled_counts` documents the fix.)*
+
+`output/uranium-build/transpile_unhandled.jsonl` writes `page` **1-based**; a manifest
+`row_id`'s `pN` suffix is **0-based**. Verified against page counts: `map050/ev004` has 3
+pages and the queue reports page 3 (= manifest `p2`); `map050/ev005` has 8 pages and the queue
+reports 6 and 7 (= `p5`, `p6`).
+
+Two failure modes, both silent:
+
+- a queue entry is attributed to the page *before* the one it came from;
+- **manifest `p0` can never match a queue entry at all**, so a genuinely-queued first page
+  reads as clean.
+
+This is how three rows were attributed to a label bug they do not have (§14.8 table). Fix:
+normalize the **queue writer** to 0-based — manifest `row_id`s are load-bearing inside
+committed `.dispositions.json` files and must not move, while the queue is regenerated output.
+
+Third instance of the standing lesson that a measurement taken through a generator attributes
+its own bugs to whatever it was measuring (cf. #95, #97).

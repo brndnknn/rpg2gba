@@ -418,7 +418,7 @@ registration). See §7.
   rule may want to double-check which chapter actually earned CH01's
   existing `full` tier promotion credit for rock smash / cave entry-exit,
   since by this reading it should trace to CH01, not CH02.
-- **Three CH02 work items are tracked in `CH02_TODO.md`, not here:**
+- **Three CH02 work items are tracked in `reference/archive/CH02_TODO.md`, not here:**
   auto-deriving ledge jump directions from RMXP passage bits (item 1);
   Route 01's animated/transparent autotile plus secondary-tileset animation
   support (item 2); and, blocking — must land before conversion starts —

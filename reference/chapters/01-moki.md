@@ -70,7 +70,7 @@ maps, see §6).
 | B1 | 48 | new game | none — arrival state | Player spawns in Map049 (per B1 boot check), not Map048; potion/starting-inventory claim **unverified this pass**, see §7 |
 | B2 | 49 | none | leave 1F without talking to Auntie | **Blocked** — player cannot pass the exit tile; no state change (mechanical redirect, not a story beat but the chapter's first gate) |
 | B3 | 49 | talk to Auntie (event 1, "Auntie") | interact | `FLAG_SYS_B_DASH` set (native Emerald run flag; RMXP source: `$PokemonGlobal.runningShoes=true`); `FLAG_MAP049_EVENT001_SSA` set (gift-once self-switch, `flag_state.json:322`) — re-talking advances to later dialogue, no repeat grant |
-| B3_up | 49 → 48 | none | press RIGHT into 1F's sideways stairs (EV003) | warp to 2F; first arrival plays EV001's wake-up autorun and sets `FLAG_MAP048_EVENT001_SSA` *(added 2026-09-15 — the 2F stop, REDERIVATION_PLAN §15.8; `tests/test_ch01_chapter.py` `ADDED_BEATS_AFTER`)* |
+| B3_up | 49 → 48 | none | press RIGHT into 1F's sideways stairs (EV003) | warp to 2F; first arrival plays EV001's wake-up autorun and sets `FLAG_MAP048_EVENT001_SSA` *(added 2026-09-15 — the 2F stop, reference/archive/REDERIVATION_PLAN.md §15.8; `tests/test_ch01_chapter.py` `ADDED_BEATS_AFTER`)* |
 | B3_signs | 48 | none | press A on EV003/006–012 | each shows its text; EV007/008 (wall map) then open the region map and return control |
 | B3_pc | 48 | none | press A on EV004 | native `EventScript_PC` boots and backs out cleanly |
 | B3_down | 48 → 49 | `FLAG_MAP048_EVENT001_SSA` set | press LEFT into 2F's stairs (EV002), climb again, descend | both stairs fire again; the wake-up line does not replay; ends on 1F for B4 |
@@ -94,7 +94,7 @@ negative beat.
 
 | Beat | Map | Violation tested | Assert refusal fires | Assert no state advanced |
 |---|---|---|---|---|
-| N1 | 49 | ~~Try to leave 1F before talking to Auntie (companion to B2)~~ | **SUPERSEDED 2026-07-27 — not implemented.** B2 already tests this exact gate with this exact assertion set; N1 was written as a second identical call to the same helper and could not fail unless B2 failed first. Dropped from the harness (`chapters/ch01.py`, `tests/test_ch01_chapter.py::DROPPED_DOC_BEATS`). | — |
+| N1 | 49 | ~~Try to leave 1F before talking to Auntie (companion to B2)~~ | **SUPERSEDED 2026-07-27 — not implemented.** B2 already tests this exact gate with this exact assertion set; N1 was written as a second identical call to the same helper and could not fail unless B2 failed first. Dropped from the harness (deleted hand suite `playtest/chapters/ch01.py`; now generated at `playtest/chapters_gen/ch01.py`; `tests/test_ch01_chapter.py::DROPPED_DOC_BEATS`). | — |
 | N2 | 32 | Skip Theo's house: after B8 (`VAR_QUEST_LOG==1`), walk straight to the west-exit ceremony trigger tiles before entering Map172 | Map032 EV009 **page 1** fires (gated exactly `VAR_QUEST_LOG==1`) — the professor's "go get Theo" redirect line, then the player is turned back toward town, **no ceremony plays** | **`VAR_QUEST_LOG` is unchanged (stays 1).** Confirmed directly from the command list of EV009 page 1 (`Map032.json`): the page contains a sign-check branch, one `pbCallBub` emote call, one dialogue line, and a player turn-back move route — **zero `code 122` (control-variable) commands anywhere in the page.** This answers the motivating question from ROM_TEST_DEV Branch B2 explicitly: **the pre-Theo redirect does not write any variable.** The only way `VAR_QUEST_LOG` advances past 1 is the real PokéPod scene in Map172 (B12). |
 | N3 | 50 | Talk to the aptitude-test offer and answer No (companion to B7) | scene ends cleanly, professor re-offers on next talk (BOOT_WALK S5 already passed) | quiz is not scored; no starter granted; `VAR_QUEST_LOG` stays 0 |
 | N4 | 32 | Rock Smash is unobtainable this chapter: press A on each of the three boulders (Map032 EV014 (65,45), EV015 (66,46), EV033 (66,44)) with nothing held | stepping toward each rock does not move the player; pressing A produces no battle | no boulder erases; player position unchanged; no state advances (`reference/manifests/CH01.dispositions.json` rows `map032/ev014/p0`, `map032/ev015/p0`, `map032/ev033/p0`) |
@@ -262,13 +262,13 @@ doc's "defer" bucket and remain correctly out of scope.
   directly in `hand_conversions/Map032_EV009.pory:218`, now
   `setvar(VAR_QUEST_LOG, 4)`.
 
-**Chapter-1 frontier per BOOT_WALK_CHECKLIST §8:** S7 (PokéPod scene) is the
+**Chapter-1 frontier per reference/archive/BOOT_WALK_CHECKLIST §8:** S7 (PokéPod scene) is the
 last *un-passed* item with a landed fix awaiting re-walk; S8/S9/S10 (ceremony
 completion + post-chain regression sanity) are built but unwalked.
 
 **Slice-2-frontier items, not chapter-1 bugs:** cave entrances, the one
 remaining inert door (EV005) in Moki Town, and the Route 03 east-seam block —
-all documented gaps, not defects, per BOOT_WALK_CHECKLIST's "Not implemented"
+all documented gaps, not defects, per reference/archive/BOOT_WALK_CHECKLIST's "Not implemented"
 list.
 
 ## 7. Open items for the lead
@@ -296,7 +296,7 @@ list.
 
 ## 8. By-eye checks `[eye]` for this chapter
 
-Pulled from `BOOT_WALK_CHECKLIST.md`'s still-open `[ ]` items that are
+Pulled from `reference/archive/BOOT_WALK_CHECKLIST.md`'s still-open `[ ]` items that are
 inherently visual (art/legibility/palette/animation), reproduced here as the
 chapter's waypoint list per ROM_TEST_DEV Branch G's contact-sheet plan:
 
@@ -322,6 +322,6 @@ doors) is a documented deferral, not a by-eye check for this chapter.
 
 *Companion docs: `reference/findings/moki_slice_story_chain_2026-07-16.md`
 (predecessor, superseded by this file for chapter-authoring purposes but kept
-for its bug-investigation narrative), `BOOT_WALK_CHECKLIST.md` §0-§8 (walk
+for its bug-investigation narrative), `reference/archive/BOOT_WALK_CHECKLIST.md` §0-§8 (walk
 status), `SLICE1_TODO.md` (live fix tracker), `ROM_TEST_DEV.md` (harness design
 and the Branch A/B/G decisions this document implements).*

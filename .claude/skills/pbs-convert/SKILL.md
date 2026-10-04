@@ -58,8 +58,8 @@ For each step: what to do, which helper/path, and a worked reference.
 
 ### 1. Inspect the source `.dat`
 Find the file under `$RPG2GBA_URANIUM_SRC/Data/`. Consult
-`reference/uranium_dat_inventory.md` (file list + format notes) and
-`reference/uranium_structure.md` (full schema disassembly) for layout.
+`reference/recon/uranium_dat_inventory.md` (file list + format notes) and
+`reference/recon/uranium_structure.md` (full schema disassembly) for layout.
 
 **Choose the decode path** (see Gotchas — this is the #1 source of mistakes):
 - **Fixed-size flat records** — every record is the same byte width, indexed by
@@ -116,7 +116,7 @@ placeholdered them; the worklist remembers them for Phase 6). *Refs:
 `move_function_codes.json` (function_code/effect_chance).*
 
 If the section has a field vanilla Essentials lacks, **document it** in
-`reference/uranium_custom_features.md` with an explicit decision: **map** to an
+`reference/recon/uranium_custom_features.md` with an explicit decision: **map** to an
 existing constant, **add** a new one, or **strip**. Never silently drop a field.
 
 ### 6. Add tests

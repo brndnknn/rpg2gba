@@ -8,7 +8,37 @@ The pipeline tooling is the long-term deliverable. The Uranium ROM is the proof 
 
 Conversion work is organized into **chapters** — the unit of both building and review, each one a play-order section converted and boot-walked to playable before the next one starts.
 
-## Building a ROM (pathfinder slice: Map049 ↔ Map048 ↔ Map32)
+## Chapter loop (current)
+
+The recipe in the next section is the **slice-1 (historical) pathfinder recipe**, kept because
+its steps 1–5 are still the shape of a build. The way work is done now is the chapter loop
+(full checklist: `BUILD_PLAN.md` §2). The runnable sequence, run from the repo root:
+
+```
+python -m rpg2gba.chapter_atlas validate
+python -m rpg2gba.chapter_manifest generate --chapter CHnn
+python -m rpg2gba.chapter_manifest check    --chapter CHnn
+```
+
+*(Caveat: `chapter_manifest check` is still keyed to the deleted hand-suite beat names —
+`PROJECT_TODO.md` #124, to be re-keyed before the next chapter relies on it.)*
+
+Then the build/assembly steps (transpile, stage, art, assemble, `make modern`) as named in
+`BUILD_PLAN.md` §2 steps 2–6 — not repeated here. Then generate the playtest suite and boot:
+
+```
+python -m rpg2gba.beat_gen generate --chapter CHnn
+# operator reads and approves output/beats/CHnn.review.md (CLAUDE.md §9), then commits the
+# generated module as src/rpg2gba/playtest/chapters_gen/chNN.py
+rpg2gba playtest run --chapter CHnn --suite gen --output output/playtest-gen
+```
+
+`beat_gen` writes the module, `CHnn.review.md` and `CHnn.route.json` under `output/beats/`
+(gitignored, regenerated every run). Generating CHn needs CHn-1's generated module present
+first when a story key crosses the boundary. Add `--from-beat X` to `playtest run` to resume
+mid-chapter.
+
+## Building a ROM — slice-1 recipe (historical; pathfinder slice: Map049 ↔ Map048 ↔ Map32)
 
 Everything below lives in `output/uranium-build/` (gitignored) plus a handful of
 gitignored generated files under `engine/` — safe to delete at any time and
@@ -44,7 +74,7 @@ ruby src/rpg2gba/rxdata_deserializer/deserialize.rb tilesets "$RPG2GBA_URANIUM_S
 
 - `phase2` runs the PBS converters (species/moves/items/abilities/trainers/…) into
   `output/uranium-build/intermediate/*.json` (feeds trainer/item lookups the
-  transpiler uses in step 2; not yet compiled into the ROM — see CLAUDE.md §Phase 2).
+  transpiler uses in step 2; not yet compiled into the ROM — see ROADMAP.md Phase 2).
 - `phase3` runs the rxdata map deserializer → `output/uranium-build/maps/Map*.json`,
   `common_events.json`, `map_infos.json`, `system.json`.
 - The `tileset` mode has no Python/CLI wrapper yet — run the Ruby deserializer
@@ -64,7 +94,7 @@ emitted symbol gated against the real fork). Writes
 `output/uranium-build/scripts/Map{049,048,032}.pory` + matching `.traits.json`
 sidecars, `CommonEvents.pory`, `flag_state.json`, and `transpile_unhandled.jsonl`
 (the queue of anything it couldn't handle — expected to be non-empty; see
-`reference/findings/slice1_queue_readthrough.md` for what's already accounted for).
+`reference/archive/slice1_queue_readthrough.md` for what's already accounted for).
 
 ### 3. Stage + wire the maps
 

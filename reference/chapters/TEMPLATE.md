@@ -49,7 +49,7 @@ title (`02-route-1.md`, `06-nowtoch-city.md`).
 | 1 | Purpose / scope | What the chapter is, its place in the act chain, the authoritative map roster, a mechanical summary of the playthrough |
 | 2 | Map inventory | One row per map + a **Wiring** paragraph (parent maps, seams vs warps, the entry/exit warps that form the chapter boundary) |
 | 3 | Story beat chain | Controlling variable(s), an ASCII arrow diagram of its writes, then the beat table(s) |
-| 3.1 | Positive beats | `B1, B2, …` in play order — *full tier only; at medium §3 is one unnumbered beat table* |
+| 3.1 | Positive beats (B-ids are **documentation anchors**: the suite is generated from the manifest by `python -m rpg2gba.beat_gen generate --chapter CHnn` and its beat names are derived, not these ids) | `B1, B2, …` in play order — *full tier only; at medium §3 is one unnumbered beat table* |
 | 3.2 | Negative beats | `N1, N2, …`, one per gated positive beat — **full tier only** |
 | 4 | Coverage targets | Four subsections: 4.1 trainer battles, 4.2 item balls/given items, 4.3 wild encounters, 4.4 warps. The largest section |
 | 5 | Wiki vs rxdata discrepancies | Numbered list. "No disagreements found, checked page X" is a real finding, not an empty section |
@@ -58,8 +58,8 @@ title (`02-route-1.md`, `06-nowtoch-city.md`).
 | — | Closing `---` + italic companion-docs line | Files this document depends on |
 
 **There is no §8 for an unbuilt chapter.** `01-moki.md` §8 is by-eye checks
-drawn from `BOOT_WALK_CHECKLIST.md`, which only exists once a chapter has been
-built and walked; §6 there is likewise a post-build bug ledger. For a chapter
+drawn from `reference/archive/BOOT_WALK_CHECKLIST.md` (retired; archived), which
+only existed once a chapter had been built and walked; §6 there is likewise a post-build bug ledger. For a chapter
 that has not been converted, §6 records *expected* work and §8 is omitted. Both
 convert to the `01-moki.md` shape when the chapter reaches its boot gate.
 
@@ -121,9 +121,11 @@ python -m rpg2gba.chapter_atlas census --chapter CHnn
 A document that disagrees with the census must say so in §7 rather than quietly
 printing a different number.
 
-`unhandled: null` means **unmeasured**, not clean — only slice-1 maps are staged
-with the transpiler (`00-atlas.md` §7 gap 1). Never report a conversion-
-readiness figure for an unstaged map.
+`unhandled: null` means **unmeasured**, not clean — only maps in a built
+chapter's manifests (`reference/manifests/`, CH01–CH05 as of 2026-10-04) are
+staged with the transpiler (`00-atlas.md` §7 gap 1). Never report a
+conversion-readiness figure for an unstaged map. *(Corrected 2026-10-04: this
+used to say only slice-1 maps were staged.)*
 
 ## 6. Two traps that have already cost this project time
 

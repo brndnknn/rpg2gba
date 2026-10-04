@@ -65,8 +65,8 @@ Kevlar↔Nowtoch through-cave is maps 36/37, via the map31↔35 seam). See §5.
 
 ## 3. Story beat chain
 
-**Beat numbering: `src/rpg2gba/playtest/chapters/ch03.py` is the source of
-truth.** Its numbering was user-approved (`CH03_TODO.md`, 2026-08-12) and
+**Beat numbering (corrected 2026-10-04: the hand suite `src/rpg2gba/playtest/chapters/ch03.py` is deleted; the suite is now generated at `src/rpg2gba/playtest/chapters_gen/ch03.py` with derived beat names, so the B-ids here are documentation anchors; historically that file was the source of
+truth.** Its numbering was user-approved (`reference/archive/CH03_TODO.md`, 2026-08-12) and
 diverges from this document's original numbering wherever the approved list
 renumbered a beat. The table below uses the harness's canonical numbers; the
 mapping to this document's original numbers (preserved for git-history
@@ -180,7 +180,7 @@ No other trainer events in the 5-map roster. `[auto]`
 | 73 | Sprinklotad | EV3 / EV6 pg1 (2 offers, 1 NPC) | only if not held | **No — `B14` confirms zero `giveitem` in the compiled script** |
 | 73 | Bacu/Guara/Cupu/Acai Berry | EV6 pg0 | none | **No — `B14` confirms zero `giveitem` in the compiled script**; only Bacu Berry is census-visible, rest are on `code-655` continuation lines |
 | 68 | 5× Oran Berry | EV15 (PC tour NPC) | tour completion | **No — `B5` confirms zero `giveitem` in the compiled script** |
-| 68 | Antidote (item ball) | EV18 | standard item-ball gate | **Yes — converted, closed** (`CH03_TODO.md` #9). Ships via the object-event *template* path (`ITEM_ANTIDOTE` in `Map068.template_fields.json`), not a Poryscript `giveitem`, so a `.pory` grep will never see it. B7 asserting the self-switch is correct for this path |
+| 68 | Antidote (item ball) | EV18 | standard item-ball gate | **Yes — converted, closed** (`reference/archive/CH03_TODO.md` #9). Ships via the object-event *template* path (`ITEM_ANTIDOTE` in `Map068.template_fields.json`), not a Poryscript `giveitem`, so a `.pory` grep will never see it. B7 asserting the self-switch is correct for this path |
 
 `item_grants` counts raw `code-126` (none exist here) plus script calls whose
 **first line** starts `pbReceiveItem`/`pbItemBall`. The Bicycle grant
@@ -304,12 +304,12 @@ and speak to the boy crying just outside of the entrance of the Poké Mart"*
 (`Kevlar_Town.wiki:28,30`; `Passage_Cave.wiki:10` concurs).
 
 So the cave **and** the Cry Boy sidequest are one **post-Strength return trip**.
-Beats B19–B24 in `playtest/chapters/ch03.py` are deferred, not failing, and the
+Beats B19–B24 in the (deleted) hand suite `playtest/chapters/ch03.py` (now generated: `playtest/chapters_gen/ch03.py`) were deferred, not failing, and the
 boulder conversion moved to `PROJECT_TODO.md` #39, due in CH25. **Map019 stays in
 `SLICE_MAP_IDS`** (user call) so the cave is built and art-checked ahead of time.
 
 Also resolved here: the Magikarp joke's var200 increment is a **counter to 99**,
-not a missing re-talk guard (`CH03_TODO.md` #21).
+not a missing re-talk guard (`reference/archive/CH03_TODO.md` #21).
 
 **Both of these were first written up as converter defects.** The shared error was
 reading compiled output as evidence about the design, without checking the

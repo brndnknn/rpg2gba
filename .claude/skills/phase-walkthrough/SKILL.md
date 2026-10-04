@@ -14,7 +14,7 @@ This is the natural companion to a **manual review gate** (CLAUDE.md §9 gates f
 
 1. **Which phase?** The argument is the phase number (`/phase-walkthrough 3` → Phase 3). If absent, infer from `MEMORY.md → Current Phase` (the active or most-recently-completed phase) and state which one you picked. If it's genuinely ambiguous, ask before proceeding.
 2. **Orient before you say anything.** Read, up front:
-   - `PHASE{N}_PLAN.md` if it exists — its `§N.x` task sections **are** the chunk list, and its "Verification — exit gate" section drives the `gate` view.
+   - `reference/archive/PHASE{N}_PLAN.md` if it exists — its `§N.x` task sections **are** the chunk list, and its "Verification — exit gate" section drives the `gate` view.
    - `MEMORY.md` — Key File Notes (your richest source for chunk summaries; lean on it), Decisions Made, Open Questions, Last Session Summary.
    - `git log --oneline --grep "Phase {N}"` (or `-15` and eyeball) so summaries match what's actually committed.
    - The phase's source tree (see the source map below), to confirm the live modules match the plan.
@@ -27,17 +27,19 @@ Where each phase's material lives. **Trust the live tree / plan over this table 
 
 | Phase | Plan | Primary modules | Key emitted / derived artifacts |
 |---|---|---|---|
-| 2 — PBS data | `PHASE2_PLAN.md` | `src/rpg2gba/pbs_converter/` | `output/uranium-build/` C tables; `reference/uranium_id_map.json` |
-| 3 — Map deserialization | `PHASE3_PLAN.md` | `src/rpg2gba/map_deserializer/`, `rxdata_deserializer/deserialize.rb` | `output/uranium-build/maps/`; `reference/rgss_event_commands.md`; switch/var sidecars |
-| 4 — Conversion agent | *(TBD)* | `src/rpg2gba/conversion_agent/` | `.pory` files; flag registry; unhandled queue |
+| 2 — PBS data | `reference/archive/PHASE2_PLAN.md` | `src/rpg2gba/pbs_converter/` | `output/uranium-build/` C tables; `reference/uranium_id_map.json` |
+| 3 — Map deserialization | `reference/archive/PHASE3_PLAN.md` | `src/rpg2gba/map_deserializer/`, `rxdata_deserializer/deserialize.rb` | `output/uranium-build/maps/`; `reference/guides/rgss_event_commands.md`; switch/var sidecars |
+| 4 — Conversion agent | `reference/archive/PHASE4_PLAN.md` (LLM bulk run, retired) | `src/rpg2gba/conversion_agent/` | `.pory` files; flag registry; unhandled queue |
 | 5 — Map/tileset | *(TBD)* | `src/rpg2gba/tileset_converter/` | Porymap maps + tilesets |
 | 6 — Nuclear engine | *(TBD)* | the `pokeemerald-expansion` fork | custom C engine features |
+
+*Phase 4 note (2026-06-18 pivot): the LLM bulk run is retired. Phase 4 is now the deterministic event→Poryscript transpiler plus generated chapter playtest suites (`beat_gen` → `playtest/chapters_gen/`); see `BUILD_PLAN.md`.*
 
 ## Step 1 — Build the chunk list
 
 Derive the chunks for phase N. **Each chunk is one coherent unit of intent** — a converter/module plus its tests and its output, not a single file or commit.
 
-1. **If `PHASE{N}_PLAN.md` exists:** its `§N.x` per-task sections are the chunks, in order (plus a §N.0 "scaffolding / shared helpers" chunk if the phase has one). Cross-check each against the live module tree.
+1. **If `reference/archive/PHASE{N}_PLAN.md` exists:** its `§N.x` per-task sections are the chunks, in order (plus a §N.0 "scaffolding / shared helpers" chunk if the phase has one). Cross-check each against the live module tree.
 2. **Otherwise:** group the phase's commits + modules into logical units yourself — one per module or feature — in dependency order.
 
 Always reconcile against the live tree. If a module was renamed, added, or merged since the plan was written, trust the tree and adjust the list.
@@ -94,12 +96,12 @@ When showing code, prefer the actual file over memory — the work is committed,
 
 ## The `gate` view
 
-The user may be driving a review with this walkthrough. On `gate`, step out of the per-chunk flow and present the phase's gate/exit view, sourced from `PHASE{N}_PLAN.md`'s "Verification — exit gate" section and MEMORY:
+The user may be driving a review with this walkthrough. On `gate`, step out of the per-chunk flow and present the phase's gate/exit view, sourced from `reference/archive/PHASE{N}_PLAN.md`'s "Verification — exit gate" section and MEMORY:
 
 - **First, say whether this phase is a hard gate.** CLAUDE.md §9 hard gates are **Phases 2, 4, and 7** — those require the user to stop before anything propagates. Other phases (3, 5, 6, 8) have only the plan's self-administered exit gate; say so plainly so the user knows whether they're blocking anything.
 - **Exit-gate checklist (Vx items)** — walk the plan's verification list: which are done (tests/idempotence/build) and which remain (usually user spot-checks or a downstream build). Mark each.
 - **Worklists / deferral buckets** — anything the phase pushed downstream: `reference/uranium_id_map.json` `needs_engine`, per-converter `intermediate/*_codes.json`, the command/script-call inventory, etc.
-- **Inventory / coverage** — the phase's "everything accounted for" artifact (e.g. `reference/uranium_dat_inventory.md` CONVERTED/STRIP/DEFER; or the command-code coverage guard).
+- **Inventory / coverage** — the phase's "everything accounted for" artifact (e.g. `reference/recon/uranium_dat_inventory.md` CONVERTED/STRIP/DEFER; or the command-code coverage guard).
 - **Open decisions** — any MEMORY Open Questions awaiting the user's call that belong to this phase.
 - **Spot-checks** — offer to pull representative generated artifacts (a Nuclear species record, a trainer party, an encounter table, a deserialized map's events) so the user can eyeball real output.
 - **Still blocked** — note anything that can't be verified yet (e.g. a fork build needing devkitARM).

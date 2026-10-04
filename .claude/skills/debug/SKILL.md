@@ -52,7 +52,7 @@ The symptom lives at exactly one of them.
    semantics, reflection scan box). §4.7 applies to debugging, not just
    conversion.
 4. **Probe, then size.** Write a scratchpad probe/census script against real
-   data (the `reflect_probe.py` / `dispatch_census.py` pattern). It settles
+   data (past probe/census scripts were retired one-offs). It settles
    the hypothesis AND tells you whether this is one cell or a corpus-wide
    class — the fix design differs completely.
 
@@ -79,7 +79,7 @@ from "forgot to rebuild". So the rebuild is mechanical and evidenced:
    reflection edit once vanished from the tree while the tested ROM had it.
 2. Clean known stale state: slice and walker builds share mutable staging +
    engine gen files — clean both when build flavors switched; remember the
-   accumulating `staging/layouts/layouts.json` wart and the fork_index
+   accumulating `output/uranium-build/staging/layouts/layouts.json` wart and the fork_index
    `_INDEX_FORMAT` bump rule if extractors changed.
 3. Hash the current ROM: `sha1sum engine/pokeemerald.gba` (record it).
 4. Run the FULL chain — transpile driver → stage_slice_scripts →

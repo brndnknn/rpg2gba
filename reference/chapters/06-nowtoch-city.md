@@ -1,12 +1,15 @@
 # Chapter 6 — Nowtoch City
 
-**Status:** new chapter document, authored directly from the converted rxdata
+**Status:** chapter spec, authored directly from the converted rxdata
 per `ROM_TEST_DEV.md` Branch A (rxdata-first, wiki cross-check only). Tier
-**medium** per `reference/chapters.json`. This is the spec a chapter test
-scenario gets written from — it is not itself a test, and it carries no
-narrative content (house style: gates and effects only, per Branch A2).
-**Not yet converted or boot-walked**; §6 records expected work, not observed
-defects.
+**medium** per `reference/chapters.json`. This is the chapter's scope/spec: the
+ROM-test suite is **generated** from the manifest by `python -m
+rpg2gba.beat_gen generate --chapter CH06`, and the B-ids here are documentation
+anchors, not suite beat names. It is not itself a test and carries no narrative
+content (house style: gates and effects only, per Branch A2). §6 records
+expected work, not observed defects. Project status lives only in `MEMORY.md`.
+*(Corrected 2026-10-04: dropped "the spec a chapter test scenario gets written
+from" and the "not yet converted or boot-walked" status claim.)*
 
 **Method note:** every fact below was read directly out of
 `output/uranium-build/maps/Map0{40,41,42,43,44,45,46,47}.json`,
@@ -249,12 +252,16 @@ live re-run, absent from the brief; flagged in §7).
 
 ## 7. Open items for the lead
 
-- **§4.3 correction**: task briefing says 1 of 8 maps has an encounter
-  table; direct inspection + fresh census both show **zero**. Recommend
-  correcting the briefing's premise.
-- **§6.2 correction**: task briefing lists 13 unmapped heads; the live
-  re-run reports **14**, adding `pkmn`. All other totals match exactly —
-  worth a second confirmation run before treating this document as final.
+*(Restated 2026-10-04 as plain findings; the earlier wording corrected a "task
+briefing" that no longer exists. Numbers are the last census run recorded in
+this document; a re-run of `python -m rpg2gba.chapter_atlas census --chapter
+CH06` on 2026-10-04 failed to start — `ModuleNotFoundError: No module named
+'rpg2gba'`, because the system Python moved 3.12 → 3.14 under `.venv` — so they were not re-measured today. Re-run
+before treating them as final.)*
+
+- **§4.3 encounter tables:** 0 of 8 maps have a wild-encounter table (direct
+  inspection and census agree).
+- **§6.2 unmapped heads:** 14, including `pkmn`. Events 206, commands 2180.
 - **Metro mechanic has no ledger disposition** (§6.1/§6.3) — what would
   settle it: a ledger pass adding a named "metro fast travel" row, plus
   checking whether Burole/Legen/Bealbeach's own metro-arrival maps gate
@@ -264,9 +271,21 @@ live re-run, absent from the brief; flagged in §7).
   wiki, but no tile-level render was consulted. A porymap render of map 46
   would confirm or refute the building-split reading.
 - **`VAR_QUEST_LOG`'s absolute value** entering/leaving this chapter is not
-  determined here — the B6 write is a relative `+1`, and CH02–CH05 aren't
-  yet authored to chain the value forward from `01-moki.md`'s exit state.
-  Not blocking at medium tier; flagged for a future full-tier promotion.
+  determined here — the B6 write is a relative `+1`. CH02–CH05 are built; the
+  predecessor's exit value is to be read from the generated chain / story_state
+  (`python -m rpg2gba.story_state report --chapter CH05`) at CH06 open — still
+  to be done.
+
+### Before the branch opens / carried into CH06
+
+- `PROJECT_TODO.md` #124 — re-key the manifest layer (still keyed to the deleted hand beat names).
+- `PROJECT_TODO.md` #122 — C10 (offline verdict head / flavour-NPC checker / ROM sample) deferred to CH06.
+- `PROJECT_TODO.md` #92 remainder — capability model (moves/items/requirement groups); CH06 has the Rock Smash grant.
+- `PROJECT_TODO.md` #121 — HM badge-count gates.
+- `PROJECT_TODO.md` #128 — `blocked:` as a clerical verdict, ruled "revisit at CH06".
+- `PROJECT_TODO.md` #111 — full-suite stall; uncapped-search hazard at CH06's map count.
+- Ledger gaps named in §6: `pbPokerus`, `pbMoveTutorChoose`, `pbStartTrade`, and the Metro mechanic.
+- Map 46 building-split question (§6.3) — a real Phase-5 risk.
 
 ---
 
