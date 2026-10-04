@@ -321,4 +321,17 @@ EMPTY_PAGES: dict[str, str] = {}
 
 WALK_CHECKED: dict[str, str] = {}
 
+ELSEWHERE: dict[str, str] = {
+    'map035/ev001/p1/b1': 'unselected_arm: not taken on the walk: else of `get_character(0).onEvent?` from cell (20, 33) (event at (20, 33)) (ruling 19)',
+    'map036/ev002/p1/b1': 'unselected_arm: not taken on the walk: else of `get_character(0).onEvent?` from cell (17, 4) (event at (17, 4)) (ruling 19)',
+    'map036/ev003/p0/b1': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',
+    'map036/ev004/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
+    'map036/ev005/p0/b1': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',
+    'map036/ev006/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
+    'map037/ev004/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
+    'map037/ev005/p0/b1': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',
+}
+
+REFUSED: dict[str, str] = {}
+
 CHAPTER = ch05.build()

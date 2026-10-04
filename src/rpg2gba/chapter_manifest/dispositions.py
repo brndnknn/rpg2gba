@@ -80,8 +80,22 @@ def load_dispositions(path: Path) -> dict[str, Disposition]:
 
     result: dict[str, Disposition] = {}
     for row_id, entry in raw.items():
-        result[row_id] = _parse_entry(path, row_id, entry)
+        disposition = _parse_entry(path, row_id, entry)
+        if disposition.verdict in GENERATOR_ONLY_VERDICTS:
+            # PROJECT_TODO #124 (2026-10-04): `elsewhere:`/`refused:` are the
+            # generator's own verdicts, derived from the module's ELSEWHERE /
+            # REFUSED records. Authored by hand they would be the override file
+            # §16 R7 ruled out -- fix the generator, not the dispositions.
+            raise DispositionFileError(
+                f"{path}: row {row_id!r} is hand-dispositioned "
+                f"{disposition.verdict!r}, a generator-only verdict -- it is "
+                f"derived from the generated module's ELSEWHERE/REFUSED records")
+        result[row_id] = disposition
     return result
+
+
+#: Verdicts only `beat_gen` may assign (via the derived sidecar), never a human.
+GENERATOR_ONLY_VERDICTS: frozenset[str] = frozenset({"elsewhere", "refused"})
 
 
 def _parse_entry(path: Path, row_id: str, entry: Any) -> Disposition:

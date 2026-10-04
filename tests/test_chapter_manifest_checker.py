@@ -48,6 +48,7 @@ from rpg2gba.chapter_manifest.checker import (
     exit_code,
 )
 from rpg2gba.chapter_manifest.dispositions import (
+    DispositionFileError,
     disposition_path,
     load_dispositions,
     write_dispositions,
@@ -670,6 +671,16 @@ def test_dispositions_rejects_bad_verdict(tmp_path: Path):
     path = tmp_path / "bad.json"
     path.write_text(json.dumps({"row1": "not_a_real_verdict"}), encoding="utf-8")
     with pytest.raises(Exception):
+        load_dispositions(path)
+
+
+@pytest.mark.parametrize("spec", ["elsewhere:later: CH06", "refused:story-state: x"])
+def test_dispositions_rejects_hand_authored_generator_verdicts(tmp_path: Path, spec: str):
+    """#124: `elsewhere:`/`refused:` come only from the generated module's
+    ELSEWHERE/REFUSED records via the sidecar -- a hand entry is an override."""
+    path = tmp_path / "bad.json"
+    path.write_text(json.dumps({"map001/ev001/p0": spec}), encoding="utf-8")
+    with pytest.raises(DispositionFileError, match="generator-only"):
         load_dispositions(path)
 
 

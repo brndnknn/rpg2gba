@@ -121,6 +121,77 @@ def _never_fires_chunk(plan: ChapterPlan, *, status: str = "never_fires",
     return "\n".join(lines)
 
 
+#: `Elsewhere.status` values the `ELSEWHERE` dict records (PROJECT_TODO #124,
+#: 2026-10-04 "emit + derive"). Excluded, each for a reason:
+#: `never_fires`/`empty_page` -- already emitted, with the same proof, as
+#: `NEVER_FIRES`/`EMPTY_PAGES` (the grader reads those; a second copy here
+#: would be two sources of truth for one fact); `blocked`/`boundary` --
+#: `chapter_manifest.derivation.derive_entry` already derives those from the
+#: manifest (`row.requires`) and the boundary model, so recording them again
+#: would let the two disagree silently.
+ELSEWHERE_EMITTED: frozenset[str] = frozenset({
+    "later", "unreachable", "unselected_arm", "stripped", "arm_gated",
+    "converter_dropped"})
+
+
+def _dict_chunk(name: str, entries: list[tuple[str, str]]) -> str:
+    """`NAME: dict[str, str] = {...}` sorted by key, `{}` when empty."""
+    if not entries:
+        return f"{name}: dict[str, str] = {{}}"
+    lines = [f"{name}: dict[str, str] = {{"]
+    lines.extend(f"    {render_value(k)}: {render_value(v)}," for k, v in sorted(entries))
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def elsewhere_value(status: str, owner: str | None, detail: str) -> str:
+    """`"<status>"` or `"<status>: <detail>"` -- `detail` if the entry has
+    one, else the owning chapter (`later`), else the bare status."""
+    extra = detail or owner
+    return f"{status}: {extra}" if extra else status
+
+
+def refused_value(blocker: str, reason: str, detail: str) -> str:
+    """`"<blocker>: <reason>"`, then the detail -- folded in when it already
+    starts with the reason id (story refusals: `unmodelled_outcome:...`),
+    appended after ` -- ` otherwise."""
+    if not detail or detail == reason:
+        return f"{blocker}: {reason}"
+    if detail.startswith(reason):
+        return f"{blocker}: {detail}"
+    return f"{blocker}: {reason} -- {detail}"
+
+
+def _elsewhere_chunk(plan: ChapterPlan) -> str:
+    """The module-level `ELSEWHERE` dict: row id -> `elsewhere_value(...)`
+    for every `plan.elsewhere` entry whose status is in `ELSEWHERE_EMITTED`.
+    Read by `chapter_manifest.generator_status`, never by the grader. A row
+    listed twice with different values is a generator bug and fails loud."""
+    out: dict[str, str] = {}
+    for e in plan.elsewhere:
+        if e.status not in ELSEWHERE_EMITTED:
+            continue
+        value = elsewhere_value(e.status, e.owner, e.detail)
+        if out.setdefault(e.row_id, value) != value:
+            raise ValueError(
+                f"{plan.chapter_id}: {e.row_id} is Elsewhere twice "
+                f"({out[e.row_id]!r} vs {value!r})")
+    return _dict_chunk("ELSEWHERE", list(out.items()))
+
+
+def _refused_chunk(plan: ChapterPlan) -> str:
+    """The module-level `REFUSED` dict: row id -> `refused_value(...)` for
+    every `plan.refusals` entry. Same duplicate rule as `ELSEWHERE`."""
+    out: dict[str, str] = {}
+    for r in plan.refusals:
+        value = refused_value(r.blocker, r.reason, r.detail)
+        if out.setdefault(r.row_id, value) != value:
+            raise ValueError(
+                f"{plan.chapter_id}: {r.row_id} is refused twice "
+                f"({out[r.row_id]!r} vs {value!r})")
+    return _dict_chunk("REFUSED", list(out.items()))
+
+
 def _walk_checked_chunk(plan: ChapterPlan) -> str:
     """The module-level `WALK_CHECKED` dict (ruling 19): arms a beat claims
     but doesn't declare, keyed by row id to the reason. Always emitted, `{}`
@@ -188,6 +259,8 @@ def emit_module(plan: ChapterPlan) -> str:
     chunks.append(_never_fires_chunk(plan))
     chunks.append(_never_fires_chunk(plan, status="empty_page", name="EMPTY_PAGES"))
     chunks.append(_walk_checked_chunk(plan))
+    chunks.append(_elsewhere_chunk(plan))
+    chunks.append(_refused_chunk(plan))
 
     chunks.append(f"CHAPTER = {chapter_var}.build()")
 

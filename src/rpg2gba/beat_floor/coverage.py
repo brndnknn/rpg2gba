@@ -14,7 +14,9 @@ them, so "covered" has exactly one definition.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, replace
+from typing import Any
 
 from .assertion import FloorAssertion, RowFloor
 
@@ -63,3 +65,70 @@ def contradicts(declared: FloorAssertion, floor: FloorAssertion) -> bool:
     return any(
         name in declared_params and declared_params[name] != value
         for name, value in floor.params)
+
+
+#: Floor kinds the section-9 boot walk checks by eye instead of the ⊇ rule
+#: (C9 ruling 7): the hand suite never asserted them either.
+WALK_CHECKED_KINDS = frozenset({"audio", "visual", "displacement"})
+
+
+@dataclass(frozen=True)
+class GradedGaps:
+    """What the graded ⊇ rule holds against a row: `contradicted` (declared
+    with the floor's key but a different param value) and `missing` (not
+    declared at all, after the walk-checked / blocked_obstacle scoping)."""
+
+    contradicted: tuple[FloorAssertion, ...] = ()
+    missing: tuple[FloorAssertion, ...] = ()
+
+    def __bool__(self) -> bool:
+        return bool(self.contradicted or self.missing)
+
+
+def graded_gaps(floor: RowFloor, declared: Iterable[FloorAssertion]) -> GradedGaps:
+    """The ONE definition of "does not cover its floor", shared by the C9
+    grader and the manifest checker. Every contradiction counts; a
+    merely-missing assertion counts unless it is walk-checked (C9 ruling 7)
+    or the floor is a capability block, which owes only its
+    `blocked_obstacle` (C9 ruling 10)."""
+    declared = tuple(declared)
+    missing = uncovered(floor, declared)
+    contradicted = [f for f in missing if any(contradicts(d, f) for d in declared)]
+    if any(a.kind == "blocked_obstacle" for a in floor.assertions):
+        owed = [f for f in missing if f.kind == "blocked_obstacle"]
+    else:
+        owed = [f for f in missing if f.kind not in WALK_CHECKED_KINDS]
+    return GradedGaps(
+        contradicted=tuple(contradicted),
+        missing=tuple(f for f in owed if f not in contradicted))
+
+
+def is_boundary_claim(row_id: str, beats: Sequence[Any]) -> bool:
+    """True iff every claiming beat is a warp declaring nothing for `row_id`
+    -- the shape of `warp_beat(boundary=True)`, which stops on the approach
+    cell and leaves the crossing to the successor chapter (C9 ruling 9).
+    `beats` are `playtest.chapter.Beat`s (duck-typed: `.archetype`,
+    `.assertions`) so this leaf module stays free of playtest imports."""
+    return all(b.archetype == "warp" for b in beats) and not any(
+        a.row_id == row_id for b in beats for a in (b.assertions or ()))
+
+
+def inherited_page_trigger(row_id: str, page_beats: Sequence[Any]) -> frozenset[FloorAssertion]:
+    """The `trigger` assertions a branch row inherits from its owning page.
+
+    An arm's floor repeats its page's `trigger` by construction -- the arm
+    runs only inside that one firing of the page -- so a beat that claims the
+    PAGE and declares its trigger has proved the arm's trigger too, even when
+    the arm is claimed by a different beat (an arrival nudge's arms beat rides
+    in the nudge's group and observes after the fact, so it cannot declare
+    the trigger itself; CH02 `map033/ev023/p1/b0`, PROJECT_TODO #124).
+    Returned re-keyed to `row_id`, ready to union into its declared set.
+    Empty for a non-branch row. `page_beats` are the beats claiming the
+    owning page row (duck-typed `.assertions`)."""
+    page_row_id, _, leaf = row_id.rpartition("/")
+    if not (leaf.startswith("b") and leaf[1:].isdigit()):
+        return frozenset()
+    return frozenset(
+        replace(a, row_id=row_id)
+        for b in page_beats for a in (b.assertions or ())
+        if a.row_id == page_row_id and a.kind == "trigger")

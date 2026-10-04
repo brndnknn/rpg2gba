@@ -110,8 +110,10 @@ STATE_WRITING_TAGS: frozenset[str] = EFFECT_TAGS - COSMETIC_SAFE_TAGS
 # all has nothing to observe and stays eligible.
 PLAYER_TRIGGERS: frozenset[str] = frozenset({"action", "player_touch", "event_touch"})
 
-Verdict = Literal["beat", "blocked", "boundary", "cosmetic", "unreachable"]
-_VERDICTS: frozenset[str] = frozenset({"beat", "blocked", "boundary", "cosmetic", "unreachable"})
+Verdict = Literal["beat", "blocked", "boundary", "cosmetic", "unreachable",
+                  "elsewhere", "refused"]
+_VERDICTS: frozenset[str] = frozenset({
+    "beat", "blocked", "boundary", "cosmetic", "unreachable", "elsewhere", "refused"})
 
 # Verdicts whose argument is mandatory. `cosmetic` and `boundary` take none;
 # `beat` names the beat, `blocked` the capability set (or tooling primitive)
@@ -137,7 +139,44 @@ _VERDICTS: frozenset[str] = frozenset({"beat", "blocked", "boundary", "cosmetic"
 # "this row is not mine; whoever arrives claims it" -- *who* arrives is
 # derived from the chapter chain (`chapter_atlas.binding`), which is already
 # the one source of truth for chapter order, not re-stated here.
-_ARGUMENT_REQUIRED: frozenset[str] = frozenset({"beat", "blocked", "unreachable"})
+#
+# `elsewhere` and `refused` (2026-10-04, PROJECT_TODO #124, operator ruling
+# "emit + derive") are the beat generator's own verdicts, never hand-authored:
+# `beat_gen` emits a per-row status record into each generated chapter module
+# (`ELSEWHERE`/`REFUSED`, beside `NEVER_FIRES`/`EMPTY_PAGES`) and
+# `derivation.derive_entry` turns it into a CLERICAL sidecar entry, so the
+# generator's refused + Elsewhere rows stop reporting `undispositioned`. Both
+# require an argument whose first `:`-separated token is checked:
+#
+#   elsewhere:<status>[: <detail>]  -- <status> in `ELSEWHERE_STATUSES`: the
+#       generator places the row outside this chapter's walk (`later`,
+#       `unselected_arm`, `stripped`, `arm_gated`, `empty_page`,
+#       `never_fires`, `converter_dropped`). The generator's `unreachable`
+#       status is NOT spelled `elsewhere:unreachable` -- it means "live in no
+#       chapter", which is exactly this file's `unreachable:` (ruling R8), so
+#       it derives to that head. `blocked`/`boundary` are not spelled here
+#       either: `derive_entry` already derives them from the manifest itself,
+#       and a second spelling would be a second source of truth.
+#   refused:<blocker>[: <reason>]   -- <blocker> in `REFUSAL_BLOCKERS`
+#       (`beat_gen.plan.BLOCKERS`): the generator could not produce a beat
+#       and names the upstream gap it waits on. Ruling (2): the checker
+#       reports a refusal as a WARNING with a count -- tracked backlog, not a
+#       red chapter.
+_ARGUMENT_REQUIRED: frozenset[str] = frozenset(
+    {"beat", "blocked", "unreachable", "elsewhere", "refused"})
+
+#: `elsewhere:` status tokens -- `beat_gen.plan.Elsewhere.status` minus the
+#: three statuses that already have their own head (`unreachable`, and the
+#: manifest-derived `blocked`/`boundary`). Kept here, not imported from
+#: `beat_gen`, so the grammar does not depend on the generator; a test pins
+#: the two in agreement.
+ELSEWHERE_STATUSES: frozenset[str] = frozenset({
+    "later", "unselected_arm", "stripped", "arm_gated", "empty_page",
+    "never_fires", "converter_dropped"})
+
+#: `refused:` blocker tokens -- the same set as `beat_gen.plan.BLOCKERS`
+#: (pinned by a test, same reasoning as `ELSEWHERE_STATUSES`).
+REFUSAL_BLOCKERS: frozenset[str] = frozenset({"#109", "C8", "story-state", "floor", "cell"})
 
 _BEAT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
@@ -641,6 +680,16 @@ class Disposition:
             )
         if self.verdict == "blocked":
             _validate_blocked_argument(self.row_id, self.argument or "")
+        if self.verdict in ("elsewhere", "refused"):
+            allowed = ELSEWHERE_STATUSES if self.verdict == "elsewhere" else REFUSAL_BLOCKERS
+            token = (self.argument or "").partition(":")[0].strip()
+            if token not in allowed:
+                raise DispositionError(
+                    f"{self.row_id}: {self.verdict!r} argument must start with one of "
+                    f"{sorted(allowed)}, got {self.argument!r}"
+                    + (" -- the generator's 'unreachable' is spelled "
+                       "'unreachable:<reason>'" if token == "unreachable" else "")
+                )
         if self.assertable is not None and self.verdict != "blocked":
             raise DispositionError(
                 f"{self.row_id}: 'assertable' only applies to verdict 'blocked', "
@@ -685,6 +734,8 @@ _EXAMPLE_BY_VERDICT = {
     "beat": "beat:B12",
     "blocked": "blocked:rock_smash",
     "unreachable": "unreachable:dev-only flag sw130, never set in the corpus",
+    "elsewhere": "elsewhere:later: CH07",
+    "refused": "refused:story-state: unmodelled_outcome",
 }
 
 

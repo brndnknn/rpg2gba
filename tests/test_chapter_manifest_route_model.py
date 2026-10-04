@@ -38,9 +38,13 @@ from rpg2gba.routing.plan import (
 )
 
 PKG = "rpg2gba.playtest.chapters_gen"  # the default suite since 2026-10-03
+# A route plan only ever approves a HAND-suite walk: `build_route_model`
+# returns None for a generated chapter (PROJECT_TODO #124), so the tests that
+# exercise the rule's mechanics install their chapters in the hand package.
+HAND_PKG = "rpg2gba.playtest.chapters"
 
 
-def _install_chapter(name: str, group_ids: list[str]) -> None:
+def _install_chapter(name: str, group_ids: list[str], pkg: str = PKG) -> None:
     """Fake a chapter module whose beats register the given groups, in order."""
     builder = ChapterBuilder(name, f"{name} test chapter")
     for group_id in group_ids:
@@ -52,19 +56,20 @@ def _install_chapter(name: str, group_ids: list[str]) -> None:
             map_constant="MAP_G1", at=(1, 1), group=group_id,
         )(_run)
 
-    module = types.ModuleType(f"{PKG}.{name}")
+    module = types.ModuleType(f"{pkg}.{name}")
     module.CHAPTER = builder.build()  # type: ignore[attr-defined]
-    sys.modules[f"{PKG}.{name}"] = module
+    sys.modules[f"{pkg}.{name}"] = module
 
 
 def _install_chapter_with_predecessor(
-    name: str, predecessor: str, group_ids: list[str],
+    name: str, predecessor: str, group_ids: list[str], pkg: str = PKG,
 ) -> None:
     """Like `_install_chapter`, but goes through
     `ChapterBuilder(predecessor=...)` so the built chapter's `groups()`
     genuinely contains inherited `<predecessor>:<group>` ids via the real
     `_prefix_beat` path, not a hand-fabricated `":"`-containing id."""
-    builder = ChapterBuilder(name, f"{name} test chapter", predecessor=predecessor, suite="gen")
+    suite = "gen" if pkg == PKG else "hand"
+    builder = ChapterBuilder(name, f"{name} test chapter", predecessor=predecessor, suite=suite)
     for group_id in group_ids:
         def _run(emu: object) -> None:  # pragma: no cover - never executed
             raise AssertionError("beat body must not run in this test")
@@ -74,13 +79,13 @@ def _install_chapter_with_predecessor(
             map_constant="MAP_G1", at=(1, 1), group=group_id,
         )(_run)
 
-    module = types.ModuleType(f"{PKG}.{name}")
+    module = types.ModuleType(f"{pkg}.{name}")
     module.CHAPTER = builder.build()  # type: ignore[attr-defined]
-    sys.modules[f"{PKG}.{name}"] = module
+    sys.modules[f"{pkg}.{name}"] = module
 
 
-def _cleanup_chapter(name: str) -> None:
-    sys.modules.pop(f"{PKG}.{name}", None)
+def _cleanup_chapter(name: str, pkg: str = PKG) -> None:
+    sys.modules.pop(f"{pkg}.{name}", None)
 
 
 def _install_chapter_at(name: str, beats: list[tuple[str, tuple[int, int]]]) -> None:
@@ -226,6 +231,28 @@ def test_explicit_route_path_overrides_the_default_location(tmp_path: Path) -> N
         _cleanup_chapter("someplace")
 
 
+def test_a_generated_chapter_is_never_checked_against_a_route_plan(
+    tmp_path: Path,
+) -> None:
+    """PROJECT_TODO #124: a gen suite loads no route plan (the runner's
+    ruling), so the checker must not compare one either -- a plan on disk
+    approved the deleted hand walk, and every regenerated group read as
+    unplanned (CH05: 27 `route_order` errors). The rule degrades to its
+    unenforced warning, exactly as for an unrouted chapter."""
+    _install_chapter("gen_predecessor", ["P1"])
+    try:
+        _install_chapter_with_predecessor("gen_successor", "gen_predecessor", ["G1", "G2"])
+        try:
+            routes = tmp_path / "routes"
+            routes.mkdir(parents=True)
+            write_plan(_plan("CH99", "gen_successor", ["G1", "G2"]), routes / "CH99.route.json")
+            assert build_route_model("CH99", root=routes) is None
+        finally:
+            _cleanup_chapter("gen_successor")
+    finally:
+        _cleanup_chapter("gen_predecessor")
+
+
 def test_registered_group_order_excludes_inherited_predecessor_groups(
     tmp_path: Path,
 ) -> None:
@@ -235,14 +262,15 @@ def test_registered_group_order_excludes_inherited_predecessor_groups(
     from `registered_group_order()` -- same filter the solver applies
     (`routing.solver._solvable_groups`) -- or every inherited group reads as
     "registered but never planned"."""
-    _install_chapter("predecessor_place", ["P1", "P2"])
+    _install_chapter("predecessor_place", ["P1", "P2"], pkg=HAND_PKG)
     try:
         _install_chapter_with_predecessor(
-            "successor_place", "predecessor_place", ["G1", "G2"])
+            "successor_place", "predecessor_place", ["G1", "G2"],
+            pkg=HAND_PKG)
         try:
             # Sanity check the fixture actually goes through real prefixing
             # before trusting the filtered assertion below.
-            chapter = sys.modules[f"{PKG}.successor_place"].CHAPTER
+            chapter = sys.modules[f"{HAND_PKG}.successor_place"].CHAPTER
             all_group_ids = [g.group_id for g in chapter.groups()]
             assert all_group_ids == [
                 "predecessor_place:P1", "predecessor_place:P2", "G1", "G2"]
@@ -258,9 +286,9 @@ def test_registered_group_order_excludes_inherited_predecessor_groups(
             assert model is not None
             assert model.registered_group_order() == ("G1", "G2")
         finally:
-            _cleanup_chapter("successor_place")
+            _cleanup_chapter("successor_place", pkg=HAND_PKG)
     finally:
-        _cleanup_chapter("predecessor_place")
+        _cleanup_chapter("predecessor_place", pkg=HAND_PKG)
 
 
 def test_rule_route_order_is_clean_despite_predecessor_when_plan_matches(
@@ -270,10 +298,11 @@ def test_rule_route_order_is_clean_despite_predecessor_when_plan_matches(
     chapter's own groups, `RULE_ROUTE_ORDER` produces zero findings even
     though the chapter has a predecessor -- before the fix, the 60+
     inherited groups each surfaced as a spurious `registered_only` error."""
-    _install_chapter("predecessor_place2", ["P1", "P2"])
+    _install_chapter("predecessor_place2", ["P1", "P2"], pkg=HAND_PKG)
     try:
         _install_chapter_with_predecessor(
-            "successor_place2", "predecessor_place2", ["G1", "G2"])
+            "successor_place2", "predecessor_place2", ["G1", "G2"],
+            pkg=HAND_PKG)
         try:
             routes = tmp_path / "routes"
             routes.mkdir(parents=True)
@@ -291,9 +320,9 @@ def test_rule_route_order_is_clean_despite_predecessor_when_plan_matches(
             relevant = [f for f in findings if f.rule != RULE_FLOOR_MODEL_UNENFORCED]
             assert relevant == []
         finally:
-            _cleanup_chapter("successor_place2")
+            _cleanup_chapter("successor_place2", pkg=HAND_PKG)
     finally:
-        _cleanup_chapter("predecessor_place2")
+        _cleanup_chapter("predecessor_place2", pkg=HAND_PKG)
 
 
 # --- chosen_approach: does the beat's declared cell match the plan's? ------

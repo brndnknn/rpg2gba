@@ -171,4 +171,31 @@ EMPTY_PAGES: dict[str, str] = {
 
 WALK_CHECKED: dict[str, str] = {}
 
+ELSEWHERE: dict[str, str] = {
+    'map035/ev003/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
+    'map035/ev003/p1': 'unreachable',
+    'map035/ev009/p0/b1': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',
+    'map035/ev012/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
+    'map035/ev015/p0': 'later',
+    'map035/ev016/p0': 'later',
+    'map035/ev018/p0': 'later',
+    'map035/ev023/p1': 'unreachable',
+    'map035/seam/N/map040': 'later: CH06',
+}
+
+REFUSED: dict[str, str] = {
+    'map035/ev003/p1/b0': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+    'map035/ev003/p1/b1': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+    'map035/ev003/p1/b2': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+    'map035/ev003/p1/b3': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+    'map035/ev003/p2/b0': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+    'map035/ev003/p2/b1': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+    'map035/ev023/p1/b0': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+    'map035/ev023/p1/b1': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+    'map035/ev023/p1/b2': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+    'map035/ev023/p1/b3': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+    'map035/ev023/p2/b0': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+    'map035/ev023/p2/b1': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
+}
+
 CHAPTER = ch04.build()

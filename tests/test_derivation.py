@@ -10,6 +10,7 @@ implementations.
 from __future__ import annotations
 
 from rpg2gba.chapter_manifest.derivation import DerivedEntry, derive_entry
+from rpg2gba.chapter_manifest.generator_status import GeneratorStatus
 from rpg2gba.chapter_manifest.schema import ManifestRow
 
 
@@ -205,3 +206,57 @@ def test_to_disposition_round_trips_a_blocked_proposal():
     disp = entry.to_disposition("map001/ev001/p0")
     assert disp.verdict == "blocked"
     assert disp.argument == "rock_smash"
+
+
+# --- generator status (PROJECT_TODO #124, 2026-10-04) --------------------------
+
+
+_RID = "map001/ev001/p0"
+
+
+def test_generator_status_fills_a_row_that_derived_none():
+    row = _row(content_hash="h1", unhandled=0, effects=("giveitem",))
+    assert derive_entry(row, beat_model=None, boundary_model=None) is None
+    for spec in ("elsewhere:later: CH07", "refused:story-state: unmodelled_outcome",
+                 "unreachable:beat_gen: the story model places it in no chapter"):
+        status = GeneratorStatus(specs={_RID: spec})
+        entry = derive_entry(row, beat_model=None, boundary_model=None,
+                             generator_status=status)
+        assert entry == DerivedEntry(disposition=spec, derived_hash="h1")
+        assert not entry.proposed
+
+
+def test_generator_status_never_overrides_an_existing_verdict():
+    status = GeneratorStatus(specs={_RID: "elsewhere:empty_page: all empty"})
+    cosmetic = _row(content_hash="h1", unhandled=0)
+    assert derive_entry(cosmetic, beat_model=None, boundary_model=None,
+                        generator_status=status).disposition == "cosmetic"
+    blocked = _row(content_hash="h1", unhandled=0, requires=("rock_smash",))
+    entry = derive_entry(blocked, beat_model=None, boundary_model=None,
+                         generator_status=status)
+    assert entry.disposition == "blocked:rock_smash" and entry.proposed
+    beat = _row(content_hash="h1", unhandled=0, effects=("giveitem",))
+    assert derive_entry(beat, beat_model=_Beats({_RID: ("B4",)}), boundary_model=None,
+                        generator_status=status).disposition == "beat:B4"
+    assert derive_entry(beat, beat_model=None, boundary_model=_Boundary({_RID}),
+                        generator_status=status).disposition == "boundary"
+
+
+def test_generator_status_does_not_bypass_the_classification_gate():
+    row = _row(content_hash="h1", unhandled=0, unrecognized_heads=("pbSomething",))
+    status = GeneratorStatus(specs={_RID: "refused:C8: ruby"})
+    assert derive_entry(row, beat_model=None, boundary_model=None,
+                        generator_status=status) is None
+
+
+def test_generator_status_does_not_resolve_an_ambiguous_beat_claim():
+    row = _row(content_hash="h1", unhandled=0, effects=("giveitem",))
+    status = GeneratorStatus(specs={_RID: "elsewhere:later"})
+    assert derive_entry(row, beat_model=_Beats({_RID: ("B4_a", "B5_b")}),
+                        boundary_model=None, generator_status=status) is None
+
+
+def test_generator_status_row_not_listed_derives_nothing():
+    row = _row(content_hash="h1", unhandled=0, effects=("giveitem",))
+    assert derive_entry(row, beat_model=None, boundary_model=None,
+                        generator_status=GeneratorStatus(specs={})) is None

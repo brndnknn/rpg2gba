@@ -568,6 +568,26 @@ def test_a_chapter_with_no_predecessor_resolves_nothing() -> None:
     assert resolved_trigger_scripts(load_chapter("CH01")) == {}
 
 
+def test_inherited_rows_resolve_their_page_scripts() -> None:
+    """PROJECT_TODO #124: the exemption is keyed on the inherited beats' own
+    `rows=`, not the predecessor's `beat:Bn` dispositions -- which named hand
+    beats and so resolved nothing once the generated suites replaced them.
+
+    CH05's replay of CH04 fights Youngster Timothy (`map035/ev012/p0`), whose
+    event-touch tile sits on CH05's only approach from the handover cell."""
+    from rpg2gba.playtest.chapter import load_chapter, resolved_trigger_scripts
+
+    chapter = load_chapter("CH05")
+    resolved = resolved_trigger_scripts(chapter)
+    assert "Map035_EV012_Page1" in resolved[35]
+    # Exactly the page scripts of rows some inherited beat claims -- no more.
+    from rpg2gba.playtest.chapter import page_row_script
+
+    claimed = {page_row_script(row) for beat in chapter.beats if ":" in beat.name
+               for row in beat.rows} - {None}
+    assert {(m, s) for m, scripts in resolved.items() for s in scripts} == claimed
+
+
 def test_page_row_script_names_the_compiled_label() -> None:
     """The row id's page number is 0-based, the label's is 1-based -- the
     one place that knows it, so the two exemption paths cannot drift."""

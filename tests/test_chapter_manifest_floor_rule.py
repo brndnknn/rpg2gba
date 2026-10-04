@@ -58,7 +58,9 @@ class _FakeFloorCoverageModel:
     """A minimal `checker.FloorCoverageModel`: fixed per-row floors and
     declarations, supplied directly by each test."""
 
-    def __init__(self, *, floors=None, declared=None, claimed=(), generated=False):
+    def __init__(self, *, floors=None, declared=None, claimed=(), generated=False,
+                 exempt=()):
+        self._exempt = set(exempt)
         self._floors = floors or {}
         self._declared = declared or {}
         self._claimed = set(claimed)
@@ -75,6 +77,9 @@ class _FakeFloorCoverageModel:
 
     def is_generated(self) -> bool:
         return self._generated
+
+    def exempt(self, row_id: str) -> bool:
+        return row_id in self._exempt
 
 
 # --- no model supplied: unenforced --------------------------------------
@@ -221,6 +226,90 @@ def test_exactly_covered_is_clean():
     ) for f in findings)
 
 
+# --- shared graded-gap rules + exemptions ---------------------------------
+
+
+def _kind_assertion(kind: str, **params) -> FloorAssertion:
+    return FloorAssertion(
+        row_id=ROW_ID, kind=kind, list_index=1, code=None,
+        params=make_params(**params), tag="flow")
+
+
+def _floor_findings(model) -> list:
+    findings = check_chapter([_row()], {}, floor_coverage=model)
+    return [f for f in findings if f.rule == RULE_FLOOR_UNCOVERED]
+
+
+def test_missing_only_walk_checked_kinds_is_not_reported():
+    floor = _floor(assertions=(_kind_assertion("audio"), _kind_assertion("visual"),
+                               _kind_assertion("displacement")))
+    model = _FakeFloorCoverageModel(
+        floors={ROW_ID: floor}, declared={ROW_ID: frozenset()}, claimed=(ROW_ID,))
+    assert _floor_findings(model) == []
+
+
+def test_contradicted_walk_checked_kind_is_still_reported():
+    floor = _floor(assertions=(_kind_assertion("audio", bgm=1),))
+    model = _FakeFloorCoverageModel(
+        floors={ROW_ID: floor},
+        declared={ROW_ID: frozenset({_kind_assertion("audio", bgm=2)})},
+        claimed=(ROW_ID,))
+    assert len(_floor_findings(model)) == 1
+
+
+def test_blocked_obstacle_is_the_whole_floor():
+    block = _kind_assertion("blocked_obstacle")
+    floor = _floor(assertions=(block, _warp_assertion()))
+    owed = _FakeFloorCoverageModel(
+        floors={ROW_ID: floor}, declared={ROW_ID: frozenset()}, claimed=(ROW_ID,))
+    assert len(_floor_findings(owed)) == 1
+    met = _FakeFloorCoverageModel(
+        floors={ROW_ID: floor}, declared={ROW_ID: frozenset({block})},
+        claimed=(ROW_ID,))
+    assert _floor_findings(met) == []
+
+
+def test_exempt_row_is_skipped_entirely():
+    # Exempt = WALK_CHECKED random arm or boundary-warp-only claim: no
+    # uncovered, and no undeclared either (it declares nothing by design).
+    floor = _floor(assertions=(_warp_assertion(),))
+    model = _FakeFloorCoverageModel(
+        floors={ROW_ID: floor}, declared={ROW_ID: None}, claimed=(ROW_ID,),
+        generated=True, exempt=(ROW_ID,))
+    findings = check_chapter([_row()], {}, floor_coverage=model)
+    assert all(f.rule not in (RULE_FLOOR_UNCOVERED, RULE_FLOOR_UNDECLARED)
+               for f in findings)
+
+
+def _beat(name, rows, archetype, assertions):
+    from rpg2gba.playtest.chapter import Beat
+    return Beat(name=name, description="", run=lambda ctx: None, rows=rows,
+                archetype=archetype, assertions=assertions)
+
+
+def _chapter(beats):
+    from rpg2gba.playtest.chapter import Chapter
+    return Chapter(name="chtest", doc="", beats=tuple(beats))
+
+
+def test_real_model_skips_walk_checked_boundary_and_inherited(tmp_path):
+    from rpg2gba.chapter_manifest.floor_model import ChapterFloorCoverageModel
+
+    chapter = _chapter([
+        _beat("arm", (ROW_ID,), "event", ()),
+        _beat("cross", ("map002/ev001/p0",), "warp", ()),
+        _beat("deep", ("map003/ev001/p0",), "warp", (_warp_assertion("map003/ev001/p0"),)),
+        _beat("OWNER:inherited", ("map004/ev001/p0",), "event", None),
+    ])
+    model = ChapterFloorCoverageModel(
+        chapter, build_dir=tmp_path, generated=True,
+        walk_checked={ROW_ID: "random arm"})
+    assert model.exempt(ROW_ID)                       # WALK_CHECKED
+    assert model.exempt("map002/ev001/p0")            # boundary warp, declares nothing
+    assert not model.exempt("map003/ev001/p0")        # warp that declares its row
+    assert not model.claims("map004/ev001/p0")        # inherited beat ignored
+
+
 # --- message capping -------------------------------------------------------
 
 
@@ -228,7 +317,7 @@ def test_uncovered_message_caps_and_counts_when_many_are_missing():
     row = _row()
     many = tuple(
         FloorAssertion(
-            row_id=ROW_ID, kind="visual", list_index=i, code=101,
+            row_id=ROW_ID, kind="warp", list_index=i, code=101,
             params=(), tag="visual")
         for i in range(12)
     )

@@ -55,8 +55,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from rpg2gba.beat_floor.assertion import FloorAssertion, RowFloor
-from rpg2gba.beat_floor.coverage import contradicts, uncovered
+from rpg2gba.beat_floor.coverage import (
+    WALK_CHECKED_KINDS,
+    graded_gaps,
+    inherited_page_trigger,
+    is_boundary_claim,
+)
 from rpg2gba.beat_floor.lookup import default_build_dir, floor_for_row
 from rpg2gba.playtest.chapter import (
     Beat,
@@ -83,9 +87,8 @@ logger = logging.getLogger(__name__)
 _ROWED_RESIDUE_RULINGS = frozenset(
     {"arrival_floor", "blocked_obstacle", "state_model", "covered_elsewhere"})
 
-#: Floor kinds the §9 boot walk checks by eye instead of rule (b) (C9 ruling
-#: 7): the hand suite never asserted them either.
-WALK_CHECKED_KINDS = frozenset({"audio", "visual", "displacement"})
+__all__ = ["WALK_CHECKED_KINDS", "ChapterGrade", "OwnerSuite", "grade_chapter",
+           "grade_chapter_from_disk"]
 
 
 @dataclass(frozen=True)
@@ -197,26 +200,13 @@ def _check_row_coverage(
     return problems
 
 
-def _graded_gaps(
-    floor: RowFloor, declared: frozenset[FloorAssertion],
-) -> tuple[list[FloorAssertion], list[FloorAssertion]]:
-    """(contradicted, missing) floor assertions rule (b) grades. Every
-    contradiction counts; a merely-missing assertion counts unless it is
-    walk-checked (C9 ruling 7) or the floor is a capability block, which
-    owes only its `blocked_obstacle` (C9 ruling 10)."""
-    missing = uncovered(floor, declared)
-    contradicted = [f for f in missing if any(contradicts(d, f) for d in declared)]
-    if any(a.kind == "blocked_obstacle" for a in floor.assertions):
-        owed = [f for f in missing if f.kind == "blocked_obstacle"]
-    else:
-        owed = [f for f in missing if f.kind not in WALK_CHECKED_KINDS]
-    return contradicted, [f for f in owed if f not in contradicted]
-
-
 def _row_floor_problem(
     chapter_id: str, row_id: str, beats: Sequence[Beat], *, build_dir: Path,
+    page_beats: Sequence[Beat] = (),
 ) -> str | None:
-    """Rule (b) for one row claimed by `beats`, or None if it passes."""
+    """Rule (b) for one row claimed by `beats`, or None if it passes.
+    `page_beats` claim a branch row's owning page; their declared `trigger`
+    covers the arm's (`coverage.inherited_page_trigger`)."""
     beat_names = [b.name for b in beats]
     try:
         floor = floor_for_row(row_id, build_dir=build_dir)
@@ -237,10 +227,12 @@ def _row_floor_problem(
                 "generated module)")
 
     declared = frozenset(
-        a for b in declaring for a in b.assertions if a.row_id == row_id)
-    contradicted, missing = _graded_gaps(floor, declared)
-    if not contradicted and not missing:
+        a for b in declaring for a in b.assertions if a.row_id == row_id
+    ) | inherited_page_trigger(row_id, page_beats)
+    gaps = graded_gaps(floor, declared)
+    if not gaps:
         return None
+    contradicted, missing = list(gaps.contradicted), list(gaps.missing)
     parts = []
     if contradicted:
         parts.append(f"declared assertion(s) contradict the floor: {contradicted}")
@@ -248,14 +240,6 @@ def _row_floor_problem(
         parts.append(f"floor assertion(s) not declared at all: {missing}")
     return (f"{row_id}: claimed by {beat_names} but does not cover its floor -- "
             + "; ".join(parts))
-
-
-def _is_boundary_claim(row_id: str, beats: Sequence[Beat]) -> bool:
-    """True iff every claiming beat is a warp declaring nothing for `row_id`
-    -- the shape of `warp_beat(boundary=True)`, which stops on the approach
-    cell and leaves the crossing to the successor chapter."""
-    return all(b.archetype == "warp" for b in beats) and not any(
-        a.row_id == row_id for b in beats for a in (b.assertions or ()))
 
 
 def _check_floor_ge(
@@ -277,13 +261,15 @@ def _check_floor_ge(
     for row_id, beats in sorted(claimed_by_own.items()):
         if row_id in walk_checked:
             continue  # claimed, not declared: a random arm (ruling 19)
+        page_beats = claimed_by_own.get(row_id.rpartition("/")[0], ())
         if row_id not in required_rows:
-            message = _row_floor_problem(chapter_id, row_id, beats, build_dir=build_dir)
+            message = _row_floor_problem(chapter_id, row_id, beats, build_dir=build_dir,
+                                         page_beats=page_beats)
             if message is not None:
                 generator_only.append(message)
             continue
 
-        if _is_boundary_claim(row_id, beats):
+        if is_boundary_claim(row_id, beats):
             beat_names = [b.name for b in beats]
             if successor is None:
                 deferred.append(
@@ -301,7 +287,8 @@ def _check_floor_ge(
             message = _row_floor_problem(
                 successor.name, row_id, crossing, build_dir=build_dir)
         else:
-            message = _row_floor_problem(chapter_id, row_id, beats, build_dir=build_dir)
+            message = _row_floor_problem(chapter_id, row_id, beats, build_dir=build_dir,
+                                         page_beats=page_beats)
         if message is not None:
             problems.append(message)
 

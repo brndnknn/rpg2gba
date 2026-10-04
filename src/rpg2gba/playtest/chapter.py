@@ -238,54 +238,26 @@ def resolved_trigger_scripts(chapter: "Chapter") -> dict[int, set[str]]:
     Two deliberate narrowings:
 
     * INHERITED only. A chapter's own triggers stay foreign to each other:
-      B3's trainer must not be excused for firing during an approach to B8,
-      which is the point of the check.
-    * REGISTERED only. The claim comes from the predecessor's committed
-      dispositions (`beat:B4`), but a disposition is an intent, not a run --
-      CH04 disposes `beat:` on rows whose beats are in `DEFERRED_BEATS` and
-      never execute. So each claim is confirmed against a beat actually
-      present in `chapter.beats`, matched with `beat_model._matches` so a
-      template-registered family (`B4_battle`) satisfies `beat:B4` exactly as
-      the checker does.
+      one trainer must not be excused for firing during an approach to
+      another beat of the same chapter, which is the point of the check.
+    * RUN only. The claim is an inherited beat's own `rows=` -- rows a beat
+      the replay actually executes -- not the predecessor's dispositions file.
+      *(Re-keyed 2026-10-04, PROJECT_TODO #124: this read the predecessor's
+      `beat:Bn` dispositions and matched them against hand beat names, so once
+      the hand suites were deleted it resolved nothing for any generated
+      chapter. A generated module's beats carry `rows=` for every row they
+      claim, which is the fact this function wants; the dispositions file is
+      no longer consulted.)*
 
     The predecessors are read off `chapter.beats` itself rather than walking
     `chapters.json` again -- the prefixes on the inherited beats already name
     every chapter that contributed one, transitively.
-
-    Fail-soft: a predecessor with no dispositions file contributes nothing
-    (CH01-CH03 predate the manifest). That is the pre-existing behaviour --
-    every trigger stays foreign -- not a silent weakening.
     """
-    from ..chapter_manifest.beat_model import _matches
-    from ..chapter_manifest.dispositions import disposition_path, load_dispositions
-
-    inherited: dict[str, set[str]] = {}
+    resolved: dict[int, set[str]] = {}
     for beat in chapter.beats:
         if ":" not in beat.name:
             continue
-        owner, _, own_name = beat.name.partition(":")
-        inherited.setdefault(owner, set()).add(own_name)
-    if not inherited:
-        return {}
-
-    resolved: dict[int, set[str]] = {}
-    for owner, beat_names in inherited.items():
-        path = disposition_path(owner)
-        try:
-            dispositions = load_dispositions(path)
-        except (OSError, ValueError) as exc:
-            logger.info(
-                "resolved_trigger_scripts: no usable dispositions for "
-                "predecessor %s (%s) -- its triggers stay foreign", owner, exc)
-            continue
-        for row_id, disposition in dispositions.items():
-            if disposition.verdict != "beat":
-                continue
-            beat_id = (disposition.argument or "").strip()
-            if not beat_id:
-                continue
-            if not any(_matches(beat_id, name) for name in beat_names):
-                continue  # dispositioned but deferred: it never ran
+        for row_id in beat.rows:
             named = page_row_script(row_id)
             if named is None:
                 continue  # seam/terrain rows name no page script

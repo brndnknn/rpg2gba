@@ -13,7 +13,7 @@ import ast
 import pytest
 
 from rpg2gba.beat_gen import emit
-from rpg2gba.beat_gen.plan import ChapterPlan, Elsewhere, PlannedBeat, make_kwargs
+from rpg2gba.beat_gen.plan import ChapterPlan, Elsewhere, PlannedBeat, Refusal, make_kwargs
 
 TRAINER = PlannedBeat(name="m036e004_trainer", template="trainer", map_id=36,
                       rows=("map036/ev004/p0", "map036/ev004/p1"), group="m036e004_trainer",
@@ -25,9 +25,9 @@ STAIR = PlannedBeat(name="m037stair11x9", template="stair", map_id=37,
                     rows=("map037/terrain/stairs/11,9",), group="m037stair11x9")
 
 
-def _plan(*beats, predecessor="CH04", elsewhere=()):
+def _plan(*beats, predecessor="CH04", elsewhere=(), refusals=()):
     return ChapterPlan(chapter_id="CH05", predecessor=predecessor, beats=beats,
-                       elsewhere=elsewhere)
+                       elsewhere=elsewhere, refusals=refusals)
 
 
 # --- render_value ---------------------------------------------------------------
@@ -198,3 +198,96 @@ def test_byte_identical_on_rerun():
 def test_empty_plan_fails_loud():
     with pytest.raises(ValueError, match="CH05"):
         emit.emit_module(_plan())
+
+
+# --- ELSEWHERE / REFUSED (PROJECT_TODO #124, 2026-10-04) ------------------------
+
+def _dict(src: str, name: str) -> dict[str, str]:
+    (assign,) = [n for n in ast.parse(src).body if isinstance(n, ast.AnnAssign)
+                 and getattr(n.target, "id", "") == name]
+    return ast.literal_eval(assign.value)
+
+
+def test_elsewhere_and_refused_present_and_empty_by_default():
+    src = emit.emit_module(_plan(TRAINER))
+    assert _dict(src, "ELSEWHERE") == {}
+    assert _dict(src, "REFUSED") == {}
+    assert "ELSEWHERE: dict[str, str] = {}" in src
+
+
+_STATUS_PLAN_ELSEWHERE = (
+    Elsewhere("map050/ev002/p0", "later", "CH07"),
+    Elsewhere("map050/ev001/p0", "later", None),
+    Elsewhere("map050/ev003/p0", "unreachable"),
+    Elsewhere("map050/ev004/p0/b1", "unselected_arm", detail="sibling runs"),
+    Elsewhere("map050/ev005/p0", "stripped", detail="strip_list.json map_events (Luz)"),
+    Elsewhere("map050/ev006/p0", "arm_gated", detail="behind No"),
+    Elsewhere("map050/ev007/p0", "converter_dropped", detail="rule x"),
+    # carried by NEVER_FIRES / EMPTY_PAGES / derived elsewhere -- not in ELSEWHERE
+    Elsewhere("map050/ev008/p0", "never_fires", detail="no warp"),
+    Elsewhere("map050/ev009/p0", "empty_page", detail="all empty"),
+    Elsewhere("map050/ev010/p0", "blocked", requires=("surf",)),
+    Elsewhere("map050/ev011/p0", "boundary", "CH06"),
+)
+_STATUS_PLAN_REFUSALS = (
+    Refusal("map050/ev013/p0", "story-state", "unmodelled_outcome",
+            "unmodelled_outcome:badge state"),
+    Refusal("map050/ev012/p0", "floor", "stair_unpaired", "no partner stair at (3,4)"),
+    Refusal("map050/ev014/p0", "story-state", "no_story_verdict", "no_story_verdict"),
+)
+
+
+def test_elsewhere_records_the_unrecorded_statuses_only():
+    src = emit.emit_module(_plan(TRAINER, elsewhere=_STATUS_PLAN_ELSEWHERE))
+    assert _dict(src, "ELSEWHERE") == {
+        "map050/ev001/p0": "later",
+        "map050/ev002/p0": "later: CH07",
+        "map050/ev003/p0": "unreachable",
+        "map050/ev004/p0/b1": "unselected_arm: sibling runs",
+        "map050/ev005/p0": "stripped: strip_list.json map_events (Luz)",
+        "map050/ev006/p0": "arm_gated: behind No",
+        "map050/ev007/p0": "converter_dropped: rule x",
+    }
+    # the existing dicts are unchanged by the new record
+    assert _dict(src, "NEVER_FIRES") == {"map050/ev008/p0": "no warp"}
+    assert _dict(src, "EMPTY_PAGES") == {"map050/ev009/p0": "all empty"}
+    # sorted in the source text
+    assert src.index("'map050/ev001/p0'") < src.index("'map050/ev002/p0'")
+
+
+def test_refused_records_blocker_and_reason():
+    src = emit.emit_module(_plan(TRAINER, refusals=_STATUS_PLAN_REFUSALS))
+    assert _dict(src, "REFUSED") == {
+        "map050/ev012/p0": "floor: stair_unpaired -- no partner stair at (3,4)",
+        "map050/ev013/p0": "story-state: unmodelled_outcome:badge state",
+        "map050/ev014/p0": "story-state: no_story_verdict",
+    }
+
+
+def test_status_dicts_sit_after_walk_checked_before_chapter():
+    src = emit.emit_module(_plan(TRAINER))
+    assert (src.index("WALK_CHECKED") < src.index("ELSEWHERE:")
+            < src.index("REFUSED:") < src.index("CHAPTER = ch05.build()"))
+
+
+def test_status_dicts_are_byte_identical_on_rerun_and_order_free():
+    a = _plan(TRAINER, elsewhere=_STATUS_PLAN_ELSEWHERE, refusals=_STATUS_PLAN_REFUSALS)
+    b = _plan(TRAINER, elsewhere=tuple(reversed(_STATUS_PLAN_ELSEWHERE)),
+              refusals=tuple(reversed(_STATUS_PLAN_REFUSALS)))
+    assert emit.emit_module(a) == emit.emit_module(a) == emit.emit_module(b)
+
+
+def test_row_with_two_different_statuses_fails_loud():
+    plan = _plan(TRAINER, elsewhere=(Elsewhere("map050/ev001/p0", "later", "CH07"),
+                                     Elsewhere("map050/ev001/p0", "unreachable")))
+    with pytest.raises(ValueError, match="Elsewhere twice"):
+        emit.emit_module(plan)
+    plan = _plan(TRAINER, refusals=(Refusal("r", "C8", "a", "a"), Refusal("r", "C8", "b", "b")))
+    with pytest.raises(ValueError, match="refused twice"):
+        emit.emit_module(plan)
+
+
+def test_identical_duplicate_is_tolerated():
+    e = Elsewhere("map050/ev001/p0", "later", "CH07")
+    assert _dict(emit.emit_module(_plan(TRAINER, elsewhere=(e, e))), "ELSEWHERE") == {
+        "map050/ev001/p0": "later: CH07"}

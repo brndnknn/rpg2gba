@@ -9,7 +9,8 @@ checker recompute it independently rather than trusting whatever the
 generator wrote earlier (CLAUDE.md §4.5 -- never trust a stored claim's mere
 presence).
 
-Operator ruling (2026-09-14): the generator derives FOUR verdicts.
+Operator ruling (2026-09-14): the generator derives FOUR verdicts (three
+more generator-sourced heads since 2026-10-04, see below).
 `cosmetic`, `beat:`, `boundary` are CLERICAL -- accepted on `derived_hash`
 alone, no human affirmation. `blocked:` is derived only as a PROPOSAL -- it
 never dispositions a row until a human copies it into the dispositions file
@@ -18,6 +19,16 @@ with an `affirmed_hash` (`DerivedEntry.proposed`).
 Precedence is `boundary > beat > blocked > cosmetic`
 (`REDERIVATION_PLAN.md` §14.4), matching `ManifestRow.may_be_derived`'s own
 docstring.
+
+2026-10-04 (PROJECT_TODO #124, operator ruling "emit + derive"): a FIFTH,
+lowest-precedence source -- the beat generator's own per-row status record
+(`generator_status.GeneratorStatus`, read from the generated module's
+`ELSEWHERE`/`REFUSED`/`NEVER_FIRES`/`EMPTY_PAGES`). It derives
+`elsewhere:<status>...`, `refused:<blocker>...` or `unreachable:<reason>`,
+all CLERICAL. Lowest, not between beat and blocked, on purpose: it only
+fills rows that derived None before, so every pre-existing sidecar entry is
+left byte-identical (no churn), and the generator's record never overrides a
+verdict the manifest itself supports.
 """
 from __future__ import annotations
 
@@ -31,6 +42,7 @@ if TYPE_CHECKING:
     # discipline `checker.py` itself uses for `rpg2gba.playtest` et al.: a
     # `Protocol` is the seam, not a hard dependency.
     from .checker import BeatModel, BoundaryModel
+    from .generator_status import GeneratorStatus
 
 
 @dataclass(frozen=True)
@@ -77,6 +89,7 @@ def derive_entry(
     *,
     beat_model: "BeatModel | None",
     boundary_model: "BoundaryModel | None",
+    generator_status: "GeneratorStatus | None" = None,
 ) -> DerivedEntry | None:
     """The machine verdict for `row`, or None if nothing can be derived and a
     human must decide.
@@ -109,7 +122,12 @@ def derive_entry(
     5. `row.may_be_derived` -> `"cosmetic"`, CLERICAL. (Already implies
        `requires` is empty and no citation is owed -- rule 4 above returns
        before this is ever reached when `requires` is non-empty.)
-    6. Otherwise None.
+    6. `generator_status.spec_for(row.row_id)` -> that spec
+       (`elsewhere:`/`refused:`/`unreachable:`), CLERICAL. Reached only when
+       rules 2-5 derive nothing, so it adds entries and never changes one.
+       Not reached for rule 1 (a human must still classify/cite) or for an
+       ambiguous multi-family beat claim (rule 3 returns None outright).
+    7. Otherwise None.
 
     `derived_hash` is always `row.content_hash`.
     """
@@ -138,5 +156,9 @@ def derive_entry(
 
     if row.may_be_derived:
         return DerivedEntry(disposition="cosmetic", derived_hash=row.content_hash)
+
+    spec = generator_status.spec_for(row.row_id) if generator_status is not None else None
+    if spec is not None:
+        return DerivedEntry(disposition=spec, derived_hash=row.content_hash)
 
     return None

@@ -1,30 +1,38 @@
 {
   "map033/ev002/p0": {
-    "disposition": "beat:B15",
+    "disposition": "beat:m033e002",
     "derived_hash": "255c5f02ae1512de"
+  },
+  "map033/ev002/p0/b0": {
+    "disposition": "beat:m033e002",
+    "derived_hash": "a8d4aef19b39ad89"
   },
   "map033/ev002/p0/b1": {
     "disposition": "cosmetic",
     "derived_hash": "982c2df0810a97de"
   },
   "map033/ev002/p1": {
-    "disposition": "beat:B15",
+    "disposition": "beat:m033e002",
     "derived_hash": "6c2d90d22489cb2a"
   },
   "map033/ev003/p0": {
-    "disposition": "beat:B15",
+    "disposition": "beat:m033e003",
     "derived_hash": "255c5f02ae1512de"
+  },
+  "map033/ev003/p0/b0": {
+    "disposition": "beat:m033e003",
+    "derived_hash": "a8d4aef19b39ad89"
   },
   "map033/ev003/p0/b1": {
     "disposition": "cosmetic",
     "derived_hash": "982c2df0810a97de"
   },
   "map033/ev003/p1": {
-    "disposition": "beat:B15",
+    "disposition": "beat:m033e003",
     "derived_hash": "6c2d90d22489cb2a"
   },
   "map033/ev004/p0": {
-    "disposition": "beat:B1",
+    "disposition": "beat:m033e004p0",
     "derived_hash": "b3354e11683672b0"
   },
   "map033/ev004/p1": {
@@ -102,11 +110,11 @@
     "proposed": true
   },
   "map033/ev022/p0": {
-    "disposition": "beat:B1",
+    "disposition": "beat:m033e022",
     "derived_hash": "915ec4ba4671381d"
   },
   "map033/ev022/p1": {
-    "disposition": "beat:B1",
+    "disposition": "elsewhere:never_fires: archetype_kwargs: map033/ev022/p1: no warp lands on this arrival autorun's cell (70,12) on map 33 -- it never fires",
     "derived_hash": "d25f35247b40bcee"
   },
   "map033/ev022/p1/b0": {
@@ -118,23 +126,27 @@
     "derived_hash": "4f8217c3e24208a2"
   },
   "map033/ev023/p0": {
-    "disposition": "beat:B1",
+    "disposition": "beat:m033e023",
     "derived_hash": "42e2f08246a68f5a"
   },
   "map033/ev023/p1": {
-    "disposition": "beat:B1",
+    "disposition": "beat:m033e023",
     "derived_hash": "5539cd09d8efee80"
   },
   "map033/ev023/p1/b0": {
-    "disposition": "cosmetic",
+    "disposition": "beat:m033e023",
     "derived_hash": "15159e8843c858aa"
   },
   "map033/ev023/p1/b1": {
     "disposition": "cosmetic",
     "derived_hash": "4f8217c3e24208a2"
   },
+  "map033/ev024/p0": {
+    "disposition": "beat:m033e024",
+    "derived_hash": "42e2f08246a68f5a"
+  },
   "map033/ev024/p1": {
-    "disposition": "beat:B1",
+    "disposition": "elsewhere:never_fires: archetype_kwargs: map033/ev024/p1: no warp lands on this arrival autorun's cell (70,13) on map 33 -- it never fires",
     "derived_hash": "50a1f42b5255a708"
   },
   "map033/ev024/p1/b0": {
@@ -146,27 +158,31 @@
     "derived_hash": "4f8217c3e24208a2"
   },
   "map033/ev025/p0": {
-    "disposition": "beat:B15",
+    "disposition": "beat:m033e025",
     "derived_hash": "aa0efa62d8c69735"
+  },
+  "map033/ev025/p0/b0": {
+    "disposition": "beat:m033e025",
+    "derived_hash": "12db9366187ed884"
   },
   "map033/ev025/p0/b1": {
     "disposition": "cosmetic",
     "derived_hash": "4abb86e4b1d91544"
   },
   "map033/ev025/p1": {
-    "disposition": "beat:B15",
+    "disposition": "beat:m033e025",
     "derived_hash": "6c2d90d22489cb2a"
   },
   "map033/ev027/p0": {
-    "disposition": "beat:B16",
+    "disposition": "beat:m033e027",
     "derived_hash": "8db80fad1a745500"
   },
   "map033/ev027/p1": {
-    "disposition": "beat:N1",
+    "disposition": "beat:m033e027",
     "derived_hash": "0d8898fba19fac94"
   },
   "map033/ev027/p1/b0": {
-    "disposition": "cosmetic",
+    "disposition": "beat:m033e027",
     "derived_hash": "11b1d4354edcd009"
   },
   "map033/ev027/p1/b1": {
@@ -193,15 +209,19 @@
     "proposed": true
   },
   "map033/ev030/p0": {
-    "disposition": "beat:B7",
+    "disposition": "beat:m033e030",
     "derived_hash": "bf6e47ffd756a188"
+  },
+  "map033/ev030/p0/b0": {
+    "disposition": "beat:m033e030",
+    "derived_hash": "e1a2b519e8a4dd85"
   },
   "map033/ev030/p0/b1": {
     "disposition": "cosmetic",
     "derived_hash": "fc52d7e7076f7427"
   },
   "map033/ev030/p1": {
-    "disposition": "beat:B7",
+    "disposition": "beat:m033e030",
     "derived_hash": "b0ac8392867a971c"
   },
   "map033/ev032/p0": {
@@ -225,15 +245,19 @@
     "proposed": true
   },
   "map033/ev034/p0": {
-    "disposition": "beat:B8",
+    "disposition": "beat:m033e034",
     "derived_hash": "0396e74497ea12af"
+  },
+  "map033/ev034/p0/b0": {
+    "disposition": "beat:m033e034",
+    "derived_hash": "aae459dbc8bfc642"
   },
   "map033/ev034/p0/b1": {
     "disposition": "cosmetic",
     "derived_hash": "19dbacd64c310d53"
   },
   "map033/ev034/p1": {
-    "disposition": "beat:B8",
+    "disposition": "beat:m033e034",
     "derived_hash": "9c5d2166a40123d7"
   },
   "map033/ev035/p0": {
@@ -257,9 +281,8 @@
     "proposed": true
   },
   "map033/ev036/p0": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "a930201f885e155b",
-    "proposed": true
+    "disposition": "beat:m033obstacle",
+    "derived_hash": "a930201f885e155b"
   },
   "map033/ev036/p0/b0": {
     "disposition": "blocked:rock_smash",
@@ -292,9 +315,8 @@
     "proposed": true
   },
   "map033/ev038/p0": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "a930201f885e155b",
-    "proposed": true
+    "disposition": "beat:m033obstacle",
+    "derived_hash": "a930201f885e155b"
   },
   "map033/ev038/p0/b0": {
     "disposition": "blocked:rock_smash",
@@ -459,20 +481,28 @@
     "derived_hash": "4f8217c3e24208a2"
   },
   "map033/ev050/p0": {
-    "disposition": "beat:B15",
+    "disposition": "beat:m033e050",
     "derived_hash": "aa0efa62d8c69735"
+  },
+  "map033/ev050/p0/b0": {
+    "disposition": "beat:m033e050",
+    "derived_hash": "12db9366187ed884"
   },
   "map033/ev050/p0/b1": {
     "disposition": "cosmetic",
     "derived_hash": "4abb86e4b1d91544"
   },
   "map033/ev050/p1": {
-    "disposition": "beat:B15",
+    "disposition": "beat:m033e050",
     "derived_hash": "6c2d90d22489cb2a"
   },
   "map033/ev053/p0": {
-    "disposition": "beat:B13",
+    "disposition": "beat:m033e053p0",
     "derived_hash": "c08d5665ae3bd8e5"
+  },
+  "map033/ev053/p0/b0": {
+    "disposition": "beat:m033e053p0",
+    "derived_hash": "8f4b0a7831a0a7ca"
   },
   "map033/ev053/p0/b1": {
     "disposition": "cosmetic",
@@ -481,6 +511,14 @@
   "map033/ev053/p1": {
     "disposition": "cosmetic",
     "derived_hash": "8df9e93830710be7"
+  },
+  "map033/ev053/p1/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "5b822ce0c639dc48"
+  },
+  "map033/ev053/p1/b1": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "3a0dc27d8bc6f9eb"
   },
   "map033/ev053/p1/b2": {
     "disposition": "cosmetic",
@@ -491,8 +529,12 @@
     "derived_hash": "26dd002a14fb13c8"
   },
   "map033/ev053/p2": {
-    "disposition": "beat:N5",
+    "disposition": "beat:m033e053p2",
     "derived_hash": "ccb073b2b9d1064e"
+  },
+  "map033/ev053/p2/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "5367cf53648ffc50"
   },
   "map033/ev053/p2/b1": {
     "disposition": "cosmetic",
@@ -502,44 +544,64 @@
     "disposition": "cosmetic",
     "derived_hash": "d2946527c34d4094"
   },
+  "map033/ev098/p0": {
+    "disposition": "beat:m033e098",
+    "derived_hash": "81a1e738410912f5"
+  },
+  "map033/ev099/p0": {
+    "disposition": "beat:m033e099",
+    "derived_hash": "1a251388ed5ff3b6"
+  },
   "map033/ev100/p0": {
-    "disposition": "cosmetic",
+    "disposition": "beat:m033e100p0",
     "derived_hash": "5ee93ebb450c405e"
+  },
+  "map033/ev100/p0/b0": {
+    "disposition": "beat:m033e100p0",
+    "derived_hash": "d6b3e68a9d332ff4"
   },
   "map033/ev100/p0/b1": {
     "disposition": "cosmetic",
     "derived_hash": "b491a611197c08bf"
   },
   "map033/ev100/p1": {
-    "disposition": "cosmetic",
+    "disposition": "beat:m033e100p1",
     "derived_hash": "e3273445c72667a1"
   },
   "map033/ev101/p0": {
-    "disposition": "cosmetic",
+    "disposition": "beat:m033e101p0",
     "derived_hash": "d30b4b6150954078"
   },
   "map033/ev102/p0": {
-    "disposition": "cosmetic",
+    "disposition": "beat:m033e102p0",
     "derived_hash": "5ee93ebb450c405e"
+  },
+  "map033/ev102/p0/b0": {
+    "disposition": "beat:m033e102p0",
+    "derived_hash": "d6b3e68a9d332ff4"
   },
   "map033/ev102/p0/b1": {
     "disposition": "cosmetic",
     "derived_hash": "b491a611197c08bf"
   },
   "map033/ev102/p1": {
-    "disposition": "cosmetic",
+    "disposition": "beat:m033e102p1",
     "derived_hash": "e3273445c72667a1"
   },
   "map033/ev103/p0": {
-    "disposition": "beat:B11",
+    "disposition": "beat:m033e103",
     "derived_hash": "ab23305b095877bb"
+  },
+  "map033/ev103/p0/b0": {
+    "disposition": "beat:m033e103",
+    "derived_hash": "6ec0466e7401f4f5"
   },
   "map033/ev103/p0/b1": {
     "disposition": "cosmetic",
     "derived_hash": "d2b0d04f4516ceea"
   },
   "map033/ev103/p1": {
-    "disposition": "beat:B11",
+    "disposition": "beat:m033e103",
     "derived_hash": "ae1add3b7d6e1007"
   },
   "map033/ev141/p0": {
@@ -547,32 +609,136 @@
     "derived_hash": "3c896bd547f9aebe",
     "proposed": true
   },
+  "map033/ev143/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "abfcd9fc28f137f6"
+  },
+  "map033/ev143/p0/b0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "011c27825e2cc2a0"
+  },
+  "map033/ev143/p0/b1": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "769ab8fd33ebedc8"
+  },
+  "map033/ev144/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "abfcd9fc28f137f6"
+  },
+  "map033/ev144/p0/b0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "011c27825e2cc2a0"
+  },
+  "map033/ev144/p0/b1": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "769ab8fd33ebedc8"
+  },
+  "map033/ev145/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "abfcd9fc28f137f6"
+  },
+  "map033/ev145/p0/b0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "011c27825e2cc2a0"
+  },
+  "map033/ev145/p0/b1": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "769ab8fd33ebedc8"
+  },
+  "map033/ev146/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "abfcd9fc28f137f6"
+  },
+  "map033/ev146/p0/b0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "011c27825e2cc2a0"
+  },
+  "map033/ev146/p0/b1": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "769ab8fd33ebedc8"
+  },
+  "map033/ev147/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "abfcd9fc28f137f6"
+  },
+  "map033/ev147/p0/b0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "011c27825e2cc2a0"
+  },
+  "map033/ev147/p0/b1": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "769ab8fd33ebedc8"
+  },
+  "map033/terrain/stairs/52,41": {
+    "disposition": "refused:cell: cell_error -- map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.",
+    "derived_hash": "46947329f720a5c1"
+  },
+  "map033/terrain/stairs/52,42": {
+    "disposition": "refused:cell: group_refused -- group 'm033stair52x41' refused: row 'map033/terrain/stairs/52,41' could not be located (map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.)",
+    "derived_hash": "a0e3e63bfbbc12c6"
+  },
+  "map033/terrain/stairs/53,43": {
+    "disposition": "refused:cell: group_refused -- group 'm033stair52x41' refused: row 'map033/terrain/stairs/52,41' could not be located (map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.)",
+    "derived_hash": "aeffa36189f99e06"
+  },
+  "map033/terrain/stairs/53,44": {
+    "disposition": "refused:cell: group_refused -- group 'm033stair52x41' refused: row 'map033/terrain/stairs/52,41' could not be located (map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.)",
+    "derived_hash": "9ca7f6d5f80331e3"
+  },
   "map033/terrain/stairs/57,10": {
-    "disposition": "beat:B2",
+    "disposition": "beat:m033stair57x9",
     "derived_hash": "870fd6cb8cacbaf7"
   },
   "map033/terrain/stairs/57,11": {
-    "disposition": "beat:B2",
+    "disposition": "beat:m033stair57x9",
     "derived_hash": "3c255189ddf2e314"
   },
   "map033/terrain/stairs/57,9": {
-    "disposition": "beat:B2",
+    "disposition": "beat:m033stair57x9",
     "derived_hash": "9ee66c3cc3ecbd96"
   },
   "map081/ev001/p0": {
-    "disposition": "beat:N1",
+    "disposition": "beat:m081e001p0",
     "derived_hash": "dcb4a76ce2a8c69e"
   },
+  "map081/ev001/p0/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "d6f7f1250a86ba95"
+  },
+  "map081/ev001/p0/b1": {
+    "disposition": "refused:story-state: unmodelled_outcome:bag_contents",
+    "derived_hash": "502d30c576218b6d"
+  },
+  "map081/ev001/p0/b2": {
+    "disposition": "refused:story-state: unmodelled_outcome:bag_contents",
+    "derived_hash": "0e67c8e595bba033"
+  },
+  "map081/ev001/p0/b3": {
+    "disposition": "beat:m081e001p0",
+    "derived_hash": "6a2921fd06a78144"
+  },
+  "map081/ev001/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "c56b4b0e4ddf1c06"
+  },
   "map081/ev002/p0": {
-    "disposition": "beat:B16",
+    "disposition": "beat:m081e002p0",
     "derived_hash": "c2f1288b0620f558"
   },
+  "map081/ev002/p0/b0": {
+    "disposition": "beat:m081e002p0",
+    "derived_hash": "d4e4c86e6d3c385a"
+  },
+  "map081/ev002/p0/b1": {
+    "disposition": "beat:m081e002p0",
+    "derived_hash": "dee3af7dd64f3da5"
+  },
   "map081/ev003/p0": {
-    "disposition": "beat:N1",
+    "disposition": "beat:m081e003",
     "derived_hash": "4c97f242e207c065"
   },
   "map081/ev004/p0": {
-    "disposition": "beat:B16",
+    "disposition": "beat:m081e004",
     "derived_hash": "e111d0c06f99f00d"
   }
 }

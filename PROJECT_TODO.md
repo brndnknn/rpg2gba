@@ -48,6 +48,40 @@ input and so the generated modules — regenerate and re-review on the diff.
 Its CH05 test was deleted with the hand suites. **To close:** all of the
 above, before CH06's `chapter_manifest check` is relied on.
 
+*(2026-10-04, re-measured on the `ch06-nowtoch-city` branch — `check` also
+carried `undispositioned` 261/42/88/6/4 and `derived_unaffirmed` 12/34/8/30/4,
+which this item had not counted. Operator rulings the same day:* **(R1) residue
+— emit + derive:** `beat_gen` emits committed per-row `ELSEWHERE`/`REFUSED`
+dicts into each generated module, derivation turns them into clerical sidecar
+verdicts (no hand entries). **(R2) a generator refusal is a WARNING with a
+count** in `check`, not an error. **(R3) the floor rule applies the grader's
+rulings 7/9/10/19 through one shared function**, still linting every claimed
+row; graded gaps error, generator-only partials warn. **(R4) the CH04/CH05
+affirmed `beat:Bn` entries are deleted**; the sidecar derives the generated
+verdict. *Done so far: sidecars regenerated (`derived_verdict_mismatch` → 0,
+`undispositioned` → 136/28/33/3/0, manifests byte-identical); `beat:Bn` entries
+dropped (CH04 40→29, CH05 25→4); `route_model` returns None for a gen suite
+(CH05 `route_order` → unenforced warning); `resolved_trigger_scripts` keyed on
+inherited beats' `rows=`. Open: R1, R2, R3, then regenerate CH01–CH05 (the
+trigger-script change moves solver input) and re-review the diff.)*
+
+*(2026-10-04, later — R1–R4 BUILT.* `beat_gen/emit.py` emits `ELSEWHERE`/
+`REFUSED`; new verdict heads `elsewhere:`/`refused:` (`schema.py`), loaded by
+`chapter_manifest/generator_status.py`, derived at lowest precedence (0 existing
+sidecar entries changed, only added) and rejected if hand-authored
+(`dispositions.GENERATOR_ONLY_VERDICTS`); `generator_refused` warning + per-chapter
+count. Floor rule: `coverage.graded_gaps`/`is_boundary_claim` shared by checker
+and grader, plus `inherited_page_trigger` (an arm inherits its page beat's
+declared trigger — fixed CH02 `map033/ev023/p1/b0`). CH01–CH05 regenerated:
+**pure additions** (the two dicts), no beat moved, so the trigger-script re-key
+changed no walk. `check` now: `floor_uncovered`, `derived_verdict_mismatch`,
+`route_order`, `unregistered_beat` all **0**; `generator_refused` warnings
+46/10/5/4/0. **Left (operator): `derived_unaffirmed` 12/34/8/30/4** (`blocked:`
+proposals — `python -m rpg2gba.chapter_manifest affirm`, review in
+`output/manifests/CHnn.blocked_review.md`) **and 19 CH01 `needs_citation` rows**
+(derivation rule 1; e.g. the rival battle `map050/ev019/p0`, claimed by a
+generated beat). Suite two halves 2315 + 2498 passed / 17 skipped.)*
+
 ### 123. `resolved_trigger_scripts` treats "the beat passed" as "the script ran"
 
 Moved from `reference/archive/REDERIVATION_PLAN.md` §4 at P10 (2026-10-03) so it survives the plan's

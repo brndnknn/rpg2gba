@@ -164,7 +164,12 @@ def build_route_model(
     plan = load_plan(route_file)
 
     try:
-        chapter = load_chapter(plan.chapter_module)
+        try:
+            chapter = load_chapter(plan.chapter_module)
+        except KeyError:
+            # No generated module of that name: the plan may name a hand-suite
+            # module, which is the only kind a route plan can approve.
+            chapter = load_chapter(plan.chapter_module, suite="hand")
     except KeyError as exc:
         # KeyError specifically -- `load_chapter` raises it, and only it, for
         # "no module of that name". Anything else (a TypeError for a module
@@ -176,6 +181,20 @@ def build_route_model(
             "route plan %s names chapter module %r, which does not exist (%s) -- "
             "route order is unenforced for %s",
             route_file, plan.chapter_module, exc, chapter_id,
+        )
+        return None
+
+    if chapter.suite == "gen":
+        # A generated suite loads no route plan (operator ruling 2026-10-02,
+        # `runner._WalkOracle.for_chapter`): the generator solves its own route
+        # every run into `output/beats/CHnn.route.json`, and a plan under
+        # `reference/routes/` approved the deleted HAND walks. Comparing the two
+        # reported every regenerated group as unplanned (CH05: 27 errors).
+        # Re-keyed 2026-10-04, PROJECT_TODO #124; #120 tracks gen-side plans.
+        logger.info(
+            "route plan %s predates the generated suite for %s -- route order is "
+            "unenforced for a generated chapter (PROJECT_TODO #120)",
+            route_file, chapter_id,
         )
         return None
 

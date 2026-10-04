@@ -1,63 +1,8 @@
 {
-  "map035/ev002/p0": {
-    "disposition": "beat:B9",
-    "affirmed_hash": "f7f92d12826eb774",
-    "note": "'Old entrance to Nowtoch City.' sign. FLAG_MENU_ON_EVENT (switch 185) bracket is a menu lock, not a story gate; it is the map's entire switch_writes=2. Not in doc's B1-B7."
-  },
-  "map035/ev003/p0": {
-    "disposition": "beat:B2",
-    "affirmed_hash": "34d653cbf094b94e",
-    "source": "output/uranium-build/maps/Map035.json ev003/p0; reference/scripts_dump/170__PSystem_Utilities.rb:2506 pbCallBub; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
-    "note": "Hiker Larrie, event-touch trainer battle + phone rematch registration."
-  },
-  "map035/ev003/p1": {
-    "disposition": "beat:B10",
-    "affirmed_hash": "c50bda502d0b5fb3",
-    "source": "output/uranium-build/maps/Map035.json ev003/p1; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
-    "note": "Post-battle self-switch B page: phone rematch offer. Carries control_flow."
-  },
-  "map035/ev003/p2": {
-    "disposition": "beat:B11",
-    "affirmed_hash": "fa930f176c79241a",
-    "source": "output/uranium-build/maps/Map035.json ev003/p2; reference/scripts_dump/170__PSystem_Utilities.rb:2506 pbCallBub",
-    "note": "Self-switch A page: defeated-trainer re-talk. Carries control_flow."
-  },
   "map035/ev008/p0": {
     "disposition": "cosmetic",
     "affirmed_hash": "a2fab855b4a49405",
     "note": "Sign @(19,33) - empty command list, no graphic, nothing to observe on press. Despite the name this is NOT the sign by the cave entrance; that is ev002 (B9) @(19,34). The only reachable cosmetic row left on this map after the 2026-08-25 re-sweep."
-  },
-  "map035/ev009/p0": {
-    "disposition": "beat:B3",
-    "affirmed_hash": "255c5f02ae1512de",
-    "source": "output/uranium-build/maps/Map035.json ev009/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
-    "note": "Potion item ball at (16,42), one-shot via self-switch A."
-  },
-  "map035/ev009/p1": {
-    "disposition": "beat:B12",
-    "affirmed_hash": "6c2d90d22489cb2a",
-    "note": "Potion ball's post-collection page (self-switch A). Writes no state, but the observable is that the ball is gone and grants no second Potion - the one-shot assertion for B3. Reclassified from cosmetic 2026-08-25: cosmetic means no trigger to press, not merely no state write."
-  },
-  "map035/ev011/p0": {
-    "disposition": "beat:B13",
-    "affirmed_hash": "b3fa3c7dbc0bd7e3",
-    "note": "Barewl flavour NPC @(17,36), west of Larrie. Action-trigger: pbCallBub(2) emote, cry SE 015Cry, text 'Bare! Bar!'. Writes no state but has three independently breakable observables. Reclassified from cosmetic 2026-08-25."
-  },
-  "map035/ev012/p0": {
-    "disposition": "beat:B4",
-    "affirmed_hash": "a034ade4fa795003",
-    "source": "output/uranium-build/maps/Map035.json ev012/p0; reference/scripts_dump/059_Messages.rb:368 pbSetSelfSwitch",
-    "note": "Youngster Timothy, event-touch trainer battle."
-  },
-  "map035/ev012/p1": {
-    "disposition": "beat:B14",
-    "affirmed_hash": "8f8b22ab37d3dfa7",
-    "note": "Timothy's defeated re-talk (self-switch A): 'Someone tougher than me? Impossible!'. Identical in kind to Larrie's B11, which was already a beat only because it rides on pbPhoneRegisterBattle state. Reclassified from cosmetic 2026-08-25."
-  },
-  "map035/ev013/p0": {
-    "disposition": "beat:B5",
-    "affirmed_hash": "32790d1077074743",
-    "note": "Passage Cave hint sign at (10,30). Text-only, so cosmetic-eligible, but it is the in-fiction signpost for the B6 gate and the doc registers it."
   },
   "map035/ev014/p0": {
     "disposition": "blocked:rock_smash",
@@ -240,10 +185,5 @@
     "affirmed_hash": "d93b684022ff4828",
     "assertable": false,
     "note": "Overland seam 35 N<->S 40 to Nowtoch City. Walkable in principle, but row y=0 is not in the south-reachable set while the rocks are solid. Becomes usable in CH07 (was unreachable:rockslide_blocks_north_seam)."
-  },
-  "map035/seam/S/map031": {
-    "disposition": "beat:B1",
-    "affirmed_hash": "125372b734127799",
-    "note": "Arrival seam from Kevlar Town; connections.json [31,'N',11,35,'S',0]."
   }
 }

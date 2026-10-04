@@ -499,3 +499,53 @@ def test_row_id_sort_key_orders_mixed_row_kinds_without_error() -> None:
     # order relative to each other.
     assert ordered.index(branch_row_id(page_row_id(50, 5, 0), 2)) < ordered.index(
         branch_row_id(page_row_id(50, 5, 0), 10))
+
+
+# --- generator verdicts: elsewhere / refused (PROJECT_TODO #124, 2026-10-04) ---
+
+
+@pytest.mark.parametrize("spec, argument", [
+    ("elsewhere:later", "later"),
+    ("elsewhere:later: CH07", "later: CH07"),
+    ("elsewhere:never_fires: archetype_kwargs: map031/ev023/p1: no warp lands",
+     "never_fires: archetype_kwargs: map031/ev023/p1: no warp lands"),
+    ("elsewhere:unselected_arm: not taken on the walk", "unselected_arm: not taken on the walk"),
+    ("elsewhere:converter_dropped", "converter_dropped"),
+])
+def test_elsewhere_parses_and_round_trips(spec: str, argument: str) -> None:
+    parsed = Disposition.parse("row", spec)
+    assert (parsed.verdict, parsed.argument) == ("elsewhere", argument)
+    assert parsed.spec == spec
+    assert Disposition.parse("row", parsed.spec) == parsed
+
+
+@pytest.mark.parametrize("spec, argument", [
+    ("refused:story-state: unmodelled_outcome:badge", "story-state: unmodelled_outcome:badge"),
+    ("refused:#109", "#109"),
+    ("refused:C8: unparsed_state_write", "C8: unparsed_state_write"),
+    ("refused:floor: stair_unpaired -- detail", "floor: stair_unpaired -- detail"),
+])
+def test_refused_parses_and_round_trips(spec: str, argument: str) -> None:
+    parsed = Disposition.parse("row", spec)
+    assert (parsed.verdict, parsed.argument) == ("refused", argument)
+    assert parsed.spec == spec
+
+
+@pytest.mark.parametrize("spec", ["elsewhere", "refused", "elsewhere:", "refused: "])
+def test_generator_verdicts_require_an_argument(spec: str) -> None:
+    with pytest.raises(DispositionError, match="requires an argument"):
+        Disposition.parse("row", spec)
+
+
+@pytest.mark.parametrize("spec", [
+    "elsewhere:somewhere", "elsewhere:blocked: surf", "elsewhere:boundary",
+    "refused:story", "refused:cosmetic",
+])
+def test_generator_verdicts_reject_an_unknown_token(spec: str) -> None:
+    with pytest.raises(DispositionError, match="must start with one of"):
+        Disposition.parse("row", spec)
+
+
+def test_generator_unreachable_points_at_the_unreachable_head() -> None:
+    with pytest.raises(DispositionError, match="spelled 'unreachable:<reason>'"):
+        Disposition.parse("row", "elsewhere:unreachable")

@@ -307,13 +307,20 @@ def test_check_flags_a_boundary_disposition_that_is_not_a_real_crossing(
     crossing -- see `test_chapter_manifest_boundary_model.py`.) Switching
     ev002/p0's real disposition from `beat:B9` to `boundary` should be
     caught as a false crossing claim, wired all the way through the CLI's
-    real `build_boundary_model`."""
+    real `build_boundary_model`.
+
+    *(2026-10-04, #124: the hand `beat:B9` entry is gone -- the sidecar now
+    derives the generated verdict -- so the row's content hash comes from the
+    sidecar's `derived_hash`, which hashes the same row content.)*"""
     dispositions_path = Path("reference/manifests/CH04.dispositions.json")
     dispositions = json.loads(dispositions_path.read_text(encoding="utf-8"))
+    derived = json.loads(
+        Path("reference/manifests/CH04.derived.json").read_text(encoding="utf-8"))
     row_id = "map035/ev002/p0"
+    assert row_id not in dispositions
     dispositions[row_id] = {
         "disposition": "boundary",
-        "affirmed_hash": dispositions[row_id]["affirmed_hash"],
+        "affirmed_hash": derived[row_id]["derived_hash"],
     }
 
     scratch = tmp_path / "CH04.dispositions.json"

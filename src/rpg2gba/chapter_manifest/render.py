@@ -31,6 +31,11 @@ _EXPANDED_SECTIONS: tuple[tuple[str, str], ...] = (
     ("blocked", "Blocked"),
     ("boundary", "Boundary"),
     ("unreachable", "Unreachable"),
+    # generator-derived (PROJECT_TODO #124, 2026-10-04): never hand-authored,
+    # but a hand `dispositions` dict can carry them when render is fed an
+    # effective (hand + derived) view.
+    ("elsewhere", "Elsewhere (generator)"),
+    ("refused", "Refused (generator)"),
     ("undispositioned", "Undispositioned"),
 )
 

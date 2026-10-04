@@ -14,10 +14,11 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from rpg2gba.beat_floor.assertion import FloorAssertion, RowFloor
-from rpg2gba.beat_floor.coverage import uncovered
+from rpg2gba.beat_floor.coverage import graded_gaps
 
 from .archetypes import classify_manifest
 from .derivation import DerivedEntry, derive_entry
+from .generator_status import GeneratorStatus
 from .schema import Disposition, ManifestRow, parse_blocked_argument
 
 Severity = Literal["error", "warning"]
@@ -70,6 +71,10 @@ RULE_FLOOR_UNCOVERED = "floor_uncovered"
 RULE_FLOOR_UNDECLARED = "floor_undeclared"
 RULE_FLOOR_MISSING = "floor_missing"
 RULE_FLOOR_MODEL_UNENFORCED = "floor_model_unenforced"
+# 2026-10-04 operator ruling (2), PROJECT_TODO #124: a beat-generator
+# refusal is tracked backlog -- a WARNING per row plus a chapter count,
+# never an error.
+RULE_GENERATOR_REFUSED = "generator_refused"
 
 
 @dataclass(frozen=True)
@@ -528,6 +533,13 @@ class FloorCoverageModel(Protocol):
         (e))."""
         ...
 
+    def exempt(self, row_id: str) -> bool:
+        """True iff the C9 grader does not hold `row_id` to the floor: a
+        `WALK_CHECKED` random arm (ruling 19) or a row claimed only by a
+        boundary warp, graded against the successor's crossing (ruling 9).
+        The floor rules skip such rows entirely."""
+        ...
+
 
 def check_chapter(
     rows: list[ManifestRow],
@@ -542,6 +554,7 @@ def check_chapter(
     boundary_model: BoundaryModel | None = None,
     floor_coverage: FloorCoverageModel | None = None,
     derived: dict[str, DerivedEntry] | None = None,
+    generator_status: GeneratorStatus | None = None,
     live_chapter: bool = False,
 ) -> list[Finding]:
     """Check one chapter's generated rows against its authored dispositions.
@@ -628,7 +641,8 @@ def check_chapter(
     # in scope. One computation, used by both the per-row rules and the
     # chapter-scale rules below.
     effective = _effective_dispositions(
-        rows, dispositions, derived, beat_model=beat_model, boundary_model=boundary_model)
+        rows, dispositions, derived, beat_model=beat_model, boundary_model=boundary_model,
+        generator_status=generator_status)
 
     for row in rows:
         disp = dispositions.get(row.row_id)
@@ -687,7 +701,8 @@ def check_chapter(
             ))
             continue
 
-        recomputed = derive_entry(row, beat_model=beat_model, boundary_model=boundary_model)
+        recomputed = derive_entry(row, beat_model=beat_model, boundary_model=boundary_model,
+                                  generator_status=generator_status)
         if (recomputed is None
                 or recomputed.disposition != entry.disposition
                 or recomputed.proposed != entry.proposed):
@@ -815,6 +830,8 @@ def check_chapter(
     )
 
     findings.extend(_check_derived_hash(rows_by_id, derived))
+
+    findings.extend(_check_generator_refused(rows, effective))
 
     findings.extend(_check_floor_coverage(rows, floor_coverage=floor_coverage))
 
@@ -1145,6 +1162,7 @@ def _effective_dispositions(
     *,
     beat_model: BeatModel | None,
     boundary_model: BoundaryModel | None,
+    generator_status: GeneratorStatus | None = None,
 ) -> dict[str, Disposition]:
     """Hand dispositions, plus a `Disposition` for every row the hand file
     omits that this checker independently recomputes as a matching,
@@ -1161,13 +1179,52 @@ def _effective_dispositions(
             continue
         if entry.proposed:
             continue
-        recomputed = derive_entry(row, beat_model=beat_model, boundary_model=boundary_model)
+        recomputed = derive_entry(row, beat_model=beat_model, boundary_model=boundary_model,
+                                  generator_status=generator_status)
         if (recomputed is None
                 or recomputed.disposition != entry.disposition
                 or recomputed.proposed != entry.proposed):
             continue
         effective[row.row_id] = entry.to_disposition(row.row_id)
     return effective
+
+
+def _check_generator_refused(
+    rows: list[ManifestRow],
+    effective: dict[str, Disposition],
+) -> list[Finding]:
+    """`RULE_GENERATOR_REFUSED` (2026-10-04 operator ruling 2, PROJECT_TODO
+    #124): every row whose effective disposition is `refused:<blocker>...`
+    -- the beat generator could not produce its beat -- is a WARNING naming
+    the blocker, plus one chapter-level WARNING with the count. A refusal is
+    tracked backlog, not a red chapter; the count makes its growth visible.
+    """
+    findings: list[Finding] = []
+    for row in rows:
+        disp = effective.get(row.row_id)
+        if disp is None or disp.verdict != "refused":
+            continue
+        findings.append(Finding(
+            row_id=row.row_id,
+            rule=RULE_GENERATOR_REFUSED,
+            message=(
+                f"the beat generator refused this row ({disp.argument}) -- "
+                "tracked backlog until the named blocker is fixed upstream"
+            ),
+            severity="warning",
+        ))
+    if findings:
+        by_blocker = Counter(
+            (effective[f.row_id].argument or "").partition(":")[0].strip()
+            for f in findings)
+        breakdown = ", ".join(f"{b}={n}" for b, n in sorted(by_blocker.items()))
+        findings.append(Finding(
+            row_id="chapter",
+            rule=RULE_GENERATOR_REFUSED,
+            message=f"{len(findings)} row(s) refused by the beat generator ({breakdown})",
+            severity="warning",
+        ))
+    return findings
 
 
 def _check_archetype_conformance(
@@ -1252,11 +1309,17 @@ def _check_archetype_conformance(
             #     explicitly rather than left to fall through the `!= "beat"`
             #     check below by accident -- both reach the same "no finding"
             #     outcome, but only one of them says so.
+            #   * `elsewhere:` / `refused:` (2026-10-04, PROJECT_TODO #124) are
+            #     the beat generator's own record: the row is outside this
+            #     chapter's walk, or the generator could not build its beat
+            #     and `RULE_GENERATOR_REFUSED` already tracks it as backlog
+            #     (ruling 2: a warning, not an error -- this rule must not
+            #     re-report it as one).
             #
             # What remains is the pair actually worth erroring on: a row
             # with no disposition at all (above), and a load-bearing
             # archetype page waved away as decoration (below).
-            if disp.verdict in ("blocked", "unreachable", "boundary"):
+            if disp.verdict in ("blocked", "unreachable", "boundary", "elsewhere", "refused"):
                 continue
 
             if prescribed == "beat" and disp.verdict == "cosmetic":
@@ -1694,7 +1757,7 @@ def _check_floor_coverage(
 
     for row in rows:
         row_id = row.row_id
-        if not floor_coverage.claims(row_id):
+        if not floor_coverage.claims(row_id) or floor_coverage.exempt(row_id):
             continue
 
         try:
@@ -1734,12 +1797,15 @@ def _check_floor_coverage(
             ))
             continue
 
-        missing = uncovered(floor, declared)
-        if missing:
+        # Same gap definition as the C9 grader (`beat_floor.coverage.
+        # graded_gaps`): walk-checked kinds are not owed, a blocked_obstacle
+        # floor owes only that, contradictions always count.
+        gaps = graded_gaps(floor, declared)
+        if gaps:
             findings.append(Finding(
                 row_id=row_id,
                 rule=RULE_FLOOR_UNCOVERED,
-                message=_uncovered_message(missing),
+                message=_uncovered_message(gaps.contradicted + gaps.missing),
                 severity="error",
             ))
 

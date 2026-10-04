@@ -48,6 +48,7 @@ from .dispositions import (
 )
 from .floor_model import build_floor_coverage_model
 from .generator import generate_chapter_manifest, write_derived, write_manifest
+from .generator_status import build_generator_status
 from .render import EventFacts, render_blocked_proposals
 from .route_model import build_route_model
 from .schema import Disposition, ManifestRow, row_from_dict
@@ -260,14 +261,27 @@ def generate_cmd(chapter: str, manifest: Path | None, derived_path_opt: Path | N
             "could not build a boundary model for %s (%s) -- boundary "
             "entries will not be derived this run", chapter, exc)
         boundary_model = None
-    write_derived(rows, derived_file, beat_model=beat_model, boundary_model=boundary_model)
+    # The generated module's per-row status record (PROJECT_TODO #124). Same
+    # degrade as the beat model: importing a real chapter module builds its
+    # `CHAPTER`, which reads the repo's build data relative to the cwd.
+    try:
+        generator_status = build_generator_status(chapter)
+    except (FileNotFoundError, SliceGrowthError) as exc:
+        logger.warning(
+            "could not load %s's generated module for its status record (%s) -- "
+            "elsewhere:/refused:/unreachable: entries will not be derived this run",
+            chapter, exc)
+        generator_status = None
+    write_derived(rows, derived_file, beat_model=beat_model, boundary_model=boundary_model,
+                  generator_status=generator_status)
 
     undispositionable = sum(1 for row in rows if not row.is_dispositionable)
     needs_citation = sum(1 for row in rows if row.needs_citation)
     entries = [
         entry
         for row in rows
-        for entry in (derive_entry(row, beat_model=beat_model, boundary_model=boundary_model),)
+        for entry in (derive_entry(row, beat_model=beat_model, boundary_model=boundary_model,
+                                   generator_status=generator_status),)
         if entry is not None
     ]
     verdict_counts: dict[str, int] = {}
@@ -378,11 +392,12 @@ def check_cmd(chapter: str, manifest: Path | None, dispositions_path_opt: Path |
     capabilities = build_capability_model(chapter)
     floor_coverage = build_floor_coverage_model(chapter, build_dir=build_dir)
     live_chapter = _is_live_chapter(chapter, chapters_path)
+    generator_status = build_generator_status(chapter)
     findings = checker.check_chapter(
         rows, dispositions, capabilities=capabilities, approach=approach, route=route,
         archetype_model=archetype_model, beat_model=beat_model,
         boundary_model=boundary_model, floor_coverage=floor_coverage,
-        derived=derived, live_chapter=live_chapter)
+        derived=derived, generator_status=generator_status, live_chapter=live_chapter)
 
     if not findings:
         click.echo(f"chapter {chapter}: OK ({len(rows)} rows)")

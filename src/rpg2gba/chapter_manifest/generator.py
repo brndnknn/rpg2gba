@@ -86,6 +86,7 @@ if TYPE_CHECKING:
     # (same layering discipline `checker.py` itself uses for the packages
     # its own Protocol seams stand in for).
     from rpg2gba.chapter_manifest.checker import BeatModel, BoundaryModel
+    from rpg2gba.chapter_manifest.generator_status import GeneratorStatus
 
 logger = logging.getLogger(__name__)
 
@@ -1055,6 +1056,7 @@ def write_derived(
     *,
     beat_model: "BeatModel | None" = None,
     boundary_model: "BoundaryModel | None" = None,
+    generator_status: "GeneratorStatus | None" = None,
 ) -> None:
     """Writes the machine-derived sidecar (format v2, `REDERIVATION_PLAN.md`
     §15.2 item 1, narrowed by the 2026-09-14 four-verdict ruling).
@@ -1075,7 +1077,10 @@ def write_derived(
     is caught, not silently inherited. `beat_model`/`boundary_model` are
     threaded through for the same reason `check_cmd` builds them: without
     them, `derive_entry` can still resolve `blocked:`/`cosmetic` but never
-    `beat:`/`boundary`.
+    `beat:`/`boundary`. `generator_status` (2026-10-04, PROJECT_TODO #124)
+    is the generated module's per-row status record; without it the
+    generator's refused/Elsewhere rows derive nothing (`elsewhere:`/
+    `refused:`/`unreachable:` need it).
 
     This module's single-writer invariant for the AUTHORED dispositions file
     (see the package docstring) is unaffected: this function writes only the
@@ -1087,7 +1092,8 @@ def write_derived(
     entries = {
         row.row_id: entry
         for row in sorted(rows, key=lambda r: row_id_sort_key(r.row_id))
-        for entry in (derive_entry(row, beat_model=beat_model, boundary_model=boundary_model),)
+        for entry in (derive_entry(row, beat_model=beat_model, boundary_model=boundary_model,
+                                   generator_status=generator_status),)
         if entry is not None
     }
     payload: dict[str, Any] = {}

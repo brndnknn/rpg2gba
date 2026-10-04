@@ -32,10 +32,12 @@ whatever it declares is still true here.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
 
 from rpg2gba.beat_floor.assertion import FloorAssertion, RowFloor
+from rpg2gba.beat_floor.coverage import inherited_page_trigger, is_boundary_claim
 from rpg2gba.beat_floor.lookup import floor_for_row
 from rpg2gba.beat_gen.emit import GENERATED_HEADER as _GENERATED_HEADER
 from rpg2gba.playtest.chapter import Beat, Chapter, load_chapter, load_chapter_module
@@ -52,12 +54,20 @@ class ChapterFloorCoverageModel:
     `(build_dir, map_id)` -- so nothing here re-derives a map's floor twice.
     """
 
-    def __init__(self, chapter: Chapter, *, build_dir: Path, generated: bool) -> None:
+    def __init__(
+        self, chapter: Chapter, *, build_dir: Path, generated: bool,
+        walk_checked: Mapping[str, str] = {},
+    ) -> None:
         self._build_dir = build_dir
         self._generated = generated
+        self._walk_checked = walk_checked
 
+        # Own beats only (`:` marks an inherited `<OWNER>:` beat), as the C9
+        # grader does -- an inherited beat's rows are graded in its owner.
         claiming: dict[str, list[Beat]] = {}
         for beat in chapter.beats:
+            if ":" in beat.name:
+                continue
             for row_id in beat.rows:
                 claiming.setdefault(row_id, []).append(beat)
         self._claiming = claiming
@@ -70,14 +80,25 @@ class ChapterFloorCoverageModel:
         declaring = [b for b in beats if b.assertions is not None]
         if not declaring:
             return None
+        page_beats = self._claiming.get(row_id.rpartition("/")[0], ())
         return frozenset(
-            a for b in declaring for a in b.assertions if a.row_id == row_id)
+            a for b in declaring for a in b.assertions if a.row_id == row_id
+        ) | inherited_page_trigger(row_id, page_beats)
 
     def claims(self, row_id: str) -> bool:
         return row_id in self._claiming
 
     def is_generated(self) -> bool:
         return self._generated
+
+    def exempt(self, row_id: str) -> bool:
+        """Rows the grader never holds to the floor here: a random arm the
+        module lists in `WALK_CHECKED` (ruling 19), or a row claimed only by
+        a boundary warp, whose crossing is the successor's (ruling 9)."""
+        if row_id in self._walk_checked:
+            return True
+        beats = self._claiming.get(row_id, ())
+        return bool(beats) and is_boundary_claim(row_id, beats)
 
 
 def _module_is_generated(module: ModuleType) -> bool:
@@ -121,4 +142,5 @@ def build_floor_coverage_model(
         return None
     module = load_chapter_module(chapter_id)
     return ChapterFloorCoverageModel(
-        chapter, build_dir=build_dir, generated=_module_is_generated(module))
+        chapter, build_dir=build_dir, generated=_module_is_generated(module),
+        walk_checked=getattr(module, "WALK_CHECKED", {}))
