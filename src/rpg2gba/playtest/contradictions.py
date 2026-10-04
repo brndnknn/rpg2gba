@@ -60,26 +60,7 @@ KIND_OFF_PLAN = "walk_off_plan"
 #: compared-and-clean one, which is the failure mode §4.5 forbids.
 KIND_UNRESOLVED_MAP = "unresolved_map"
 
-#: An INHERITED beat whose leg could not be planned and was walked greedily
-#: on the bare target instead, with none of the planner's avoid-set.
-#:
-#: CH01-CH04 were authored while `_route_waypoints` degraded to exactly this
-#: walk on every planning failure, so their coordinates were never held to a
-#: strict planner; the degrade was removed in f705b642 and CH05's replay is
-#: the first run to feel it. `_walk_to_once` restores it for inherited beats
-#: only, as scaffolding until those chapters are re-derived -- see its
-#: docstring for the scope and the expiry.
-#:
-#: It is recorded because of what it costs. This is the walk that crossed
-#: Timothy's event-touch tile in CH04's B3, fought the wrong trainer, and
-#: passed both guards -- read as a converter bug for three sessions. A run
-#: that leaned on it is not the same evidence as a run that did not, and the
-#: difference has to be visible in the artifact rather than in a log nobody
-#: reads. §4.5 forbids the silence, not the walk.
-KIND_REPLAY_FALLBACK = "replay_route_fallback"
-
-_KINDS = frozenset({KIND_WALKABILITY, KIND_OFF_PLAN, KIND_UNRESOLVED_MAP,
-                    KIND_REPLAY_FALLBACK})
+_KINDS = frozenset({KIND_WALKABILITY, KIND_OFF_PLAN, KIND_UNRESOLVED_MAP})
 
 
 @dataclass(frozen=True)

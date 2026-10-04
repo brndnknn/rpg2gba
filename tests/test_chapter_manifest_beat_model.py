@@ -22,7 +22,7 @@ import pytest
 from rpg2gba.chapter_manifest.beat_model import ChapterBeatModel, build_beat_model
 from rpg2gba.playtest.chapter import ChapterBuilder
 
-PKG = "rpg2gba.playtest.chapters"
+PKG = "rpg2gba.playtest.chapters_gen"  # the default suite since 2026-10-03
 
 
 def _run(emu: object) -> None:  # pragma: no cover - never executed
@@ -119,18 +119,3 @@ def test_malformed_deferred_beats_entry_raises_rather_than_skipping() -> None:
             build_beat_model("beatplace6")
     finally:
         _cleanup_chapter("beatplace6")
-
-
-def test_real_ch04_has_b8_and_b10_deferred_and_unregistered() -> None:
-    """Pinned against real `ch04.py` state as of CLAUDE.md's D2 background:
-    `CH04.dispositions.json` disposes `beat:B8` and `beat:B10`, while
-    `ch04.py`'s `DEFERRED_BEATS` lists both -- this is the exact silent
-    contradiction D2 exists to catch. If this test breaks because ch04 has
-    since registered B8 or B10 for real, that's good news; update the
-    assertion."""
-    model = build_beat_model("CH04")
-    assert model is not None
-    assert model.is_registered("B8") is False
-    assert model.deferral_reason("B8") is not None
-    assert model.is_registered("B10") is False
-    assert model.deferral_reason("B10") is not None

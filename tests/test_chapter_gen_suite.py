@@ -70,11 +70,19 @@ def _clean_sys_modules():
 
 # -- load_chapter(_module) suite= --------------------------------------------
 
-def test_default_suite_is_hand_unchanged():
+def test_default_suite_is_gen():
+    """The hand suites were deleted 2026-10-03; every loader defaults to gen."""
+    gen = make_chapter("CHZDEFAULT")
+    install(GEN_PKG, "CHZDEFAULT", gen)
+    assert load_chapter("CHZDEFAULT") is gen
+
+
+def test_hand_suite_still_loads_when_asked_for():
     chapter = make_chapter("CHZHAND")
     install(HAND_PKG, "CHZHAND", chapter)
-    assert load_chapter("CHZHAND") is chapter
     assert load_chapter("CHZHAND", suite="hand") is chapter
+    with pytest.raises(KeyError):
+        load_chapter("CHZHAND")
 
 
 def test_gen_suite_loads_from_chapters_gen():

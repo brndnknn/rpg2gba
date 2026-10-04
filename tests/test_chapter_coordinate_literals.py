@@ -92,18 +92,11 @@ def _map_const_for(uranium_id: int) -> str:
 # ban and are deliberately not being retrofitted -- see module docstring.
 # THIS IS DEBT, NOT AN ALLOWANCE: when a file is cleaned up, lower its number
 # here to match (the test enforces that direction too, not just the ceiling).
-_PRE_BAN_BUDGET: dict[str, int] = {
-    "ch01.py": 13,
-    # 45 -> 44 on 2026-09-15: B1's ROUTE1_ARRIVAL became arrival_cell(...),
-    # the same (70,11), when B1 took Route 1's arrival-nudge rows.
-    "ch02.py": 44,
-    "ch03.py": 42,
-    # 25 -> 23 on 2026-09-04: trimming B7 to stop at the cave-mouth approach
-    # tile retired CAVE_MOUTH_NORTH_WALL_XY and CAVE_MOUTH_NORTH_OPEN_XY, the
-    # two literals for tiles north of the CH04|CH05 boundary. Debt paid down
-    # by deleting the assertions that owned it, not by adding a resolver.
-    "ch04.py": 23,
-}
+# Empty since 2026-10-03: ch01-ch04.py, the only pre-ban files, were deleted
+# with the hand suites, debt and all. The ban still binds any hand-written
+# chapter module; generated modules (`chapters_gen/`) take their cells from
+# the decoded source and are out of its scope.
+_PRE_BAN_BUDGET: dict[str, int] = {}
 
 
 # -- the walker ---------------------------------------------------------------

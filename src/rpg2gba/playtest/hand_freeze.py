@@ -1,35 +1,30 @@
-"""Freeze CH01–CH05's hand beats: rows + identity (REDERIVATION_PLAN.md §16.3 C7).
+"""The frozen CH01–CH05 hand beats: rows + identity (REDERIVATION_PLAN.md §16.3 C7).
 
-Writes `reference/frozen/hand_beats_ch01-ch05.json`, the grading target C9
-holds the generated suites to (R12 as amended 2026-09-17: every frozen row
-must be claimed by some generated beat; order and group are recorded for
-review, never graded).
+`reference/frozen/hand_beats_ch01-ch05.json` is the grading target C9 holds
+the generated suites to (R12 as amended 2026-09-17: every frozen row must be
+claimed by some generated beat; order and group are recorded for review,
+never graded).
 
-Only each chapter's OWN beats are frozen. `load_chapter` returns a composed
-list in which predecessor beats arrive renamed `CHnn:Bn`; those are frozen
-once, under the chapter that owns them.
+The hand suites it was captured from were deleted after the C9/P11 gate
+(2026-10-03), so the freeze is now a fixed artifact: there is nothing left to
+re-capture it from, and the capture half of this module (`write`, the
+blob-sha provenance, the rebuild-and-diff `check`) went with them. What
+remains is the loader, the residue-ledger validation and the C9 grader.
 
 Usage:
 
-    .venv/bin/python -m rpg2gba.playtest.hand_freeze write [--force]
     .venv/bin/python -m rpg2gba.playtest.hand_freeze check
-
-STATUS: stub. The CLI (bottom of file) is complete; every function marked
-`NotImplementedError` is the assignment (`assignments/C7/01_freeze_capture.md`).
+    .venv/bin/python -m rpg2gba.playtest.hand_freeze grade [--chapter CHnn]
 """
 from __future__ import annotations
 
 import json
 import logging
-import re
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import click
-
-from rpg2gba.playtest.chapter import load_chapter  # noqa: F401  -- used by own_beats
 
 logger = logging.getLogger(__name__)
 
@@ -42,15 +37,6 @@ SCHEMA = 1
 RULE = ("REDERIVATION_PLAN.md §16.3 R12 (amended 2026-09-17): "
         "rows + identity; order/group recorded, not graded")
 
-# A predecessor's beats arrive under a `CHnn:` name prefix; own beats are bare.
-_INHERITED = re.compile(r"^CH\d\d:")
-
-
-class FreezeError(Exception):
-    """One or more problems that make a freeze unsafe to write. The message
-    lists every problem found, one per line (collect, then raise)."""
-
-
 @dataclass(frozen=True)
 class FrozenBeat:
     chapter: str
@@ -60,43 +46,6 @@ class FrozenBeat:
     map_constant: str | None
     rows: tuple[str, ...]
 
-
-def module_path(chapter: str) -> str:
-    """Repo-relative path of a chapter's hand module."""
-    return f"src/rpg2gba/playtest/chapters/{chapter.lower()}.py"
-
-
-# --- git provenance (R2) -------------------------------------------------
-
-def head_blob_sha(repo_relative: str) -> str:
-    """Blob sha of `repo_relative` as committed at HEAD
-    (`git rev-parse HEAD:<path>`). Raises if git can't resolve it."""
-    result = subprocess.run(
-        ["git", "rev-parse", f"HEAD:{repo_relative}"],
-        cwd=REPO_ROOT, capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"Cannot resolve path for '{repo_relative}': "
-            f"{result.stderr.strip()}")
-    return result.stdout.strip()
-
-
-def worktree_blob_sha(repo_relative: str) -> str:
-    """Blob sha of `repo_relative` as it is on disk now
-    (`git hash-object <path>`). Raises if git fails."""
-    result = subprocess.run(
-        ["git", "hash-object", f"{repo_relative}"],
-        cwd=REPO_ROOT, capture_output=True, text=True,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"Cannot resolve path for '{repo_relative}': "
-            f"{result.stderr.strip()}")
-    return result.stdout.strip()
-
-
-# --- capture (R1, R3) ----------------------------------------------------
 
 def manifest_row_ids(chapter: str) -> set[str]:
     """Every `row_id` in `reference/manifests/<chapter>.manifest.json`,
@@ -111,100 +60,6 @@ def manifest_row_ids(chapter: str) -> set[str]:
                 "-- data defect, refusing to merge silently")
         ids.add(row_id)
     return ids
-
-
-def own_beats(chapter: str) -> list[dict[str, Any]]:
-    """The chapter's own beats, in registration order, as R1's dicts:
-    `name`, `order`, `group`, `map_constant`, `rows`."""
-    own = [b for b in load_chapter(chapter).beats if not _INHERITED.match(b.name)]
-    result: list[dict[str, Any]] = []
-    for order, beat in enumerate(own):
-        map_constant = beat.locations[0].map_constant if beat.locations else None
-        result.append({
-            "name": beat.name,
-            "order": order,
-            "group": beat.group,
-            "map_constant": map_constant,
-            "rows": list(beat.rows),
-        })
-    return result
-
-
-def build_freeze() -> dict[str, Any]:
-    """The whole freeze document (R1's shape), built in memory.
-
-    Collect-then-raise: raises `FreezeError` listing EVERY problem (a module
-    with uncommitted edits, a claimed row missing from its manifest) rather
-    than stopping at the first. Never returns a partial document."""
-    problems: list[str] = []
-    sources: dict[str, dict[str, str]] = {}
-    chapters: dict[str, list[dict[str, Any]]] = {}
-    # A chapter's beats legitimately claim rows a predecessor's manifest owns
-    # (CH02 re-walks map032, CH05 claims into map035): a row is known if any
-    # manifest from CH01 up to this chapter carries it. Measured 2026-09-21.
-    known: set[str] = set()
-    for chapter in CHAPTERS:
-        module = module_path(chapter)
-        head = head_blob_sha(module)
-        if worktree_blob_sha(module) != head:
-            problems.append(
-                f"{chapter}: {module} has uncommitted changes; a freeze of "
-                "uncommitted code cannot name its own source")
-        # A dirty module still gets its rows checked, so one run reports both.
-        known |= manifest_row_ids(chapter)
-        beats = own_beats(chapter)
-        for beat in beats:
-            for row in beat["rows"]:
-                if row not in known:
-                    problems.append(
-                        f"{chapter}:{beat['name']} claims {row!r}, "
-                        f"not in any manifest CH01..{chapter}")
-        sources[chapter] = {"module": module, "blob_sha": head}
-        chapters[chapter] = beats
-    if problems:
-        raise FreezeError("\n".join(problems))
-    return {
-        "schema": SCHEMA,
-        "authored": AUTHORED,
-        "rule": RULE,
-        "sources": sources,
-        "chapters": chapters,
-    }
-
-
-def dump(data: dict[str, Any]) -> str:
-    """Byte-stable serialisation. Already done -- don't change it without a
-    reason, or every committed freeze diffs."""
-    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-
-
-# --- check (R4) ----------------------------------------------------------
-
-def diff_freeze(committed: dict[str, Any], rebuilt: dict[str, Any]) -> list[str]:
-    """Problems with the committed freeze, one string each; `[]` means clean.
-
-    Report (a) any chapter whose `sources[ch].blob_sha` differs between the
-    two ("stale: CHnn module changed since freeze"), and (b) any chapter
-    whose beat list differs. Pure function: no I/O."""
-    problems: list[str] = []
-    for chapter in CHAPTERS:
-        old_sha = committed["sources"][chapter]["blob_sha"]
-        new_sha = rebuilt["sources"][chapter]["blob_sha"]
-        if old_sha != new_sha:
-            problems.append(f"stale: {chapter} module changed since freeze")
-        # Both are reported even when stale: the beat diff says WHAT changed,
-        # which is what the operator needs to decide whether to re-freeze.
-        old = {b["name"]: b for b in committed["chapters"][chapter]}
-        new = {b["name"]: b for b in rebuilt["chapters"][chapter]}
-        for name in sorted(old.keys() - new.keys()):
-            problems.append(f"{chapter}:{name} frozen but no longer registered")
-        for name in sorted(new.keys() - old.keys()):
-            problems.append(f"{chapter}:{name} registered but not frozen")
-        for name in sorted(old.keys() & new.keys()):
-            if old[name] != new[name]:
-                fields = sorted(k for k in old[name] if old[name][k] != new[name].get(k))
-                problems.append(f"{chapter}:{name} differs from freeze ({', '.join(fields)})")
-    return problems
 
 
 # The ruling vocabulary as data: ruling -> the extra fields it requires
@@ -235,7 +90,7 @@ def validate_residue(
     ruling's extra fields plus a `note`, and cite only manifest rows. Pure:
     `manifest_ids` (chapter -> row ids) is a parameter so callers and tests
     control the I/O. A row is known if any manifest from CH01 up to the
-    entry's chapter carries it, matching `build_freeze`."""
+    entry's chapter carries it."""
     rowless: set[str] = set()
     rowed: set[str] = set()
     for chapter, beats in frozen["chapters"].items():
@@ -311,7 +166,7 @@ def load_frozen_hand_beats(path: Path = FROZEN_PATH) -> list[FrozenBeat]:
     ]
 
 
-# --- CLI (wired; you shouldn't need to edit below) -----------------------
+# --- CLI ------------------------------------------------------------------
 
 def _read_json(path: Path) -> Any:
     with path.open(encoding="utf-8") as f:
@@ -320,42 +175,19 @@ def _read_json(path: Path) -> Any:
 
 @click.group()
 def cli() -> None:
-    """Freeze and check CH01–CH05's hand beats (C7)."""
+    """Check the frozen CH01–CH05 hand beats and grade the generated suites (C7/C9)."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
 @cli.command()
-@click.option("--force", is_flag=True, help="Overwrite an existing freeze file.")
-def write(force: bool) -> None:
-    """Build the freeze and write it. Writes nothing if any problem is found."""
-    if FROZEN_PATH.exists() and not force:
-        raise click.ClickException(
-            f"{FROZEN_PATH.relative_to(REPO_ROOT)} exists; pass --force to overwrite")
-    try:
-        data = build_freeze()
-    except FreezeError as exc:
-        raise click.ClickException(f"freeze NOT written:\n{exc}") from exc
-    FROZEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-    FROZEN_PATH.write_text(dump(data), encoding="utf-8")
-    total = sum(len(beats) for beats in data["chapters"].values())
-    logger.info("wrote %s (%d beats)", FROZEN_PATH.relative_to(REPO_ROOT), total)
-
-
-@cli.command()
 def check() -> None:
-    """Rebuild in memory and compare with the committed freeze; exit 1 on any problem."""
+    """Validate the committed freeze's residue ledger; exit 1 on any problem."""
     if not FROZEN_PATH.exists():
-        raise click.ClickException(
-            f"{FROZEN_PATH.relative_to(REPO_ROOT)} missing; run `write` first")
+        raise click.ClickException(f"{FROZEN_PATH.relative_to(REPO_ROOT)} missing")
     committed = _read_json(FROZEN_PATH)
-    try:
-        rebuilt = build_freeze()
-    except FreezeError as exc:
-        raise click.ClickException(f"cannot rebuild freeze:\n{exc}") from exc
     ledger = _read_json(RESIDUE_PATH) if RESIDUE_PATH.exists() else None
     manifest_ids = {ch: manifest_row_ids(ch) for ch in CHAPTERS}
-    problems = (diff_freeze(committed, rebuilt)
-                + validate_residue(committed, ledger, manifest_ids))
+    problems = validate_residue(committed, ledger, manifest_ids)
     for problem in problems:
         click.echo(problem, err=True)
     if problems:

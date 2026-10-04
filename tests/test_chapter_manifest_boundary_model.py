@@ -26,7 +26,7 @@ from rpg2gba.chapter_manifest.boundary_model import (
 )
 from rpg2gba.playtest.chapter import ChapterBuilder
 
-PKG = "rpg2gba.playtest.chapters"
+PKG = "rpg2gba.playtest.chapters_gen"  # the default suite since 2026-10-03
 
 
 def _run(emu: object) -> None:  # pragma: no cover - never executed

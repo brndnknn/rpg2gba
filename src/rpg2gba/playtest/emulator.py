@@ -22,7 +22,6 @@ from ..traversal.graph import MapGraph, build_map_graph
 from .charmap import invert_charmap_english_first
 from .contact_sheet import Waypoint
 from .contradictions import (
-    KIND_REPLAY_FALLBACK,
     KIND_UNRESOLVED_MAP,
     KIND_WALKABILITY,
     Contradiction,
@@ -821,11 +820,6 @@ class Emulator:
         # attribute so the runner can drain it into the run artifact and a
         # test can inspect it; nothing may branch on its contents.
         self.contradictions = ContradictionLedger()
-        # The inherited beat currently running (`<owner>:<name>`), or None
-        # for a beat the chapter under test owns. Set per beat by `runner`;
-        # read only by `_walk_to_once`'s replay fallback, whose docstring
-        # carries the rationale and the expiry.
-        self.replay_beat: str | None = None
         # Q7's frame rule: how many times this beat explicitly pinned a
         # frame. `waypoint()` clears it, so it is per-beat exactly like
         # `_frame_pinned`.
@@ -3263,7 +3257,6 @@ def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
     # keep today's wait-it-out behaviour unchanged.
     start_locked = emu.field_locked()
     reason = f"walk_to({tx},{ty}) made no progress"
-    plan_failed = False
     for _ in range(_MAX_REPLANS):
         stuck = False
         # A planning failure is a stuck iteration, not an instant abort: it
@@ -3276,9 +3269,6 @@ def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
             waypoints = emu._route_waypoints(tx, ty)
         except RoutePlanningError as exc:
             stuck, reason, waypoints = True, str(exc), ()
-            plan_failed = True
-        else:
-            plan_failed = False
         for wx, wy in waypoints:
             arrived, used, why = emu._walk_greedy(
                 wx, wy, frame_budget - spent, max_sidesteps, start_map,
@@ -3293,98 +3283,7 @@ def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
             break
         emu.run(_REPLAN_WAIT)
         spent += _REPLAN_WAIT
-    if plan_failed and _replay_fallback_beat(emu):
-        _walk_unplanned_for_replay(emu, tx, ty, frame_budget - spent,
-                                   max_sidesteps, start_map, start_locked,
-                                   reason)
-        return
     shot = emu.screenshot("walk_stuck")
     raise ScenarioError(f"{reason} ({shot})")
 
 
-def _replay_fallback_beat(emu: "Emulator") -> str | None:
-    """The inherited beat currently running, if the replay fallback applies.
-
-    `runner` sets `emu.replay_beat` to the beat's own name for a beat that
-    came from `ChapterBuilder(predecessor=...)` and to `None` for a beat the
-    chapter under test owns. `None`/absent means no fallback: the chapter
-    being tested is always held to the strict planner.
-    """
-    return getattr(emu, "replay_beat", None)
-
-
-def _walk_unplanned_for_replay(
-    emu: "Emulator", tx: int, ty: int, frame_budget: int, max_sidesteps: int,
-    start_map, start_locked: bool, reason: str,
-) -> None:
-    """Walk greedily at the bare target, with none of the planner's
-    avoid-set -- the degrade f705b642 removed, restored for INHERITED beats
-    only and recorded every time it fires.
-
-    Why it is back at all: CH01-CH04's beats were authored while this degrade
-    fired on every planning failure, so their declared coordinates have never
-    been held to a strict planner. The router is new; CH05 is the run that
-    proves it. Failing an inherited beat on a route its own chapter never
-    committed to tests the wrong thing and blocks the replay that only exists
-    to reach CH05's starting state. `_close_walk` already draws this exact
-    line for the walked-path oracle, and for the same reason: an inherited
-    beat is replayed to reach a state, it is not the artifact under test.
-
-    Why it is narrow:
-
-    - INHERITED ONLY. A beat the chapter owns never reaches here, so CH05's
-      own 19 beats get the strict planner with no exception.
-    - PLANNING FAILURES ONLY. A leg that planned fine and then got stuck is
-      not this case and still fails loud; only `RoutePlanningError` after
-      `_MAX_REPLANS` degrades.
-    - AFTER the retry loop, never instead of it. A patrolling NPC still
-      recovers by waiting and re-planning; this is the last resort.
-    - RECORDED, never silent (`KIND_REPLAY_FALLBACK`). The finding lands in
-      the run's ledger with the beat's name, so a green replay that leaned on
-      it says so in its own artifact. What §4.5 forbids is the silence.
-
-    Why it expires: the gate is `emu.replay_beat`, which the runner derives
-    from the `<owner>:<name>` prefix `ChapterBuilder` puts on inherited beats.
-    Re-derive CH01 and run it as its own chapter and its beats are unprefixed,
-    so they get the strict planner automatically. Nothing here has to be
-    remembered and removed -- when CH01-CH04 have been re-run through the new
-    beat pipeline, this function is dead code and should be deleted.
-
-    Standing hazard while it lives: this is the walk that crossed Timothy's
-    event-touch tile in CH04's B3 and fought the wrong trainer while both
-    guards passed. An inherited beat can still pass for the wrong reason. The
-    ledger entry is where to look first when a CH05 beat fails for no reason
-    its own code explains.
-    """
-    beat = _replay_fallback_beat(emu)
-    logger.warning(
-        "[replay fallback] %s: walk_to(%d,%d) could not be planned after %d "
-        "re-plans (%s) -- walking greedily on the bare target with no "
-        "avoid-set, because this is an INHERITED beat. Recorded as a carried "
-        "finding; this beat's result is weaker evidence than a planned one.",
-        beat, tx, ty, _MAX_REPLANS, reason)
-    try:
-        emu.contradictions.record(Contradiction(
-            kind=KIND_REPLAY_FALLBACK,
-            beat="",  # stamped at the beat boundary by `_close_walk`
-            detail=(f"walk_to({tx},{ty}) was walked unplanned: {reason}"),
-            model="the route planner found no route",
-            measurement="walked greedily on the bare target",
-            assumption=(
-                "an inherited beat replays to reach state and predates the "
-                "strict planner, so the walk proceeds unprotected"),
-            cell=(tx, ty),
-        ))
-    except AttributeError:
-        # Lightweight walk fakes predate the ledger -- same degrade shape
-        # `_close_walk` uses for them. The WARNING above still fired.
-        pass
-    arrived, _used, why = emu._walk_greedy(
-        tx, ty, frame_budget, max_sidesteps, start_map,
-        start_locked=start_locked)
-    if not arrived:
-        # The fallback is a relaxation of PLANNING, not of arrival. A greedy
-        # walk that still cannot reach the tile is a real failure and stays
-        # loud -- otherwise this would be the silent-degrade shape twice over.
-        shot = emu.screenshot("walk_stuck")
-        raise ScenarioError(f"{why} ({shot})")

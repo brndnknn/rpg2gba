@@ -319,24 +319,23 @@ def lab_doorstep(emu: Emulator) -> None:
     house -> west across Map032's fence row to fire Theo's cameo -> walk to the
     lab door tile -> in-game save.
 
-    Coordinates are the moki chapter's, imported rather than re-derived so
-    there is one place to fix if a re-walk moves them.
+    Coordinates are the hand-written moki chapter's (`playtest/chapters/
+    ch01.py`, ROM-verified), carried here when that suite was deleted
+    (2026-10-03). The fence trip is a westward step off (27,17): the
+    converter relocates EV074's impassable RMXP touch trigger onto the
+    standable (26,13)..(26,17) column.
     """
-    from .chapters.ch01 import (
-        AUNTIE_INTERACT,
-        FENCE_TRIP_APPROACH,
-        FENCE_TRIP_DIRECTION,
-        HOUSE1F_EXIT_APPROACH,
-        HOUSE1F_EXIT_DIRECTION,
-        LAB_DOOR_MOKI_TOWN,
-        _try_step,
-        _wait_for_map,
-    )
+    from .assertions import try_step, wait_for_map
+
+    auntie_interact = (4, 5)
+    house1f_exit_approach, house1f_exit_direction = (10, 10), "DOWN"
+    fence_trip_approach, fence_trip_direction = (27, 17), "LEFT"
+    lab_door_moki_town = (17, 11)
 
     emu.run(BOOT_FRAMES)
 
     # Auntie — the 1F exit stays blocked until she's talked to.
-    emu.walk_to(*AUNTIE_INTERACT)
+    emu.walk_to(*auntie_interact)
     emu.face("UP")
     emu.interact()
     emu.advance_dialog()
@@ -344,15 +343,15 @@ def lab_doorstep(emu: Emulator) -> None:
         raise ScenarioError("FLAG_SYS_B_DASH not set — Auntie's scene didn't run")
 
     # Out of the house into Map032.
-    emu.walk_to(*HOUSE1F_EXIT_APPROACH)
-    _try_step(emu, HOUSE1F_EXIT_DIRECTION)
-    _wait_for_map(emu, "lab-doorstep", "MAP_MOKI_TOWN")
+    emu.walk_to(*house1f_exit_approach)
+    try_step(emu, house1f_exit_direction)
+    wait_for_map(emu, "lab-doorstep", "MAP_MOKI_TOWN")
     emu.wait_for_map_grid()
 
     # Theo's cameo fires on a westward step off the fence row; it's an autorun
     # conversation, so let it play out before moving on.
-    emu.walk_to(*FENCE_TRIP_APPROACH)
-    _try_step(emu, FENCE_TRIP_DIRECTION)
+    emu.walk_to(*fence_trip_approach)
+    try_step(emu, fence_trip_direction)
     emu.advance_dialog()
     emu.run(60)
 
@@ -360,7 +359,7 @@ def lab_doorstep(emu: Emulator) -> None:
     # tile below (TryDoorWarp only fires for DIR_NORTH), so parking here means
     # the ROM boots with the doorway one step away and nothing pre-triggered —
     # walking in is the player's job.
-    emu.walk_to(LAB_DOOR_MOKI_TOWN[0], LAB_DOOR_MOKI_TOWN[1] + 1)
+    emu.walk_to(lab_door_moki_town[0], lab_door_moki_town[1] + 1)
     emu.face("UP")
     emu.screenshot("lab_doorstep")
     save_in_game(emu)

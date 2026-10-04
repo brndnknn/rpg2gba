@@ -33,16 +33,6 @@ def test_flag_ssa_explicit_letter_and_zero_padding() -> None:
     assert assertions.flag_ssa(31, 14, "D") == "FLAG_MAP031_EVENT014_SSD"
 
 
-def test_route1_flag_ssa_wrapper_matches_general_form() -> None:
-    """`ch02.py`'s `_flag_ssa(event_id, letter)` is now a thin wrapper over
-    `assertions.flag_ssa(33, event_id, letter)` -- pin that it produces the
-    exact same string the old hardcoded-Map033 implementation did."""
-    from rpg2gba.playtest.chapters import ch02
-
-    assert ch02._flag_ssa(18) == "FLAG_MAP033_EVENT018_SSA" == assertions.flag_ssa(33, 18)
-    assert ch02._flag_ssa(18, "B") == assertions.flag_ssa(33, 18, "B")
-
-
 # -- small fakes ---------------------------------------------------------------
 
 class _FakeEmu:
@@ -417,44 +407,6 @@ def test_party_has_species_false_when_absent_or_empty() -> None:
     emu = _party_emu([1, 2])
     assert assertions.party_has_species(emu, 129) is False
     assert assertions.party_has_species(_party_emu([]), 129) is False
-
-
-# -- structural: the refactor must not change any chapter's registered beats -
-
-def test_beat_counts_unchanged_after_the_assertions_refactor() -> None:
-    """Pins finding H's promotion as behaviour-preserving: moving helpers
-    into `assertions.py` must not add, drop, or rename a beat. Import-based,
-    not grep-based -- `ch02.py`/`ch03.py` both contain prose comments
-    describing the `@X.beat(...)` decorator syntax without applying it, so a
-    grep count over-counts (see the task brief this test was written for)."""
-    from rpg2gba.playtest.chapter import load_chapter
-
-    # route1 went 30 -> 31 on 2026-08-27: N5 (re-talking defeated Richey) was
-    # registered once the silent-`Page2` bug it guards was fixed. kevlar
-    # chains route1 as its predecessor, so it carries the same +1.
-    # route1 went 31 -> 32 on 2026-09-13: B18 (the initial white-out anchor,
-    # REDERIVATION_PLAN.md §14.7/§15.6) was registered; kevlar carries the +1.
-    # 2026-09-14: moki 17 -> 18 (N4, the refused Moki rocks); route1 +1 for
-    # that, +4 for the Moki<->Route 1 boundary-claim crossings after B1
-    # (32 -> 37); kevlar carries both, +1 for N7 (the refused Kevlar
-    # boulders) and +4 for the Route 1<->Kevlar crossings after B27 (62 -> 72).
-    # 2026-09-15: moki 18 -> 22 (the 2F stop, B3_up/B3_signs/B3_pc/B3_down);
-    # route1 and kevlar carry the +4 (41, 76).
-    expected = {"CH01": 22, "CH02": 41, "CH03": 76}
-    for name, count in expected.items():
-        chapter = load_chapter(name)
-        assert len(chapter.beats) == count, f"{name}: beat count drifted"
-
-
-def test_deferred_tuples_survive_the_refactor_intact() -> None:
-    """`ch02.DEFERRED_ROCK_GATED` and `ch03.DEFERRED_BEATS` are inert
-    tuples of undecorated functions that no registered beat touches --
-    ready-made regression tests for content years away. The refactor must
-    not disturb their entry counts."""
-    from rpg2gba.playtest.chapters import ch02, ch03
-
-    assert len(ch02.DEFERRED_ROCK_GATED) == 10
-    assert len(ch03.DEFERRED_BEATS) == 10
 
 
 # -- talk_to_moving_npc: the NPC does not stay where it spawned ---------------

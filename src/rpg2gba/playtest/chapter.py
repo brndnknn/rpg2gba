@@ -79,11 +79,13 @@ logger = logging.getLogger(__name__)
 
 BeatFn = Callable[["Emulator"], None]
 
-#: Which chapter-module package a name resolves against: "hand" is the
-#: hand-written `playtest.chapters` package (the default, unchanged
-#: behaviour); "gen" is the beat-gen-written `playtest.chapters_gen`
-#: sibling (C9 rulings). See `load_chapter`/`load_chapter_module` and
-#: `ChapterBuilder.suite`.
+#: Which chapter-module package a name resolves against: "gen" is the
+#: beat-gen-written `playtest.chapters_gen` package and the default for every
+#: loader (2026-10-03, after the C9/P11 gate); "hand" is the hand-written
+#: `playtest.chapters` package, emptied the same day -- CH01-CH05's hand
+#: suites were deleted once the generated ones passed. It survives as a
+#: second package for `ChapterBuilder.suite` and the loader tests. See
+#: `load_chapter`/`load_chapter_module` and `ChapterBuilder.suite`.
 Suite = Literal["hand", "gen"]
 
 # Row-id parsing is `chapter_manifest.schema.parse_row_id` now (C1,
@@ -761,25 +763,28 @@ _SUITE_PACKAGES: dict[Suite, str] = {"hand": "chapters", "gen": "chapters_gen"}
 
 
 def chapter_names() -> list[str]:
-    """Every module under `rpg2gba.playtest.chapters`, sorted."""
+    """Every chapter module of the default ("gen") suite, sorted."""
+    return gen_chapter_names()
+
+
+def hand_chapter_names() -> list[str]:
+    """Every module under `rpg2gba.playtest.chapters` (the "hand" suite),
+    sorted. Empty since 2026-10-03."""
     from . import chapters
 
     return sorted(m.name for m in pkgutil.iter_modules(chapters.__path__))
 
 
 def gen_chapter_names() -> list[str]:
-    """Every module under `rpg2gba.playtest.chapters_gen`, sorted -- the
-    "gen" suite's counterpart to `chapter_names()` above. Generated modules
-    land here one chapter at a time (C9 rulings), so this list is typically
-    a strict subset of `chapter_names()`."""
+    """Every module under `rpg2gba.playtest.chapters_gen`, sorted."""
     from . import chapters_gen
 
     return sorted(m.name for m in pkgutil.iter_modules(chapters_gen.__path__))
 
 
-def load_chapter_module(name: str, *, suite: Suite = "hand") -> ModuleType:
-    """Import and return `rpg2gba.playtest.chapters.<name>` (`suite="hand"`,
-    the default) or `rpg2gba.playtest.chapters_gen.<name>` (`suite="gen"`).
+def load_chapter_module(name: str, *, suite: Suite = "gen") -> ModuleType:
+    """Import and return `rpg2gba.playtest.chapters_gen.<name>` (`suite="gen"`,
+    the default) or `rpg2gba.playtest.chapters.<name>` (`suite="hand"`).
 
     `load_chapter` (below) is what most callers want -- it hands back the
     built `Chapter`, which holds only the beats that were actually
@@ -808,18 +813,15 @@ def load_chapter_module(name: str, *, suite: Suite = "hand") -> ModuleType:
         # broken gen module would fall back to the hand suite without a word.
         if exc.name != target:
             raise
-        if suite == "hand":
-            raise KeyError(
-                f"no chapter {name!r}; known chapters: {chapter_names()}") from exc
+        known = gen_chapter_names() if suite == "gen" else hand_chapter_names()
         raise KeyError(
             f"no chapter {name!r} in suite {suite!r}; "
-            f"known gen chapters: {gen_chapter_names()}") from exc
+            f"known {suite} chapters: {known}") from exc
 
 
-def load_chapter(name: str, *, suite: Suite = "hand") -> Chapter:
+def load_chapter(name: str, *, suite: Suite = "gen") -> Chapter:
     """Import `rpg2gba.playtest.chapters(_gen).<name>` and return its
-    `CHAPTER` (`suite="hand"` by default -- unchanged for every existing
-    caller)."""
+    `CHAPTER` (`suite="gen"` by default)."""
     module = load_chapter_module(name, suite=suite)
     chapter = getattr(module, "CHAPTER", None)
     if not isinstance(chapter, Chapter):

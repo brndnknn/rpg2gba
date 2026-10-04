@@ -149,14 +149,14 @@ def test_predecessor_beats_keep_locations(monkeypatch) -> None:
 # like a plausible MAP_* symbol -----------------------------------------------
 
 def _all_real_chapter_names() -> list[str]:
-    from rpg2gba.playtest import chapters
-    return sorted(m.name for m in pkgutil.iter_modules(chapters.__path__))
+    from rpg2gba.playtest import chapters_gen
+    return sorted(m.name for m in pkgutil.iter_modules(chapters_gen.__path__))
 
 
 def test_all_declared_map_constants_look_plausible() -> None:
     checked_any = False
     for name in _all_real_chapter_names():
-        module = importlib.import_module(f"rpg2gba.playtest.chapters.{name}")
+        module = importlib.import_module(f"rpg2gba.playtest.chapters_gen.{name}")
         chapter = module.CHAPTER
         for beat in chapter.beats:
             for loc in beat.locations:

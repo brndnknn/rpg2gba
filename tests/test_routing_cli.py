@@ -3,7 +3,7 @@
 Follows `tests/test_chapter_manifest_cli.py`'s style (CliRunner, tmp_path
 fixtures for `--build-dir`/`--chapters`/`--manifest`) and the chapter-module-
 faking technique from `tests/test_chapter_predecessor.py` (a fake module
-dropped into `sys.modules` under `rpg2gba.playtest.chapters.<name>`, since
+dropped into `sys.modules` under `rpg2gba.playtest.chapters_gen.<name>`, since
 `load_chapter` is just `importlib.import_module` + `getattr(..., "CHAPTER")`).
 
 `build_map_graph`/`build_trigger_overlay`/`build_world_graph`/`build_occupancy`
@@ -37,7 +37,7 @@ from rpg2gba.routing.__main__ import cli
 from rpg2gba.routing.plan import load_plan
 import rpg2gba.routing.__main__ as routing_main
 
-PKG = "rpg2gba.playtest.chapters"
+PKG = "rpg2gba.playtest.chapters_gen"  # the default suite since 2026-10-03
 MAP_ID = 101
 
 

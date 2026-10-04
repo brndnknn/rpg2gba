@@ -219,159 +219,51 @@ def test_persistent_planning_failure_surfaces_the_diagnosis() -> None:
     assert "sealed room, distinctive text" in str(exc.value)
 
 
-# --- the replay fallback, scoped to inherited beats ----------------------
+# --- no replay fallback ---------------------------------------------------
 #
-# CH01-CH04's beats were authored while the degrade above was unconditional,
-# so their coordinates have never faced a strict planner. `_walk_to_once`
-# restores it for INHERITED beats only, as scaffolding until those chapters
-# are re-derived. These tests pin the scope, because a fallback that leaks
-# into the chapter under test is the B3 bug again.
-
-
-class _NeverPlansRecordingEmu:
-    """Never plans, always walks. Carries a real ledger so the fallback's
-    recording is observable, and a `replay_beat` the test sets."""
-
-    def __init__(self, replay_beat: str | None) -> None:
-        from rpg2gba.playtest.contradictions import ContradictionLedger
-        self.replay_beat = replay_beat
-        self.contradictions = ContradictionLedger()
-        self.greedy_targets: list[tuple[int, int]] = []
-        self.shots = 0
-
-    def wait_for_map_grid(self, frame_budget: int = 300) -> int:
-        return 0
-
-    def map_location(self) -> tuple[int, int]:
-        return (3, 7)
-
-    def field_locked(self) -> bool:
-        return False
-
-    def run(self, frames: int, keys=None) -> None:
-        pass
-
-    def _route_waypoints(self, tx: int, ty: int):
-        raise RoutePlanningError("TRANSIENT: distinctive diagnosis text")
-
-    def _walk_greedy(self, wx, wy, budget, sidesteps, start_map, *,
-                     start_locked):
-        self.greedy_targets.append((wx, wy))
-        return True, 10, ""
-
-    def screenshot(self, name: str) -> str:
-        self.shots += 1
-        return "shot.png"
+# Inherited (`<owner>:<name>`) beats once got an unplanned greedy walk when
+# the planner failed, because the hand CH01-CH04 coordinates predated the
+# strict planner. That fallback was deleted with the hand suites
+# (REDERIVATION_PLAN.md P10, 2026-10-03; it fired 0 times across all five
+# generated walks). Every beat is now held to the planner.
 
 
 @needs_mgba
-def test_inherited_beat_falls_back_to_an_unplanned_walk() -> None:
-    """An inherited beat whose leg cannot be planned still walks.
-
-    The replay of CH01-CH04 exists to reach CH05's starting state; failing it
-    on a route its own chapter never committed to blocks the run without
-    testing anything. `_close_walk` already exempts inherited beats from the
-    walked-path oracle for the same reason.
-    """
+def test_an_unplannable_leg_fails_loud_and_walks_nothing() -> None:
+    from rpg2gba.playtest.contradictions import ContradictionLedger
     from rpg2gba.playtest.emulator import _walk_to_once
 
-    emu = _NeverPlansRecordingEmu(replay_beat="CH02:B17")
-    _walk_to_once(emu, 15, 6, frame_budget=3000, max_sidesteps=8)
+    class _NeverPlansEmu:
+        def __init__(self) -> None:
+            self.contradictions = ContradictionLedger()
+            self.greedy_targets: list[tuple[int, int]] = []
 
-    assert emu.greedy_targets[-1] == (15, 6), "walked at the bare target"
-    assert emu.shots == 0, "the walk succeeded, so nothing was screenshotted"
+        def wait_for_map_grid(self, frame_budget: int = 300) -> int:
+            return 0
 
+        def map_location(self) -> tuple[int, int]:
+            return (3, 7)
 
-@needs_mgba
-def test_the_chapter_under_test_never_gets_the_fallback() -> None:
-    """A beat the chapter owns (`replay_beat is None`) still fails loud.
+        def field_locked(self) -> bool:
+            return False
 
-    This is the property that keeps CH05 an honest test of the router. If
-    this ever passes by walking, the fallback has leaked out of the replay
-    and the new pipeline is being proved against the old degrade.
-    """
-    from rpg2gba.playtest.emulator import _walk_to_once
+        def run(self, frames: int, keys=None) -> None:
+            pass
 
-    emu = _NeverPlansRecordingEmu(replay_beat=None)
+        def _route_waypoints(self, tx: int, ty: int):
+            raise RoutePlanningError("TRANSIENT: distinctive diagnosis text")
 
+        def _walk_greedy(self, wx, wy, budget, sidesteps, start_map, *,
+                         start_locked):
+            self.greedy_targets.append((wx, wy))
+            return True, 10, ""
+
+        def screenshot(self, name: str) -> str:
+            return "shot.png"
+
+    emu = _NeverPlansEmu()
     with pytest.raises(ScenarioError) as exc:
         _walk_to_once(emu, 15, 6, frame_budget=3000, max_sidesteps=8)
     assert "distinctive diagnosis text" in str(exc.value)
     assert emu.greedy_targets == [], "nothing may be walked unplanned"
-
-
-@needs_mgba
-def test_the_fallback_is_recorded_as_a_carried_finding() -> None:
-    """§4.5 forbids the silence, not the walk.
-
-    A replay that leaned on the fallback is weaker evidence than one that did
-    not, and the difference has to survive into the run artifact -- this is
-    the walk that fought the wrong trainer in CH04's B3 and passed both
-    guards. The beat name is left blank here and stamped at the beat boundary
-    by `_close_walk`, the same handoff `_plan_route`'s findings use.
-    """
-    from rpg2gba.playtest.contradictions import KIND_REPLAY_FALLBACK
-    from rpg2gba.playtest.emulator import _walk_to_once
-
-    emu = _NeverPlansRecordingEmu(replay_beat="CH02:B17")
-    _walk_to_once(emu, 15, 6, frame_budget=3000, max_sidesteps=8)
-
-    entries = emu.contradictions.entries
-    assert len(entries) == 1
-    assert entries[0].kind == KIND_REPLAY_FALLBACK
-    assert entries[0].cell == (15, 6)
-    assert entries[0].beat == ""  # stamped later, by the runner's boundary
-    assert "distinctive diagnosis text" in entries[0].detail
-
-
-@needs_mgba
-def test_the_fallback_relaxes_planning_but_not_arrival() -> None:
-    """A greedy walk that still cannot reach the tile is a real failure.
-
-    The fallback drops the planner's avoid-set; it does not make an unwalked
-    tile count as walked. Letting it swallow this too would be the silent
-    degrade twice over.
-    """
-    from rpg2gba.playtest.emulator import _walk_to_once
-
-    class _NeverArrivesEmu(_NeverPlansRecordingEmu):
-        def _walk_greedy(self, wx, wy, budget, sidesteps, start_map, *,
-                         start_locked):
-            self.greedy_targets.append((wx, wy))
-            return False, 10, "greedy walk got stuck too"
-
-    emu = _NeverArrivesEmu(replay_beat="CH02:B17")
-
-    with pytest.raises(ScenarioError) as exc:
-        _walk_to_once(emu, 15, 6, frame_budget=3000, max_sidesteps=8)
-    assert "greedy walk got stuck too" in str(exc.value)
-
-
-@needs_mgba
-def test_a_stuck_leg_that_planned_fine_does_not_get_the_fallback() -> None:
-    """Only PLANNING failures degrade.
-
-    A leg that planned and then got stuck is a different failure -- the route
-    was committed to and the walk could not execute it -- and the fallback
-    must not convert it into an unprotected walk on the bare target, even for
-    an inherited beat.
-    """
-    from rpg2gba.playtest.emulator import _walk_to_once
-
-    class _PlansButStuckEmu(_NeverPlansRecordingEmu):
-        def _route_waypoints(self, tx: int, ty: int):
-            return [(9, 9), (tx, ty)]
-
-        def _walk_greedy(self, wx, wy, budget, sidesteps, start_map, *,
-                         start_locked):
-            self.greedy_targets.append((wx, wy))
-            return False, 10, "leg to (9,9) made no progress"
-
-    emu = _PlansButStuckEmu(replay_beat="CH02:B17")
-
-    with pytest.raises(ScenarioError) as exc:
-        _walk_to_once(emu, 15, 6, frame_budget=3000, max_sidesteps=8)
-    assert "leg to (9,9) made no progress" in str(exc.value)
-    assert emu.contradictions.entries == [], "no fallback was taken"
-    assert all(t == (9, 9) for t in emu.greedy_targets), \
-        "the bare target was never walked at"
+    assert emu.contradictions.entries == []

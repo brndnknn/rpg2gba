@@ -41,7 +41,7 @@ def list_chapters() -> None:
     """List available chapters and their beats."""
     names = chapter_names()
     if not names:
-        click.echo("no chapters found under rpg2gba.playtest.chapters")
+        click.echo("no chapters found under rpg2gba.playtest.chapters_gen")
         return
     for name in names:
         chapter = load_chapter(name)
@@ -67,7 +67,7 @@ def list_chapters() -> None:
 @click.option("--beat-timeout", type=int, default=DEFAULT_BEAT_TIMEOUT_S,
               help="Per-beat wall-clock hang budget in seconds (Q10). "
                    f"Default: {DEFAULT_BEAT_TIMEOUT_S}.")
-@click.option("--suite", type=click.Choice(["hand", "gen"]), default="hand",
+@click.option("--suite", type=click.Choice(["hand", "gen"]), default="gen",
               show_default=True, help="Load the chapter from the hand-written "
                    "or beat-gen-generated module suite.")
 def run(chapter: str, from_beat: str | None, rom: Path | None, engine: Path,
@@ -134,7 +134,7 @@ def run(chapter: str, from_beat: str | None, rom: Path | None, engine: Path,
               help="Verify by booting the built ROM with a foreign save paired, "
                    "to prove the embedded state wins over any .sav residue on "
                    "the target device.")
-@click.option("--suite", type=click.Choice(["hand", "gen"]), default="hand",
+@click.option("--suite", type=click.Choice(["hand", "gen"]), default="gen",
               show_default=True, help="Load the chapter from the hand-written "
                    "or beat-gen-generated module suite.")
 def walk_cmd(chapter: str, at_beat: str | None, at_end: bool, rom: Path | None,
@@ -191,7 +191,7 @@ def walk_cmd(chapter: str, at_beat: str | None, at_end: bool, rom: Path | None,
               help="Engine build dir (map/elf must match the ROM)")
 @click.option("--output", type=click.Path(path_type=Path), default=None,
               help="Output root for artifacts (default: output/playtest)")
-@click.option("--suite", type=click.Choice(["hand", "gen"]), default="hand",
+@click.option("--suite", type=click.Choice(["hand", "gen"]), default="gen",
               show_default=True, help="Load the chapter from the hand-written "
                    "or beat-gen-generated module suite.")
 def seeds_cmd(chapter: str, rom: Path | None, engine: Path,

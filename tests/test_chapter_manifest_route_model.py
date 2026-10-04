@@ -37,7 +37,7 @@ from rpg2gba.routing.plan import (
     write_plan,
 )
 
-PKG = "rpg2gba.playtest.chapters"
+PKG = "rpg2gba.playtest.chapters_gen"  # the default suite since 2026-10-03
 
 
 def _install_chapter(name: str, group_ids: list[str]) -> None:
@@ -64,7 +64,7 @@ def _install_chapter_with_predecessor(
     `ChapterBuilder(predecessor=...)` so the built chapter's `groups()`
     genuinely contains inherited `<predecessor>:<group>` ids via the real
     `_prefix_beat` path, not a hand-fabricated `":"`-containing id."""
-    builder = ChapterBuilder(name, f"{name} test chapter", predecessor=predecessor)
+    builder = ChapterBuilder(name, f"{name} test chapter", predecessor=predecessor, suite="gen")
     for group_id in group_ids:
         def _run(emu: object) -> None:  # pragma: no cover - never executed
             raise AssertionError("beat body must not run in this test")

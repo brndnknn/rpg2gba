@@ -17,6 +17,37 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 124. The manifest layer is still keyed to the deleted hand suites — re-key before CH06
+
+The hand suites were deleted 2026-10-03 (operator: remove now, re-key later).
+Everything built around their beat names still is. Measured that day with the
+loaders pointed at the generated suites, `chapter_manifest check` (already red
+on the generator backlog) gains:
+
+- **`derived_verdict_mismatch`** CH01 79 / CH02 38 / CH03 63 / CH05 3 — the
+  `CHnn.derived.json` sidecars record hand names (`beat:B5`), the checker now
+  derives generated ones (`beat:m032e003`). Clerical: regenerate the sidecars.
+- **`unregistered_beat`** CH04 11 / CH05 21 (warnings) — ~32 hand-affirmed
+  `beat:Bn` verdicts in `CHnn.dispositions.json` name beats that no longer
+  exist. Needs a ruling on rewriting affirmed entries.
+- **`floor_uncovered`** CH01 96 / CH02 16 / CH03 39 / CH04 6 / CH05 7 — the
+  checker's ⊇-floor rule disagrees with the C9 grader. Part is the grader's
+  ruling 7 (audio/visual/displacement ungraded); part is rows the generated
+  suites don't claim in that chapter (random talk arms, stacked exits,
+  boundary warps). Not root-caused.
+- **`route_order`** CH05 27 — generated CH05 checked against the hand route
+  plan `reference/routes/CH05.route.json` (#120's other face).
+
+Runtime face of the same gap: `playtest.chapter.resolved_trigger_scripts`
+matches inherited beat names against the predecessor's `beat:Bn`
+dispositions, so for a generated chapter it resolves **nothing** (it already
+did on the ROM-green gen walks; the flip changed nothing). The route solver
+and the walk oracle therefore get no inherited-trigger exemption. Keying it
+on inherited beats' `rows=` instead is the fix, but it changes the solver's
+input and so the generated modules — regenerate and re-review on the diff.
+Its CH05 test was deleted with the hand suites. **To close:** all of the
+above, before CH06's `chapter_manifest check` is relied on.
+
 ### 123. `resolved_trigger_scripts` treats "the beat passed" as "the script ran"
 
 Moved from `REDERIVATION_PLAN.md` §4 at P10 (2026-10-03) so it survives the plan's

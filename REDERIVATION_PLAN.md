@@ -25,8 +25,10 @@ and §13. Branch `rederive-ch01-ch04`.
 C1–C10); P8a-2 is retired and §15.3's residue becomes the generator's backlog. Read §16 before
 any further P8 work.
 
-**2026-10-03: C9 committed (`67a88c1e`) and P11 passed (operator).** C10 deferred to CH06 (#122). Before merge:
-a full suite run, then hand-suite removal as its own commit.
+**2026-10-03: C9 committed (`67a88c1e`) and P11 passed (operator).** C10 deferred to CH06 (#122). P10 and the
+hand-suite removal landed together the same day; the manifest layer is still keyed to the
+hand beat names (`PROJECT_TODO.md` #124, operator: re-key before CH06). Next: merge to `main`,
+then P12.
 
 ---
 
@@ -211,7 +213,7 @@ prerequisite.
 | **P8c** | **Generated beats** — branch-arm rows, story-state model, engine forks, generic extractor floor with layered archetypes, whole-module generator, Ruby-subset interpreter, CH01–CH05 regenerated behind a freeze, offline flavour checks. Steps C1–C10 in §16.3. | §16 | **C1–C9 DONE** (C9 `67a88c1e`, 2026-10-03); C10 deferred to CH06 (#122) |
 | **P8b** | **Generate the disposition files** — derive `cosmetic`/`blocked`/`unreachable`/`boundary`, join `beat:` off P8a-1's `rows=` (which now exist), hand-decide the **100**-row residue (measured; §13.1's ~109 was close). Affirmation is a separate pass from derivation. Carries §10 R2/R3's flip on CH04+CH05. **Read §14 first — it carries the operator's four rulings and corrects four claims made elsewhere in this plan.** Precedence is `boundary` > `beat` > `blocked` > `cosmetic` (§14.4); clerical rows get `derived_hash`, not `affirmed_hash` (§14.2); and P8b now absorbs **all ten** transpiler work items for the 28 undispositionable rows, item 7 timeboxed (§14.1). | #65 | **DONE** — §15's eight work items and five structural changes committed; `CH01–CH05.{manifest,dispositions,derived}.json` in `reference/manifests/`. §15.3's hand residue was superseded by §16 (generated beats). Closed 2026-10-03 |
 | **P9** | **Route plans** for all four chapters (`routing plan --chapter CHnn --module <mod>`). Still last: `routing locations` hard-fails without P8b's output. | #67 | **DONE by the generator** (closed 2026-10-03) — `beat_gen generate` solves each chapter's route with `routing.plan.write_plan` and writes `output/beats/CHnn.route.json` every run; the generated module carries the solved order. Per the C9 rulings only the module is committed. Residual: the runner doesn't grade gen walks against a plan — `PROJECT_TODO.md` #120 |
-| **P10** | **Discharge the inherited obligations** (§4) and delete the scaffolding that expires with this task. | — | **Folded into the hand-suite removal commit** (operator, 2026-10-03): delete `_walk_unplanned_for_replay` + `KIND_REPLAY_FALLBACK` (0 firings across all five gen walks); the `ch04`/`ch02`/`ch03`/`ch05` hand-module IOUs die with the hand suites; retarget `test_chapter_archetypes.py` to the gen suites; delete the P7 freeze scaffolding (`scripts/{freeze,diff}_rederivation.py`, `reference/frozen/rederivation/`, `tests/test_rederivation_freeze.py`). The `resolved_trigger_scripts` limitation moves to `PROJECT_TODO.md` #123 |
+| **P10** | **Discharge the inherited obligations** (§4) and delete the scaffolding that expires with this task. | — | **DONE 2026-10-03, in the hand-suite removal commit** (operator): deleted `_walk_unplanned_for_replay` + `KIND_REPLAY_FALLBACK` (0 firings across all five gen walks); the `ch04`/`ch02`/`ch03`/`ch05` hand-module IOUs die with the hand suites; `test_chapter_archetypes.py` loads the gen suites by default (its hand-CH05 trigger test was deleted, see #124); deleted the P7 freeze scaffolding (`scripts/{freeze,diff}_rederivation.py`, `reference/frozen/rederivation/`, `tests/test_rederivation_freeze.py`, `tests/test_diff_rederivation.py`). The `resolved_trigger_scripts` limitation moved to `PROJECT_TODO.md` #123 |
 
 ### Phase D — gates
 
