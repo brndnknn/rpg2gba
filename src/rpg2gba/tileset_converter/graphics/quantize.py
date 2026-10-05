@@ -190,6 +190,46 @@ def _nearest(colors: np.ndarray, vocab: np.ndarray) -> np.ndarray:
     return ((colors[:, None, :].astype(np.int32) - vocab[None, :, :]) ** 2).sum(2).argmin(1)
 
 
+_REDUCTIONS = ("median_cut", "ward")
+
+
+def _ward_reduce(colors: np.ndarray, weights: np.ndarray, k: int) -> np.ndarray:
+    """Usage-weighted Ward reduction of `colors` (N,3 uint8, 5-bit-expanded) to <=k.
+
+    Works in RGB555 integer space; repeatedly merges the pair minimising
+    w_i*w_j/(w_i+w_j)*||c_i-c_j||^2 (weighted-mean colour, summed weight), so heavily
+    used colours barely move. Returns unique 5-bit-expanded uint8 colours."""
+    c5, inv = np.unique(colors, axis=0, return_inverse=True)
+    inv = np.asarray(inv).reshape(-1)
+    w = np.zeros(len(c5))
+    np.add.at(w, inv, np.asarray(weights, dtype=np.float64))
+    c = (c5 >> 3).astype(np.float64)
+
+    def cost(ci: np.ndarray, wi: np.ndarray, cj: np.ndarray, wj: np.ndarray) -> np.ndarray:
+        return wi * wj / (wi + wj) * ((ci - cj) ** 2).sum(-1)
+
+    n = len(c)
+    if n > k:
+        d = cost(c[:, None], w[:, None], c[None], w[None])
+        np.fill_diagonal(d, np.inf)
+        while len(c) > k:
+            i, j = np.unravel_index(d.argmin(), d.shape)
+            wn = w[i] + w[j]
+            m = (c[i] * w[i] + c[j] * w[j]) / wn
+            keep = np.ones(len(c), bool)
+            keep[[i, j]] = False
+            c = np.concatenate([c[keep], m[None]])
+            w = np.concatenate([w[keep], [wn]])
+            d = d[keep][:, keep]
+            row = cost(c[:-1], w[:-1], m, wn)
+            d = np.pad(d, ((0, 1), (0, 1)))
+            d[-1, :-1] = row
+            d[:-1, -1] = row
+            d[-1, -1] = np.inf
+    q = np.clip(np.round(c), 0, 31).astype(np.uint8)
+    return np.unique((q << 3) | (q >> 2), axis=0).astype(np.uint8)
+
+
 def build_quantized_tileset(
     tiles: list[np.ndarray],
     *,
@@ -199,8 +239,13 @@ def build_quantized_tileset(
     global_colors: int | None = None,
     iterations: int = 8,
     extra_tile_colors: dict[int, np.ndarray] | None = None,
+    reduction: str = "median_cut",
 ) -> QuantizeResult:
     """Quantize a list of 8x8 RGBA tiles into <=`max_palettes` GBA sub-palettes.
+
+    `reduction` picks how a palette still over `colors_per_palette` is cut down:
+    "median_cut" (default, unweighted) or "ward" (pixel-usage-weighted agglomerative
+    merge, see `_ward_reduce`); it only affects that per-palette step.
 
     Input tiles are raw step-3 output (any alpha); binary-alpha resolution and 15-bit
     reduction happen inside. **This is a palette-MERGING (15-colour bin-packing)
@@ -235,6 +280,8 @@ def build_quantized_tileset(
     Returns the sub-palettes, per-tile palette index (-1 = empty tile), the remapped
     RGBA tiles, and loss stats."""
     _ = (weights, iterations)  # retained for API compatibility
+    if reduction not in _REDUCTIONS:
+        raise ValueError(f"unknown reduction {reduction!r}; expected one of {_REDUCTIONS}")
     resolved = [resolve_alpha(t) for t in tiles]
     n = len(tiles)
 
@@ -307,7 +354,14 @@ def build_quantized_tileset(
             idxs = [b for b in range(vocab.shape[0]) if mask & (1 << b)]
             pal = vocab[idxs]
             if len(pal) > colors_per_palette:
-                pal = _median_cut(pal.astype(np.uint8), colors_per_palette).astype(np.int16)
+                if reduction == "ward":
+                    counts = np.bincount(
+                        np.concatenate([tile_gidx[i] for i in mem]), minlength=vocab.shape[0]
+                    )
+                    w = np.maximum(counts[idxs].astype(np.float64), 1e-9)
+                    pal = _ward_reduce(pal.astype(np.uint8), w, colors_per_palette).astype(np.int16)
+                else:
+                    pal = _median_cut(pal.astype(np.uint8), colors_per_palette).astype(np.int16)
             palettes_u8.append(pal.astype(np.uint8))
             for i in mem:
                 tile_palette[i] = pi
@@ -384,6 +438,7 @@ class FamilyParams:
     green_cuts: tuple[float, ...] = ()  # interior hue° in (70,170) splitting green into sub-bands
     palette_floor: int = 1        # minimum palettes guaranteed to each family
     overflow_weight: str = "colors"  # "colors"=distinct overflow; "coverage"=tile-weighted
+    reduction: str = "median_cut"    # per-palette >15-colour cut: "median_cut" | "ward" (usage-weighted)
 
 
 def _dominant_family(tile: np.ndarray, params: FamilyParams = FamilyParams()) -> str | None:
@@ -437,6 +492,7 @@ def _pack_subset(
     quantized: list[np.ndarray | None],
     color_map: list,
     extra_tile_colors: dict[int, np.ndarray] | None = None,
+    reduction: str = "median_cut",
 ) -> int:
     """Quantize ``tiles[idxs]`` into <=``budget`` palettes (no phase-1 vocab cut, so
     the merge stays within the subset) and splice the result into the global lists at
@@ -452,7 +508,7 @@ def _pack_subset(
     )
     r = build_quantized_tileset(
         [tiles[i] for i in idxs], max_palettes=budget, global_colors=_NO_VOCAB_CUT,
-        extra_tile_colors=local_extra,
+        extra_tile_colors=local_extra, reduction=reduction,
     )
     for local_i, gi in enumerate(idxs):
         lp = r.tile_palette[local_i]
@@ -565,5 +621,6 @@ def build_quantized_tileset_family(
     for f, idxs in fam_tiles.items():
         offset = _pack_subset(tiles, idxs, budget[f], offset,
                               palettes, tile_palette, quantized, color_map,
-                              extra_tile_colors=extra_tile_colors)
+                              extra_tile_colors=extra_tile_colors,
+                              reduction=params.reduction)
     return _assemble(tiles, palettes, tile_palette, quantized, color_map)

@@ -51,6 +51,7 @@ from rpg2gba.tileset_converter.graphics.quantize import (
     build_quantized_tileset_family,
 )
 from rpg2gba.tileset_converter.graphics.raster import TileRasterizer, column_in_atlas
+from rpg2gba.tileset_converter.graphics.shared_palettes import make_shared_quantizer
 from rpg2gba.tileset_converter.graphics.sources import (
     load_tileset_sources,
     tileset_source_paths,
@@ -338,6 +339,11 @@ class _QuantView:
 # Seam-palette caches hold only the LATEST entry per key subject, so a changing
 # fingerprint replaces rather than accumulates: component tuple -> (seam_key, palettes)
 # and map id -> (seam_key, view).
+class SeamSharedConflict(ValueError):
+    """?sp=1 (seam palettes) requested while shared palettes (P2) are on. The server
+    maps this to a 400 with the message telling the operator what to untick."""
+
+
 _seam_palette_cache: dict[tuple[int, ...], tuple[tuple, list[np.ndarray]]] = {}
 _seam_view_cache: dict[int, tuple[tuple, _QuantView]] = {}
 
@@ -359,39 +365,85 @@ _seam_view_cache: dict[int, tuple[tuple, _QuantView]] = {}
 # resolution so per-lifetime `+= 1` bumps can't catch up to a later lifetime's seed;
 # still far below JS's 2^53 (nanoseconds would NOT survive the JSON→double round-trip).
 _ENGINE_MAX_PALS = 13  # NUM_PALS_TOTAL — hardware/engine ceiling; knob can only lower it
-_family_params: FamilyParams = FamilyParams()
-_max_palettes: int = _ENGINE_MAX_PALS
+# Two named configurations. ROM-STOCK is exactly what the ROM build does (median cut, no
+# shared palettes) — the oracle/parity checks must run under it. VIEWER-DEFAULT is the
+# preview the viewer boots with (Ward + shared palettes, operator-approved 2026-10-05);
+# the ROM build is unchanged by it. `non_stock` compares against ROM-STOCK.
+ROM_STOCK_PARAMS: FamilyParams = FamilyParams()
+ROM_STOCK_MAX_PALETTES: int = _ENGINE_MAX_PALS
+ROM_STOCK_SHARED: bool = False
+VIEWER_DEFAULT_PARAMS: FamilyParams = FamilyParams(reduction="ward")
+VIEWER_DEFAULT_MAX_PALETTES: int = _ENGINE_MAX_PALS
+VIEWER_DEFAULT_SHARED: bool = True
+_family_params: FamilyParams = VIEWER_DEFAULT_PARAMS
+_max_palettes: int = VIEWER_DEFAULT_MAX_PALETTES
 _quant_generation: int = int(time.time() * 1000)
+# Viewer-only PREVIEW of P2 shared fixed palettes (never reaches the ROM build). Not a
+# FamilyParams field. `_shared_info` holds the latest per-map reservation counts.
+_shared_palettes: bool = VIEWER_DEFAULT_SHARED
+_shared_info: dict[int, dict] = {}
 
 
-def _make_quantizer():
-    """Current packer as a ``(tiles, *, max_palettes) -> QuantizeResult`` callable."""
-    return partial(build_quantized_tileset_family, params=_family_params)
+def _make_quantizer(*, shared: bool = False):
+    """Current packer as a ``(tiles, *, max_palettes) -> QuantizeResult`` callable.
+    ``shared=True`` wraps it with the P2 shared-palette reservation (per-map path only)."""
+    base = partial(build_quantized_tileset_family, params=_family_params)
+    if shared:
+        return make_shared_quantizer(base, family_params=_family_params)
+    return base
 
 
 def current_quantize_state() -> tuple[FamilyParams, int]:
-    """Live (params, max_palettes) — for snapshot/rollback by the server."""
+    """Live (params, max_palettes) — for snapshot/rollback by the server. The
+    viewer-only shared-palettes toggle is separate: ``current_shared_palettes()``."""
     return _family_params, _max_palettes
+
+
+def current_shared_palettes() -> bool:
+    """Live shared-palettes (P2 preview) toggle — snapshot/rollback companion of
+    ``current_quantize_state``."""
+    return _shared_palettes
+
+
+def shared_palettes_from_dict(d: dict) -> bool:
+    """Parse the Apply POST's ``shared_palettes``. A MISSING key means the viewer
+    default (True); a present value is strict (only boolean True is on)."""
+    if "shared_palettes" not in d:
+        return VIEWER_DEFAULT_SHARED
+    return d["shared_palettes"] is True
 
 
 def get_quantize_params() -> dict:
     """Current knob state for injection into the page config (seeds the UI + the
     `generation` cache-bust token). `non_stock` is True when the live knobs differ
-    from stock (`FamilyParams()` defaults, `max_palettes == _ENGINE_MAX_PALS`) —
-    drives the always-visible (non-Advanced-gated) toolbar warning badge."""
+    from the ROM build's (ROM_STOCK_*), so it is True in the viewer-default state;
+    `viewer_default` is True when the live state IS the viewer default. Both drive
+    the always-visible (non-Advanced-gated) toolbar badge."""
     return {
         "generation": _quant_generation,
         "max_palettes": _max_palettes,
-        "non_stock": _family_params != FamilyParams() or _max_palettes != _ENGINE_MAX_PALS,
+        "non_stock": (
+            _family_params != ROM_STOCK_PARAMS or _max_palettes != ROM_STOCK_MAX_PALETTES
+            or _shared_palettes != ROM_STOCK_SHARED
+        ),
+        "viewer_default": (
+            _family_params == VIEWER_DEFAULT_PARAMS
+            and _max_palettes == VIEWER_DEFAULT_MAX_PALETTES
+            and _shared_palettes == VIEWER_DEFAULT_SHARED
+        ),
+        "shared_palettes": _shared_palettes,
         "dark_value": _family_params.dark_value,
         "neutral_sat": _family_params.neutral_sat,
         "green_cuts": list(_family_params.green_cuts),
         "palette_floor": _family_params.palette_floor,
         "overflow_weight": _family_params.overflow_weight,
+        "reduction": _family_params.reduction,
     }
 
 
-def set_quantize_params(params: FamilyParams, max_palettes: int) -> int:
+def set_quantize_params(
+    params: FamilyParams, max_palettes: int, *, shared_palettes: bool | None = None
+) -> int:
     """Update the live family-quant knobs, invalidate the quant-dependent caches, and
     return the new generation token.
 
@@ -401,10 +453,17 @@ def set_quantize_params(params: FamilyParams, max_palettes: int) -> int:
     quant-DEPENDENT caches are dropped (the palette analysis and the post-quant
     metatile PNGs).  Bumping ``_quant_generation`` marks every cached ``_MapState``
     stale; ``_ensure_loaded`` re-runs *only* the quantize step for a map the next time
-    it's touched, so a knob change no longer rebuilds grids or re-renders tiles."""
-    global _family_params, _max_palettes, _quant_generation
+    it's touched, so a knob change no longer rebuilds grids or re-renders tiles.
+
+    ``shared_palettes`` (viewer-only P2 preview toggle) is part of the applied state:
+    it is keyword-only; ``None`` (omitted) keeps the live toggle unchanged (the server
+    snapshots it with ``current_shared_palettes()`` for rollback)."""
+    global _family_params, _max_palettes, _quant_generation, _shared_palettes
     _family_params = params
     _max_palettes = max_palettes
+    if shared_palettes is not None:
+        _shared_palettes = bool(shared_palettes)
+    _shared_info.clear()
     _quant_generation += 1
     _tileset_analysis_cache.clear()
     _metatile_png_cache.clear()
@@ -414,10 +473,28 @@ def set_quantize_params(params: FamilyParams, max_palettes: int) -> int:
     return _quant_generation
 
 
+def set_rom_stock_quantize() -> int:
+    """Put the viewer in the ROM-equivalent config (median cut, no shared palettes,
+    engine max palettes). The oracle/parity checks must call this first."""
+    return set_quantize_params(
+        ROM_STOCK_PARAMS, ROM_STOCK_MAX_PALETTES, shared_palettes=ROM_STOCK_SHARED
+    )
+
+
+def set_viewer_default_quantize() -> int:
+    """Put the viewer in its default preview config (Ward + shared palettes)."""
+    return set_quantize_params(
+        VIEWER_DEFAULT_PARAMS, VIEWER_DEFAULT_MAX_PALETTES,
+        shared_palettes=VIEWER_DEFAULT_SHARED,
+    )
+
+
 def params_from_dict(d: dict) -> tuple[FamilyParams, int]:
     """Parse + clamp a knob dict (from the Apply POST) into (FamilyParams, max_palettes)
     so a malformed value can never crash the packer.  green_cuts are kept only if they
-    fall strictly inside the green band (70, 170)."""
+    fall strictly inside the green band (70, 170).  A MISSING ``reduction`` means the
+    viewer default (ward); a present value is strict (only "ward" selects Ward).
+    ``{}`` therefore parses to the viewer default (the reset path)."""
     mp = max(1, min(_ENGINE_MAX_PALS, int(d.get("max_palettes", _ENGINE_MAX_PALS))))
     cuts = sorted({float(c) for c in d.get("green_cuts", []) if 70.0 < float(c) < 170.0})
     params = FamilyParams(
@@ -426,6 +503,10 @@ def params_from_dict(d: dict) -> tuple[FamilyParams, int]:
         green_cuts=tuple(cuts),
         palette_floor=max(1, min(_ENGINE_MAX_PALS, int(d.get("palette_floor", 1)))),
         overflow_weight=("coverage" if str(d.get("overflow_weight")) == "coverage" else "colors"),
+        reduction=(
+            VIEWER_DEFAULT_PARAMS.reduction if "reduction" not in d
+            else ("ward" if d["reduction"] == "ward" else "median_cut")
+        ),
     )
     return params, mp
 
@@ -533,10 +614,15 @@ def _ensure_tileset_analysis(
             _render_pool_column(ck, raster, priorities, passages, terrain_tags)
             for ck in pool_keys
         ]
+        if quantizer is not None:
+            q = quantizer
+        else:
+            q = _make_quantizer(shared=_shared_palettes)
         analysis = analyze_tileset_palettes(
-            pool_metatiles, max_palettes=_max_palettes,
-            quantizer=quantizer if quantizer is not None else _make_quantizer(),
+            pool_metatiles, max_palettes=_max_palettes, quantizer=q,
         )
+        if quantizer is None and _shared_palettes:
+            _shared_info[map_id] = dict(q.info)
         pool_key_to_idx = {ck: i for i, ck in enumerate(pool_keys)}
 
     _tileset_analysis_cache[cache_key] = (analysis, pool_key_to_idx)
@@ -614,6 +700,11 @@ def _seam_key(map_id: int, seam: bool) -> tuple | None:
     changes the key, so a toggle never serves a stale image."""
     if not seam:
         return None
+    if _shared_palettes:
+        raise SeamSharedConflict(
+            "seam palettes (?sp=1) cannot be combined with shared palettes (P2): "
+            "untick \"shared palettes\" in the knob bar and Apply, then retry"
+        )
     comp = _seam_component(map_id)
     if comp is None:
         return None
@@ -1698,6 +1789,7 @@ def build_map_data(map_id: int, seam: bool = False) -> dict:
             "width": state.map_width,
             "height": state.map_height,
             "atlas": {"cols": ATLAS_COLS, "cell": ATLAS_CELL_PX, "count": len(state.metatile_imgs)},
+            "shared_palettes": _shared_info.get(map_id) if _shared_palettes else None,
         },
         "colkeys_list": colkeys_list,
         "metatile_attrs": metatile_attrs,

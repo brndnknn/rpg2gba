@@ -557,6 +557,8 @@ def run_viewer_mode() -> int:
     import map_viewer_common as mvc
 
     mvc._load_dotenv()
+    # The viewer boots with the Ward + shared-palettes PREVIEW; this compares to the ROM.
+    mvc.set_rom_stock_quantize()
     from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, synth_tileset_id
 
     passed: list[int] = []

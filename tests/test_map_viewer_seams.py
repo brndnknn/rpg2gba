@@ -123,6 +123,7 @@ def seam_env(monkeypatch):
     fps = {"v": 1}
     monkeypatch.setattr(mvc, "_slice_aware_fingerprint", lambda m: ((m, fps["v"]),))
     monkeypatch.setattr(mvc, "_quant_generation", 100)
+    monkeypatch.setattr(mvc, "_shared_palettes", False)  # seam palettes need shared off (viewer default is on)
     mvc._seam_palette_cache.clear()
     mvc._seam_view_cache.clear()
     mvc._tileset_analysis_cache.clear()

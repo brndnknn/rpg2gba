@@ -52,6 +52,8 @@ from map_viewer_common import (  # noqa: E402
     _load_dotenv,
     build_map_data,
     current_quantize_state,
+    current_shared_palettes,
+    shared_palettes_from_dict,
     export_feedback,
     get_quantize_params,
     load_feedback,
@@ -64,6 +66,7 @@ from map_viewer_common import (  # noqa: E402
     seam_check,
     shared_default_maps,
     shared_tiles,
+    SeamSharedConflict,
     set_quantize_params,
 )
 
@@ -280,6 +283,8 @@ class _Handler(BaseHTTPRequestHandler):
             # The browser dropped the request (navigated away, or cancelled a
             # superseded image load) — nobody is left to send an error to.
             log.debug("client went away during %s", self.path)
+        except SeamSharedConflict as exc:
+            self._send(400, "text/plain", str(exc).encode())
         except (FileNotFoundError, KeyError, IndexError) as exc:
             log.warning("404 for %s: %s", self.path, exc)
             self._send(404, "text/plain", str(exc).encode())
@@ -318,11 +323,14 @@ class _Handler(BaseHTTPRequestHandler):
         map_id = int(body.get("map_id", 0))
         with _quant_lock:
             prev_params, prev_max = current_quantize_state()
-            gen = set_quantize_params(params, max_pals)
+            prev_shared = current_shared_palettes()
+            gen = set_quantize_params(
+                params, max_pals, shared_palettes=shared_palettes_from_dict(body)
+            )
             try:
                 build_map_data(map_id)  # eager re-quant; raises ValueError on bad knobs
             except ValueError as exc:
-                set_quantize_params(prev_params, prev_max)  # roll back; keep tool usable
+                set_quantize_params(prev_params, prev_max, shared_palettes=prev_shared)  # roll back; keep tool usable
                 self._send(400, "application/json",
                            json.dumps({"error": str(exc)}).encode("utf-8"))
                 return

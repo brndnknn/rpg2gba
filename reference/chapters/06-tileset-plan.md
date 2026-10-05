@@ -198,6 +198,47 @@ sqrt-damped weights were **worse** everywhere.
 7. **Persisted artifact.** P2's palettes plus the tile→palette table would be a new committed
    intermediate (`.gen.json`). Ask first (CLAUDE.md §10), same as step 2's palette-families file.
 
+### P1 in the viewer — built 2026-10-05 (uncommitted, awaiting operator eye check)
+
+- `FamilyParams.reduction` (`"median_cut"` stock | `"ward"`) → `_pack_subset` →
+  `build_quantized_tileset(reduction=)`; `_ward_reduce` in `quantize.py` (weights =
+  per-vocab-index pixel counts over the palette's member tiles, extra frames count 1).
+  Only the per-palette cut changes; the phase-1 vocab cut is untouched.
+- Viewer: knob-bar "Reduction" select (`knobbar.js`, injected after the overflow
+  control); `params_from_dict`/`get_quantize_params` carry it; honoured in both the
+  per-map and the seam-palette paths; lights the non-stock badge.
+- ROM path untouched (default stock). Oracle Mode B with stock: 18/18, 0 px. No time cost
+  (31/35/40 render times identical). Tests: `tests/test_quantize_ward.py` (7),
+  `tests/test_map_viewer_reduction_knob.py` (9).
+- Not yet: Ward in the ROM build or the oracle (item 6 above). Those follow the operator's
+  approval.
+
+### P2 preview in the viewer — built 2026-10-05 (uncommitted, awaiting operator eye check)
+
+- `graphics/shared_palettes.py`: `ROCK_V1` + `GREEN_G3T` as **provisional constants copied from
+  the research** (not re-derived; open item 5), `fit_palette`, `make_shared_quantizer(base,
+  min_tiles=8, rock_max_shift=1)` — reserves V1 / the 3 greens per map past the threshold, packs
+  the rest with `base` (so Ward composes). **Deviation:** green tiles take the best-SSE green
+  palette, not the research's adjacency-refined table, so mixed-palette grass cells may be worse.
+- Viewer: knob-bar "shared palettes (P2)" checkbox; viewer-only state (`_shared_palettes`, not a
+  `FamilyParams` field); `meta.shared_palettes` carries per-map counts. Combining with `?sp=1`
+  fails loud (reaches the client as a 500, not a 400).
+- Measured (Ward + shared): outdoor maps 31/32/33/35/40 reserve 4 palettes; 19 and 36 are under the
+  threshold. No time cost. **31∩35, 308 common opaque 8×8 source quads: 52 identical after
+  quantization without shared, 186 with.** 11 of 193 shared-palette-coloured quads still differ
+  (not investigated). Stock oracle Mode B still 18/18, 0 px; full suite 4901 passed.
+- **Operator approved the look (2026-10-05): Ward + shared palettes are the VIEWER DEFAULT.**
+  `map_viewer_common` has `ROM_STOCK_*` / `set_rom_stock_quantize()` and `VIEWER_DEFAULT_*` /
+  `set_viewer_default_quantize()`. `non_stock` still means "differs from the ROM build", so the
+  badge is lit by default; knob bar has Reset (viewer default) and ROM view. Oracle Mode B sets
+  the ROM config explicitly. `?sp=1` with shared on returns a 400. **The ROM build is still stock.**
+- **The 11 "differing" tiles are a measurement artefact** (`output/scratch/diff11.md`): all are
+  near-rock browns (best V1 fit max shift 5, so not rock; not green family) that go to the per-map
+  packer on both maps and happen to land on shared-palette colours. Every tile actually pinned on
+  both 31 and 35 (182) is byte-identical; all 122 non-identical common quads are packer tiles.
+  Possible palette-design follow-up: loosen the rock test (e.g. shift ≤5 with SSE ≤~350 catches
+  9 of 11) or add a second rock-ish palette.
+
 ### How this relates to steps 2–4 above
 
 P2 generalises step 2: game-wide groups instead of per-seam components. The two can stack: fixed
