@@ -2,46 +2,61 @@
 """Independent oracle: decode the REAL emitted GBA tileset artifacts and byte-
 compare them against the pipeline's own quantize+emit simulation.
 
-The pipeline (``build_slice_tilesets.py`` + ``emit.py``) writes, per slice
-tileset, a PRIMARY+SECONDARY pokeemerald-expansion tileset pair under
-``$RPG2GBA_POKEEMERALD/data/tilesets/{primary,secondary}/uranium<ts>/``
-(``tiles.png``, ``palettes/NN.pal``, ``metatiles.bin``,
-``metatile_attributes.bin``). Separately, the map viewer (``map_viewer_common.py``)
-re-simulates the SAME quantize step for its preview. This script is a THIRD,
-independent path: it reconstructs the exact metatile list the build produced
-(same helpers, same order, read-only), re-runs the quantizer, and decodes the
-literal emitted bytes back into RGBA -- then compares the two, pixel-for-pixel,
-without going through either the viewer's code or the pipeline's own emit
-path. A clean match here proves the ROM bytes really are what the pipeline
-intended; a mismatch pinpoints exactly which metatile/layer/pixel disagrees.
+Per-map tileset scheme (since 4db0deb9, 2026-08-05). The ROM build gives every
+slice map its OWN tileset with the synthetic id synth_tileset_id(map_id) ==
+1000 + map_id (tileset_converter/map_set.py): assemble_pathfinder.py's
+graphics pass rewrites each map's tileset_id to that id on a shallow copy
+and passes source_tileset_of so the synthetic id resolves back to the real
+RMXP tileset for art / passages / priorities / terrain tags. So there is one
+group per map, and the artifacts live at
+/data/tilesets/{primary,secondary}/uranium<1000+map_id>/
+(tiles.png, palettes/NN.pal, metatiles.bin, metatile_attributes.bin; the C
+symbols are gTileset_Uranium<synth> / gTileset_Uranium<synth>B).
+Pooling per real RMXP tileset no longer exists. Dirs named uranium<real_ts>
+(uranium19, uranium22, *_cmp*) are pre-2026-08-05 leftovers and are
+ignored.
+
+Rather than re-deriving the metatile list (which had drifted: animated-tile
+frames, inlined stair columns, stair/seam behaviour copies, ...), Mode A calls
+the build's OWN build_slice_tilesets with the same arguments the graphics
+pass uses (warp overrides, stair + seam-warp behaviour cells via
+seam_warps.behavior_cells_for, source_tileset_of), but with
+emit_tileset and _write_fragments replaced by capture stubs and the
+overlay written to a temp file -- so nothing is written to engine/ or
+reference/. The captured metatile lists are then:
+
+  1. the overlay the build just produced is compared, per synthetic tileset,
+     against the committed reference/tileset_map.gen.json; and
+  2. quantized with the pipeline quantizer and compared pixel-for-pixel with
+     the literal bytes decoded from the emitted artifacts.
+
+Maps with no emitted artifacts and no overlay entry (e.g. map 40, in
+WALKER_OVERFLOW_MAP_IDS) are reported as SKIPPED, not failed.
 
 Mode A (--mode pipeline, DEFAULT): the ROM bytes vs. the pipeline's own
-quantize+emit simulation (`emit.analyze_tileset_palettes` with the same
-quantizer `build_slice_tilesets.py` used). No viewer code touched.
+quantize+emit simulation. No viewer code touched.
 
-Mode B (--mode viewer): the ROM bytes vs. `scripts/map_viewer_common.py`'s own
-render path (`render_metatile_png`), so the two independent CONSUMERS of the
-same `tileset_map.gen.json` (the ROM build and the live viewer) can be checked
-against each other directly. Implemented, but see `run_viewer_mode`'s
-docstring -- it documents unverified assumptions about the concurrently-edited
-`map_viewer_common.py` and should be run (and re-checked) only after that
-file's edits land.
+Mode B (--mode viewer): the viewer's own post-quant render path
+(map_viewer_common: ``_ensure_loaded`` -> per-colkey ``metatile_imgs_postquant``)
+vs the decoded ROM artifacts, per slice map. The viewer pools per map (one pool =
+the map itself), exactly like the ROM, so ROM metatile ``i`` is the viewer's pool
+key ``i`` (both are the sorted non-empty column keys; the build's void / door /
+stair copies are appended after them and are not compared). Runs the viewer's
+quantizer once per map (about a minute or two for the whole slice).
 
 Usage:
     python scripts/verify_viewer_rom_match.py                    # Mode A (default)
     python scripts/verify_viewer_rom_match.py --mode pipeline
-    python scripts/verify_viewer_rom_match.py --mode viewer       # see caveats above
+    python scripts/verify_viewer_rom_match.py --mode viewer      # viewer vs ROM
     python scripts/verify_viewer_rom_match.py -v                  # debug logging
 
-Exit 0 if every compared tileset matches byte-for-byte (mask + colour, on
-opaque pixels); 1 otherwise (mismatch, missing artifacts, or a reconstruction
-that disagrees with reference/tileset_map.gen.json -- in which case the pixel
-comparison is skipped for that tileset, since it would be meaningless).
+Exit 0 if every compared tileset matches (overlay agreement + byte-for-byte
+mask and colour on opaque pixels) and nothing failed; 1 otherwise. Skips do not
+fail the run.
 """
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import logging
 import os
@@ -91,159 +106,136 @@ def _resolve_fork() -> Path:
 
 
 def _output_dir() -> Path:
-    return Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build"
+    out = Path(os.environ.get("RPG2GBA_OUTPUT", "output")) / "uranium-build"
+    return out if out.is_absolute() else REPO_ROOT / out
 
 
-def _grouped_slice_maps(
-    out_dir: Path, slice_map_ids: list[int]
-) -> dict[int, list[tuple[int, dict]]]:
-    """Group SLICE_MAP_IDS maps by real tileset_id, in encounter order -- mirrors
-    build_slice_tilesets.py's ``by_ts`` construction (~line 249-251)."""
-    by_ts: dict[int, list[tuple[int, dict]]] = {}
+def per_map_inputs(
+    out_dir: Path, slice_map_ids: list[int], seam_behavior_cells: dict,
+) -> tuple[list[tuple[int, dict]], dict[int, int], dict[int, dict[tuple[int, int], str]]]:
+    """Mirror of the map-prep loop in assemble_pathfinder.run_graphics_pass:
+    one (map_id, shallow copy with tileset_id = synth id) per slice map, the
+    synth -> real RMXP tileset table, and the merged stair + seam-warp behaviour
+    cells per map. Returns (maps, synth_to_real, stair_cells)."""
+    from rpg2gba.tileset_converter.map_set import synth_tileset_id
+    from rpg2gba.tileset_converter.metadata_wiring import collect_stair_behavior_cells
+
+    maps: list[tuple[int, dict]] = []
+    synth_to_real: dict[int, int] = {}
+    stair_cells: dict[int, dict[tuple[int, int], str]] = {}
     for map_id in slice_map_ids:
         map_json = json.loads(
             (out_dir / "maps" / f"Map{map_id:03d}.json").read_text(encoding="utf-8")
         )
-        by_ts.setdefault(int(map_json["tileset_id"]), []).append((map_id, map_json))
-    return by_ts
+        synth = synth_tileset_id(map_id)
+        synth_to_real[synth] = int(map_json["tileset_id"])
+        synth_json = dict(map_json)  # shallow: only the top-level tileset_id changes
+        synth_json["tileset_id"] = synth
+        maps.append((map_id, synth_json))
+        stair_cells[map_id] = {
+            **collect_stair_behavior_cells(map_json),
+            **seam_behavior_cells.get(map_id, {}),
+        }
+    return maps, synth_to_real, stair_cells
 
 
 # ---------------------------------------------------------------------------
-# Mode A: reconstruct the metatile list build_slice_tilesets.py built
+# Mode A: capture the metatile lists the real build_slice_tilesets builds
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class Reconstruction:
-    ts: int
-    metatile_list: list  # list[MetatileImage]
-    ordered: list[tuple]  # column keys, in metatile-index order (void/door excluded)
-    void_idx: int
-    warp_tiles: dict[str, int]
-    warp_fallback_idx: int | None
-    door_keys: set
+class Captured:
+    """What the build handed to emit_tileset for one synthetic tileset."""
+
+    synth: int
+    metatile_list: list  # list[MetatileImage], in metatile-index order
 
 
-def _reconstruct_tileset(
-    ts: int,
-    maplist: list[tuple[int, dict]],
-    warp_coords: dict[int, set[tuple[int, int]]],
-    fork: Path,
-    tilesets_json: Path,
-    terrain_table,
-) -> Reconstruction:
-    """Replicate build_slice_tilesets.py's per-tileset metatile-list construction
-    (same helpers, same order), writing nothing. Mirrors
-    src/rpg2gba/tileset_converter/graphics/build_slice_tilesets.py ~lines 260-370
-    (the loop body of build_slice_tilesets, for one tileset, with
-    source_tileset_of=None so `resolve(ts) == ts` throughout -- matches the real
-    build's call in scripts/assemble_pathfinder.py::run_graphics_pass)."""
+def run_build_capture(
+    out_dir: Path, fork: Path, tilesets_json: Path, overlay_out: Path,
+) -> tuple[dict[int, Captured], dict, dict[int, int]]:
+    """Run the build's own ``build_slice_tilesets`` exactly as the graphics pass
+    does, but with ``emit_tileset`` / ``_write_fragments`` stubbed so no engine
+    artifact is written, and the overlay sent to ``overlay_out`` (a temp path).
+    Returns (captured per synth id, the freshly built overlay, synth_to_real)."""
     from rpg2gba.tileset_converter.graphics import build_slice_tilesets as bst
-    from rpg2gba.tileset_converter.layout import column_key
-    from rpg2gba.tileset_converter.tile_map import serialize_column_key
-
-    rast = bst._default_rasterizer(ts, tilesets_json, None)
-    priorities = bst._load_priorities(tilesets_json, ts)
-    passages = bst._load_passages(tilesets_json, ts)
-    terrain_tags = bst._load_terrain_tags(tilesets_json, ts)
-
-    max_tid = rast.max_static_tile_id()
-    # Matches the real build: a stray out-of-atlas static tile id on one layer
-    # of a cell is masked (zeroed), not dropped whole — `_masked_grid_of`/
-    # `column_keys_for_maps(max_static_tile_id=...)` (build_slice_tilesets.py)
-    # is the single place this happens; mirror it via the same helpers here.
-    ordered = bst.column_keys_for_maps(maplist, max_static_tile_id=max_tid)
-    if not ordered:
-        raise ValueError(f"tileset {ts}: no non-empty in-atlas columns")
-
-    door_keys: set = set()
-    for map_id, map_json in maplist:
-        grid = bst._masked_grid_of(map_json, max_tid, map_id=map_id)
-        for wx, wy in warp_coords.get(map_id, set()):
-            dk = column_key(grid, wx, wy)
-            if dk:
-                door_keys.add(dk)
-
-    opaque_cache: dict[int, bool] = {}
-
-    def _is_opaque(tile_id: int) -> bool:
-        hit = opaque_cache.get(tile_id)
-        if hit is None:
-            alpha = np.asarray(rast.render(tile_id).convert("RGBA"))[..., 3]
-            hit = bool((alpha == 255).all())
-            opaque_cache[tile_id] = hit
-        return hit
-
-    metatile_list = [
-        bst._render_column(
-            k, rast, priorities, passages, terrain_tags,
-            behavior=terrain_table.column_behavior(ts, k, terrain_tags, is_opaque=_is_opaque),
-        )
-        for k in ordered
-    ]
-    void_idx = len(metatile_list)
-    metatile_list.append(bst._void_metatile())
-
-    needs_warp = any(warp_coords.get(mid) for mid, _ in maplist)
-    warp_tiles: dict[str, int] = {}
-    warp_fallback_idx: int | None = None
-    if needs_warp:
-        door_behavior = bst._behavior_value(fork, "MB_NON_ANIMATED_DOOR")
-        for k in sorted(door_keys):
-            idx = len(metatile_list)
-            metatile_list.append(
-                bst._render_column(k, rast, priorities, passages, terrain_tags, behavior=door_behavior)
-            )
-            warp_tiles[serialize_column_key(k)] = idx
-        warp_fallback_idx = len(metatile_list)
-        z = np.zeros((16, 16, 4), dtype=np.uint8)
-        metatile_list.append(bst.MetatileImage(z, z.copy(), bst.LAYER_COVERED, door_behavior))
-
-    return Reconstruction(
-        ts=ts, metatile_list=metatile_list, ordered=ordered, void_idx=void_idx,
-        warp_tiles=warp_tiles, warp_fallback_idx=warp_fallback_idx, door_keys=door_keys,
+    from rpg2gba.tileset_converter.graphics.emit import EmittedTileset
+    from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
+    from rpg2gba.tileset_converter.seam_warps import (
+        behavior_cells_for,
+        load_seam_warps,
+        seams_for_slice,
     )
 
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import assemble_pathfinder as ap  # the real build's exact input
 
-def _cross_check_overlay(recon: Reconstruction, overlay: dict) -> list[str]:
-    """Compare the reconstructed column-key -> metatile-index mapping (and warp
-    mapping) against the build's own reference/tileset_map.gen.json overlay.
-    Returns a list of human-readable problems (empty == clean agreement)."""
-    from rpg2gba.tileset_converter.tile_map import serialize_column_key
+    slice_seams = seams_for_slice(load_seam_warps(), set(SLICE_MAP_IDS))
+    seam_behavior_cells = behavior_cells_for(slice_seams)
+    maps, synth_to_real, stair_cells = per_map_inputs(
+        out_dir, SLICE_MAP_IDS, seam_behavior_cells,
+    )
 
-    problems: list[str] = []
-    ts_str = str(recon.ts)
-    tiles_for_ts = {
-        k: v["metatile"] for k, v in overlay.get("tiles", {}).get(ts_str, {}).items()
-    }
-    recon_tiles = {serialize_column_key(k): i for i, k in enumerate(recon.ordered)}
-    if tiles_for_ts != recon_tiles:
-        missing = set(recon_tiles) - set(tiles_for_ts)
-        extra = set(tiles_for_ts) - set(recon_tiles)
-        differing = {
-            k for k in (set(recon_tiles) & set(tiles_for_ts))
-            if recon_tiles[k] != tiles_for_ts[k]
-        }
-        problems.append(
-            f"tiles mapping mismatch: {len(missing)} missing from overlay, "
-            f"{len(extra)} extra in overlay, {len(differing)} differing index"
+    captured: dict[int, Captured] = {}
+
+    def _capture_emit(metatile_list, primary_dir, secondary_dir, primary_name,
+                      secondary_name, **_kwargs):
+        synth = int(primary_name[len("gTileset_Uranium"):])
+        captured[synth] = Captured(synth, list(metatile_list))
+        return EmittedTileset(
+            primary_name=primary_name, secondary_name=secondary_name,
+            n_metatiles=len(metatile_list), n_tiles=0, n_palettes=0,
         )
 
-    warps_for_ts = overlay.get("warps", {}).get(ts_str)
-    if warps_for_ts is not None:
-        if warps_for_ts.get("tiles") != recon.warp_tiles:
-            problems.append(
-                f"warps.tiles mismatch: overlay={warps_for_ts.get('tiles')} "
-                f"reconstructed={recon.warp_tiles}"
-            )
-        if warps_for_ts.get("fallback") != recon.warp_fallback_idx:
-            problems.append(
-                f"warps.fallback mismatch: overlay={warps_for_ts.get('fallback')} "
-                f"reconstructed={recon.warp_fallback_idx}"
-            )
-    elif recon.warp_fallback_idx is not None:
-        problems.append("overlay has no warps entry but reconstruction produced one")
+    real_emit, real_frag = bst.emit_tileset, bst._write_fragments
+    bst.emit_tileset = _capture_emit
+    bst._write_fragments = lambda *_a, **_k: None
+    try:
+        bst.build_slice_tilesets(
+            maps,
+            ap._load_warp_overrides(out_dir),
+            fork=fork,
+            base_tile_map=REPO_ROOT / "reference" / "tileset_map.json",
+            overlay_out=overlay_out,
+            tilesets_json=tilesets_json,
+            source_tileset_of=lambda s: synth_to_real[s],
+            stair_cells=stair_cells,
+            dry_run=False,
+        )
+    finally:
+        bst.emit_tileset, bst._write_fragments = real_emit, real_frag
+    fresh = json.loads(overlay_out.read_text(encoding="utf-8"))
+    return captured, fresh, synth_to_real
 
+
+_OVERLAY_SECTIONS = (
+    "tilesets", "tiles", "buckets", "warps", "atlas_max", "behavior_overrides",
+    "source_tilesets",
+)
+
+
+def _cross_check_overlay(fresh: dict, committed: dict, synth: int) -> list[str]:
+    """Compare the overlay the build just produced against the committed
+    reference/tileset_map.gen.json for one synthetic tileset. Returns
+    human-readable problems (empty == clean agreement)."""
+    problems: list[str] = []
+    key = str(synth)
+    for section in _OVERLAY_SECTIONS:
+        a = fresh.get(section, {}).get(key)
+        b = committed.get(section, {}).get(key)
+        if a == b:
+            continue
+        if isinstance(a, dict) and isinstance(b, dict):
+            missing = set(a) - set(b)
+            extra = set(b) - set(a)
+            differing = {k for k in set(a) & set(b) if a[k] != b[k]}
+            problems.append(
+                f"{section}: {len(missing)} only in fresh build, {len(extra)} only in "
+                f"committed overlay, {len(differing)} differing"
+            )
+        else:
+            problems.append(f"{section}: fresh={a!r} committed={b!r}")
     return problems
 
 
@@ -414,23 +406,12 @@ def _report_layer(
     return n
 
 
-# ---------------------------------------------------------------------------
-# Mode A: pipeline simulation vs. decoded ROM bytes
-# ---------------------------------------------------------------------------
-
-
 def run_pipeline_mode() -> int:
+    import tempfile
+
     fork = _resolve_fork()
     out_dir = _output_dir()
     tilesets_json = out_dir / "tilesets.json"
-
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import assemble_pathfinder as ap  # the real build's exact input
-
-    # Derived, not hand-listed, since 2026-09-08 (PROJECT_TODO #25): the same
-    # warp_overrides.gen.json the assembler reads, so this really is the
-    # build's input and not a second copy of it.
-    warp_overrides = ap._load_warp_overrides(out_dir)
 
     from rpg2gba.tileset_converter.graphics.emit import (
         NUM_METATILES_IN_PRIMARY,
@@ -438,8 +419,7 @@ def run_pipeline_mode() -> int:
         analyze_tileset_palettes,
     )
     from rpg2gba.tileset_converter.graphics.quantize import build_quantized_tileset_family
-    from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
-    from rpg2gba.tileset_converter.terrain_tags import load_terrain_tag_map
+    from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, synth_tileset_id
 
     if not tilesets_json.is_file():
         print(f"MISSING: {tilesets_json} -- run the phase-3/5 pipeline first", file=sys.stderr)
@@ -448,54 +428,57 @@ def run_pipeline_mode() -> int:
         print(f"MISSING: {OVERLAY_PATH} -- run assemble_pathfinder.py first", file=sys.stderr)
         return 1
 
-    overlay = json.loads(OVERLAY_PATH.read_text(encoding="utf-8"))
-    by_ts = _grouped_slice_maps(out_dir, SLICE_MAP_IDS)
-    terrain_table = load_terrain_tag_map(fork)
+    committed = json.loads(OVERLAY_PATH.read_text(encoding="utf-8"))
 
-    overall_ok = True
-    for ts, maplist in sorted(by_ts.items()):
-        maps_desc = "+".join(f"Map{m:03d}" for m, _ in maplist)
-        print(f"=== tileset {ts} ({maps_desc}) ===")
-
-        recon = _reconstruct_tileset(
-            ts, maplist, warp_overrides, fork, tilesets_json, terrain_table,
+    with tempfile.TemporaryDirectory(prefix="verify_rom_match_") as tmp:
+        captured, fresh, _synth_to_real = run_build_capture(
+            out_dir, fork, tilesets_json, Path(tmp) / "tileset_map.fresh.json",
         )
 
-        problems = _cross_check_overlay(recon, overlay)
+    passed: list[int] = []
+    skipped: list[int] = []
+    failed: list[int] = []
+    for map_id in SLICE_MAP_IDS:
+        synth = synth_tileset_id(map_id)
+        print(f"=== Map{map_id:03d} (tileset {synth}) ===")
+        primary_dir = fork / "data" / "tilesets" / "primary" / f"uranium{synth}"
+        secondary_dir = fork / "data" / "tilesets" / "secondary" / f"uranium{synth}"
+        have_artifacts = primary_dir.is_dir() and secondary_dir.is_dir()
+        in_committed = str(synth) in committed.get("tilesets", {})
+        if not have_artifacts and not in_committed:
+            print("  SKIPPED: no emitted artifacts and no entry in the committed overlay")
+            skipped.append(map_id)
+            continue
+        if not have_artifacts:
+            print(f"  MISSING ARTIFACTS: {primary_dir} and/or {secondary_dir}")
+            failed.append(map_id)
+            continue
+        if synth not in captured:
+            print("  FAIL: the build produced no tileset for this map")
+            failed.append(map_id)
+            continue
+
+        problems = _cross_check_overlay(fresh, committed, synth)
         if problems:
-            print(f"  RECONSTRUCTION DIVERGED from {OVERLAY_PATH.name} for ts{ts}:")
+            print(f"  RECONSTRUCTION DIVERGED from {OVERLAY_PATH.name} for ts{synth}:")
             for p in problems:
                 print(f"    - {p}")
             print("  Skipping pixel comparison for this tileset (would be meaningless).")
-            overall_ok = False
+            failed.append(map_id)
             continue
-        print(
-            f"  reconstruction agrees with {OVERLAY_PATH.name}: {len(recon.ordered)} columns, "
-            f"void@{recon.void_idx}, {len(recon.door_keys)} door metatile(s), "
-            f"fallback@{recon.warp_fallback_idx}"
-        )
+        metatile_list = captured[synth].metatile_list
+        print(f"  fresh build agrees with {OVERLAY_PATH.name}: {len(metatile_list)} metatiles")
 
         analysis = analyze_tileset_palettes(
-            recon.metatile_list, max_palettes=NUM_PALS_TOTAL,
+            metatile_list, max_palettes=NUM_PALS_TOTAL,
             quantizer=build_quantized_tileset_family,
         )
-
-        primary_dir = fork / "data" / "tilesets" / "primary" / f"uranium{ts}"
-        secondary_dir = fork / "data" / "tilesets" / "secondary" / f"uranium{ts}"
-        if not primary_dir.is_dir() or not secondary_dir.is_dir():
-            print(f"  MISSING ARTIFACTS: {primary_dir} and/or {secondary_dir}")
-            overall_ok = False
-            continue
         rom = load_tileset_rom(primary_dir, secondary_dir)
 
-        n_metatiles = len(recon.metatile_list)
-        # emit.py's Step 7 writes `metatile_entries[512:] or [[0]*8]` (and the
-        # primary-side mirror): whichever half is empty (all real metatiles fit
-        # in the other) still gets ONE all-zero placeholder metatile so its
-        # .bin is never zero-length. That placeholder is real on-disk bytes but
-        # not a real metatile -- never referenced by tileset_map.gen.json or any
-        # layout cell -- so the expected ROM total is n_metatiles+1 when
-        # everything fits in one half, else exactly n_metatiles.
+        n_metatiles = len(metatile_list)
+        # emit.py's Step 7 writes `metatile_entries[512:] or [[0]*8]`: whichever
+        # half is empty still gets ONE all-zero placeholder metatile so its .bin
+        # is never zero-length. Never referenced by the overlay or any layout.
         expected_rom_total = (
             n_metatiles + 1 if n_metatiles <= NUM_METATILES_IN_PRIMARY else n_metatiles
         )
@@ -503,9 +486,9 @@ def run_pipeline_mode() -> int:
             print(
                 f"  METATILE COUNT MISMATCH: ROM has {rom.n_metatiles()}, expected "
                 f"{expected_rom_total} ({n_metatiles} real + emit.py's empty-half "
-                f"placeholder) -- stopping comparison for ts{ts}."
+                f"placeholder) -- stopping comparison for ts{synth}."
             )
-            overall_ok = False
+            failed.append(map_id)
             continue
 
         mismatch_px = 0
@@ -513,132 +496,109 @@ def run_pipeline_mode() -> int:
         for i in range(n_metatiles):
             mp = analysis.metatiles[i]
             dec_bottom, dec_top = rom.decode_metatile(i)
-            n_bot = _report_layer(f"ts{ts}", i, "bottom", mp.quant_bottom, dec_bottom)
-            n_top = _report_layer(f"ts{ts}", i, "top", mp.quant_top, dec_top)
+            n_bot = _report_layer(f"ts{synth}", i, "bottom", mp.quant_bottom, dec_bottom)
+            n_top = _report_layer(f"ts{synth}", i, "top", mp.quant_top, dec_top)
             if n_bot or n_top:
                 mismatch_mts += 1
             mismatch_px += n_bot + n_top
 
         total_px = n_metatiles * 2 * 16 * 16
         print(
-            f"  RESULT ts{ts}: {n_metatiles} metatiles compared, "
+            f"  RESULT ts{synth}: {n_metatiles} metatiles compared, "
             f"{mismatch_mts} metatile(s) with a mismatch, "
             f"{mismatch_px}/{total_px} differing px"
         )
-        if mismatch_px:
-            overall_ok = False
+        (failed if mismatch_px else passed).append(map_id)
 
-    return 0 if overall_ok else 1
+    print(
+        f"\nSUMMARY: {len(passed)} passed, {len(skipped)} skipped, {len(failed)} failed "
+        f"of {len(SLICE_MAP_IDS)} maps"
+    )
+    if skipped:
+        print(f"  skipped maps: {skipped}")
+    if failed:
+        print(f"  FAILED maps: {failed}")
+    return 0 if not failed else 1
 
 
 # ---------------------------------------------------------------------------
-# Mode B: decoded ROM bytes vs. map_viewer_common.py's own render path
+# Mode B: the viewer's post-quant render vs the ROM artifacts
 # ---------------------------------------------------------------------------
+
+
+def compare_viewer_to_rom(map_id: int, state, rom: TilesetROM, label: str) -> tuple[int, int, int]:
+    """Compare one loaded viewer ``_MapState`` against its decoded ROM tileset.
+    Returns (metatiles compared, metatiles with a mismatch, differing px). Each
+    distinct non-empty column key is compared once, at ROM index
+    ``state.pool_key_to_idx[ck]``."""
+    n_cmp = n_bad_mt = n_px = 0
+    for cidx, ck in enumerate(state.colkeys_sorted):
+        pq = state.metatile_imgs_postquant[cidx]
+        if not ck or pq is None:
+            continue
+        rom_idx = state.pool_key_to_idx[ck]
+        dec_bottom, dec_top = rom.decode_metatile(rom_idx)
+        n_bot = _report_layer(label, rom_idx, "bottom", pq[0], dec_bottom)
+        n_top = _report_layer(label, rom_idx, "top", pq[1], dec_top)
+        n_cmp += 1
+        if n_bot or n_top:
+            n_bad_mt += 1
+        n_px += n_bot + n_top
+    return n_cmp, n_bad_mt, n_px
 
 
 def run_viewer_mode() -> int:
-    """NOT RUN as part of this script's own verification pass -- implemented per
-    spec, to be run by the lead once scripts/map_viewer_common.py's concurrent
-    edit lands. Assumptions below were read from that file's state as of
-    2026-07-12 and MUST be re-checked before trusting a result:
-
-      - ``build_map_data(map_id)['colkeys_list'][i]`` is
-        ``serialize_column_key(colkeys_sorted[i])`` for map_id's OWN per-map
-        column-key list (confirmed at map_viewer_common.py:619 as read). This
-        per-map list is NOT the tileset-wide ``ordered`` list
-        build_slice_tilesets.py (and Mode A above) uses -- ``colkeys_sorted`` is
-        built from a single map's grid only (``_ensure_loaded``). So a viewer
-        colkey_idx and a ROM metatile index are different numbering schemes;
-        the only safe join key between them is the SERIALIZED COLUMN-KEY
-        STRING, resolved through reference/tileset_map.gen.json's
-        ``tiles[str(ts)][colkey_str]['metatile']``.
-      - ``render_metatile_png(map_id, idx, layer)`` takes that per-map
-        colkey_idx for EVERY layer, including ``'post_bottom'``/``'post_top'``
-        (confirmed at map_viewer_common.py:550-577 as read).
-      - Use ``'post_bottom'``/``'post_top'`` here, NOT ``'bottom'``/``'top'`` --
-        the latter are PRE-quantization composites and will never byte-match
-        the ROM even when everything is correct; only the post_* pair is
-        documented to "match the shipped ROM's palette assignment".
-      - The viewer's quantizer/max_palettes come from the module-level
-        ``current_quantize_state()``, mutable via the Advanced tab's
-        POST /api/quantize (map_viewer_common.py:357-358's
-        ``_max_palettes``/``_make_quantizer()``). If that state has ever been
-        changed from the pipeline default (``FamilyParams()``,
-        ``NUM_PALS_TOTAL``=13) on a long-running server, a mismatch here is a
-        QUANTIZER-PARAMETER difference, not a viewer/ROM bug -- check
-        ``current_quantize_state()`` reports the stock default first.
-      - ``_ensure_tileset_analysis`` pools every SLICE_MAP_IDS map that shares
-        a real tileset_id into ONE shared quantization (Map048+Map049 for
-        ts19), matching build_slice_tilesets.py's own grouping -- so opening
-        EITHER pooled map_id should give identical post-quant pixels; this
-        function only opens one map per tileset (the first in `by_ts`), not
-        every pooled member.
-    """
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import map_viewer_common as mvc  # lazy: concurrently edited, see docstring above
-
+    """Mode B: viewer post-quant pixels vs decoded ROM artifacts, per slice map.
+    Maps without artifacts are SKIPPED (e.g. 40); a map whose artifacts exist but
+    that the viewer cannot load, or any pixel difference, FAILS."""
     fork = _resolve_fork()
-    out_dir = _output_dir()
-    if not OVERLAY_PATH.is_file():
-        print(f"MISSING: {OVERLAY_PATH} -- run assemble_pathfinder.py first", file=sys.stderr)
-        return 1
-    overlay = json.loads(OVERLAY_PATH.read_text(encoding="utf-8"))
 
-    from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import map_viewer_common as mvc
 
-    by_ts = _grouped_slice_maps(out_dir, SLICE_MAP_IDS)
+    mvc._load_dotenv()
+    from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, synth_tileset_id
 
-    overall_ok = True
-    for ts, maplist in sorted(by_ts.items()):
-        # Walk EVERY pooled map, not just one representative: pooled maps share
-        # one tileset analysis, but each map's colkeys_list only covers its own
-        # columns, so ts19 needs both Map049 and Map048 to compare all columns.
-        pooled_ids = [mid for mid, _ in maplist]
-        print(f"=== tileset {ts} (viewer via {', '.join(f'Map{m:03d}' for m in pooled_ids)}) ===")
-
-        tiles_for_ts: dict[str, dict] = overlay.get("tiles", {}).get(str(ts), {})
-
-        primary_dir = fork / "data" / "tilesets" / "primary" / f"uranium{ts}"
-        secondary_dir = fork / "data" / "tilesets" / "secondary" / f"uranium{ts}"
-        if not primary_dir.is_dir() or not secondary_dir.is_dir():
-            print(f"  MISSING ARTIFACTS: {primary_dir} and/or {secondary_dir}")
-            overall_ok = False
+    passed: list[int] = []
+    skipped: list[int] = []
+    failed: list[int] = []
+    tot_px = tot_mt = 0
+    for map_id in SLICE_MAP_IDS:
+        synth = synth_tileset_id(map_id)
+        print(f"=== Map{map_id:03d} (tileset {synth}) ===")
+        primary_dir = fork / "data" / "tilesets" / "primary" / f"uranium{synth}"
+        secondary_dir = fork / "data" / "tilesets" / "secondary" / f"uranium{synth}"
+        if not (primary_dir.is_dir() and secondary_dir.is_dir()):
+            print("  SKIPPED: no emitted artifacts")
+            skipped.append(map_id)
             continue
+        try:
+            mvc._ensure_loaded(map_id)
+        except Exception as exc:  # noqa: BLE001 - report and keep going
+            print(f"  FAIL: viewer could not load the map: {exc!r}")
+            failed.append(map_id)
+            continue
+        state = mvc._map_cache[map_id]
         rom = load_tileset_rom(primary_dir, secondary_dir)
-
-        n_compared = 0
-        mismatch_px = 0
-        seen_rom_idx: set[int] = set()
-        for map_id in pooled_ids:
-            data = mvc.build_map_data(map_id)
-            colkeys_list: list[str] = data["colkeys_list"]
-            for colkey_idx, ck_str in enumerate(colkeys_list):
-                entry = tiles_for_ts.get(ck_str)
-                if entry is None:
-                    continue  # empty/void/out-of-atlas column -- no real emitted metatile
-                rom_idx = entry["metatile"]
-                if rom_idx in seen_rom_idx:
-                    continue  # column already compared via a pooled sibling map
-                seen_rom_idx.add(rom_idx)
-                dec_bottom, dec_top = rom.decode_metatile(rom_idx)
-
-                bottom_png = mvc.render_metatile_png(map_id, colkey_idx, "post_bottom")
-                top_png = mvc.render_metatile_png(map_id, colkey_idx, "post_top")
-                exp_bottom = np.asarray(Image.open(io.BytesIO(bottom_png)).convert("RGBA"))
-                exp_top = np.asarray(Image.open(io.BytesIO(top_png)).convert("RGBA"))
-
-                n_compared += 1
-                mismatch_px += _report_layer(f"ts{ts}", rom_idx, "bottom", exp_bottom, dec_bottom)
-                mismatch_px += _report_layer(f"ts{ts}", rom_idx, "top", exp_top, dec_top)
-
+        n_cmp, n_bad_mt, n_px = compare_viewer_to_rom(map_id, state, rom, f"ts{synth}")
+        tot_px += n_px
+        tot_mt += n_cmp
         print(
-            f"  RESULT ts{ts}: {n_compared} metatiles compared vs viewer, "
-            f"{mismatch_px} differing px"
+            f"  RESULT ts{synth}: {n_cmp} metatiles compared, {n_bad_mt} with a mismatch, "
+            f"{n_px}/{n_cmp * 2 * 16 * 16} differing px"
         )
-        if mismatch_px:
-            overall_ok = False
+        (failed if n_px else passed).append(map_id)
 
-    return 0 if overall_ok else 1
+    print(
+        f"\nSUMMARY (viewer vs ROM): {len(passed)} passed, {len(skipped)} skipped, "
+        f"{len(failed)} failed of {len(SLICE_MAP_IDS)} maps; {tot_mt} metatiles, "
+        f"{tot_px} differing px total"
+    )
+    if skipped:
+        print(f"  skipped maps: {skipped}")
+    if failed:
+        print(f"  FAILED maps: {failed}")
+    return 0 if not failed else 1
 
 
 # ---------------------------------------------------------------------------
@@ -653,7 +613,7 @@ def main() -> int:
     ap.add_argument(
         "--mode", choices=["pipeline", "viewer"], default="pipeline",
         help="pipeline (default): ROM vs pipeline simulation, no viewer code touched. "
-             "viewer: ROM vs scripts/map_viewer_common.py's own render path (see caveats).",
+             "viewer: the map viewer's post-quant render vs the ROM artifacts.",
     )
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()

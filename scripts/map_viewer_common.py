@@ -9,12 +9,14 @@ at import (see the bottom of this module).
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import logging
 import os
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -22,6 +24,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from rpg2gba.tileset_converter.connections import (
+    EDGE_TO_DIRECTION,
+    ConnectionRow,
+    parse_connections,
+)
 from rpg2gba.tileset_converter.graphics.autotile import autotile_frame_count
 from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
     _render_column,
@@ -33,8 +40,14 @@ from rpg2gba.tileset_converter.graphics.emit import (
     PaletteAnalysis,
     analyze_tileset_palettes,
 )
+from rpg2gba.tileset_converter.graphics.palette_families import (
+    compute_component_palettes,
+    make_pinned_quantizer,
+    seam_components,
+)
 from rpg2gba.tileset_converter.graphics.quantize import (
     FamilyParams,
+    QuantizeResult,
     build_quantized_tileset_family,
 )
 from rpg2gba.tileset_converter.graphics.raster import TileRasterizer, column_in_atlas
@@ -44,7 +57,9 @@ from rpg2gba.tileset_converter.graphics.sources import (
 )
 from rpg2gba.tileset_converter.graphics.sprites import convert_character_sheet
 from rpg2gba.tileset_converter.layout import TileGrid, column_key, mask_out_of_atlas
-from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
+# Not used by the viewer any more (pooling is per map); kept as a module attribute
+# because tests monkeypatch ``mvc.SLICE_MAP_IDS``.
+from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS  # noqa: F401
 from rpg2gba.tileset_converter.sprite_pass import _characters_dir, _resolve_sheet
 from rpg2gba.tileset_converter.tile_map import serialize_column_key
 
@@ -104,24 +119,16 @@ def _file_fingerprint(path: Path) -> tuple[int, int]:
 
 def _json_fingerprint(map_id: int) -> tuple[tuple[int, int], ...]:
     """Stat-only fingerprint of the JSON inputs that can change *map_id*'s
-    rendered output at the data level: its own ``Map{NNN}.json``,
-    ``tilesets.json``, and — for slice maps — every ``SLICE_MAP_IDS`` sibling's
-    ``Map{NNN}.json`` too, since a sibling can join or leave this map's
-    quantization pool without this map's own file changing (see
-    ``_ensure_tileset_analysis``).
+    rendered output at the data level: its own ``Map{NNN}.json`` and
+    ``tilesets.json``.
 
-    A superset of what ``_derive_png_paths_for_map`` itself reads (that
-    function only needs *map_id*'s own json — see its docstring for why pool
-    siblings never add a distinct tileset), but it's safe and convenient to
-    reuse this broader fingerprint as that derivation's memoization key too
-    (see ``_slice_aware_fingerprint`` below): a sibling-json change some
-    unrelated tileset never touches would just cost one extra cache-miss
-    re-derivation, not an incorrect result."""
+    Per-map pooling (see ``_ensure_tileset_analysis``) means no sibling map's json
+    can change this map's quantization, so siblings are NOT folded in (they were,
+    for ``SLICE_MAP_IDS`` members, while the viewer pooled by real tileset id).
+    The opt-in seam-palette view depends on the other members of the seam
+    component; that dependency is keyed separately (``_seam_key``)."""
     maps_dir = _maps_dir()
-    paths = [maps_dir / f"Map{map_id:03d}.json"]
-    if map_id in SLICE_MAP_IDS:
-        paths += [maps_dir / f"Map{m:03d}.json" for m in SLICE_MAP_IDS if m != map_id]
-    paths.append(_tilesets_json())
+    paths = [maps_dir / f"Map{map_id:03d}.json", _tilesets_json()]
     return tuple(_file_fingerprint(p) for p in paths)
 
 
@@ -146,19 +153,10 @@ def _derive_png_paths_for_map(
     depends on: the sheet + non-empty autotile PNGs of *map_id*'s own
     ``tileset_id``.
 
-    Only *map_id*'s own tileset is resolved — even for slice maps, deliberately
-    NOT every ``SLICE_MAP_IDS`` sibling's tileset. ``_ensure_tileset_analysis``
-    (~line 394) pools a slice sibling into *map_id*'s shared quantization only
-    when the sibling's CURRENT ``tileset_id`` is an EXACT match to *map_id*'s
-    own; every pool member therefore shares the identical ``tileset_name`` and
-    PNGs by construction, so "the pool siblings' tileset PNGs" collapses to
-    this same single tileset — there's nothing distinct left to resolve. A
-    sibling with a genuinely different ``tileset_id`` is, by definition, not
-    in the pool, so its source art has zero effect on *map_id*'s render and is
-    correctly excluded. (Sibling json *changes*, which could shift pool
-    membership, are still caught independently — ``_json_fingerprint`` watches
-    every ``SLICE_MAP_IDS`` sibling's json unconditionally, regardless of this
-    function.)
+    Only *map_id*'s own tileset is resolved: the viewer pools per map
+    (``_ensure_tileset_analysis``), so no other map's source art affects *map_id*'s
+    render. (The seam-palette view's cross-map dependency is keyed by ``_seam_key``,
+    which fingerprints each component member separately.)
 
     Takes explicit ``maps_dir`` / ``tilesets_json_path`` / ``graphics_dir``
     params rather than reading the module's env-derived state directly, so
@@ -193,12 +191,10 @@ def _slice_aware_fingerprint(map_id: int) -> tuple[tuple[int, int] | tuple[str, 
 
     Two halves, concatenated:
 
-    1. ``_json_fingerprint(map_id)``: the map's own ``Map{NNN}.json``,
-       ``tilesets.json``, and (for slice maps) every sibling's json — each a
-       ``(mtime_ns, size)`` pair.
+    1. ``_json_fingerprint(map_id)``: the map's own ``Map{NNN}.json`` and
+       ``tilesets.json`` — each a ``(mtime_ns, size)`` pair.
     2. The tileset source PNGs (sheet + autotiles) map_id's own tileset depends
-       on (see ``_derive_png_paths_for_map`` for why pool siblings never add a
-       distinct tileset here). Each entry is ``(str(path), mtime_ns, size)``:
+       on (see ``_derive_png_paths_for_map``). Each entry is ``(str(path), mtime_ns, size)``:
        the path string is included, not just the stat, so a changed PNG *path
        set* (e.g. tilesets.json renaming an autotile) is caught even when
        stats happen to coincide (e.g. two same-sized files).
@@ -310,16 +306,40 @@ class _MapState:
 
 _map_cache: dict[int, _MapState] = {}
 _tile_png_cache: dict[tuple[int, int], bytes] = {}          # (map_id, tile_id)
-_metatile_png_cache: dict[tuple[int, int, str], bytes] = {}  # (map_id, idx, layer)
+_metatile_png_cache: dict[tuple, bytes] = {}  # (map_id, idx, layer, seam_key | None)
+# Per-map metatile atlas PNGs: (map_id, layer, seam_key | None).  Same lifetime rules
+# as _metatile_png_cache (cleared at every site that clears it).
+_atlas_png_cache: dict[tuple, bytes] = {}
 _npc_png_cache: dict[str, bytes] = {}                        # character_name.lower() -> PNG
+_npc_unconvertible: dict[str, str] = {}                      # character_name.lower() -> converter error
 # key: (pool map-id set, fingerprint of every pooled map's json + tilesets.json) ->
 # (analysis, pool_key_to_idx). The fingerprint half means a rebuild that changes a
 # pooled map's content invalidates the entry even if the pool's *membership*
 # (the frozenset) didn't change.
+# The trailing key element is the seam-palette key (``_seam_key``) or None for the
+# plain per-map analysis, so the two views never alias.
 _tileset_analysis_cache: dict[
-    tuple[frozenset[int], tuple[tuple[int, int], ...]],
+    tuple[frozenset[int], tuple[tuple[int, int], ...], tuple | None],
     tuple[PaletteAnalysis, dict[tuple, int]],
 ] = {}
+
+
+@dataclass
+class _QuantView:
+    """The quant-DEPENDENT half of a map's render: which palette analysis its
+    metatiles were fitted by, and the resulting post-quant pixels. The plain view is
+    a window onto ``_MapState``; the seam-palette view is built on demand."""
+
+    analysis: PaletteAnalysis
+    pool_key_to_idx: dict[tuple, int]
+    postquant: list[tuple[np.ndarray, np.ndarray] | None]
+
+
+# Seam-palette caches hold only the LATEST entry per key subject, so a changing
+# fingerprint replaces rather than accumulates: component tuple -> (seam_key, palettes)
+# and map id -> (seam_key, view).
+_seam_palette_cache: dict[tuple[int, ...], tuple[tuple, list[np.ndarray]]] = {}
+_seam_view_cache: dict[int, tuple[tuple, _QuantView]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -388,6 +408,9 @@ def set_quantize_params(params: FamilyParams, max_palettes: int) -> int:
     _quant_generation += 1
     _tileset_analysis_cache.clear()
     _metatile_png_cache.clear()
+    _atlas_png_cache.clear()
+    _seam_palette_cache.clear()
+    _seam_view_cache.clear()
     return _quant_generation
 
 
@@ -407,6 +430,24 @@ def params_from_dict(d: dict) -> tuple[FamilyParams, int]:
     return params, mp
 
 
+def _render_pool_column(
+    ck: tuple, raster: TileRasterizer, priorities: list[int], passages: list[int],
+    terrain_tags: list[int],
+) -> MetatileImage:
+    """A pool metatile exactly as ``build_slice_tilesets`` hands it to the emitter:
+    ``n_frames=column_n_frames`` so an animated column's later frames feed the
+    quantizer (their colours must fit the chosen palette too). Without it the viewer
+    quantizes a different input than the ROM and animated-water maps drift. A column
+    over the frame-count guard falls back to frame 0 (the build fails loud there; the
+    viewer must still open)."""
+    try:
+        n = column_n_frames(ck, raster)
+    except ValueError as e:
+        log.warning("colkey %r: %s; quantizing frame 0 only", ck, e)
+        n = 1
+    return _render_column(ck, raster, priorities, passages, terrain_tags, n_frames=n)
+
+
 def _ensure_tileset_analysis(
     tileset_id: int,
     raster: TileRasterizer,
@@ -414,54 +455,38 @@ def _ensure_tileset_analysis(
     map_id: int,
     passages: list[int],
     terrain_tags: list[int],
+    *,
+    seam_key: tuple | None = None,
+    quantizer: Callable[..., QuantizeResult] | None = None,
 ) -> tuple[PaletteAnalysis, dict[tuple, int]]:
     """Build and cache the palette-quantization pool for a map (idempotent).
 
-    Pool = whatever the SHIPPED ROM quantizes together, replicated exactly. The
-    boot-gate ROM is built by ``scripts/assemble_pathfinder.py`` (``run_graphics_pass``),
-    which calls ``build_slice_tilesets(maps, ...)`` with no ``source_tileset_of``
-    over ``SLICE_MAP_IDS`` (``rpg2gba.tileset_converter.map_set``). Inside,
-    ``build_slice_tilesets`` groups maps by their REAL ``map_json["tileset_id"]``
-    (``build_slice_tilesets.py`` ~line 249-251): Map048 and Map049 (Player's House
-    1F/2F) both carry tileset 19 and are pooled into ONE shared 13-palette
-    quantization; Map032 (Moki Town, tileset 22) is alone. This function replicates
-    that grouping — for a slice map, the pool is every ``SLICE_MAP_IDS`` member
-    sharing the opened map's real ``tileset_id`` — so the "Quantized (family)" view
-    matches the ROM byte-for-byte given the same inputs.
+    Pool = THIS MAP ALONE, for every map (slice or not). That is what the shipped ROM
+    does: since commit 4db0deb9 ``build_slice_tilesets`` is handed a unique synthetic
+    tileset id per map, so each map is quantized against its own 13 palettes and no
+    map shares tiles or palettes with a sibling that has the same real RMXP tileset
+    id. (Before that the viewer pooled every ``SLICE_MAP_IDS`` member sharing the
+    real ``tileset_id`` — e.g. Map031/032/033/035 — which showed sharing the ROM
+    does not have.) ``scripts/verify_viewer_rom_match.py`` Mode A rebuilds the real
+    per-map synthetic tilesets via ``build_slice_tilesets`` and matches the shipped
+    artifacts for all 18 slice maps with 0 px diff, which is the evidence that the
+    build is per-map; Mode B checks this viewer against the same artifacts.
 
-    Non-slice maps have no shipped ROM truth to match: the Map Walker's phase5
-    build feeds ``build_slice_tilesets`` a unique synthetic tileset id per map
-    (``1000 + map_id``), a per-map pool that is NOT what the §9 boot-gate ROM
-    compares against. They self-pool (``pool_map_ids = [map_id]``) as a
-    preview-only best effort, not a fidelity claim.
+    ``seam_key`` / ``quantizer`` are the opt-in "seam palettes" view: the same
+    per-map pool, but quantized by ``quantizer`` (a ``make_pinned_quantizer`` over the
+    palettes shared by the map's seam component). ``seam_key`` (see ``_seam_key``)
+    is folded into the cache key so the two views never alias.
     """
     maps_dir = _maps_dir()
+    docs: dict[int, dict] = {}
+    pool_map_ids = [map_id]
 
-    if map_id in SLICE_MAP_IDS:
-        docs: dict[int, dict] = {}
-        for m in SLICE_MAP_IDS:
-            p = maps_dir / f"Map{m:03d}.json"
-            try:
-                docs[m] = json.loads(p.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-        if map_id not in docs:
-            raise FileNotFoundError(f"Map JSON not found: {maps_dir / f'Map{map_id:03d}.json'}")
-        opened_ts = int(docs[map_id]["tileset_id"])
-        pool_map_ids = [
-            m for m in SLICE_MAP_IDS if m in docs and int(docs[m]["tileset_id"]) == opened_ts
-        ]
-    else:
-        docs = {}
-        pool_map_ids = [map_id]
-
-    # Cache key includes a stat-only fingerprint of every pooled map's json (+
-    # tilesets.json) alongside the pool membership, so a rebuild that changes a
-    # pooled map's content invalidates the entry even when membership is unchanged
-    # (e.g. Map049 rebuilt while viewing Map048 — same {48,49} pool, new content).
+    # Cache key includes a stat-only fingerprint of the map's json (+ tilesets.json)
+    # alongside the pool membership, so a rebuild that changes the map's content
+    # invalidates the entry.
     pool_fp = tuple(_file_fingerprint(maps_dir / f"Map{m:03d}.json") for m in pool_map_ids)
     pool_fp += (_file_fingerprint(_tilesets_json()),)
-    cache_key = (frozenset(pool_map_ids), pool_fp)
+    cache_key = (frozenset(pool_map_ids), pool_fp, seam_key)
     if cache_key in _tileset_analysis_cache:
         return _tileset_analysis_cache[cache_key]
 
@@ -495,17 +520,22 @@ def _ensure_tileset_analysis(
         )
 
     pool_desc = "+".join(f"Map{m:03d}" for m in pool_map_ids)
-    print(f"    tileset {tileset_id}: pool [{pool_desc}], {len(pool_keys)} pool keys")
+    print(
+        f"    tileset {tileset_id}: pool [{pool_desc}], {len(pool_keys)} pool keys"
+        + (" (seam palettes)" if seam_key is not None else "")
+    )
 
     if not pool_keys:
         analysis: PaletteAnalysis = PaletteAnalysis(palettes=[], metatiles=[])
         pool_key_to_idx: dict[tuple, int] = {}
     else:
         pool_metatiles = [
-            _render_column(ck, raster, priorities, passages, terrain_tags) for ck in pool_keys
+            _render_pool_column(ck, raster, priorities, passages, terrain_tags)
+            for ck in pool_keys
         ]
         analysis = analyze_tileset_palettes(
-            pool_metatiles, max_palettes=_max_palettes, quantizer=_make_quantizer()
+            pool_metatiles, max_palettes=_max_palettes,
+            quantizer=quantizer if quantizer is not None else _make_quantizer(),
         )
         pool_key_to_idx = {ck: i for i, ck in enumerate(pool_keys)}
 
@@ -513,17 +543,13 @@ def _ensure_tileset_analysis(
     return analysis, pool_key_to_idx
 
 
-def _refresh_postquant(map_id: int, state: _MapState) -> None:
-    """Recompute only the quant-DEPENDENT fields of an already-loaded map state
-    (palette analysis + post-quant metatile pairs), reusing the param-independent
-    grid, warm rasterizer, and pre-quant metatile composites already in ``state``.
-
-    Called on first load and whenever the cached state is stale after a re-quant, so
-    a knob change re-runs the quantize step alone — not the grid load or tile renders."""
-    analysis, pool_key_to_idx = _ensure_tileset_analysis(
-        state.tileset_id, state.raster, state.priorities, map_id,
-        state.passages, state.terrain_tags,
-    )
+def _postquant_for(
+    map_id: int,
+    state: _MapState,
+    analysis: PaletteAnalysis,
+    pool_key_to_idx: dict[tuple, int],
+) -> list[tuple[np.ndarray, np.ndarray] | None]:
+    """Post-quant (bottom, top) pixels per colkey idx of *state*, read out of *analysis*."""
     postquant: list[tuple[np.ndarray, np.ndarray] | None] = []
     for ck in state.colkeys_sorted:
         if not ck:
@@ -540,11 +566,135 @@ def _refresh_postquant(map_id: int, state: _MapState) -> None:
             )
         mp = analysis.metatiles[pool_idx]
         postquant.append((mp.quant_bottom, mp.quant_top))
+    return postquant
 
+
+def _refresh_postquant(map_id: int, state: _MapState) -> None:
+    """Recompute only the quant-DEPENDENT fields of an already-loaded map state
+    (palette analysis + post-quant metatile pairs), reusing the param-independent
+    grid, warm rasterizer, and pre-quant metatile composites already in ``state``.
+
+    Called on first load and whenever the cached state is stale after a re-quant, so
+    a knob change re-runs the quantize step alone — not the grid load or tile renders."""
+    analysis, pool_key_to_idx = _ensure_tileset_analysis(
+        state.tileset_id, state.raster, state.priorities, map_id,
+        state.passages, state.terrain_tags,
+    )
     state.analysis = analysis
     state.pool_key_to_idx = pool_key_to_idx
-    state.metatile_imgs_postquant = postquant
+    state.metatile_imgs_postquant = _postquant_for(map_id, state, analysis, pool_key_to_idx)
     state.quant_generation = _quant_generation
+
+
+# ---------------------------------------------------------------------------
+# Seam palettes (opt-in): palettes shared across a seam component
+# ---------------------------------------------------------------------------
+
+
+def _connection_rows() -> list[ConnectionRow]:
+    """ALL rows of connections.json (not restricted to SLICE_MAP_IDS: Map040 is not in
+    it). Same loader the viewer's seam geometry uses (``map_graph``); [] if the file
+    is unavailable."""
+    import map_graph
+
+    return parse_connections([list(e) for e in map_graph._load_connections_raw()])
+
+
+def _seam_component(map_id: int) -> tuple[int, ...] | None:
+    """The sorted seam component containing *map_id*, or None if it has no seams."""
+    return seam_components(_connection_rows()).get(map_id)
+
+
+def _seam_key(map_id: int, seam: bool) -> tuple | None:
+    """Cache key for the seam-palette view of *map_id*; None when the toggle is off
+    or the map is in no component (then the render is the plain per-map one).
+
+    (component, every member's full stat fingerprint — json, tilesets.json, source
+    PNGs —, quantize generation, max palettes): a sibling rebuild or a knob Apply
+    changes the key, so a toggle never serves a stale image."""
+    if not seam:
+        return None
+    comp = _seam_component(map_id)
+    if comp is None:
+        return None
+    return (
+        comp,
+        tuple(_slice_aware_fingerprint(m) for m in comp),
+        _quant_generation,
+        _max_palettes,
+    )
+
+
+def _member_metatiles(mid: int) -> list[MetatileImage] | None:
+    """One component member's metatile list, rendered with that member's OWN
+    rasterizer: every distinct non-empty (masked) column key, sorted, through
+    ``_render_column`` — the same list ``_ensure_tileset_analysis`` quantizes for the
+    map (and the emitter's input minus its void/door/stair copies, which are
+    transparent or duplicate art and add no palette demand). None if the map json
+    is absent (a seam neighbour that was never converted)."""
+    maps_dir = _maps_dir()
+    p = maps_dir / f"Map{mid:03d}.json"
+    if not p.is_file():
+        log.warning("seam palettes: Map%03d.json missing, member skipped", mid)
+        return None
+    cached = _map_cache.get(mid)
+    if cached is not None:
+        raster, priorities, passages, terrain_tags = (
+            cached.raster, cached.priorities, cached.passages, cached.terrain_tags,
+        )
+        doc = json.loads(p.read_text(encoding="utf-8"))
+    else:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        tileset_id = int(doc["tileset_id"])
+        all_ts = json.loads(_tilesets_json().read_text(encoding="utf-8"))
+        ts_entry = all_ts[str(tileset_id)]
+        raster = TileRasterizer(load_tileset_sources(tileset_id, tilesets_json=_tilesets_json()))
+        priorities, passages = ts_entry["priorities"], ts_entry["passages"]
+        terrain_tags = ts_entry["terrain_tags"]
+    keys = column_keys_for_maps([(mid, doc)], max_static_tile_id=raster.max_static_tile_id())
+    return [_render_pool_column(ck, raster, priorities, passages, terrain_tags) for ck in keys]
+
+
+def _component_palettes(key: tuple) -> list[np.ndarray]:
+    """Shared palettes for the component in *key* (cached, latest per component)."""
+    comp = key[0]
+    hit = _seam_palette_cache.get(comp)
+    if hit is not None and hit[0] == key:
+        return hit[1]
+    lists = [lst for m in comp for lst in [_member_metatiles(m)] if lst is not None]  # sorted by id
+    pals = compute_component_palettes(
+        lists, max_palettes=_max_palettes, quantizer=_make_quantizer()
+    )
+    print(
+        f"    seam palettes {'+'.join(f'Map{m:03d}' for m in comp)}: "
+        f"{sum(len(x) for x in lists)} metatiles -> {len(pals)} palettes"
+    )
+    _seam_palette_cache[comp] = (key, pals)
+    return pals
+
+
+def _quant_view(map_id: int, seam: bool = False) -> _QuantView:
+    """The quant-dependent view of *map_id*: plain per-map, or (seam on, map in a
+    component) the same per-map pool quantized against the component's shared
+    palettes via ``make_pinned_quantizer``. Maps with no component, or seam off,
+    return the plain view unchanged."""
+    _ensure_loaded(map_id)
+    state = _map_cache[map_id]
+    key = _seam_key(map_id, seam)
+    if key is None:
+        return _QuantView(state.analysis, state.pool_key_to_idx, state.metatile_imgs_postquant)
+    hit = _seam_view_cache.get(map_id)
+    if hit is not None and hit[0] == key:
+        return hit[1]
+    pals = _component_palettes(key)
+    analysis, p2i = _ensure_tileset_analysis(
+        state.tileset_id, state.raster, state.priorities, map_id,
+        state.passages, state.terrain_tags,
+        seam_key=key, quantizer=make_pinned_quantizer(pals),
+    )
+    view = _QuantView(analysis, p2i, _postquant_for(map_id, state, analysis, p2i))
+    _seam_view_cache[map_id] = (key, view)
+    return view
 
 
 def _invalidate_for_reload(map_id: int) -> None:
@@ -565,7 +715,10 @@ def _invalidate_for_reload(map_id: int) -> None:
     _map_cache.pop(map_id, None)
     _tile_png_cache.clear()
     _metatile_png_cache.clear()
+    _atlas_png_cache.clear()
     _tileset_analysis_cache.clear()
+    _seam_palette_cache.clear()
+    _seam_view_cache.clear()
     _quant_generation += 1
 
 
@@ -784,37 +937,74 @@ def render_tile_png(map_id: int, tile_id: int) -> bytes:
     return png
 
 
-def render_metatile_png(map_id: int, idx: int, layer: str) -> bytes:
+# Metatile atlas geometry, shared with the client via ``build_map_data`` meta.atlas.
+# Metatile ``idx`` lives at cell (idx % cols, idx // cols), each cell cell_px square.
+ATLAS_COLS = 64
+ATLAS_CELL_PX = 16
+
+
+def _metatile_arr(map_id: int, state: _MapState, idx: int, layer: str, seam: bool) -> np.ndarray:
+    """RGBA pixels for one metatile layer -- the single pixel source for both the
+    per-metatile PNG and the atlas, so the two can never disagree."""
+    if layer in ("post_bottom", "post_top"):
+        pq = _quant_view(map_id, seam).postquant[idx]
+        if pq is None:
+            return np.zeros((16, 16, 4), dtype=np.uint8)
+        return pq[0] if layer == "post_bottom" else pq[1]
+    mt = state.metatile_imgs[idx]
+    if mt is None:
+        return np.zeros((16, 16, 4), dtype=np.uint8)
+    return mt.top if layer == "top" else mt.bottom
+
+
+def render_metatile_png(map_id: int, idx: int, layer: str, seam: bool = False) -> bytes:
     """Render one metatile layer to PNG bytes (cached).
 
     ``layer`` is one of: ``'bottom'``, ``'top'``, ``'post_bottom'``, ``'post_top'``.
     ``post_bottom`` / ``post_top`` return the quantized-and-alpha-resolved pixels
     that match the shipped ROM's palette assignment.
 
+    ``seam=True`` swaps the post-quant layers for the seam-palette view (see
+    ``_quant_view``); the cache key carries ``_seam_key`` so the views never alias.
+    The raw layers ignore it.
+
     ``idx`` is the per-map colkey index returned in ``build_map_data``."""
     _ensure_loaded(map_id)
-    key = (map_id, idx, layer)
+    post = layer in ("post_bottom", "post_top")
+    key = (map_id, idx, layer, _seam_key(map_id, seam) if post else None)
     if key in _metatile_png_cache:
         return _metatile_png_cache[key]
     state = _map_cache[map_id]
     if idx < 0 or idx >= len(state.metatile_imgs):
         raise IndexError(f"metatile idx {idx} out of range for map {map_id}")
-
-    if layer in ("post_bottom", "post_top"):
-        pq = state.metatile_imgs_postquant[idx]
-        if pq is None:
-            arr: np.ndarray = np.zeros((16, 16, 4), dtype=np.uint8)
-        else:
-            arr = pq[0] if layer == "post_bottom" else pq[1]
-    else:
-        mt = state.metatile_imgs[idx]
-        if mt is None:
-            arr = np.zeros((16, 16, 4), dtype=np.uint8)
-        else:
-            arr = mt.top if layer == "top" else mt.bottom
-
+    arr = _metatile_arr(map_id, state, idx, layer, seam)
     png = _arr_to_png(arr)
     _metatile_png_cache[key] = png
+    return png
+
+
+def render_atlas_png(map_id: int, layer: str, seam: bool = False) -> bytes:
+    """Every metatile of ``map_id`` for ``layer`` as ONE PNG (cached).
+
+    Fixed ``ATLAS_COLS``-wide grid of ``ATLAS_CELL_PX`` cells; metatile ``idx`` is at
+    cell (idx % cols, idx // cols).  Pixels come from ``_metatile_arr``, so each cell
+    is identical to ``render_metatile_png(map_id, idx, layer, seam)``.  Replaces
+    thousands of per-metatile requests per page load with one per layer."""
+    _ensure_loaded(map_id)
+    post = layer in ("post_bottom", "post_top")
+    key = (map_id, layer, _seam_key(map_id, seam) if post else None)
+    if key in _atlas_png_cache:
+        return _atlas_png_cache[key]
+    state = _map_cache[map_id]
+    n = len(state.metatile_imgs)
+    rows = max(1, -(-n // ATLAS_COLS))
+    cp = ATLAS_CELL_PX
+    sheet = np.zeros((rows * cp, ATLAS_COLS * cp, 4), dtype=np.uint8)
+    for idx in range(n):
+        y, x = divmod(idx, ATLAS_COLS)
+        sheet[y * cp:(y + 1) * cp, x * cp:(x + 1) * cp] = _metatile_arr(map_id, state, idx, layer, seam)
+    png = _arr_to_png(sheet)
+    _atlas_png_cache[key] = png
     return png
 
 
@@ -854,6 +1044,331 @@ def render_map_png(map_id: int) -> bytes:
     return png
 
 
+# ---------------------------------------------------------------------------
+# ROM seam check: cost of border-strip import
+# ---------------------------------------------------------------------------
+# fieldmap.c draws a connected map's metatile IDs, up to SEAM_DEPTH cells deep, through
+# the CURRENT map's tileset. A neighbour strip metatile whose image is not in the
+# current map's own pool therefore has nothing to resolve to; the count of those is
+# what importing the strip into A's tileset would cost.
+
+SEAM_DEPTH = 7
+
+
+def metatile_image_hash(mt: MetatileImage | None) -> str | None:
+    """sha1 of a metatile's rendered 16x16 RGBA (bottom then top). None for the
+    empty column (it is void, never imported)."""
+    if mt is None:
+        return None
+    h = hashlib.sha1()
+    h.update(np.ascontiguousarray(mt.bottom).tobytes())
+    h.update(np.ascontiguousarray(mt.top).tobytes())
+    return h.hexdigest()
+
+
+def seam_strip_cells(
+    edge: str,
+    origin: tuple[int, int],
+    a_dims: tuple[int, int],
+    b_dims: tuple[int, int],
+    depth: int = SEAM_DEPTH,
+) -> list[tuple[int, int]]:
+    """B-local cells of neighbour B's strip along the seam.
+
+    ``edge`` is A's own edge the seam sits on and ``origin`` is B's (0,0) in A's
+    frame (``map_graph.connections_for``'s fields). The strip is the ``depth`` rows
+    (N/S) or columns (E/W) of B nearest the shared edge, clamped to the span where
+    A's edge and B overlap. Row-major order."""
+    aw, ah = a_dims
+    bw, bh = b_dims
+    dx, dy = origin
+    if edge in ("N", "S"):
+        xs = range(max(0, dx), min(aw, dx + bw))
+        ys = range(max(0, bh - depth), bh) if edge == "N" else range(0, min(depth, bh))
+        return [(ax - dx, y) for y in ys for ax in xs]
+    ys_a = range(max(0, dy), min(ah, dy + bh))
+    xs_b = range(max(0, bw - depth), bw) if edge == "W" else range(0, min(depth, bw))
+    return [(x, ay - dy) for ay in ys_a for x in xs_b]
+
+
+def compute_seam_entry(
+    conn: dict,
+    a_dims: tuple[int, int],
+    b_dims: tuple[int, int],
+    a_hashes: set[str],
+    b_hash_at: Callable[[int, int], str | None],
+) -> dict:
+    """One seam's record: B's strip cells, those whose metatile image is absent from
+    A's pool (*a_hashes*), and the unique-metatile counts. Empty cells (hash None)
+    are neither strip nor missing."""
+    cells = seam_strip_cells(conn["edge"], tuple(conn["origin"]), a_dims, b_dims)
+    strip: list[list[int]] = []
+    missing: list[list[int]] = []
+    strip_u: set[str] = set()
+    missing_u: set[str] = set()
+    for x, y in cells:
+        hx = b_hash_at(x, y)
+        if hx is None:
+            continue
+        strip.append([x, y])
+        strip_u.add(hx)
+        if hx not in a_hashes:
+            missing.append([x, y])
+            missing_u.add(hx)
+    return {
+        "neighbor": conn["id"],
+        "name": conn.get("name", ""),
+        "edge": conn["edge"],
+        "direction": EDGE_TO_DIRECTION[conn["edge"]],
+        "origin": list(conn["origin"]),
+        "depth": SEAM_DEPTH,
+        "strip": strip,
+        "missing": missing,
+        "strip_unique": len(strip_u),
+        "missing_unique": len(missing_u),
+    }
+
+
+def seam_check(map_id: int) -> dict:
+    """ROM seam check for *map_id* (A): per neighbour B, B's strip and which of it is
+    absent from A's per-map pool, compared by rendered metatile image hash (not
+    column key: two column keys, or two different tilesets, can render one image).
+    Cell coordinates are B-local. Loads A and each B (``_ensure_loaded``)."""
+    import map_graph
+
+    _ensure_loaded(map_id)
+    a = _map_cache[map_id]
+    a_hashes = {h for h in map(metatile_image_hash, a.metatile_imgs) if h is not None}
+    seams: list[dict] = []
+    for conn in map_graph.connections_for(map_id):
+        bid = conn["id"]
+        _ensure_loaded(bid)
+        b = _map_cache[bid]
+        memo: dict[int, str | None] = {}
+
+        def b_hash_at(x: int, y: int, _b: _MapState = b, _memo: dict = memo) -> str | None:
+            idx = _b.colkey_to_idx[column_key(_b.grid, x, y)]
+            if idx not in _memo:
+                _memo[idx] = metatile_image_hash(_b.metatile_imgs[idx])
+            return _memo[idx]
+
+        seams.append(compute_seam_entry(
+            conn, (a.grid.xsize, a.grid.ysize), (b.grid.xsize, b.grid.ysize),
+            a_hashes, b_hash_at,
+        ))
+    return {"map_id": map_id, "depth": SEAM_DEPTH, "pool_unique": len(a_hashes), "seams": seams}
+
+
+# ---------------------------------------------------------------------------
+# Shared tiles: what a set of maps shares in the RMXP data vs the emitted ROM
+# ---------------------------------------------------------------------------
+# Four bases, per map a SET of keys:
+#   rmxp_id     (real RMXP tileset id, column key)     same tileset + same tile ids
+#   rmxp_image  sha1 of the pre-quant 16x16 render     identical art across tilesets
+#   rom_mt      sha1 of the DECODED ROM metatile       real emitted artifacts, post-quant,
+#               (bottom+top RGBA, palette resolved)
+#   rom_tile    sha1 of the DECODED 8x8 quadrant       FLIP-CANONICAL: the min over the 4
+#               (RGBA, palette resolved)               h/v flips of the pixel block.
+# Flip decision: the emitter flip-dedups 8x8 tiles, so one stored tile may be used
+# mirrored by one map and upright by another; two blocks that differ only by a flip are
+# the same ROM tile for sharing purposes. Pixels are compared as palette COLOURS, so the
+# same art under different palette-index layouts still matches. Fully transparent
+# quadrants (and empty metatiles) are never counted. ROM sets cover the metatiles the map
+# actually uses (cells), not the tileset's unused void/door/stair copies, so the four
+# bases measure the same population. A map with no uranium<1000+id> artifacts has
+# ``rom: null`` and null ROM sets/pairs.
+
+SHARED_BASES = ("rmxp_id", "rmxp_image", "rom_mt", "rom_tile")
+_CELL_BASES = ("rmxp_id", "rmxp_image", "rom_mt")  # bases with a per-cell highlight
+
+_shared_profile_cache: dict[int, tuple[tuple, dict]] = {}
+_shared_result_cache: dict[tuple[int, ...], tuple[tuple, dict]] = {}
+
+
+def canon_tile_hash(rgba: np.ndarray) -> str | None:
+    """Flip-canonical sha1 of an 8x8 RGBA block; None if fully transparent."""
+    if not np.any(rgba[..., 3]):
+        return None
+    best: bytes | None = None
+    for blk in (rgba, rgba[:, ::-1], rgba[::-1, :], rgba[::-1, ::-1]):
+        b = np.ascontiguousarray(blk).tobytes()
+        if best is None or b < best:
+            best = b
+    return hashlib.sha1(best).hexdigest()
+
+
+def rom_metatile_hashes(bottom: np.ndarray, top: np.ndarray) -> tuple[str | None, list[str]]:
+    """(metatile hash or None if both layers are transparent, flip-canonical hashes of
+    its non-transparent 8x8 quadrants) from a decoded ROM metatile's RGBA layers."""
+    tiles: list[str] = []
+    for layer in (bottom, top):
+        for r in (0, 8):
+            for c in (0, 8):
+                h = canon_tile_hash(layer[r:r + 8, c:c + 8])
+                if h is not None:
+                    tiles.append(h)
+    if not np.any(bottom[..., 3]) and not np.any(top[..., 3]):
+        return None, tiles
+    h = hashlib.sha1()
+    h.update(np.ascontiguousarray(bottom).tobytes())
+    h.update(np.ascontiguousarray(top).tobytes())
+    return h.hexdigest(), tiles
+
+
+def pair_stats(a: set | None, b: set | None) -> dict | None:
+    """Shared / only-A / only-B unique-key counts; None if either side is absent."""
+    if a is None or b is None:
+        return None
+    s = len(a & b)
+    return {"shared": s, "only_a": len(a) - s, "only_b": len(b) - s}
+
+
+def shared_cells(cell_keys: list, partner: set | None) -> list[int] | None:
+    """Flat (row-major) indices of cells whose key is in *partner*; None if either the
+    map's keys or the partner set is absent. Empty cells (None) never match."""
+    if partner is None or cell_keys is None:
+        return None
+    return [i for i, k in enumerate(cell_keys) if k is not None and k in partner]
+
+
+def build_shared(profiles: dict[int, dict]) -> dict:
+    """Assemble the /api/shared payload from per-map profiles. A profile is
+    ``{"w","h","tileset","rom": dict|None, "sets": {basis: set|None},
+    "cells": {basis: list|None}}`` (cells: per-cell key, None = empty)."""
+    ids = sorted(profiles)
+    maps: dict[str, dict] = {}
+    for m in ids:
+        p = profiles[m]
+        maps[str(m)] = {
+            "w": p["w"], "h": p["h"], "rmxp_tileset": p["tileset"], "rom": p["rom"],
+            "counts": {b: (None if p["sets"][b] is None else len(p["sets"][b]))
+                       for b in SHARED_BASES},
+        }
+    pairs = []
+    for i, a in enumerate(ids):
+        for b in ids[i + 1:]:
+            e: dict = {"a": a, "b": b}
+            for basis in SHARED_BASES:
+                e[basis] = pair_stats(profiles[a]["sets"][basis], profiles[b]["sets"][basis])
+            pairs.append(e)
+    cells: dict[str, dict] = {}
+    for a in ids:
+        cells[str(a)] = {
+            str(b): {basis: shared_cells(profiles[a]["cells"][basis], profiles[b]["sets"][basis])
+                     for basis in _CELL_BASES}
+            for b in ids if b != a
+        }
+    return {"maps": ids, "bases": list(SHARED_BASES), "info": maps, "pairs": pairs, "cells": cells}
+
+
+def _rom_artifact_dirs(map_id: int) -> tuple[int, Path, Path] | None:
+    """(synth tileset id, primary dir, secondary dir) of the map's emitted per-map
+    tileset, or None if either directory is absent."""
+    from rpg2gba.tileset_converter.map_set import synth_tileset_id
+    from verify_viewer_rom_match import _resolve_fork
+
+    synth = synth_tileset_id(map_id)
+    base = _resolve_fork() / "data" / "tilesets"
+    prim, sec = base / "primary" / f"uranium{synth}", base / "secondary" / f"uranium{synth}"
+    if prim.is_dir() and sec.is_dir():
+        return synth, prim, sec
+    return None
+
+
+def _artifact_stat(dirs: tuple[int, Path, Path] | None) -> tuple:
+    """(path, mtime_ns, size) of every artifact file; () when there are none."""
+    if dirs is None:
+        return ()
+    out = []
+    for d in dirs[1:]:
+        for p in sorted(d.rglob("*")):
+            if p.is_file():
+                st = p.stat()
+                out.append((str(p), st.st_mtime_ns, st.st_size))
+    return tuple(out)
+
+
+def _shared_profile(map_id: int) -> dict:
+    """One map's shared-tiles profile (cached by member fingerprint + artifact stats)."""
+    from verify_viewer_rom_match import load_tileset_rom
+
+    _ensure_loaded(map_id)
+    state = _map_cache[map_id]
+    dirs = _rom_artifact_dirs(map_id)
+    key = (state.input_fingerprint, _artifact_stat(dirs))
+    hit = _shared_profile_cache.get(map_id)
+    if hit is not None and hit[0] == key:
+        return hit[1]
+    rom = load_tileset_rom(dirs[1], dirs[2]) if dirs is not None else None
+    w, h = state.grid.xsize, state.grid.ysize
+    memo: dict[int, tuple] = {}
+
+    def per_idx(idx: int) -> tuple:
+        if idx in memo:
+            return memo[idx]
+        ck = state.colkeys_sorted[idx]
+        mt = state.metatile_imgs[idx]
+        if not ck or mt is None:
+            res: tuple = (None, None, None, [])
+        else:
+            rid, rtiles = None, []
+            if rom is not None:
+                ri = state.pool_key_to_idx.get(ck)
+                if ri is not None and ri < rom.n_metatiles():
+                    rid, rtiles = rom_metatile_hashes(*rom.decode_metatile(ri))
+            res = (repr((state.tileset_id, ck)), metatile_image_hash(mt), rid, rtiles)
+        memo[idx] = res
+        return res
+
+    cells: dict[str, list] = {b: [] for b in _CELL_BASES}
+    for y in range(h):
+        for x in range(w):
+            rk, ih, rm, _ = per_idx(state.colkey_to_idx[column_key(state.grid, x, y)])
+            cells["rmxp_id"].append(rk)
+            cells["rmxp_image"].append(ih)
+            cells["rom_mt"].append(rm)
+    tile_set: set[str] = set()
+    for _rk, _ih, _rm, tl in memo.values():
+        tile_set.update(tl)
+    sets: dict[str, set | None] = {
+        b: {k for k in cells[b] if k is not None} for b in _CELL_BASES
+    }
+    sets["rom_tile"] = tile_set
+    if rom is None:
+        sets["rom_mt"] = sets["rom_tile"] = None
+        cells["rom_mt"] = None  # type: ignore[assignment]
+    profile = {
+        "w": w, "h": h, "tileset": state.tileset_id, "sets": sets, "cells": cells,
+        "rom": None if dirs is None else {
+            "synth_tileset": dirs[0], "n_metatiles": rom.n_metatiles(),  # type: ignore[union-attr]
+        },
+    }
+    _shared_profile_cache[map_id] = (key, profile)
+    return profile
+
+
+def shared_tiles(map_ids: list[int]) -> dict:
+    """The /api/shared payload for *map_ids* (deduped, sorted). Cached by the members'
+    profile keys; a rebuild or new artifacts change the key."""
+    ids = tuple(sorted(set(map_ids)))
+    if len(ids) < 2:
+        raise ValueError("shared tiles needs at least two maps")
+    profiles = {m: _shared_profile(m) for m in ids}
+    key = tuple(_shared_profile_cache[m][0] for m in ids)
+    hit = _shared_result_cache.get(ids)
+    if hit is not None and hit[0] == key:
+        return hit[1]
+    result = build_shared(profiles)
+    _shared_result_cache[ids] = (key, result)
+    return result
+
+
+def shared_default_maps(map_id: int) -> list[int]:
+    """The default pick for ``/api/shared?map=<id>``: the map's seam component."""
+    comp = _seam_component(map_id)
+    return list(comp) if comp else [map_id]
+
+
 def render_npc_png(character_name: str) -> bytes:
     """Render one NPC's sheet to PNG bytes (cached by lowercased name).
 
@@ -862,12 +1377,23 @@ def render_npc_png(character_name: str) -> bytes:
     sprite per event, not per-direction accuracy. Raises FileNotFoundError if
     the sheet isn't under RPG2GBA_URANIUM_SRC/Graphics/Characters (fails loud;
     the client falls back to a dot marker on a 404).
+
+    A sheet the converter rejects (e.g. ``light``, a 46x45 additive glow that the
+    ROM strips via ``strip_list.json``) is also surfaced as FileNotFoundError, so it
+    404s to the same dot marker; the rejection is logged once and remembered.
     """
     key = character_name.lower()
     if key in _npc_png_cache:
         return _npc_png_cache[key]
+    if key in _npc_unconvertible:
+        raise FileNotFoundError(_npc_unconvertible[key])
     sheet_path = _resolve_sheet(_characters_dir(), character_name)
-    sprite = convert_character_sheet(sheet_path)
+    try:
+        sprite = convert_character_sheet(sheet_path)
+    except ValueError as exc:
+        log.warning("NPC sheet %s not convertible, drawing a dot: %s", character_name, exc)
+        _npc_unconvertible[key] = str(exc)
+        raise FileNotFoundError(str(exc)) from exc
     png = _arr_to_png(sprite.frames[0])
     _npc_png_cache[key] = png
     return png
@@ -924,16 +1450,20 @@ def _build_events_payload(map_id: int, events_list: list) -> list[dict]:
         return _parse_events(events_list)
 
 
-def build_map_data(map_id: int) -> dict:
+def build_map_data(map_id: int, seam: bool = False) -> dict:
     """Return all per-map data WITHOUT inline image bytes.
 
     Distinct column keys are assigned stable integer indices (``colkeys_list``);
     cells reference these via ``colkey_idx`` rather than the URL-unsafe colkey
     string.  Per-cell tile references stay as ``tile_id`` ints.
     Use ``render_tile_png`` / ``render_metatile_png`` to obtain image bytes.
+
+    ``seam=True`` reports the seam-palette analysis (palettes shared across the map's
+    seam component) instead of the per-map one; a map in no component is unchanged.
     """
     _ensure_loaded(map_id)
     state = _map_cache[map_id]
+    seam_comp = _seam_component(map_id)
     grid = state.grid
 
     colkeys_list = [serialize_column_key(ck) for ck in state.colkeys_sorted]
@@ -1016,7 +1546,8 @@ def build_map_data(map_id: int) -> dict:
             cells.append(cell)
 
     # ---- palette data -------------------------------------------------------
-    analysis, pool_key_to_idx = state.analysis, state.pool_key_to_idx
+    view = _quant_view(map_id, seam)
+    analysis, pool_key_to_idx = view.analysis, view.pool_key_to_idx
 
     # palettes: JSON-friendly list[list[[r,g,b]]]
     palettes_json: list[list[list[int]]] = [
@@ -1166,6 +1697,7 @@ def build_map_data(map_id: int) -> dict:
             "zsize": grid.zsize,
             "width": state.map_width,
             "height": state.map_height,
+            "atlas": {"cols": ATLAS_COLS, "cell": ATLAS_CELL_PX, "count": len(state.metatile_imgs)},
         },
         "colkeys_list": colkeys_list,
         "metatile_attrs": metatile_attrs,
@@ -1177,6 +1709,10 @@ def build_map_data(map_id: int) -> dict:
         "colkey_palettes": colkey_palettes,
         "palette_usage": palette_usage,
         "out_of_atlas": out_of_atlas,
+        "seam": {
+            "component": list(seam_comp) if seam_comp else None,
+            "active": bool(seam and seam_comp),
+        },
     }
 
 

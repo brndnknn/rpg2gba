@@ -10,8 +10,13 @@ Routes:
   GET  /component/<id>              -> stitched viewer: all seam-connected maps as one canvas
   GET  /palettes/<id>               -> palette inspector HTML (server mode, lazy images)
   GET  /api/map/<id>                -> build_map_data JSON
+  GET  /api/seamcheck/<id>          -> ROM seam check (neighbour strips missing from this map's pool)
+  GET  /api/shared?maps=31,35,40    -> shared-tiles (RMXP id/image vs ROM metatile/8x8); or ?map=<id> = its seam component
+  (?sp=1 on /map, /component, /palettes, /api/map, /api/metatile = seam-palette view)
   GET  /api/tile/<mapid>/<tid>.png  -> single RMXP tile PNG
   GET  /api/metatile/<mapid>/<idx>.png?layer=bottom|top -> metatile PNG
+  GET  /api/atlas/<mapid>.png?layer=bottom|top|post_bottom|post_top -> every metatile of the
+       map in one PNG (64-col grid of 16px cells; geometry in /api/map meta.atlas)
   GET  /api/feedback/<id>           -> this map's tile-feedback flags (JSON list)
   GET  /api/event/<mapid>/<eventid> -> per-event debug record (map_viewer_events.event_detail)
   GET  /api/beats/<mapid>           -> scenario beat markers for this map (map_viewer_events.beat_markers)
@@ -51,10 +56,14 @@ from map_viewer_common import (  # noqa: E402
     get_quantize_params,
     load_feedback,
     params_from_dict,
+    render_atlas_png,
     render_metatile_png,
     render_npc_png,
     render_tile_png,
     save_feedback,
+    seam_check,
+    shared_default_maps,
+    shared_tiles,
     set_quantize_params,
 )
 
@@ -93,10 +102,12 @@ _RE_PAL_PAGE = re.compile(r"^/palettes/(\d+)$")
 _RE_API_MAP = re.compile(r"^/api/map/(\d+)$")
 _RE_API_TILE = re.compile(r"^/api/tile/(\d+)/(\d+)\.png$")
 _RE_API_META = re.compile(r"^/api/metatile/(\d+)/(\d+)\.png$")
+_RE_API_ATLAS = re.compile(r"^/api/atlas/(\d+)\.png$")
 # Sheet-name charset only (no '.' or '/'): closes off path traversal via the
 # character_name URL segment before it ever reaches _resolve_sheet.
 _RE_API_NPC = re.compile(r"^/api/npc/([A-Za-z0-9_\-]+)\.png$")
 _RE_API_FEEDBACK = re.compile(r"^/api/feedback/(\d+)$")
+_RE_API_SEAMCHECK = re.compile(r"^/api/seamcheck/(\d+)$")
 # Segments captured loosely (not \d+) so a non-integer id falls through to our
 # own 400 JSON response instead of the generic 404 catch-all.
 _RE_API_EVENT = re.compile(r"^/api/event/([^/]+)/([^/]+)$")
@@ -202,6 +213,11 @@ render();
 
 
 class _Handler(BaseHTTPRequestHandler):
+    # Keep-alive: one TCP connection serves many requests (a page load is hundreds of
+    # fetches over a high-latency link).  Requires Content-Length on EVERY response and
+    # a fully-read request body on every POST, else the stream desyncs.
+    protocol_version = "HTTP/1.1"
+
     def log_message(self, fmt: str, *args: object) -> None:  # quieter logging
         log.debug(fmt, *args)
 
@@ -209,25 +225,36 @@ class _Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         qs = parse_qs(parsed.query)
+        # Seam-palette toggle (?sp=1), threaded through every route whose output depends on it.
+        sp = qs.get("sp", ["0"])[0] == "1"
 
         try:
             if path in ("", "/"):
                 self._serve_index()
             elif m := _RE_MAP_PAGE.match(path):
-                self._serve_map_page(int(m.group(1)))
+                self._serve_map_page(int(m.group(1)), sp)
             elif m := _RE_COMPONENT_PAGE.match(path):
-                self._serve_component_page(int(m.group(1)))
+                self._serve_component_page(int(m.group(1)), sp)
             elif m := _RE_PAL_PAGE.match(path):
-                self._serve_palette_page(int(m.group(1)))
+                self._serve_palette_page(int(m.group(1)), sp)
             elif m := _RE_API_MAP.match(path):
-                self._serve_api_map(int(m.group(1)))
+                self._serve_api_map(int(m.group(1)), sp)
             elif m := _RE_API_TILE.match(path):
                 self._serve_tile(int(m.group(1)), int(m.group(2)))
             elif m := _RE_API_META.match(path):
                 layer = qs.get("layer", ["bottom"])[0]
                 if layer not in ("bottom", "top", "post_bottom", "post_top"):
                     layer = "bottom"
-                self._serve_metatile(int(m.group(1)), int(m.group(2)), layer)
+                self._serve_metatile(int(m.group(1)), int(m.group(2)), layer, sp)
+            elif m := _RE_API_ATLAS.match(path):
+                layer = qs.get("layer", ["bottom"])[0]
+                if layer not in ("bottom", "top", "post_bottom", "post_top"):
+                    layer = "bottom"
+                self._serve_atlas(int(m.group(1)), layer, sp)
+            elif m := _RE_API_SEAMCHECK.match(path):
+                self._serve_seamcheck(int(m.group(1)))
+            elif path == "/api/shared":
+                self._serve_shared(qs)
             elif m := _RE_API_NPC.match(path):
                 self._serve_npc(m.group(1))
             elif m := _RE_API_FEEDBACK.match(path):
@@ -249,6 +276,10 @@ class _Handler(BaseHTTPRequestHandler):
                 self._serve_mappng(int(m.group(1)))
             else:
                 self._send(404, "text/plain", b"Not found")
+        except (BrokenPipeError, ConnectionResetError):
+            # The browser dropped the request (navigated away, or cancelled a
+            # superseded image load) — nobody is left to send an error to.
+            log.debug("client went away during %s", self.path)
         except (FileNotFoundError, KeyError, IndexError) as exc:
             log.warning("404 for %s: %s", self.path, exc)
             self._send(404, "text/plain", str(exc).encode())
@@ -258,6 +289,9 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        # Drain the body up front, whatever the route: an unread body on a keep-alive
+        # connection would be parsed as the next request line.
+        self._post_body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
         try:
             if path == "/api/quantize":
                 self._handle_quantize()
@@ -279,8 +313,7 @@ class _Handler(BaseHTTPRequestHandler):
         """Apply new family-packer knobs, eagerly re-quantize the requesting map (so a
         bad value surfaces as a clean 400 instead of breaking the page reload), and
         return the new generation token.  On failure the previous params are restored."""
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length) or b"{}")
+        body = json.loads(self._post_body or b"{}")
         params, max_pals = params_from_dict(body)
         map_id = int(body.get("map_id", 0))
         with _quant_lock:
@@ -301,8 +334,7 @@ class _Handler(BaseHTTPRequestHandler):
         reference/map_feedback/MapNNN.json (whole-file rewrite; the list per map is
         always tiny). The client sends the full list on every Save/delete, so there is
         no per-flag key to manage. Responds with the now-persisted list."""
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length) or b"{}")
+        body = json.loads(self._post_body or b"{}")
         map_id = int(body["map_id"])
         flags = body.get("flags", [])
         if not isinstance(flags, list):
@@ -317,8 +349,7 @@ class _Handler(BaseHTTPRequestHandler):
         machine running the server — the viewer is usually driven from a phone, and the
         export is only useful next to the rest of the pipeline's output. Responds with
         the written path so the page can show where it landed."""
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length) or b"{}")
+        body = json.loads(self._post_body or b"{}")
         map_id = int(body["map_id"])
         flags = body.get("flags", [])
         if not isinstance(flags, list):
@@ -407,15 +438,15 @@ class _Handler(BaseHTTPRequestHandler):
         html = _INDEX_HTML.replace("__INDEX_DATA__", index_json)
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
 
-    def _serve_map_page(self, map_id: int) -> None:
-        data = build_map_data(map_id)
+    def _serve_map_page(self, map_id: int, seam: bool = False) -> None:
+        data = build_map_data(map_id, seam)
         config = {"data": data, "graph": map_relationships(map_id),
-                  "quant": get_quantize_params()}
+                  "quant": get_quantize_params(), "seam": seam}
         config_json = json.dumps(config, separators=(",", ":"))
         html = MAP_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
 
-    def _serve_component_page(self, map_id: int) -> None:
+    def _serve_component_page(self, map_id: int, seam: bool = False) -> None:
         """Stitched view: every seam-connected map drawn in one shared cell space.
 
         The page ships the requested map's full data plus the component layout;
@@ -426,25 +457,26 @@ class _Handler(BaseHTTPRequestHandler):
         if len(layout["members"]) <= 1:
             self.send_response(302)
             self.send_header("Location", f"/map/{map_id}")
+            self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        data = build_map_data(map_id)
+        data = build_map_data(map_id, seam)
         config = {"data": data, "graph": map_relationships(map_id),
-                  "quant": get_quantize_params(), "component": layout}
+                  "quant": get_quantize_params(), "component": layout, "seam": seam}
         config_json = json.dumps(config, separators=(",", ":"))
         html = MAP_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
 
-    def _serve_palette_page(self, map_id: int) -> None:
-        data = build_map_data(map_id)
+    def _serve_palette_page(self, map_id: int, seam: bool = False) -> None:
+        data = build_map_data(map_id, seam)
         config = {"data": data, "graph": map_relationships(map_id),
                   "quant": get_quantize_params()}
         config_json = json.dumps(config, separators=(",", ":"))
         html = PALETTE_VIEWER_HTML.replace("__VIEWER_CONFIG__", config_json)
         self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
 
-    def _serve_api_map(self, map_id: int) -> None:
-        data = build_map_data(map_id)
+    def _serve_api_map(self, map_id: int, seam: bool = False) -> None:
+        data = build_map_data(map_id, seam)
         body = json.dumps(data, separators=(",", ":")).encode("utf-8")
         self._send(200, "application/json", body)
 
@@ -452,9 +484,33 @@ class _Handler(BaseHTTPRequestHandler):
         png = render_tile_png(map_id, tile_id)
         self._send(200, "image/png", png, cache=_CACHE_IMMUTABLE)
 
-    def _serve_metatile(self, map_id: int, idx: int, layer: str) -> None:
-        png = render_metatile_png(map_id, idx, layer)
+    def _serve_metatile(self, map_id: int, idx: int, layer: str, seam: bool = False) -> None:
+        png = render_metatile_png(map_id, idx, layer, seam)
         self._send(200, "image/png", png, cache=_CACHE_IMMUTABLE)
+
+    def _serve_atlas(self, map_id: int, layer: str, seam: bool = False) -> None:
+        png = render_atlas_png(map_id, layer, seam)
+        self._send(200, "image/png", png, cache=_CACHE_IMMUTABLE)
+
+    def _serve_seamcheck(self, map_id: int) -> None:
+        """ROM seam check JSON. Depends on on-disk maps, so never cached."""
+        body = json.dumps(seam_check(map_id), separators=(",", ":")).encode("utf-8")
+        self._send(200, "application/json", body, cache="no-cache")
+
+    def _serve_shared(self, qs: dict[str, list[str]]) -> None:
+        """Shared-tiles JSON: ``?maps=31,35,40`` or ``?map=31`` (its seam component)."""
+        try:
+            if "maps" in qs:
+                ids = [int(s) for s in qs["maps"][0].split(",") if s.strip()]
+            else:
+                ids = shared_default_maps(int(qs["map"][0]))
+            if len(set(ids)) < 2:
+                raise ValueError("need at least two maps (?maps=a,b[,c] or ?map=<id> in a component)")
+        except (ValueError, KeyError, IndexError) as exc:
+            self._send(400, "text/plain", f"bad request: {exc}".encode())
+            return
+        body = json.dumps(shared_tiles(ids), separators=(",", ":")).encode("utf-8")
+        self._send(200, "application/json", body, cache="no-cache")
 
     def _serve_npc(self, character_name: str) -> None:
         png = render_npc_png(character_name)

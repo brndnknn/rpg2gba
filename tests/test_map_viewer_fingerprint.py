@@ -337,14 +337,14 @@ def test_missing_graphics_dir_env_still_returns_fingerprint(
     assert mvc._png_paths_cache[7][1] == ()
 
 
-def test_slice_map_fingerprint_covers_json_of_sibling_maps(
+def test_slice_map_fingerprint_ignores_json_of_sibling_maps(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Slice maps (SLICE_MAP_IDS) still fold every sibling's json stat into the
-    fingerprint (pre-existing behavior, unchanged by this feature): editing a
-    sibling's json (which can shift the shared quantization pool -- see
-    _ensure_tileset_analysis) must flip Map048's fingerprint even though
-    Map048's own json never changed."""
+    """The viewer pools PER MAP (as the ROM has since 4db0deb9), so a sibling slice
+    map's json cannot change Map048's render and must NOT flip its fingerprint -- even
+    a sibling on the same real RMXP tileset (Map049, tileset 19). Its own json still
+    does. (This used to assert the opposite while slice maps were pooled by real
+    tileset id.)"""
     maps_dir = tmp_path / "maps"
     gfx = tmp_path / "Graphics"
     tj = tmp_path / "tilesets.json"
@@ -367,17 +367,22 @@ def test_slice_map_fingerprint_covers_json_of_sibling_maps(
 
     before = mvc._slice_aware_fingerprint(48)
 
-    # Rewrite Map049.json (sibling) -- Map048's own json is untouched.
+    # Rewrite Map049.json (same-tileset sibling) -- Map048's own json is untouched.
     _write_map_json(maps_dir / "Map049.json", tileset_id=19)
     st = (maps_dir / "Map049.json").stat()
     os.utime(
         maps_dir / "Map049.json", ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000)
     )
+    assert mvc._slice_aware_fingerprint(48) == before
 
-    after = mvc._slice_aware_fingerprint(48)
+    # Its OWN json does flip it.
+    _write_map_json(maps_dir / "Map048.json", tileset_id=19)
+    st = (maps_dir / "Map048.json").stat()
+    os.utime(
+        maps_dir / "Map048.json", ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000)
+    )
+    assert mvc._slice_aware_fingerprint(48) != before
 
-    assert before != after
-    # And Map048's own PNG derivation only ever resolved tileset 19 (its own),
-    # never tileset 22 (Map032's, a different tileset -- not in the pool).
+    # Only Map048's own tileset (19) is ever resolved for its PNG fingerprint.
     assert (gfx / "Tilesets" / "Outdoor.png") not in mvc._png_paths_cache[48][1]
     assert (gfx / "Tilesets" / "Indoor.png") in mvc._png_paths_cache[48][1]

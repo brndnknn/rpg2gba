@@ -43,10 +43,23 @@ function getTileURL(tileId, mid) {
   const g = (V.quant && V.quant.generation) || 0;
   return '/api/tile/' + mid + '/' + tileId + '.png?g=' + g;
 }
+// `sp=1` selects the seam-palette view (page-level toggle, `V.seam`). It is part of the
+// URL, hence of the browser's cache key, so toggling can never serve a stale image.
+const SP = V.seam ? '&sp=1' : '';
 function getMetatileURL(idx, layer, mid) {
   mid = mid || D.meta.map_id;
   const g = (V.quant && V.quant.generation) || 0;
-  return '/api/metatile/' + mid + '/' + idx + '.png?layer=' + layer + '&g=' + g;
+  return '/api/metatile/' + mid + '/' + idx + '.png?layer=' + layer + '&g=' + g + SP;
+}
+// One atlas PNG per (map, layer) holds every metatile of that map -- see
+// map_viewer_common.render_atlas_png.  The page draws map cells from a sub-rect of it
+// instead of fetching one PNG per distinct metatile (thousands of requests on a big
+// map).  Same `g` / `sp` cache-busting as the per-metatile URL.  Geometry is
+// meta.atlas {cols, cell, count}; it is a server-side constant, identical for every map.
+function getAtlasURL(layer, mid) {
+  mid = mid || D.meta.map_id;
+  const g = (V.quant && V.quant.generation) || 0;
+  return '/api/atlas/' + mid + '.png?layer=' + layer + '&g=' + g + SP;
 }
 function getNpcURL(name) {
   if (!name) return null;
@@ -111,6 +124,22 @@ function drawImg(url, dx, dy, cp) {
   if (c === 'err') return;
   ctx.drawImage(c, dx, dy, cp, cp);
 }
+// Draw metatile `idx` of `layer` from the map's atlas (lazy-loaded once, via imgCache).
+function drawMeta(idx, layer, mid, dx, dy, cp) {
+  const url = getAtlasURL(layer, mid);
+  const c = imgCache.get(url);
+  if (!c) {
+    imgCache.set(url, 'loading');
+    const img = new Image();
+    img.onload = function() { imgCache.set(url, img); scheduleRender(); };
+    img.onerror = function() { imgCache.set(url, 'err'); };
+    img.src = url;
+  }
+  if (!c || c === 'loading') { ctx.fillStyle = '#1c1c22'; ctx.fillRect(dx, dy, cp, cp); return; }
+  if (c === 'err') return;
+  const A = D.meta.atlas;
+  ctx.drawImage(c, (idx % A.cols) * A.cell, Math.floor(idx / A.cols) * A.cell, A.cell, A.cell, dx, dy, cp, cp);
+}
 // NPC sprite: bottom-center anchored on the event's tile cell (the converted
 // sheet's own frame is bottom-anchored/h-centered on its canvas -- see
 // sprites.py `_anchor` -- so scaling by cp/16, the current-zoom size of one
@@ -140,7 +169,7 @@ function drawNpcSprite(url, dx, dy, cp) {
 let zoom = 2;
 let panX = 0, panY = 0;
 let currentLayer = 'post-quant';   // default view = the quantized GBA render
-let overlays = {collision:false, diff:false, priority:false, merge:false, events:true, warps:true, animated:false};
+let overlays = {collision:false, diff:false, priority:false, merge:false, events:true, warps:true, animated:false, seamcheck:false, shared:false};
 // Max merge severity across this map's metatiles, for normalizing the Merge heat-map.
 let maxMergeSeverity = 1;
 (function() {
@@ -258,15 +287,15 @@ function drawCellBase(cell, dx, dy, cp, mid) {
     const tid = cell.layers[parseInt(lyr[1])];
     if (tid) drawImg(getTileURL(tid, mid), dx, dy, cp);
   } else if (lyr === 'gba') {
-    drawImg(getMetatileURL(cell.colkey_idx, 'bottom', mid), dx, dy, cp);
-    drawImg(getMetatileURL(cell.colkey_idx, 'top', mid),    dx, dy, cp);
+    drawMeta(cell.colkey_idx, 'bottom', mid, dx, dy, cp);
+    drawMeta(cell.colkey_idx, 'top', mid, dx, dy, cp);
   } else if (lyr === 'gba_bottom') {
-    drawImg(getMetatileURL(cell.colkey_idx, 'bottom', mid), dx, dy, cp);
+    drawMeta(cell.colkey_idx, 'bottom', mid, dx, dy, cp);
   } else if (lyr === 'gba_top') {
-    drawImg(getMetatileURL(cell.colkey_idx, 'top', mid), dx, dy, cp);
+    drawMeta(cell.colkey_idx, 'top', mid, dx, dy, cp);
   } else if (lyr === 'post-quant') {
-    drawImg(getMetatileURL(cell.colkey_idx, 'post_bottom', mid), dx, dy, cp);
-    drawImg(getMetatileURL(cell.colkey_idx, 'post_top', mid),    dx, dy, cp);
+    drawMeta(cell.colkey_idx, 'post_bottom', mid, dx, dy, cp);
+    drawMeta(cell.colkey_idx, 'post_top', mid, dx, dy, cp);
   }
 }
 
@@ -693,6 +722,163 @@ function render() {
     ctx.restore();
   }
   drawSeamBands();
+  drawSeamCheck(cp);
+  drawShared(cp);
+}
+
+// ---- ROM seam check overlay (stitched only) ---------------------------------
+// fieldmap.c draws a neighbour's metatile IDs (7 deep) through the CURRENT map's
+// tileset. /api/seamcheck/<A> lists, per neighbour B, B's strip cells and the ones
+// whose rendered image is absent from A's per-map pool. Hatch = missing; the count of
+// unique missing metatiles is the cost of importing the border strip. A is the ACTIVE
+// member; cell coords in the payload are B-local, so they map through B's offset.
+const seamCheckData = {};   // map id -> payload | 'loading' | 'error'
+function ensureSeamCheck(id) {
+  if (seamCheckData[id]) return;
+  seamCheckData[id] = 'loading';
+  fetch('/api/seamcheck/' + id).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(d) { seamCheckData[id] = d; scheduleRender(); })
+    .catch(function(e) { console.error('seamcheck failed for ' + id, e); seamCheckData[id] = 'error'; scheduleRender(); });
+}
+function updateSeamSummary(text) {
+  const el = document.getElementById('seamcheck-summary');
+  if (!el) return;
+  el.style.display = text ? 'block' : 'none';
+  el.textContent = text || '';
+}
+function drawSeamCheck(cp) {
+  if (!stitched || !overlays.seamcheck) { updateSeamSummary(''); return; }
+  ensureSeamCheck(activeM.id);
+  const d = seamCheckData[activeM.id];
+  if (d === 'loading' || !d) { updateSeamSummary('ROM seam check: loading…'); return; }
+  if (d === 'error') { updateSeamSummary('ROM seam check: failed (see console)'); return; }
+  const pad3 = function(n) { return String(n).padStart(3, '0'); };
+  const lines = ['ROM seam check for Map' + pad3(d.map_id) + ' (pool ' + d.pool_unique + ' metatiles; ' + d.depth + '-deep strips, by image hash)'];
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,60,60,0.95)';
+  ctx.lineWidth = Math.max(1, cp / 10);
+  for (const sm of d.seams) {
+    const b = members.filter(function(m) { return m.id === sm.neighbor; })[0];
+    lines.push('-> Map' + pad3(sm.neighbor) + ' (' + sm.direction + '): strip ' + sm.strip.length + ' cells / ' +
+      sm.strip_unique + ' unique, missing ' + sm.missing.length + ' cells / ' + sm.missing_unique + ' unique');
+    if (!b) continue;
+    for (const c of sm.missing) {
+      const x0 = panX + (b.ox + c[0]) * cp, y0 = panY + (b.oy + c[1]) * cp;
+      if (x0 + cp < 0 || x0 >= canvas.width || y0 + cp < 0 || y0 >= canvas.height) continue;
+      ctx.fillStyle = 'rgba(255,40,40,0.18)';
+      ctx.fillRect(x0, y0, cp, cp);
+      ctx.beginPath();
+      const step = Math.max(4, cp / 3);
+      for (let t = step; t < 2 * cp; t += step) {   // diagonal hatch, clipped to the cell
+        const ax = Math.min(t, cp), ay = Math.max(0, t - cp);
+        const bx = Math.max(0, t - cp), by = Math.min(t, cp);
+        ctx.moveTo(x0 + ax, y0 + ay); ctx.lineTo(x0 + bx, y0 + by);
+      }
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  updateSeamSummary(lines.join('\n'));
+}
+
+// ---- Shared tiles overlay (stitched only) ----------------------------------
+// /api/shared compares a set of maps in the original RMXP data (same tileset+tile ids,
+// or identical rendered art) and in the real emitted ROM tilesets (decoded metatiles,
+// flip-canonical 8x8 tiles). Pick a partner map and a basis: cells in the OTHER maps whose
+// metatile is shared with the partner are tinted (partner's own cells: shared with any
+// other map). The matrix shows all four bases side by side; orange = the ROM shares less
+// than the RMXP art does, i.e. what per-map tilesets lose. Maps: ?maps=31,35,40, default =
+// the stitched component.
+let sharedData = null;   // payload | 'loading' | 'error'
+let sharedPartner = null;
+let sharedBasis = 'rmxp_id';
+function ensureShared() {
+  if (sharedData) return;
+  sharedData = 'loading';
+  const q = new URLSearchParams(location.search).get('maps');
+  const url = '/api/shared?' + (q ? 'maps=' + encodeURIComponent(q) : 'map=' + D.meta.map_id);
+  fetch(url).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(d) {
+    sharedData = d;
+    if (sharedPartner === null || d.maps.indexOf(sharedPartner) < 0) sharedPartner = d.maps[0];
+    const sel = document.getElementById('sh_partner');
+    sel.innerHTML = d.maps.map(function(m) { return '<option value="' + m + '">Map' + String(m).padStart(3, '0') + '</option>'; }).join('');
+    sel.value = String(sharedPartner);
+    scheduleRender();
+  }).catch(function(e) { console.error('shared failed', e); sharedData = 'error'; scheduleRender(); });
+}
+function updateSharedPanel(html) {
+  const el = document.getElementById('shared-summary');
+  if (!el) return;
+  el.style.display = html ? 'block' : 'none';
+  el.innerHTML = html || '';
+}
+function sharedPanelHTML(d) {
+  const pad3 = function(n) { return String(n).padStart(3, '0'); };
+  const names = {rmxp_id: 'RMXP id', rmxp_image: 'RMXP image', rom_mt: 'ROM metatile', rom_tile: 'ROM 8x8'};
+  let h = '<b>Shared tiles</b> (unique keys; cell = shared <span style="color:#8f8">S</span> | only-A | only-B)<br>';
+  h += '<table style="border-collapse:collapse"><tr><th style="text-align:left">pair</th>';
+  d.bases.forEach(function(b) { h += '<th style="padding:0 6px">' + names[b] + '</th>'; });
+  h += '</tr>';
+  d.pairs.forEach(function(p) {
+    h += '<tr><td>' + pad3(p.a) + '/' + pad3(p.b) + '</td>';
+    d.bases.forEach(function(b) {
+      const s = p[b];
+      if (!s) { h += '<td style="padding:0 6px;color:#777">not in ROM</td>'; return; }
+      const lost = (b === 'rom_mt' && p.rmxp_image && s.shared < p.rmxp_image.shared) ||
+                   (b === 'rom_tile' && p.rmxp_image && s.shared === 0 && p.rmxp_image.shared > 0);
+      h += '<td style="padding:0 6px;' + (lost ? 'color:#fb6' : '') + '"><span style="color:#8f8">' + s.shared + '</span> | ' + s.only_a + ' | ' + s.only_b + '</td>';
+    });
+    h += '</tr>';
+  });
+  h += '</table>';
+  d.maps.forEach(function(m) {
+    const i = d.info[String(m)], c = i.counts;
+    h += 'Map' + pad3(m) + ': RMXP ts' + i.rmxp_tileset + ', ' + c.rmxp_id + ' id / ' + c.rmxp_image + ' img; ROM ' +
+      (i.rom ? 'ts' + i.rom.synth_tileset + ', ' + c.rom_mt + ' mt / ' + c.rom_tile + ' 8x8' : 'not in ROM') + '<br>';
+  });
+  if (sharedBasis === 'rom_tile') h += '<i>(8x8 basis has no per-cell highlight)</i><br>';
+  return h;
+}
+function drawShared(cp) {
+  if (!stitched || !overlays.shared) { updateSharedPanel(''); return; }
+  ensureShared();
+  const d = sharedData;
+  if (d === 'loading' || !d) { updateSharedPanel('Shared tiles: loading…'); return; }
+  if (d === 'error') { updateSharedPanel('Shared tiles: failed (see console)'); return; }
+  const P = sharedPartner;
+  let note = '';
+  ctx.save();
+  ctx.fillStyle = 'rgba(60,220,120,0.38)';
+  for (const m of members) {
+    if (d.maps.indexOf(m.id) < 0) continue;
+    let flat = null;
+    if (sharedBasis !== 'rom_tile') {
+      const per = d.cells[String(m.id)];
+      const others = m.id === P ? d.maps.filter(function(x) { return x !== P; }) : [P];
+      const set = new Set();
+      let any = false;
+      for (const o of others) {
+        const l = per[String(o)] && per[String(o)][sharedBasis];
+        if (l) { any = true; for (const i of l) set.add(i); }
+      }
+      if (!any) { if (sharedBasis === 'rom_mt') note += 'Map' + m.id + ': no ROM comparison (not in ROM)\n'; continue; }
+      flat = set;
+    }
+    if (!flat) continue;
+    const w = d.info[String(m.id)].w;
+    for (const i of flat) {
+      const x0 = panX + (m.ox + (i % w)) * cp, y0 = panY + (m.oy + Math.floor(i / w)) * cp;
+      if (x0 + cp < 0 || x0 >= canvas.width || y0 + cp < 0 || y0 >= canvas.height) continue;
+      ctx.fillRect(x0, y0, cp, cp);
+    }
+  }
+  ctx.restore();
+  updateSharedPanel(sharedPanelHTML(d) + (note ? '<span style="color:#fb6">' + escHtml(note).replace(/\n/g, '<br>') + '</span>' : ''));
 }
 
 // ---- pointer events (covers mouse + touch) --------------------------------
@@ -839,6 +1025,36 @@ document.querySelectorAll('input[name="view2"]').forEach(function(r) {
   r.addEventListener('change', function() { currentLayer = r.value; scheduleRender(); });
 });
 /*KNOBBAR_JS*/
+// "Seam palettes" (page-level, reload): quantize this map against the palettes shared by
+// its seam component. Off by default. A map in no component has nothing to share.
+(function() {
+  const el = document.getElementById('ov_seampal');
+  const comp = D.seam && D.seam.component;
+  el.checked = !!V.seam;
+  if (!comp) {
+    el.disabled = true;
+    el.parentElement.title = 'This map is in no seam component; nothing to share';
+  }
+  el.addEventListener('change', function() {
+    const params = new URLSearchParams(location.search);
+    if (el.checked) params.set('sp', '1'); else params.delete('sp');
+    const qs = params.toString();
+    location.href = location.pathname + (qs ? '?' + qs : '');
+  });
+  const sc = document.getElementById('ov_seamcheck');
+  if (!stitched) sc.parentElement.style.display = 'none';
+  sc.addEventListener('change', function() { overlays.seamcheck = sc.checked; scheduleRender(); });
+  const sh = document.getElementById('ov_shared');
+  if (!stitched) sh.parentElement.style.display = 'none';
+  const shc = document.getElementById('shared-controls');
+  sh.addEventListener('change', function() {
+    overlays.shared = sh.checked;
+    shc.style.display = sh.checked ? 'inline' : 'none';
+    scheduleRender();
+  });
+  document.getElementById('sh_partner').addEventListener('change', function(e) { sharedPartner = parseInt(e.target.value, 10); scheduleRender(); });
+  document.getElementById('sh_basis').addEventListener('change', function(e) { sharedBasis = e.target.value; scheduleRender(); });
+})();
 ['collision','diff','priority','merge','events','warps','animated'].forEach(function(name) {
   const el = document.getElementById('ov_' + name);
   el.addEventListener('change', function() { overlays[name] = el.checked; scheduleRender(); });
@@ -1667,7 +1883,7 @@ function loadMemberFeedback(mem) {
   // stitched: fetch the other members' datasets; they pop in as they arrive
   for (const mem of members) {
     if (mem.data) continue;
-    fetch('/api/map/' + mem.id).then(function(r) {
+    fetch('/api/map/' + mem.id + (V.seam ? '?sp=1' : '')).then(function(r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function(data) {

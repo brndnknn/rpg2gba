@@ -48,6 +48,18 @@
     <label title="Heat-map cells by palette-merge loss (brighter = more colour snapped)"><input type="checkbox" id="ov_merge"> Merge</label>
     <a class="btn" id="nav-palettes" href="#" style="display:none;text-decoration:none">Palettes &rarr;</a>
   </span>
+  <label title="Quantize this map against ONE palette set shared by its whole seam component (design: connections_and_palette_families.md part 2). Off = the ROM as built today (per-map palettes). Reloads the page."><input type="checkbox" id="ov_seampal"> Seam palettes</label>
+  <label title="Stitched view only: hatch neighbour-strip metatiles (7 deep) that are absent from the active map's own pool, i.e. what fieldmap.c would draw wrongly through this map's tileset"><input type="checkbox" id="ov_seamcheck"> ROM seam check</label>
+  <label title="Stitched view only: which tiles the maps share in the original RMXP data vs the emitted ROM tilesets. Maps default to the component; override with ?maps=31,35,40"><input type="checkbox" id="ov_shared"> Shared tiles</label>
+  <span id="shared-controls" style="display:none">
+    <select id="sh_partner" title="Partner map: cells of the other maps that share a metatile with it are tinted"></select>
+    <select id="sh_basis" title="What counts as shared">
+      <option value="rmxp_id">RMXP id</option>
+      <option value="rmxp_image">RMXP image</option>
+      <option value="rom_mt">ROM metatile</option>
+      <option value="rom_tile">ROM 8x8 (matrix only)</option>
+    </select>
+  </span>
   <span id="nonstock-badge" title="Live quantization knobs differ from stock (FamilyParams defaults, max_palettes=13) — this render is not a faithful ROM preview. Open Advanced to inspect/reset.">&#9888; non-stock quantize</span>
   </span>
   <span id="events-chrome">
@@ -89,6 +101,8 @@
 <div id="main">
   <div id="canvas-wrap">
     <canvas id="mapCanvas"></canvas>
+    <div id="seamcheck-summary" style="display:none;position:absolute;left:6px;bottom:6px;max-width:92%;background:rgba(20,10,10,0.88);color:#fbb;border:1px solid #a44;border-radius:3px;padding:4px 8px;font:11px/1.4 monospace;white-space:pre-wrap;pointer-events:none"></div>
+    <div id="shared-summary" style="display:none;position:absolute;right:6px;top:6px;max-width:60%;background:rgba(10,20,14,0.9);color:#cfe;border:1px solid #4a6;border-radius:3px;padding:4px 8px;font:11px/1.4 monospace;pointer-events:none"></div>
   </div>
   <div id="sidebar">
     <div id="cell-info"><span style="color:#555">Tap cells to build a selection, then add a note.</span></div>
