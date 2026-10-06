@@ -284,6 +284,17 @@ helps every map, seam or not. The **Seam palettes** viewer toggle (step 4) previ
     has no natural chokepoints, so arrow warps are not viable — pieces need real seams,
     i.e. **step 3 (border-strip import) is a prerequisite of step 1**, and the strip
     metatiles cost tiles out of that headroom.
+  - **Engine (verified 2026-10-06):** `fieldmap.c` `FillConnection` copies the neighbour's raw
+    metatile ids 7 cells deep (east: 8), drawn through the current tileset; crossing a
+    connection (`overworld.c` `LoadMapFromCameraTransition`) reloads ONLY the secondary
+    tileset + palettes 6–12. So connected pieces must share one primary, and each piece must
+    hold its neighbours' strip art at the neighbours' ids (shared primary, or duplicated in
+    its own secondary).
+  - **Seam cost of the three fitting layouts (`seam_cost_map40.py`): all OVER.** Strips in the
+    shared primary alone need 745–812 metatiles / 1226–1340 tiles (primary cap 512/511). The
+    floor — each piece holding own + visible strip art — is still over on every piece
+    (pre-quant upper bound, ~×0.9 after quant): HH 1187/1407/1155; VV 1160/1401/1227;
+    V+H 1228/1197/1227 tiles. Strips add 127–410 tiles per piece; middle pieces see two.
 - **Step 3: border-strip import.** Check fieldmap.c first: imported strip metatiles must sit
   at the SAME IDs in both tilesets, or the neighbour's raw IDs resolve wrong. That decides
   whether any stitched seam is possible, or whether every seam stays an arrow warp.
