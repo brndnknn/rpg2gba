@@ -307,6 +307,16 @@ helps every map, seam or not. The **Seam palettes** viewer toggle (step 4) previ
     drop (1277), so the metatile cap still forces a split. The scratch merge also dropped
     animation frames on merged animated metatiles (26 → 11 animated tiles) — a real
     implementation must exclude animated quads.
+  - **With K=4 merge (animated excluded; `seam_cost_merged_map40.py`), a seamless 2-piece split
+    FITS.** 1748 → 1075 merged quads. 30 of 131 two-piece cuts pass the floor (own + visible
+    strips); the best also pass the engine check (one shared primary, per-piece secondaries,
+    strip ids agreeing): V x=48 exact floor 803/821 tiles; V x=45–49 and H y=31 fit. Shared
+    primary ~434–507 mt / ~497–512 t; each secondary ≤512 mt / ~300–350 t.
+    **Metatiles are now the binding cap:** the larger piece needs 946–1019 of 1024 ids and
+    the strip-id constraint lands at exactly 512 under the scratch greedy — a real id
+    allocator must be built and checked. Palettes are not modelled (primary 6 shared,
+    secondary 7 per piece → needs a two-stage quantizer). 3-piece layouts pass the floor but
+    fail the strip-id check under this greedy (560–639 > 512) — more cuts, more strips.
 - **Step 3: border-strip import.** Check fieldmap.c first: imported strip metatiles must sit
   at the SAME IDs in both tilesets, or the neighbour's raw IDs resolve wrong. That decides
   whether any stitched seam is possible, or whether every seam stays an arrow warp.
