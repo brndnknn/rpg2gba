@@ -317,6 +317,21 @@ helps every map, seam or not. The **Seam palettes** viewer toggle (step 4) previ
     allocator must be built and checked. Palettes are not modelled (primary 6 shared,
     secondary 7 per piece → needs a two-stage quantizer). 3-piece layouts pass the floor but
     fail the strip-id check under this greedy (560–639 > 512) — more cuts, more strips.
+- **Corpus outlook (2026-10-06, `output/scratch/overflow_census.py`; re-measured the walker's
+  16 `WALKER_OVERFLOW_MAP_IDS` under today's ROM quantizer + K=4 merge, exact emit):**
+  - Must split, metatiles > 1024 (merge does not reduce metatiles): 40 Nowtoch CH06 (1278),
+    117 Route 08 CH22 (1209), 143 Route 10 CH31 (1066), 144 Venesi City CH47 (1062),
+    101 Bealbeach City CH51 (1557), 187 Route 08 Nuclear CH52 (1413), 84 Dream Mountain CH59
+    (1249), 71 Abyssal Venesi CH59 (~1062, grid count — its `Floatstone` autotile asset is
+    missing from the source tree, so it can't render), 94 "Mapa intro" (no chapter, 150×150,
+    1816).
+  - Must split, tiles even after merge: 122 Nuclear Plant Epsilon CH18 (1009 mt, 1189 tiles
+    at K=4).
+  - Fit with the K=4 merge alone, no split: 60 Burole CH28 (952), 209 / 213 CH59 (939 / 955),
+    151 Amatree CH30 (989), 146 Tsukinami CH49 (996), 128 Legen CH54 (1003) — the last three
+    with < 40 tiles spare.
+  - 84 and 143 also exceed the 128 KiB per-tileset animation-art budget (177 / 131 KiB).
+  - Not re-checked: maps that fit in July but sat near a cap.
 - **Step 3: border-strip import.** Check fieldmap.c first: imported strip metatiles must sit
   at the SAME IDs in both tilesets, or the neighbour's raw IDs resolve wrong. That decides
   whether any stitched seam is possible, or whether every seam stays an arrow warp.
