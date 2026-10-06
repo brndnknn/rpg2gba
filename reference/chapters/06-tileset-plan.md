@@ -342,6 +342,11 @@ helps every map, seam or not. The **Seam palettes** viewer toggle (step 4) previ
   min-bake + metatile merge 1101 / 1425; min-bake + K=4 **1048 mt / 1026 t** (−24 mt, −2 t).
   Min-bake costs metatiles (separate layers expose differences baking hid). Neither variant
   fits; a per-column hybrid might, with ~zero headroom.
+- **K=5 / K=6 (`k6_map40.py`):** current rule + metatile merge: K=5 992 mt / 1040 t (over);
+  **K=6 989 mt / 1005 t — FITS UNSPLIT (+35 mt, +19 tiles spare)**. Min-bake: K=5 1039/1004,
+  K=6 1039/972 (metatiles over). By eye (`map40_k6_{north,southwest,east}.png`): K=6 ≈ K=4 —
+  "SUBWAY" sign intact, gym roof panels intact; K=8 still garbles the sign. Already at K=4 the
+  flat grey roofs' grid texture gets noisier than the original.
 - **Step 3: border-strip import.** Check fieldmap.c first: imported strip metatiles must sit
   at the SAME IDs in both tilesets, or the neighbour's raw IDs resolve wrong. That decides
   whether any stitched seam is possible, or whether every seam stays an arrow warp.
