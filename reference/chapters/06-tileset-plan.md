@@ -332,6 +332,16 @@ helps every map, seam or not. The **Seam palettes** viewer toggle (step 4) previ
     with < 40 tiles spare.
   - 84 and 143 also exceed the 128 KiB per-tileset animation-art budget (177 / 131 KiB).
   - Not re-checked: maps that fit in July but sat near a cap.
+- **Metatile merge (2026-10-06, `metatile_merge.py`):** metatiles that draw identically with the
+  same behavior + layer type can share an id (collision lives in map.bin). Lossless merge alone:
+  40 1277→1051, 143 1065→894, 144 1061→777, 117 1208→1003, 84 1247→861, 187 1412→1186,
+  101 1556→1193, 94 1815→1363; after K=4 tile merge: 1005 / 878 / 695 / 988 / 803 / 1162 /
+  1064 / 1208. So 117, 143, 144, 84 no longer need splitting; 187, 101, 94 still do.
+- **Map 40 unsplit (`single_map_fit.py`, exact emit, incl. void + build copies):**
+  current rule + metatile merge 1052 mt / 1544 t; + K=4 **1007 mt / 1080 t** (−56 tiles);
+  min-bake + metatile merge 1101 / 1425; min-bake + K=4 **1048 mt / 1026 t** (−24 mt, −2 t).
+  Min-bake costs metatiles (separate layers expose differences baking hid). Neither variant
+  fits; a per-column hybrid might, with ~zero headroom.
 - **Step 3: border-strip import.** Check fieldmap.c first: imported strip metatiles must sit
   at the SAME IDs in both tilesets, or the neighbour's raw IDs resolve wrong. That decides
   whether any stitched seam is possible, or whether every seam stays an arrow warp.
