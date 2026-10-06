@@ -22,7 +22,7 @@ Operator approved steps 2 and 4 below; steps 1 and 3 are not started and not app
   draws each map with its own art and cannot show what fieldmap.c does (neighbour metatile
   IDs, 7 cells deep, drawn through the CURRENT map's tileset).
 
-## Done this session (uncommitted, tests green)
+## Done 2026-10-04 (committed `e1ee646a`)
 
 - `src/rpg2gba/tileset_converter/graphics/palette_families.py` + `tests/test_palette_families.py`
   (13 tests): `seam_components(rows, map_ids)`, `compute_component_palettes(lists)`,
@@ -33,9 +33,11 @@ Operator approved steps 2 and 4 below; steps 1 and 3 are not started and not app
   0 px diff** against the 10-02 artifacts. Mode B refuses (exit 1) until the viewer is fixed.
   `tests/test_verify_viewer_rom_match.py` (3 tests).
 - Open aside: stale `engine/data/tilesets/primary/uranium19`, `uranium22`, `*_cmp*` dirs —
-  check whether tracked; likely delete.
+  check whether tracked; likely delete. *(Checked 2026-10-06: untracked (gitignored) and
+  referenced by nothing in `engine/src`/`include`/`data/tilesets` — `uranium19{,_cmpcur,_cmpdiv,_cmpfam}`
+  and the same four for 22 are leftovers of the June palette A/B/C compare. Safe to delete; not yet deleted.)*
 
-## Step 4 progress (2026-10-04, uncommitted)
+## Step 4 progress (2026-10-04, committed `e1ee646a`)
 
 - **Items 1, 2, 3, 5 DONE.** Per-map pooling; `?sp=1` seam-palettes toggle; `/api/seamcheck/<id>`
   + stitched overlay; oracle Mode B re-enabled — **18/18 slice maps, 0 px diff**. Mode B also
@@ -198,7 +200,7 @@ sqrt-damped weights were **worse** everywhere.
 7. **Persisted artifact.** P2's palettes plus the tile→palette table would be a new committed
    intermediate (`.gen.json`). Ask first (CLAUDE.md §10), same as step 2's palette-families file.
 
-### P1 in the viewer — built 2026-10-05 (uncommitted, awaiting operator eye check)
+### P1 in the viewer — built 2026-10-05 (committed `9dfc3663`; look approved, viewer default)
 
 - `FamilyParams.reduction` (`"median_cut"` stock | `"ward"`) → `_pack_subset` →
   `build_quantized_tileset(reduction=)`; `_ward_reduce` in `quantize.py` (weights =
@@ -213,7 +215,7 @@ sqrt-damped weights were **worse** everywhere.
 - Not yet: Ward in the ROM build or the oracle (item 6 above). Those follow the operator's
   approval.
 
-### P2 preview in the viewer — built 2026-10-05 (uncommitted, awaiting operator eye check)
+### P2 preview in the viewer — built 2026-10-05 (committed `9dfc3663`; look approved, viewer default)
 
 - `graphics/shared_palettes.py`: `ROCK_V1` + `GREEN_G3T` as **provisional constants copied from
   the research** (not re-derived; open item 5), `fit_palette`, `make_shared_quantizer(base,
@@ -248,8 +250,9 @@ sqrt-damped weights were **worse** everywhere.
 
 P2 generalises step 2: game-wide groups instead of per-seam components. The two can stack: fixed
 groups first, then the seam component's palettes for the remaining slots. P1 is orthogonal and
-helps every map, seam or not. The **Seam palettes** viewer toggle (step 4) previews step 2 only;
-none of P1–P3 is in the viewer yet.
+helps every map, seam or not. The **Seam palettes** viewer toggle (step 4) previews step 2 only.
+*(Corrected 2026-10-06: P1 and the P2 preview are in the viewer and are its default since
+2026-10-05; P3 is not built. None of P1–P3 is in the ROM build.)*
 
 ## Later (not approved)
 
