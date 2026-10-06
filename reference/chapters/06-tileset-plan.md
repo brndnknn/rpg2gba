@@ -192,13 +192,21 @@ sqrt-damped weights were **worse** everywhere.
 3. **Trunks** are still at 39.5% ≥3 vs BASE 26.9%.
 4. **Small artefacts:** Kevlar's sand path loses its speckle; Route 01's water is a little dark;
    blue flowers grow a grey petal (31, 33).
-5. **G3t and V1 are tuned on CH01–06 art only.** Later chapters will add tilesets: decide whether
-   the fixed palettes are frozen (stable colours across chapters) or refit (which re-colours
-   shipped chapters).
-6. **Viewer and oracle parity.** Any of P1–P3 must go into `map_viewer_common` and
-   `verify_viewer_rom_match.py` in the same change, or the viewer stops telling the truth.
-7. **Persisted artifact.** P2's palettes plus the tile→palette table would be a new committed
-   intermediate (`.gen.json`). Ask first (CLAUDE.md §10), same as step 2's palette-families file.
+5. ~~**G3t and V1 are tuned on CH01–06 art only.**~~ **RULED 2026-10-06 (operator): frozen.**
+   Later chapters add palettes (e.g. swap palettes for pink/sandstone rock); they never refit
+   V1/G3t, because a refit re-colours chapters that already passed their boot gate.
+6. ~~**Viewer and oracle parity.**~~ **RULED 2026-10-06: a standing rule, not a question.**
+   Implemented by `graphics/rom_quantize.py` — the one definition of the ROM quantizer;
+   `build_slice_tilesets` emits with it, and the viewer's `ROM_STOCK_*` (which the oracle sets)
+   are read from it, so they cannot drift.
+7. ~~**Persisted artifact.**~~ **RULED 2026-10-06: not needed for now.** The palettes are source
+   constants in `shared_palettes.py` and `classify_tile` assigns tiles at build time. Revisit
+   (and ask, CLAUDE.md §10) only if the research's hand-refined tile→palette table is adopted
+   for item 2.
+
+**P1 + P2 IN THE ROM BUILD (2026-10-06, operator-directed):** `rom_quantize.ROM_FAMILY_PARAMS =
+FamilyParams(reduction="ward")`, `ROM_SHARED_PALETTES = True`. Open items 1–4 (and P3) are
+still open; they are tuning on top of what now ships, not blockers to it.
 
 ### P1 in the viewer — built 2026-10-05 (committed `9dfc3663`; look approved, viewer default)
 

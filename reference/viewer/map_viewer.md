@@ -320,7 +320,10 @@ RPG Maker/Quantized toggle isn't fine-grained enough.
   `_family_params`/`_max_palettes` non-default for the life of the server. A small
   "⚠ non-stock quantize" badge in the toolbar — always visible, not gated behind
   Advanced — appears whenever the live knobs differ from stock, so a viewer can't
-  silently mistake a tuned render for the shipped ROM's.
+  silently mistake a tuned render for the shipped ROM's. "Stock" means the ROM
+  build's own config, read from `src/rpg2gba/tileset_converter/graphics/rom_quantize.py`
+  (since 2026-10-06: family packer + Ward reduction + shared rock/green palettes). The
+  viewer boots in that config, so the badge is off by default.
 - **Needs `.env-paths`.** All three entry points call `_load_dotenv()` for
   `RPG2GBA_*` paths; run from the repo root.
 - **Zero external deps for the server** (stdlib `http.server`); the rendering core
