@@ -22,6 +22,10 @@ from .shared_palettes import make_shared_quantizer
 
 ROM_FAMILY_PARAMS: FamilyParams = FamilyParams(reduction="ward")
 ROM_SHARED_PALETTES: bool = True
+# Game-wide near-duplicate tile merge (graphics/tile_merge.py, K 16 rock/green / 4 other)
+# + lossless metatile merge. Viewer-preview only until the operator's eye check; the ROM
+# build does not apply it while this is False.
+ROM_TILE_MERGE: bool = False
 
 
 def make_rom_quantizer() -> Callable[..., QuantizeResult]:
