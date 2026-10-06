@@ -51,6 +51,10 @@ from rpg2gba.tileset_converter.graphics.quantize import (
     build_quantized_tileset_family,
 )
 from rpg2gba.tileset_converter.graphics.raster import TileRasterizer, column_in_atlas
+from rpg2gba.tileset_converter.graphics.rom_quantize import (
+    ROM_FAMILY_PARAMS,
+    ROM_SHARED_PALETTES,
+)
 from rpg2gba.tileset_converter.graphics.shared_palettes import make_shared_quantizer
 from rpg2gba.tileset_converter.graphics.sources import (
     load_tileset_sources,
@@ -365,21 +369,22 @@ _seam_view_cache: dict[int, tuple[tuple, _QuantView]] = {}
 # resolution so per-lifetime `+= 1` bumps can't catch up to a later lifetime's seed;
 # still far below JS's 2^53 (nanoseconds would NOT survive the JSON→double round-trip).
 _ENGINE_MAX_PALS = 13  # NUM_PALS_TOTAL — hardware/engine ceiling; knob can only lower it
-# Two named configurations. ROM-STOCK is exactly what the ROM build does (median cut, no
-# shared palettes) — the oracle/parity checks must run under it. VIEWER-DEFAULT is the
-# preview the viewer boots with (Ward + shared palettes, operator-approved 2026-10-05);
-# the ROM build is unchanged by it. `non_stock` compares against ROM-STOCK.
-ROM_STOCK_PARAMS: FamilyParams = FamilyParams()
+# Two named configurations. ROM-STOCK is exactly what the ROM build does — read from
+# rom_quantize, the single definition the build uses — and the oracle/parity checks
+# must run under it. VIEWER-DEFAULT is the preview the viewer boots with. Since
+# 2026-10-06 both are Ward + shared palettes (the ROM adopted the 10-05 preview), so
+# `non_stock` (compares against ROM-STOCK) is False by default.
+ROM_STOCK_PARAMS: FamilyParams = ROM_FAMILY_PARAMS
 ROM_STOCK_MAX_PALETTES: int = _ENGINE_MAX_PALS
-ROM_STOCK_SHARED: bool = False
-VIEWER_DEFAULT_PARAMS: FamilyParams = FamilyParams(reduction="ward")
+ROM_STOCK_SHARED: bool = ROM_SHARED_PALETTES
+VIEWER_DEFAULT_PARAMS: FamilyParams = ROM_FAMILY_PARAMS
 VIEWER_DEFAULT_MAX_PALETTES: int = _ENGINE_MAX_PALS
-VIEWER_DEFAULT_SHARED: bool = True
+VIEWER_DEFAULT_SHARED: bool = ROM_SHARED_PALETTES
 _family_params: FamilyParams = VIEWER_DEFAULT_PARAMS
 _max_palettes: int = VIEWER_DEFAULT_MAX_PALETTES
 _quant_generation: int = int(time.time() * 1000)
-# Viewer-only PREVIEW of P2 shared fixed palettes (never reaches the ROM build). Not a
-# FamilyParams field. `_shared_info` holds the latest per-map reservation counts.
+# P2 shared fixed palettes on/off (the ROM build's setting is rom_quantize's
+# ROM_SHARED_PALETTES; this is the viewer's live copy). Not a FamilyParams field. `_shared_info` holds the latest per-map reservation counts.
 _shared_palettes: bool = VIEWER_DEFAULT_SHARED
 _shared_info: dict[int, dict] = {}
 

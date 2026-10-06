@@ -9,6 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import map_viewer_common as mvc  # noqa: E402
+from rpg2gba.tileset_converter.graphics import rom_quantize  # noqa: E402
 from rpg2gba.tileset_converter.graphics.quantize import FamilyParams  # noqa: E402
 
 
@@ -39,21 +40,26 @@ def test_missing_key_is_viewer_default():
 def test_module_boots_in_viewer_default():
     # The fixture saved the import-time state before any test mutated it.
     assert mvc.VIEWER_DEFAULT_PARAMS.reduction == "ward" and mvc.VIEWER_DEFAULT_SHARED is True
-    assert mvc.ROM_STOCK_PARAMS == FamilyParams() and mvc.ROM_STOCK_SHARED is False
+
+
+def test_rom_stock_is_the_rom_build_config():
+    # The viewer's ROM view must be the build's config (rom_quantize), never a copy.
+    assert mvc.ROM_STOCK_PARAMS == rom_quantize.ROM_FAMILY_PARAMS
+    assert mvc.ROM_STOCK_SHARED is rom_quantize.ROM_SHARED_PALETTES
+    assert mvc.ROM_STOCK_PARAMS.reduction == "ward" and mvc.ROM_STOCK_SHARED is True
 
 
 def test_state_reports_reduction_and_non_stock():
     mvc.set_rom_stock_quantize()
     st = mvc.get_quantize_params()
-    assert st["reduction"] == "median_cut" and st["non_stock"] is False
-    assert st["viewer_default"] is False
+    assert st["reduction"] == "ward" and st["non_stock"] is False
     gen = st["generation"]
     mvc.set_viewer_default_quantize()
     st = mvc.get_quantize_params()
-    assert st["reduction"] == "ward" and st["non_stock"] is True
-    assert st["viewer_default"] is True
+    assert st["reduction"] == "ward" and st["viewer_default"] is True
     assert st["generation"] > gen
-    # custom knobs: non-stock and not the viewer default
-    mvc.set_quantize_params(*mvc.params_from_dict({"reduction": "ward", "dark_value": 10}))
+    # stock median cut: non-stock now, and not the viewer default
+    mvc.set_quantize_params(*mvc.params_from_dict({"reduction": "median_cut"}))
     st = mvc.get_quantize_params()
+    assert st["reduction"] == "median_cut"
     assert st["non_stock"] is True and st["viewer_default"] is False

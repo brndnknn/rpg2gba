@@ -33,14 +33,21 @@ def test_missing_key_is_viewer_default():
     assert mvc.shared_palettes_from_dict({}) is True
 
 
+def _shared_off() -> None:
+    """ROM params with shared palettes OFF (the ROM itself has them on since 10-06)."""
+    mvc.set_quantize_params(
+        mvc.ROM_STOCK_PARAMS, mvc.ROM_STOCK_MAX_PALETTES, shared_palettes=False
+    )
+
+
 def test_round_trip_non_stock_and_generation():
-    mvc.set_rom_stock_quantize()
+    _shared_off()
     st = mvc.get_quantize_params()
-    assert st["shared_palettes"] is False and st["non_stock"] is False
+    assert st["shared_palettes"] is False and st["non_stock"] is True
     gen = st["generation"]
     _apply({"shared_palettes": True})
     st = mvc.get_quantize_params()
-    assert st["shared_palettes"] is True and st["non_stock"] is True
+    assert st["shared_palettes"] is True and st["non_stock"] is False
     assert st["generation"] > gen
     assert mvc.current_shared_palettes() is True
 
@@ -69,7 +76,7 @@ def test_wrap_applied_only_when_on(monkeypatch):
         return real(base, **kw)
 
     monkeypatch.setattr(mvc, "make_shared_quantizer", spy)
-    mvc.set_rom_stock_quantize()
+    _shared_off()
     q_off = mvc._make_quantizer(shared=mvc._shared_palettes)
     assert calls == [] and not hasattr(q_off, "info")
     _apply({"shared_palettes": True, "reduction": "ward"})
@@ -97,5 +104,5 @@ def test_seam_plus_shared_fails_loud():
 
 
 def test_seam_works_with_shared_off():
-    mvc.set_rom_stock_quantize()
+    _shared_off()
     mvc._seam_key(31, True)  # must not raise

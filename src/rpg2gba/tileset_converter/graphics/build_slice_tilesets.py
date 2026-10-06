@@ -71,7 +71,7 @@ from .emit import (
     MetatileImage,
     emit_tileset,
 )
-from .quantize import build_quantized_tileset_family
+from .rom_quantize import make_rom_quantizer
 from .raster import TileRasterizer, column_in_atlas
 from .sources import load_tileset_sources
 
@@ -665,13 +665,15 @@ def build_slice_tilesets(
             + len(stair_fallback_by_kind)
         )
 
-        # Family packer is the pipeline standard (per-hue-family palette budget; see
-        # quantize.build_quantized_tileset_family) — keeps the ROM render consistent
-        # with the map viewer, which previews the same packer.
+        # The ROM quantizer (family packer + Ward + shared palettes) is defined once in
+        # rom_quantize; the map viewer's ROM view and the oracle read the same config.
+        rom_q = make_rom_quantizer()
         emit = emit_tileset(
             metatile_list, primary_dir, secondary_dir, primary_name, secondary_name,
-            quantizer=build_quantized_tileset_family,
+            quantizer=rom_q,
         )
+        if getattr(rom_q, "info", None):
+            logger.info("  tileset %d shared palettes: %s", ts, dict(rom_q.info))
         results[ts] = emit
 
         overlay["tilesets"][str(ts)] = {"primary": primary_name, "secondary": secondary_name}

@@ -27,7 +27,8 @@ reference/. The captured metatile lists are then:
 
   1. the overlay the build just produced is compared, per synthetic tileset,
      against the committed reference/tileset_map.gen.json; and
-  2. quantized with the pipeline quantizer and compared pixel-for-pixel with
+  2. quantized with the pipeline quantizer (rom_quantize.make_rom_quantizer, the
+     same definition the build emits with) and compared pixel-for-pixel with
      the literal bytes decoded from the emitted artifacts.
 
 Maps with no emitted artifacts and no overlay entry (e.g. map 40, in
@@ -418,7 +419,7 @@ def run_pipeline_mode() -> int:
         NUM_PALS_TOTAL,
         analyze_tileset_palettes,
     )
-    from rpg2gba.tileset_converter.graphics.quantize import build_quantized_tileset_family
+    from rpg2gba.tileset_converter.graphics.rom_quantize import make_rom_quantizer
     from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, synth_tileset_id
 
     if not tilesets_json.is_file():
@@ -471,7 +472,7 @@ def run_pipeline_mode() -> int:
 
         analysis = analyze_tileset_palettes(
             metatile_list, max_palettes=NUM_PALS_TOTAL,
-            quantizer=build_quantized_tileset_family,
+            quantizer=make_rom_quantizer(),
         )
         rom = load_tileset_rom(primary_dir, secondary_dir)
 

@@ -80,7 +80,9 @@ def test_reservation_matches_quantizer_info_when_on():
 def test_works_with_shared_off_and_same_classification():
     mvc.set_viewer_default_quantize()
     on = _sets(SMALL)
-    mvc.set_rom_stock_quantize()
+    mvc.set_quantize_params(
+        mvc.ROM_STOCK_PARAMS, mvc.ROM_STOCK_MAX_PALETTES, shared_palettes=False
+    )
     off = _sets(SMALL)
     assert on["shared_on"] is True and off["shared_on"] is False
     # classification is still reported with the toggle off (label: "would be pinned")
