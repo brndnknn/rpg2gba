@@ -265,6 +265,25 @@ helps every map, seam or not. The **Seam palettes** viewer toggle (step 4) previ
 ## Later (not approved)
 
 - **Step 1: split map 40** so each piece fits under the caps. Measure the cut lines first.
+  **Measured 2026-10-06** (real build path, ROM quantizer; scripts `output/scratch/
+  {measure_map40,flip_stages_map40,layer_test_map40,cut_scan_map40,cut_scan3_map40,
+  render_cuts_map40}.py`, gitignored):
+  - Whole map: **1278 metatiles / 1544 tiles** vs 1024/1024 (+254 / +520); palettes 13/13.
+  - Flip reuse is already on (raw pixels, H/V/HV): 2062 → 1748 distinct quads (−314);
+    post-quant merge → 1543. Transparent-pixel RGB is not hiding matches.
+  - Baking: art alone (every RMXP tile rendered by itself) = 1234 quads (~1090 ROM) — **over
+    the cap even with zero baking**. Current baking rule = 1748; "bake only when forced"
+    (one RMXP layer per GBA slot in ≤2-layer all-p0 cells) = 1585 (~−145 ROM). 549 of 1277
+    columns are 3-layer, so most baking is forced by the 2-slot metatile. The fork has no
+    triple-layer metatiles (`NUM_TILES_PER_METATILE 8`).
+  - **No 2-piece straight cut fits**: best exact worst piece 1125 tiles (H y=31); halves
+    each keep ~70% of the tiles because the art repeats city-wide.
+  - **3 pieces fit with ~40–150 tiles headroom** (exact): HH y=23,42 → 912/923/888 tiles;
+    VV x=34,55 → 873/912/933; V x=55 + left H y=34 → 929/872/933. Metatiles ≤ 604.
+  - Every fitting cut runs through open streets (30–90 walkable crossing cells); the city
+    has no natural chokepoints, so arrow warps are not viable — pieces need real seams,
+    i.e. **step 3 (border-strip import) is a prerequisite of step 1**, and the strip
+    metatiles cost tiles out of that headroom.
 - **Step 3: border-strip import.** Check fieldmap.c first: imported strip metatiles must sit
   at the SAME IDs in both tilesets, or the neighbour's raw IDs resolve wrong. That decides
   whether any stitched seam is possible, or whether every seam stays an arrow warp.
