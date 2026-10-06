@@ -295,6 +295,18 @@ helps every map, seam or not. The **Seam palettes** viewer toggle (step 4) previ
     floor — each piece holding own + visible strip art — is still over on every piece
     (pre-quant upper bound, ~×0.9 after quant): HH 1187/1407/1155; VV 1160/1401/1227;
     V+H 1228/1197/1227 tiles. Strips add 127–410 tiles per piece; middle pieces see two.
+  - **Repetition (`repetition_map40.py`):** of 1748 pre-quant quads, 38.6% are used by exactly
+    one cell and 65% by ≤4; only 10% by 20+. By column class: overhang (priority ≥1: roofs,
+    tree tops, tall objects) 787, solid (walls, faces, fences) 733, ground static 189, ground
+    autotile 39 — **buildings are 87% of the cost; ground is ~13%**, so an Emerald-style shared
+    "general" primary of ground art would hold only ~230 quads. Heat map: `map40_rarity.png`.
+  - **Near-duplicate merge (lossy, original pixels, alpha shape must match, flips allowed,
+    K = pixels allowed to differ by >24/255):** exact ROM tiles 1544 → K=0 1347 · K=2 1170 ·
+    **K=4 1063**. By eye (crops `map40_merge_{north,southwest}.png`): K=4 indistinguishable;
+    K=8 garbles sign text ("SUBWAY") and roof panels; K=16 visibly broken. Metatiles do not
+    drop (1277), so the metatile cap still forces a split. The scratch merge also dropped
+    animation frames on merged animated metatiles (26 → 11 animated tiles) — a real
+    implementation must exclude animated quads.
 - **Step 3: border-strip import.** Check fieldmap.c first: imported strip metatiles must sit
   at the SAME IDs in both tilesets, or the neighbour's raw IDs resolve wrong. That decides
   whether any stitched seam is possible, or whether every seam stays an arrow warp.
