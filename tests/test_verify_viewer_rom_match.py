@@ -43,6 +43,7 @@ def test_one_group_per_map_even_on_shared_real_tileset(oracle, tmp_path, monkeyp
     _write_map(tmp_path, 31, 22)
     _write_map(tmp_path, 32, 22)
     _write_map(tmp_path, 49, 19)
+    (tmp_path / "connections.json").write_text("[]", encoding="utf-8")
     import rpg2gba.tileset_converter.metadata_wiring as mw
 
     monkeypatch.setattr(mw, "collect_stair_behavior_cells", lambda mj: {(1, 2): "stair"})
@@ -55,6 +56,16 @@ def test_one_group_per_map_even_on_shared_real_tileset(oracle, tmp_path, monkeyp
     assert synth_to_real == {1031: 22, 1032: 22, 1049: 19}
     assert stair_cells[31] == {(1, 2): "stair"}
     assert stair_cells[32] == {(1, 2): "stair", (3, 4): "arrow"}
+
+
+def test_connected_maps_share_one_group(oracle, tmp_path):
+    _write_map(tmp_path, 31, 22)
+    _write_map(tmp_path, 35, 22)
+    (tmp_path / "connections.json").write_text(
+        json.dumps([[31, "N", 11, 35, "S", 0]]), encoding="utf-8")
+    maps, synth_to_real, _ = oracle.per_map_inputs(tmp_path, [31, 35], {})
+    assert [j["tileset_id"] for _, j in maps] == [synth_tileset_id(31)] * 2
+    assert synth_to_real == {1031: 22}
 
 
 def test_cross_check_overlay(oracle):
@@ -108,3 +119,37 @@ def test_compare_viewer_to_rom_uses_pool_index_and_counts_px(oracle):
 
     bad = _FakeRom([(8, 8, 8), (10, 9, 9)])  # ck_b's bottom differs on all 256 px
     assert oracle.compare_viewer_to_rom(31, st, bad, "t") == (2, 1, 256)
+
+
+def test_compare_viewer_to_rom_goes_through_dedup_remap(oracle):
+    import numpy as np
+
+    from rpg2gba.tileset_converter.tile_map import serialize_column_key
+
+    def solid(c):
+        a = np.zeros((16, 16, 4), dtype=np.uint8)
+        a[...] = (*c, 255)
+        return a
+
+    zero = np.zeros((16, 16, 4), dtype=np.uint8)
+    ck_a, ck_b, ck_c = ((1, 2),), ((3, 4),), ((5, 6),)
+    # Pool idx 0/1/2; the ROM folded a and c into ONE metatile (index 0) and
+    # renumbered b to 1, so pool index != ROM index for b and c.
+    st = _state([ck_a, ck_b, ck_c],
+                [(solid((8, 8, 8)), zero), (solid((9, 9, 9)), zero), (solid((8, 8, 8)), zero)],
+                {ck_a: 0, ck_b: 1, ck_c: 2})
+    rom = _FakeRom([(8, 8, 8), (9, 9, 9)])
+    committed = {"tiles": {"1031": {
+        serialize_column_key(ck_a): {"metatile": 0},
+        serialize_column_key(ck_b): {"metatile": 1},
+        serialize_column_key(ck_c): {"metatile": 0},
+    }}}
+    idx = oracle.rom_index_table(committed, 1031)
+    assert oracle.compare_viewer_to_rom(31, st, rom, "t", idx) == (3, 0, 0)
+    # Without the remap, ck_c would be compared at (non-existent) ROM index 2.
+    with pytest.raises(IndexError):
+        oracle.compare_viewer_to_rom(31, st, rom, "t")
+    # A column the overlay does not know is a hard error, not a silent skip.
+    with pytest.raises(KeyError):
+        oracle.compare_viewer_to_rom(31, st, rom, "t", {})
+    assert oracle.rom_index_table(committed, 9999) == {}

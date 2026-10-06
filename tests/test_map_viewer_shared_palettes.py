@@ -23,7 +23,7 @@ def _restore_state():
 def _apply(d: dict) -> int:
     params, mp = mvc.params_from_dict(d)
     return mvc.set_quantize_params(params, mp, shared_palettes=mvc.shared_palettes_from_dict(d),
-                                    tile_merge=False)  # these tests are about P2 alone
+                                    tile_merge=mvc.ROM_STOCK_TILE_MERGE)  # about P2 alone
 
 
 @pytest.mark.parametrize("val,want", [(True, True), (False, False), (None, False),

@@ -1225,3 +1225,108 @@ def test_arrow_warp_and_stair_kinds_coexist(tmp_path: Path) -> None:
     overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
     bo = overlay["behavior_overrides"]["5"]
     assert set(bo) == {"stairs_left", "arrow_warp_down"}
+
+
+# --------------------------------------------------------------------------- tile merge
+
+
+class _NearDupRasterizer:
+    """400 and 401 are near-identical solid colours (merge into one tile); 402/403 differ."""
+
+    _COLORS = {400: (100, 100, 100), 401: (102, 100, 100),
+               402: (200, 0, 0), 403: (0, 200, 0)}
+
+    def render(self, tile_id: int) -> Image.Image:
+        if tile_id == 0:
+            return Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+        return Image.new("RGBA", (16, 16), (*self._COLORS[tile_id], 255))
+
+
+def _stub_merge_table(tmp_path: Path):
+    """A real MergeTable built from this fixture's own columns (K/d from MergeParams)."""
+    from rpg2gba.tileset_converter.graphics.tile_merge import build_merge_table, collect_quads
+
+    rast = _NearDupRasterizer()
+    mts = [_render_column(((0, t),), rast, [0] * 600, [0] * 600, _ZERO_TERRAIN_TAGS)
+           for t in (400, 401, 402, 403)]
+    return build_merge_table(collect_quads((mt, 1) for mt in mts))
+
+
+def _build_merge_fixture(tmp_path: Path, tile_merge: bool):
+    fork = _fake_fork(tmp_path)
+    base = tmp_path / "tileset_map.json"
+    base.write_text("{}", encoding="utf-8")
+    overlay_out = tmp_path / "tileset_map.gen.json"
+    results = build_slice_tilesets(
+        [(10, _map(5))],
+        {10: {(1, 0)}},  # warp on the cell holding column 401
+        fork=fork, base_tile_map=base, overlay_out=overlay_out,
+        rasterizer_for=lambda ts: _NearDupRasterizer(),
+        priorities_for=lambda ts: [0] * 600,
+        passages_for=lambda ts: [0] * 600,
+        terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
+        tile_merge=tile_merge,
+        merge_table=_stub_merge_table(tmp_path) if tile_merge else None,
+    )
+    overlay = json.loads(overlay_out.read_text(encoding="utf-8"))
+    prim = fork / "data" / "tilesets" / "primary" / "uranium5"
+    return results[5], overlay, prim
+
+
+def test_tile_merge_on_dedups_and_remaps_layout_references(tmp_path: Path) -> None:
+    off_res, off_ov, _ = _build_merge_fixture(tmp_path / "off", tile_merge=False)
+    on_res, on_ov, prim = _build_merge_fixture(tmp_path / "on", tile_merge=True)
+
+    col = lambda t: json.dumps([[0, t]], separators=(",", ":"))  # noqa: E731
+    # 4 columns + void + door copy + door fallback; merge folds 400/401's plain metatiles.
+    assert off_res.n_metatiles == 7
+    assert on_res.n_metatiles == 6
+    tiles = on_ov["tiles"]["5"]
+    assert tiles[col(400)]["metatile"] == tiles[col(401)]["metatile"]
+    assert tiles[col(402)]["metatile"] != tiles[col(403)]["metatile"]
+    # Every index the overlay records points at a surviving metatile.
+    warps = on_ov["warps"]["5"]
+    idxs = [m["metatile"] for m in tiles.values()] + [
+        *warps["tiles"].values(), warps["fallback"], *on_ov["buckets"]["5"].values()]
+    assert all(0 <= i < on_res.n_metatiles for i in idxs)
+
+    # Behavior-distinct copies are never folded into the plain metatile they copy.
+    door_idx = warps["tiles"][col(401)]
+    plain_idx = tiles[col(401)]["metatile"]
+    assert door_idx != plain_idx
+    n = on_res.n_metatiles
+    attrs = struct.unpack(f"<{n}H", (prim / "metatile_attributes.bin").read_bytes())
+    entries = _read_metatile_entries(prim, n)
+    assert (attrs[door_idx] & 0xFF) == 2 and (attrs[plain_idx] & 0xFF) == 0
+    assert entries[door_idx] == entries[plain_idx]  # same (merged) art, distinct behavior
+    # The void bucket still points at an all-transparent metatile.
+    assert (attrs[on_ov["buckets"]["5"]["void"]] & 0xFF) == 0
+    assert (attrs[warps["fallback"]] & 0xFF) == 2
+
+
+def test_tile_merge_knob_default_follows_rom_quantize(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from rpg2gba.tileset_converter.graphics import build_slice_tilesets as bst
+    from rpg2gba.tileset_converter.graphics import rom_quantize
+
+    monkeypatch.undo()  # drop the conftest "off" patch: read the real knob
+    assert bst._rom_tile_merge_enabled() is rom_quantize.ROM_TILE_MERGE
+    assert rom_quantize.ROM_TILE_MERGE is True
+
+
+def test_merge_and_dedup_metatiles_never_merges_distinct_behavior() -> None:
+    from rpg2gba.tileset_converter.graphics.tile_merge import merge_and_dedup_metatiles
+
+    rast = _NearDupRasterizer()
+    a = _render_column(((0, 400),), rast, [0] * 600, [0] * 600, _ZERO_TERRAIN_TAGS)
+    b = _render_column(((0, 401),), rast, [0] * 600, [0] * 600, _ZERO_TERRAIN_TAGS)
+    b_beh = MetatileImage(b.bottom, b.top, b.layer_type, 7)
+    b_cov = MetatileImage(b.bottom, b.top, LAYER_NORMAL, 0)
+    from rpg2gba.tileset_converter.graphics.tile_merge import build_merge_table, collect_quads
+
+    table = build_merge_table(collect_quads((m, 1) for m in (a, b)))
+    out, remap = merge_and_dedup_metatiles([a, b, b_beh, b_cov], table)
+    assert remap[0] == remap[1]                       # same behavior/layer: folded
+    assert len({remap[1], remap[2], remap[3]}) == 3   # behavior / layer type differ: kept
+    assert len(out) == 3

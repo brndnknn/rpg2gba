@@ -44,6 +44,12 @@ import os
 from pathlib import Path
 
 from ..tileset_converter.connections import ConnectionRow, load_connections
+from ..routing.connections import (
+    MapConnection,
+    connections_between as _connections_between,
+    crossing_cells as _crossing_cells,
+    load_connections as _load_directed_connections,
+)
 from ..tileset_converter.layout import column_key
 from ..tileset_converter.terrain_tags import DEFAULT_TERRAIN_TAG_MAP, TerrainTagTable
 from ..traversal.collision import build_tile_grid, load_map_json, load_tileset_arrays
@@ -1000,6 +1006,70 @@ def seam_cells(map_constant: str, *, to: str) -> tuple[Cell, ...]:
     seam = party[0]
     cells = seam["cells_a"] if seam["map_a"] == uid else seam["cells_b"]
     return tuple((c[0], c[1]) for c in cells)
+
+
+def real_connection(map_constant: str, to: str) -> "MapConnection | None":
+    """The directed pokeemerald map CONNECTION `map_constant` -> `to`
+    (`connections.json`, parsed by `routing.connections.load_connections`,
+    which wraps `tileset_converter.connections`), or None when the pair is
+    not joined by one. A pair that ALSO has a seam_warps.json entry is an
+    arrow-warp seam (the substitution replaces the connection on the ROM), so
+    it answers None."""
+    uid = _uranium_id(map_constant, resolver="real_connection")
+    to_uid = _uranium_id(to, resolver="real_connection")
+    if seam_warp_cells(uid, to_uid):
+        return None
+    root = Path(os.environ.get("RPG2GBA_OUTPUT", "output"))
+    path = root / "uranium-build" / "connections.json"
+    if not path.is_file():
+        return None
+    found = _connections_between(_load_directed_connections(path), uid, to_uid)
+    return found[0] if found else None
+
+
+def connection_arrival_cell(map_constant: str, *, to: str, cell: Cell) -> Cell:
+    """Where a step off `cell` (an edge cell of `map_constant`) across its
+    real connection into `to` lands on `to`'s map.
+
+    Engine semantics (`engine/src/fieldmap.c` Fill*Connection, derived in
+    `routing/connections.py`): with raw `connections.json` offsets, the
+    shared-axis coordinate maps as `to_axis = from_axis - (offset -
+    to_offset)`; the other coordinate is `to`'s far edge row -- height-1 when
+    leaving a N edge, 0 for S; width-1 leaving W, 0 for E. Raises
+    ValueError when the pair has no connection, `cell` is not on the edge,
+    or the mapped cell is off `to`'s edge."""
+    conn = real_connection(map_constant, to)
+    if conn is None:
+        raise ValueError(f"connection_arrival_cell: {map_constant} -> {to} is not a "
+                         "real connections.json connection")
+    _, from_graph = _graph_for(map_constant, resolver="connection_arrival_cell")
+    _, to_graph = _graph_for(to, resolver="connection_arrival_cell")
+    shift = conn.offset - conn.to_offset
+    x, y = cell
+    if conn.direction in (Direction.NORTH, Direction.SOUTH):
+        edge_y = 0 if conn.direction is Direction.NORTH else from_graph.height - 1
+        arrival = (x - shift, to_graph.height - 1 if conn.direction is Direction.NORTH else 0)
+        on_edge, in_range = y == edge_y, 0 <= arrival[0] < to_graph.width
+    else:
+        edge_x = from_graph.width - 1 if conn.direction is Direction.EAST else 0
+        arrival = (to_graph.width - 1 if conn.direction is Direction.WEST else 0, y - shift)
+        on_edge, in_range = x == edge_x, 0 <= arrival[1] < to_graph.height
+    if not on_edge or not in_range:
+        raise ValueError(f"connection_arrival_cell: {cell} on {map_constant} is not an "
+                         f"edge cell that maps onto {to} ({conn})")
+    return arrival
+
+
+def connection_exit_cells(map_constant: str, *, to: str) -> tuple[Cell, ...]:
+    """Edge cells of `map_constant` walkable on BOTH sides of its real
+    connection into `to` (`routing.connections.crossing_cells`), sorted."""
+    conn = real_connection(map_constant, to)
+    if conn is None:
+        raise ValueError(f"connection_exit_cells: {map_constant} -> {to} is not a "
+                         "real connections.json connection")
+    _, from_graph = _graph_for(map_constant, resolver="connection_exit_cells")
+    _, to_graph = _graph_for(to, resolver="connection_exit_cells")
+    return tuple(e for e, _ in _crossing_cells(conn, from_graph=from_graph, to_graph=to_graph))
 
 
 def is_seam_crossing(map_constant: str, to: str, cell: Cell) -> bool:

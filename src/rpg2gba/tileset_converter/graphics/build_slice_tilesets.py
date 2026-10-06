@@ -71,7 +71,9 @@ from .emit import (
     MetatileImage,
     emit_tileset,
 )
+from . import rom_quantize
 from .rom_quantize import make_rom_quantizer
+from .tile_merge import MergeTable, merge_and_dedup_metatiles, rom_merge_table
 from .raster import TileRasterizer, column_in_atlas
 from .sources import load_tileset_sources
 
@@ -110,6 +112,11 @@ _ARROW_KIND_TO_MB_NAME: dict[str, str] = {
 # must keep its terrain behavior and the stair cells need a behavior-stamped copy.
 # Not a real kind — never written to the overlay.
 _NON_STAIR_USER = "\x00non-stair"
+
+
+def _rom_tile_merge_enabled() -> bool:
+    """``rom_quantize.ROM_TILE_MERGE``, read at call time (tests patch this seam)."""
+    return rom_quantize.ROM_TILE_MERGE
 
 
 def _behavior_value(fork: Path, name: str) -> int:
@@ -366,6 +373,8 @@ def build_slice_tilesets(
     source_tileset_of: Callable[[int], int] | None = None,
     stair_cells: dict[int, dict[tuple[int, int], str]] | None = None,
     dry_run: bool = False,
+    tile_merge: bool | None = None,
+    merge_table: MergeTable | None = None,
 ) -> dict[int, EmittedTileset]:
     """Emit real Uranium tilesets for the slice and write the engine + overlay glue.
 
@@ -400,8 +409,17 @@ def build_slice_tilesets(
     out-of-atlas. `None`/no cells emits no "behavior_overrides" overlay entry
     for the tileset (the default no-op path). The layout converter looks up
     the right one per cell via `tile_map.behavior_for_column`.
+    `tile_merge` (default ``rom_quantize.ROM_TILE_MERGE``) applies the game-wide
+    near-duplicate tile merge to every metatile and then the lossless metatile dedup
+    (`tile_merge.merge_and_dedup_metatiles`); every metatile index the overlay records
+    (column tiles, void bucket, door/stair copies and fallbacks) is remapped to the
+    dedup survivor so layouts resolve to the right metatile. `merge_table` overrides
+    the corpus table (tests); default `tile_merge.rom_merge_table(tilesets_json)`.
     Returns the per-tileset `EmittedTileset`. Writes nothing when `dry_run`."""
     fork = Path(fork)
+    do_merge = _rom_tile_merge_enabled() if tile_merge is None else tile_merge
+    if do_merge and merge_table is None and not dry_run:
+        merge_table = rom_merge_table(tilesets_json)
     resolve = source_tileset_of or (lambda ts: ts)
     make_rast = rasterizer_for or (
         lambda ts: _default_rasterizer(resolve(ts), tilesets_json, graphics_dir)
@@ -665,6 +683,24 @@ def build_slice_tilesets(
             + len(stair_fallback_by_kind)
         )
 
+        # Game-wide tile merge + lossless metatile dedup (ROM_TILE_MERGE). ``remap[old]``
+        # is the surviving index; every recorded metatile index below goes through it.
+        remap = list(range(len(metatile_list)))
+        if do_merge:
+            n_before = len(metatile_list)
+            metatile_list, remap = merge_and_dedup_metatiles(metatile_list, merge_table)
+            void_idx = remap[void_idx]
+            warp_tiles = {k: remap[i] for k, i in warp_tiles.items()}
+            if warp_fallback_idx is not None:
+                warp_fallback_idx = remap[warp_fallback_idx]
+            stair_tiles_by_kind = {
+                kind: {k: remap[i] for k, i in tiles.items()}
+                for kind, tiles in stair_tiles_by_kind.items()
+            }
+            stair_fallback_by_kind = {k: remap[i] for k, i in stair_fallback_by_kind.items()}
+            logger.info("  tileset %d tile merge: %d -> %d metatiles after dedup",
+                        ts, n_before, len(metatile_list))
+
         # The ROM quantizer (family packer + Ward + shared palettes) is defined once in
         # rom_quantize; the map viewer's ROM view and the oracle read the same config.
         rom_q = make_rom_quantizer()
@@ -686,7 +722,7 @@ def build_slice_tilesets(
         # Column-key strings are the shared format (serialize_column_key) that
         # lookup_column expects at layout-conversion time.
         overlay["tiles"][str(ts)] = {
-            serialize_column_key(k): {"metatile": i} for i, k in enumerate(ordered)
+            serialize_column_key(k): {"metatile": remap[i]} for i, k in enumerate(ordered)
         }
         # All bucket roles point at void_idx; real cells always hit the explicit
         # tiles table so the bucket is only reached for genuinely empty fallback.

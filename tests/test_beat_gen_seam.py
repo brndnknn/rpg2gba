@@ -116,9 +116,9 @@ def test_real_kevlar_seam_x31_closed_x32_open():
     exits = {c.exit_cell for c in got}
     assert (32, 0) in exits
     assert (31, 0) not in exits      # walkable pair, but the landing is walled
-    # Only the seam_warps.json arrow cells warp on the ROM: (31,0) has a
-    # walled landing, leaving exactly (32,0) (was 28 whole-edge crossings).
-    assert [c.exit_cell for c in got] == [(32, 0)]
+    # Since 2026-10-06 31<->35 is a real whole-edge connection (the arrow-warp
+    # seam was retired), so every walkable-pair column crosses, not just (32,0).
+    assert len(got) > 1
 
 
 # --- arrow-warp seams (seam_warps.json substitution) --------------------------

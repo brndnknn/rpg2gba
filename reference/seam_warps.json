@@ -1,15 +1,4 @@
 {
-  "_comment": "Seam warp pairs that REPLACE a pokeemerald map CONNECTION with a synthetic two-cell direction-gated ARROW-WARP pair (MB_NORTH/SOUTH/EAST/WEST_ARROW_WARP). Used ONLY when the two maps cannot share a tileset: their unique-8x8-tile union exceeds the hard 1024-tile cap and both metatile dedup and unreferenced-metatile pruning are measured-exhausted. This is a user-approved fidelity substitution (loses cross-map scroll-stitching at this one seam), not a general connection replacement — most seams stay real connections. Schema: cells_a[i] pairs 1:1 with cells_b[i] (reciprocal warp cells, geometry-verified passable + connection-offset-consistent). direction_a/direction_b name the arrow direction (up/down/left/right = the travel direction that fires the warp) each side's cells carry; see rpg2gba.tileset_converter.seam_warps.",
-  "seams": [
-    {
-      "id": "kevlar_town_route_02",
-      "_note": "Kevlar Town (map 31) <-> Route 2 (map 35), CH04. Union of the two maps' tilesets measures 1028 8x8 tiles against the 1024 cap. Seam row y=0 on Kevlar (blocked x: 8,18,25,26,37,39,40), y=56 on Route 2 (blocked x: 14-19,26,28,29); connection offset 11 (route2_x = kevlar_x - 11). Cells verified passable + offset-consistent by decoding the emitted map.bin collision bits.",
-      "map_a": 31,
-      "map_b": 35,
-      "cells_a": [[31, 0], [32, 0]],
-      "cells_b": [[20, 56], [21, 56]],
-      "direction_a": "up",
-      "direction_b": "down"
-    }
-  ]
+  "_comment": "Seam warp pairs that REPLACE a pokeemerald map CONNECTION with a synthetic two-cell direction-gated ARROW-WARP pair (MB_NORTH/SOUTH/EAST/WEST_ARROW_WARP). Used ONLY when the two maps cannot share a tileset: their unique-8x8-tile union exceeds the hard 1024-tile cap and both metatile dedup and unreferenced-metatile pruning are measured-exhausted. This is a user-approved fidelity substitution (loses cross-map scroll-stitching at this one seam), not a general connection replacement — most seams stay real connections. Schema: cells_a[i] pairs 1:1 with cells_b[i] (reciprocal warp cells, geometry-verified passable + connection-offset-consistent). direction_a/direction_b name the arrow direction (up/down/left/right = the travel direction that fires the warp) each side's cells carry; see rpg2gba.tileset_converter.seam_warps. NOTE 2026-10-06: the one seam this file carried (kevlar_town_route_02, maps 31<->35) was retired when 31+35 moved onto a shared synthetic tileset (map_set.tileset_groups), so that seam is a real scrolling connection again; the mechanism stays for any future seam whose maps cannot share a tileset.",
+  "seams": []
 }

@@ -309,9 +309,12 @@ def test_real_corpus_passage_cave_connects_only_to_map_31():
 
 
 @pytestmark_corpus
-def test_real_corpus_seam_warp_edge_exists_both_directions():
+def test_real_corpus_kevlar_route2_is_a_real_connection_both_directions():
+    """31<->35 became a real scrolling connection 2026-10-06 (shared tileset;
+    the kevlar_town_route_02 arrow-warp seam was retired)."""
     g = build_world_graph()
-    fwd = [e for e in g.edges_from(31) if e.kind == "seam_warp" and e.dst_map == 35]
-    back = [e for e in g.edges_from(35) if e.kind == "seam_warp" and e.dst_map == 31]
+    fwd = [e for e in g.edges_from(31) if e.kind == "connection" and e.dst_map == 35]
+    back = [e for e in g.edges_from(35) if e.kind == "connection" and e.dst_map == 31]
     assert len(fwd) >= 1
     assert len(back) >= 1
+    assert not [e for e in g.edges_from(31) if e.kind == "seam_warp"]

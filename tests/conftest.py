@@ -57,6 +57,17 @@ def _synthetic_builds_have_no_entry_cells(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(generator, "_start_cells", start_cells)
 
 
+@pytest.fixture(autouse=True)
+def _synthetic_tilesets_skip_corpus_tile_merge(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ROM_TILE_MERGE is on in production, and its corpus table only knows real
+    Uranium quads. Synthetic-rasterizer tests of `build_slice_tilesets` would KeyError
+    on it, so the default is off here; a test of the merge passes `tile_merge=True` and
+    its own `merge_table` explicitly."""
+    from rpg2gba.tileset_converter.graphics import build_slice_tilesets as bst
+
+    monkeypatch.setattr(bst, "_rom_tile_merge_enabled", lambda: False)
+
+
 @pytest.fixture(scope="session")
 def reference_dir() -> Path:
     """The repo's committed `reference/` sidecars."""

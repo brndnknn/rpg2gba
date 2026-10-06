@@ -19,7 +19,7 @@ transit_beat(
     chapter_id='CH04',
     beat_name='m035seamS031_transit',
     group='m035seamS031',
-    hops=(('MAP_KEVLAR_TOWN', 32, 1, 'UP', 'MAP_ROUTE_02'),),
+    hops=(('MAP_KEVLAR_TOWN', 32, 0, 'UP', 'MAP_ROUTE_02'),),
 )
 
 seam_beat(

@@ -337,7 +337,14 @@ def test_order_stair_crossings_refuses_an_unreached_preferred_side():
 SEAM ="map031/seam/N/map035"
 
 
-def test_seam_beat_declares_the_crossing():
+def test_seam_beat_declares_the_crossing(monkeypatch):
+    # seam_warps.json is empty since 2026-10-06 (31<->35 is a real connection);
+    # the arrow-warp mechanism is exercised with an injected seam entry.
+    import rpg2gba.playtest.cells as cells_mod
+
+    monkeypatch.setattr(cells_mod, "_SEAM_WARPS_CACHE", [
+        {"id": "synthetic", "map_a": 31, "map_b": 35,
+         "cells_a": [[31, 0], [32, 0]], "cells_b": [[20, 56], [21, 56]]}])
     b = _builder()
     generic.seam_beat(b, chapter_id="CH03", beat_name="m031seamN035", rows=(SEAM,))
     (beat,) = b.build().beats

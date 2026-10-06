@@ -68,7 +68,7 @@ from pathlib import Path
 from rpg2gba.tileset_converter.map_set import (
     SLICE_MAP_IDS,
     WALKABLE_OVERRIDES,
-    synth_tileset_id,
+    load_slice_tileset_groups,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -218,7 +218,8 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
     else:
         logger.info("  [dry] would run NPC sprite pass -> engine gen files")
 
-    # Per-map synthetic tileset ids (map_set.synth_tileset_id): pooling metatiles
+    # Per-map synthetic tileset ids (map_set.synth_tileset_id; maps joined by an
+    # emitted connection share one, see tileset_groups): pooling metatiles
     # per RMXP tileset overflows the GBA's 1024 hard caps once two maps share an
     # RMXP tileset id (e.g. Map032 union Map033 on RMXP tileset 22 -> 1607
     # metatiles / 1611 tiles). Giving each map its own synthetic tileset_id makes
@@ -239,6 +240,12 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
     slice_seams = seams_for_slice(load_seam_warps(), set(SLICE_MAP_IDS))
     seam_behavior_cells = behavior_cells_for(slice_seams)
 
+    # Maps joined by an emitted scrolling connection share ONE synthetic tileset
+    # (the engine draws a neighbour through the current map's tileset); every
+    # other map keeps its own. Fails loud if a joined pair has different real
+    # RMXP tilesets.
+    groups = load_slice_tileset_groups(out, SLICE_MAP_IDS)
+
     maps: list[tuple[int, dict]] = []
     synth_to_real: dict[int, int] = {}
     stair_cells: dict[int, dict[tuple[int, int], str]] = {}
@@ -246,7 +253,7 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
         map_json = json.loads(
             (out / "maps" / f"Map{map_id:03d}.json").read_text(encoding="utf-8")
         )
-        synth = synth_tileset_id(map_id)
+        synth = groups[map_id]
         synth_to_real[synth] = int(map_json["tileset_id"])
         synth_json = dict(map_json)  # shallow: only the top-level tileset_id changes
         synth_json["tileset_id"] = synth
@@ -307,6 +314,7 @@ def run_layout_pass(
     seam_behavior_cells = behavior_cells_for(slice_seams)
 
     all_warp_overrides = _load_warp_overrides(out)
+    groups = load_slice_tileset_groups(out, SLICE_MAP_IDS)
 
     entries: list[dict] = []
     for map_id in SLICE_MAP_IDS:
@@ -330,7 +338,7 @@ def run_layout_pass(
             warp_overrides=warp_overrides,
             blocked_cells=blocked_cells,
             unblocked_cells=WALKABLE_OVERRIDES.get(map_id, frozenset()),
-            tileset_key=synth_tileset_id(map_id),
+            tileset_key=groups[map_id],
             behavior_overrides={
                 **collect_stair_behavior_cells(map_json),
                 **seam_behavior_cells.get(map_id, {}),

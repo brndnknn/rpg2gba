@@ -23,9 +23,10 @@ from .shared_palettes import make_shared_quantizer
 ROM_FAMILY_PARAMS: FamilyParams = FamilyParams(reduction="ward")
 ROM_SHARED_PALETTES: bool = True
 # Game-wide near-duplicate tile merge (graphics/tile_merge.py, K 16 rock/green / 4 other)
-# + lossless metatile merge. Viewer-preview only until the operator's eye check; the ROM
-# build does not apply it while this is False.
-ROM_TILE_MERGE: bool = False
+# + lossless metatile dedup, applied by build_slice_tilesets to every metatile of every
+# map. Operator-approved 2026-10-06 for all maps, to put Kevlar (31) +
+# Route 2 (35) on one shared tileset so their seam is a real connection.
+ROM_TILE_MERGE: bool = True
 
 
 def make_rom_quantizer() -> Callable[..., QuantizeResult]:

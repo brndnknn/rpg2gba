@@ -123,7 +123,10 @@ from rpg2gba.playtest.cells import (
     event_is_sight_trainer,
     event_page_moves,
     native_berry_tree_id,
+    connection_arrival_cell,
+    connection_exit_cells,
     is_seam_crossing,
+    real_connection,
     local_id,
     seam_cells,
 )
@@ -1788,6 +1791,9 @@ def seam_beat(
     other_map_constant = _map_constant_for(params["other_map_id"])
     # The floor names the EDGE ("N"); crossing it is a held press ("UP").
     direction = _EDGE_PRESS[str(params["direction"])]
+    # A pair joined by a REAL pokeemerald connection (not a seam_warps.json
+    # arrow substitution) is crossed by walking off the edge, not by a warp.
+    connection = real_connection(map_constant, other_map_constant) is not None
     if approach_prefer is not None:
         # locate.py's seam candidate side: "<press>@(x,y)".
         press, _, at = approach_prefer.partition("@")
@@ -1796,6 +1802,8 @@ def seam_beat(
                 f"seam_beat: {beat_name}: approach_prefer={approach_prefer!r} is not "
                 f"a {direction} crossing of {row_id}")
         x, y = (int(v) for v in at.strip("()").split(","))
+    elif connection:
+        x, y = connection_exit_cells(map_constant, to=other_map_constant)[0]
     else:
         x, y = seam_cells(map_constant, to=other_map_constant)[0]
 
@@ -1812,6 +1820,21 @@ def seam_beat(
     )
     def body(emu: "Emulator") -> None:
         assertions.require_map(emu, beat_name, map_constant)
+        if connection:
+            # Arrival: other_axis = axis - (offset - to_offset), on the
+            # other map's far edge row (`cells.connection_arrival_cell`).
+            # The step that flips the map can land the player one tile
+            # further in, hence tolerance 1; the return crossing re-walks to
+            # the exact edge cell, so it is checked the same way.
+            arrival = connection_arrival_cell(map_constant, to=other_map_constant, cell=(x, y))
+            assertions.cross_connection(emu, beat_name, (x, y), direction, other_map_constant)
+            emu.settle_field()
+            assertions.assert_near(emu, beat_name, arrival)
+            assertions.cross_connection(
+                emu, beat_name, arrival, _OPPOSITE_DIR[direction], map_constant)
+            emu.settle_field()
+            assertions.assert_near(emu, beat_name, (x, y))
+            return
         assertions.cross_arrow_warp(emu, beat_name, (x, y), direction, other_map_constant)
         # Let each arrival settle, as transit hops do: ROM run 72 ended the
         # chapter on the return crossing with the field still locked.
@@ -1873,7 +1896,10 @@ def transit_beat(
             assertions.require_map(emu, beat_name, map_constant)
             dx, dy = assertions._ARROW_APPROACH_DELTA[press]
             tile = (x - dx, y - dy)
-            if is_seam_crossing(map_constant, dest, tile):
+            if real_connection(map_constant, dest) is not None:
+                # (x, y) is the edge cell itself: hold the press off it.
+                assertions.cross_connection(emu, beat_name, (x, y), press, dest)
+            elif is_seam_crossing(map_constant, dest, tile):
                 assertions.cross_arrow_warp(emu, beat_name, tile, press, dest)
             else:
                 assertions.cross_threshold(emu, beat_name, (x, y), press, dest)

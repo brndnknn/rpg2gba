@@ -42,6 +42,7 @@ def test_run_graphics_pass_assigns_synthetic_ids_and_source_tileset_of(
     back to the correct real RMXP id -- exactly what phase5's walker path does."""
     out = tmp_path / "out"
     (out / "maps").mkdir(parents=True)
+    (out / "connections.json").write_text("[]", encoding="utf-8")
     (out / "maps" / "Map032.json").write_text(
         json.dumps({"tileset_id": 22, "tiles": []}), encoding="utf-8"
     )
@@ -80,6 +81,39 @@ def test_run_graphics_pass_assigns_synthetic_ids_and_source_tileset_of(
     assert resolve(synth_33) == 22
 
 
+def test_run_graphics_pass_connected_maps_share_one_synthetic_id(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Maps joined by an emitted connection reach build_slice_tilesets under ONE
+    synthetic id (min of the component), resolving to their common real id."""
+    out = tmp_path / "out"
+    (out / "maps").mkdir(parents=True)
+    for mid in (32, 33):
+        (out / "maps" / f"Map{mid:03d}.json").write_text(
+            json.dumps({"tileset_id": 22, "tiles": []}), encoding="utf-8"
+        )
+    (out / "connections.json").write_text(
+        json.dumps([[32, "E", 0, 33, "W", 0]]), encoding="utf-8"
+    )
+    monkeypatch.setattr(ap, "SLICE_MAP_IDS", [32, 33])
+    monkeypatch.setattr(ap, "_load_warp_overrides", lambda out: {32: set(), 33: set()})
+    captured: dict = {}
+
+    def fake_build_slice_tilesets(maps, warp_coords, **kwargs):
+        captured["maps"] = dict(maps)
+        captured["source_tileset_of"] = kwargs["source_tileset_of"]
+        return {}
+
+    import rpg2gba.tileset_converter.graphics.build_slice_tilesets as bst_mod
+    monkeypatch.setattr(bst_mod, "build_slice_tilesets", fake_build_slice_tilesets)
+    ap.run_graphics_pass(out, tmp_path / "fork", dry_run=True)
+
+    shared = synth_tileset_id(32)
+    assert captured["maps"][32]["tileset_id"] == shared
+    assert captured["maps"][33]["tileset_id"] == shared
+    assert captured["source_tileset_of"](shared) == 22
+
+
 def test_run_graphics_pass_leaves_original_map_json_untouched(
     tmp_path: Path, monkeypatch,
 ) -> None:
@@ -87,6 +121,7 @@ def test_run_graphics_pass_leaves_original_map_json_untouched(
     tileset_id must never be mutated (idempotence, CLAUDE.md §4.2)."""
     out = tmp_path / "out"
     (out / "maps").mkdir(parents=True)
+    (out / "connections.json").write_text("[]", encoding="utf-8")
     (out / "maps" / "Map032.json").write_text(
         json.dumps({"tileset_id": 22, "tiles": []}), encoding="utf-8"
     )
@@ -125,6 +160,7 @@ def test_run_layout_pass_uses_matching_synthetic_tileset_key(
 ) -> None:
     out = tmp_path / "out"
     (out / "maps").mkdir(parents=True)
+    (out / "connections.json").write_text("[]", encoding="utf-8")
     for mid in (32, 33):
         (out / "maps" / f"Map{mid:03d}.json").write_text(
             json.dumps({"tileset_id": 22, "tiles": []}), encoding="utf-8"

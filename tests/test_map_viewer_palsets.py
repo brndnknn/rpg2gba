@@ -66,16 +66,17 @@ def test_codes_consistent_with_tile_info_and_classify_tile():
 
 
 def test_reservation_matches_quantizer_info_when_on():
-    # Merge off: the overlay classifies SOURCE quads, the quantizer's info counts the
+    # SMALL is outside any tileset group (the overlay is per-map; a grouped map pools
+    # its group, so its counts legitimately differ). Merge off: the overlay classifies SOURCE quads, the quantizer's info counts the
     # (possibly tile-merged) pool, so the two legitimately differ under tile merge.
     mvc.set_quantize_params(mvc.VIEWER_DEFAULT_PARAMS, mvc.VIEWER_DEFAULT_MAX_PALETTES,
                             shared_palettes=True, tile_merge=False)
-    mvc._shared_info.pop(BIG, None)
+    mvc._shared_info.pop(SMALL, None)
     mvc._tileset_analysis_cache.clear()
-    mvc._map_cache.pop(BIG, None)
-    d = _sets(BIG)
-    mvc.build_map_data(BIG)
-    info = mvc._shared_info[BIG]
+    mvc._map_cache.pop(SMALL, None)
+    d = _sets(SMALL)
+    mvc.build_map_data(SMALL)
+    info = mvc._shared_info[SMALL]
     r = d["reservation"]
     assert d["shared_on"] is True
     assert (r["n_rock"], r["n_green"]) == (info["n_rock"], info["n_green"])

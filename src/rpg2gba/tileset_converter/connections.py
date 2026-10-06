@@ -183,6 +183,52 @@ def _check_duplicates(rows: list[ConnectionRow]) -> None:
         seen[row.pair_key] = row
 
 
+def emitted_rows(
+    rows: list[ConnectionRow],
+    map_ids: set[int],
+    suppress_pairs: frozenset[frozenset[int]] = frozenset(),
+) -> list[ConnectionRow]:
+    """The rows a build actually emits: duplicate check, suppression validation,
+    then the suppress + frontier filters (both endpoints in *map_ids*), each
+    drop logged at INFO. The single definition of "emitted" shared by
+    `build_connections` and `map_set.tileset_groups` (tileset sharing must
+    follow exactly the seams the ROM stitches). Fail-loud conditions are
+    documented on `build_connections`."""
+    _check_duplicates(rows)
+
+    if suppress_pairs:
+        row_pairs = {row.pair_key for row in rows}
+        undeclared = suppress_pairs - row_pairs
+        if undeclared:
+            raise ValueError(
+                "seam_warps.json declares an arrow-warp replacement for map "
+                f"pair(s) {[sorted(p) for p in undeclared]}, but connections.json "
+                "has no row for them — nothing to suppress (contradictory "
+                "declaration between the two source-of-truth files)"
+            )
+
+    kept: list[ConnectionRow] = []
+    for row in rows:
+        raw = (row.map_a, row.edge_a, row.offset_a, row.map_b, row.edge_b, row.offset_b)
+        if row.pair_key in suppress_pairs:
+            logger.info(
+                "suppressing connection row %s: superseded by a seam_warps.json "
+                "arrow-warp pair",
+                raw,
+            )
+            continue
+        missing = [m for m in (row.map_a, row.map_b) if m not in map_ids]
+        if missing:
+            logger.info(
+                "omitting connection row %s: map(s) %s not in this build's map set",
+                raw,
+                missing,
+            )
+            continue
+        kept.append(row)
+    return kept
+
+
 def build_connections(
     rows: list[ConnectionRow],
     map_ids: set[int],
@@ -209,37 +255,8 @@ def build_connections(
     a bad row in the source is never silently dropped as "out of slice".
     Deterministic: each map's connection list is sorted, so repeated calls on
     the same input are byte-identical (idempotence, rule 5)."""
-    _check_duplicates(rows)
-
-    if suppress_pairs:
-        row_pairs = {row.pair_key for row in rows}
-        undeclared = suppress_pairs - row_pairs
-        if undeclared:
-            raise ValueError(
-                "seam_warps.json declares an arrow-warp replacement for map "
-                f"pair(s) {[sorted(p) for p in undeclared]}, but connections.json "
-                "has no row for them — nothing to suppress (contradictory "
-                "declaration between the two source-of-truth files)"
-            )
-
     result: dict[str, list[Connection]] = {}
-    for row in rows:
-        if row.pair_key in suppress_pairs:
-            logger.info(
-                "suppressing connection row %s: superseded by a seam_warps.json "
-                "arrow-warp pair",
-                (row.map_a, row.edge_a, row.offset_a, row.map_b, row.edge_b, row.offset_b),
-            )
-            continue
-        missing = [m for m in (row.map_a, row.map_b) if m not in map_ids]
-        if missing:
-            logger.info(
-                "omitting connection row %s: map(s) %s not in this build's map set",
-                (row.map_a, row.edge_a, row.offset_a, row.map_b, row.edge_b, row.offset_b),
-                missing,
-            )
-            continue
-
+    for row in emitted_rows(rows, map_ids, suppress_pairs):
         try:
             const_a = resolve_map_const(row.map_a)
         except (KeyError, ValueError) as exc:

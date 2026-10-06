@@ -363,6 +363,28 @@ def dedup_metatiles(mts: list[MetatileImage]) -> tuple[list[MetatileImage], list
     return unique, remap
 
 
+def merge_and_dedup_metatiles(
+    mts: list[MetatileImage], table: MergeTable,
+) -> tuple[list[MetatileImage], list[int]]:
+    """THE ROM transformation (viewer budget readout shares it): game-wide tile merge
+    on every metatile, then the lossless metatile dedup. ``remap[old] = new`` index.
+
+    Dedup keys on (art, frames, behavior, layer_type), so door / stair / terrain
+    behavior copies and covered/normal layers never fold into one another."""
+    return dedup_metatiles([table.apply_metatile(mt) for mt in mts])
+
+
+def rom_merge_table(tilesets_json: Path) -> MergeTable:
+    """The corpus table for the ROM build: ``<build dir>/tile_merge_table.npz`` where the
+    build dir is ``tilesets_json``'s parent (holds ``maps/``). Cache hit is instant; a
+    stale cache rebuilds from the whole corpus (minutes)."""
+    build = Path(tilesets_json).parent
+    return corpus_merge_table(
+        MergeParams(), out_dir=build, tilesets_json=Path(tilesets_json),
+        cache_path=build / "tile_merge_table.npz",
+    )
+
+
 # --------------------------------------------------------------------------- corpus
 
 def _strip_map_ids() -> set[int]:

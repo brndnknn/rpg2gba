@@ -95,7 +95,9 @@ from rpg2gba.beat_gen.plan import (
     make_kwargs,
 )
 from rpg2gba.beat_gen.review import RowLocation, render_review
-from rpg2gba.beat_gen.seam import SeamCrossing, connection_for, seam_crossings
+from rpg2gba.beat_gen.seam import (
+    SeamCrossing, connection_crossings, connection_for, seam_crossings,
+)
 from rpg2gba.beat_gen.seed import route_winner
 from rpg2gba.beat_gen.page_sim import Firing
 from rpg2gba.beat_gen.select import dropped_events, empty_events, select_rows
@@ -133,6 +135,7 @@ from rpg2gba.routing.occupancy import (
     _load_emitted_map,
     _load_map_constants_entry,
 )
+from rpg2gba.routing.connections import connections_between, load_connections
 from rpg2gba.routing.pathing import RoutePlanningError, landing_cell
 from rpg2gba.routing.plan import write_plan
 from rpg2gba.routing.solver import RouteCandidate, solve_route
@@ -475,17 +478,57 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
         except RoutePlanningError:
             return False
 
+    connection_press: dict[tuple[int, int], str] = {}
+
+    def connection_edges() -> list:
+        """A real map connection has no trigger cell, so the world edge
+        carries none: give each one the crossing the seam resolver picks
+        (an edge cell reachable on this side whose offset-mapped cell on
+        the far side is walkable, reachable and has an open landing), so a
+        hop can stand on it and hold the edge press."""
+        out = []
+        loaded = None
+        for m in sorted(maps):
+            for e in world.edges_from(m):
+                if e.kind != "connection" or e.dst_map not in maps:
+                    continue
+                if loaded is None:
+                    loaded = load_connections()
+                picked = None
+                for conn in connections_between(loaded, e.src_map, e.dst_map):
+                    for c in connection_crossings(
+                            conn, from_graph=graphs[e.src_map], to_graph=graphs[e.dst_map]):
+                        if ((e.src_map, c.exit_cell) in reach
+                                and (e.dst_map, c.entry_cell) in reach):
+                            picked = c
+                            break
+                    if picked is not None:
+                        break
+                if picked is None:
+                    raise ValueError(
+                        f"connection {e.src_map} -> {e.dst_map}: no edge cell is passable "
+                        "and reachable on both sides (offset-consistent)")
+                connection_press[(e.src_map, e.dst_map)] = picked.press
+                out.append(dataclasses.replace(
+                    e, src_cell=picked.exit_cell, dst_cell=picked.entry_cell))
+        return out
+
     edges = sorted(
-        (e for m in sorted(maps) for e in world.edges_from(m)
+        [e for m in sorted(maps) for e in world.edges_from(m)
          if e.kind in ("warp", "seam_warp") and e.dst_map in maps
          and e.src_cell is not None and e.dst_cell is not None
          and (e.kind != "warp" or stepped_transfers is None
               or (e.src_map, e.event_id) in stepped_transfers)
-         and lands_reachably(e)),
+         and lands_reachably(e)] + connection_edges(),
         key=lambda e: (e.src_map, e.dst_map, e.src_cell, e.dst_cell))
 
     def hop_for(edge) -> tuple[str, int, int, str, str] | None:  # noqa: ANN001
         x, y = edge.src_cell
+        if edge.kind == "connection":
+            # Stand ON the edge cell and hold the edge press.
+            return (_map_constant_for(edge.src_map), x, y,
+                    connection_press[(edge.src_map, edge.dst_map)],
+                    _map_constant_for(edge.dst_map))
         press = (warp_presses or {}).get((edge.src_map, edge.event_id))
         if press is not None:
             # The warp's own beat already crosses it from the side the route

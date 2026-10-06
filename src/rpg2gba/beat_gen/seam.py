@@ -75,7 +75,20 @@ def seam_crossings(
     (ROM run 74: Route 2 (20,56) sits under a wall). An empty result is
     returned, not raised; the caller turns it into a
     `Refusal(blocker="cell")`."""
-    connection = connection_for(row)
+    return connection_crossings(
+        connection_for(row), from_graph=from_graph, to_graph=to_graph)
+
+
+def connection_crossings(
+    connection: MapConnection, *, from_graph: MapGraph, to_graph: MapGraph,
+) -> tuple[SeamCrossing, ...]:
+    """`seam_crossings` for a bare `MapConnection` (no manifest row): the
+    transit planner has only the world edge. For a REAL pokeemerald
+    connection (no seam_warps.json entry for the pair) every edge column
+    whose offset-mapped cell on the far map is walkable, with an open
+    landing one step further, qualifies -- both sides passable and offset-
+    consistent (`crossing_cells`' formula). Empty result is returned, not
+    raised; callers fail loud with the context they have."""
     press = _PRESS[connection.direction]
     dx, dy = connection.direction.delta
     arrows = seam_warp_cells(connection.from_map, connection.to_map)

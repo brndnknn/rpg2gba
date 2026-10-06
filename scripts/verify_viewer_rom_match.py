@@ -39,10 +39,11 @@ quantize+emit simulation. No viewer code touched.
 
 Mode B (--mode viewer): the viewer's own post-quant render path
 (map_viewer_common: ``_ensure_loaded`` -> per-colkey ``metatile_imgs_postquant``)
-vs the decoded ROM artifacts, per slice map. The viewer pools per map (one pool =
-the map itself), exactly like the ROM, so ROM metatile ``i`` is the viewer's pool
-key ``i`` (both are the sorted non-empty column keys; the build's void / door /
-stair copies are appended after them and are not compared). Runs the viewer's
+vs the decoded ROM artifacts, per slice map. The ROM dedups and renumbers metatiles,
+so each viewer column key is looked up in the committed overlay's ``tiles`` table
+(column key -> post-dedup ROM metatile index) rather than assumed equal to the pool
+index. A tileset shared by connected maps (e.g. 1031) is compared once per member map
+against the same ROM artifacts. Runs the viewer's
 quantizer once per map (about a minute or two for the whole slice).
 
 Usage:
@@ -118,9 +119,10 @@ def per_map_inputs(
     one (map_id, shallow copy with tileset_id = synth id) per slice map, the
     synth -> real RMXP tileset table, and the merged stair + seam-warp behaviour
     cells per map. Returns (maps, synth_to_real, stair_cells)."""
-    from rpg2gba.tileset_converter.map_set import synth_tileset_id
+    from rpg2gba.tileset_converter.map_set import load_slice_tileset_groups
     from rpg2gba.tileset_converter.metadata_wiring import collect_stair_behavior_cells
 
+    groups = load_slice_tileset_groups(out_dir, slice_map_ids)
     maps: list[tuple[int, dict]] = []
     synth_to_real: dict[int, int] = {}
     stair_cells: dict[int, dict[tuple[int, int], str]] = {}
@@ -128,7 +130,7 @@ def per_map_inputs(
         map_json = json.loads(
             (out_dir / "maps" / f"Map{map_id:03d}.json").read_text(encoding="utf-8")
         )
-        synth = synth_tileset_id(map_id)
+        synth = groups[map_id]
         synth_to_real[synth] = int(map_json["tileset_id"])
         synth_json = dict(map_json)  # shallow: only the top-level tileset_id changes
         synth_json["tileset_id"] = synth
@@ -420,7 +422,9 @@ def run_pipeline_mode() -> int:
         analyze_tileset_palettes,
     )
     from rpg2gba.tileset_converter.graphics.rom_quantize import make_rom_quantizer
-    from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, synth_tileset_id
+    from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, load_slice_tileset_groups
+
+    groups = load_slice_tileset_groups(out_dir, SLICE_MAP_IDS)
 
     if not tilesets_json.is_file():
         print(f"MISSING: {tilesets_json} -- run the phase-3/5 pipeline first", file=sys.stderr)
@@ -440,7 +444,7 @@ def run_pipeline_mode() -> int:
     skipped: list[int] = []
     failed: list[int] = []
     for map_id in SLICE_MAP_IDS:
-        synth = synth_tileset_id(map_id)
+        synth = groups[map_id]
         print(f"=== Map{map_id:03d} (tileset {synth}) ===")
         primary_dir = fork / "data" / "tilesets" / "primary" / f"uranium{synth}"
         secondary_dir = fork / "data" / "tilesets" / "secondary" / f"uranium{synth}"
@@ -527,17 +531,39 @@ def run_pipeline_mode() -> int:
 # ---------------------------------------------------------------------------
 
 
-def compare_viewer_to_rom(map_id: int, state, rom: TilesetROM, label: str) -> tuple[int, int, int]:
+def rom_index_table(committed: dict, synth: int) -> dict[str, int]:
+    """column-key string -> ROM metatile index for one synthetic tileset, read from the
+    overlay (reference/tileset_map.gen.json). These indices are POST-dedup: the ROM
+    build folds identical metatiles and renumbers, recording the survivor per column."""
+    return {
+        k: int(v["metatile"]) for k, v in committed.get("tiles", {}).get(str(synth), {}).items()
+    }
+
+
+def compare_viewer_to_rom(
+    map_id: int, state, rom: TilesetROM, label: str,
+    rom_index: dict[str, int] | None = None,
+) -> tuple[int, int, int]:
     """Compare one loaded viewer ``_MapState`` against its decoded ROM tileset.
     Returns (metatiles compared, metatiles with a mismatch, differing px). Each
-    distinct non-empty column key is compared once, at ROM index
-    ``state.pool_key_to_idx[ck]``."""
+    distinct non-empty column key is compared once. With ``rom_index`` (the overlay's
+    column-key -> ROM metatile table, see ``rom_index_table``) the ROM index is looked
+    up through the build's dedup remap and a column missing from it is a hard error;
+    without it the viewer pool index is assumed to equal the ROM index (pre-dedup)."""
+    from rpg2gba.tileset_converter.tile_map import serialize_column_key
+
     n_cmp = n_bad_mt = n_px = 0
     for cidx, ck in enumerate(state.colkeys_sorted):
         pq = state.metatile_imgs_postquant[cidx]
         if not ck or pq is None:
             continue
-        rom_idx = state.pool_key_to_idx[ck]
+        if rom_index is None:
+            rom_idx = state.pool_key_to_idx[ck]
+        else:
+            skey = serialize_column_key(ck)
+            if skey not in rom_index:
+                raise KeyError(f"{label}: column key {skey} absent from the overlay")
+            rom_idx = rom_index[skey]
         dec_bottom, dec_top = rom.decode_metatile(rom_idx)
         n_bot = _report_layer(label, rom_idx, "bottom", pq[0], dec_bottom)
         n_top = _report_layer(label, rom_idx, "top", pq[1], dec_top)
@@ -560,14 +586,16 @@ def run_viewer_mode() -> int:
     mvc._load_dotenv()
     # The viewer boots with the Ward + shared-palettes PREVIEW; this compares to the ROM.
     mvc.set_rom_stock_quantize()
-    from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, synth_tileset_id
+    from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, load_slice_tileset_groups
 
+    groups = load_slice_tileset_groups(_output_dir(), SLICE_MAP_IDS)
+    committed = json.loads(OVERLAY_PATH.read_text(encoding="utf-8"))
     passed: list[int] = []
     skipped: list[int] = []
     failed: list[int] = []
     tot_px = tot_mt = 0
     for map_id in SLICE_MAP_IDS:
-        synth = synth_tileset_id(map_id)
+        synth = groups[map_id]
         print(f"=== Map{map_id:03d} (tileset {synth}) ===")
         primary_dir = fork / "data" / "tilesets" / "primary" / f"uranium{synth}"
         secondary_dir = fork / "data" / "tilesets" / "secondary" / f"uranium{synth}"
@@ -583,7 +611,14 @@ def run_viewer_mode() -> int:
             continue
         state = mvc._map_cache[map_id]
         rom = load_tileset_rom(primary_dir, secondary_dir)
-        n_cmp, n_bad_mt, n_px = compare_viewer_to_rom(map_id, state, rom, f"ts{synth}")
+        try:
+            n_cmp, n_bad_mt, n_px = compare_viewer_to_rom(
+                map_id, state, rom, f"ts{synth}", rom_index_table(committed, synth),
+            )
+        except KeyError as exc:
+            print(f"  FAIL: {exc}")
+            failed.append(map_id)
+            continue
         tot_px += n_px
         tot_mt += n_cmp
         print(

@@ -149,6 +149,28 @@ def cross_threshold(emu: Emulator, beat: str, approach: tuple[int, int],
     wait_for_map(emu, beat, dest_map)
 
 
+def cross_connection(emu: Emulator, beat: str, edge_cell: tuple[int, int],
+                     direction: str, dest_map: str, budget: int = 240) -> None:
+    """Cross a real pokeemerald map CONNECTION: stand on `edge_cell` (on the
+    map's own edge) and hold `direction` until the map changes.
+
+    No tile triggers a connection -- the engine swaps maps when the player
+    walks off the edge -- so this is `cross_threshold` without the single
+    step (one tap can be eaten by a turn-in-place) and without a trigger
+    tile: hold in short chunks, stop the moment the map flips (holding on
+    would walk the player further into the new map)."""
+    if direction not in _ARROW_APPROACH_DELTA:
+        raise ScenarioError(
+            f"{beat}: cross_connection got direction {direction!r}, "
+            f"expected one of {sorted(_ARROW_APPROACH_DELTA)}")
+    emu.walk_to(*edge_cell, absorb_wild=True)
+    spent = 0
+    while spent < budget and not at_map(emu, dest_map):
+        emu.run(4, [direction])
+        spent += 4
+    wait_for_map(emu, beat, dest_map)
+
+
 def enter_door(emu: Emulator, beat: str, door: tuple[int, int],
                 dest_map: str, hold: int = 48) -> None:
     """Walk into a door warp from the south, holding the D-pad.

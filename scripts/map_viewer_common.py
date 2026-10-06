@@ -384,8 +384,8 @@ ROM_STOCK_TILE_MERGE: bool = ROM_TILE_MERGE
 VIEWER_DEFAULT_PARAMS: FamilyParams = ROM_FAMILY_PARAMS
 VIEWER_DEFAULT_MAX_PALETTES: int = _ENGINE_MAX_PALS
 VIEWER_DEFAULT_SHARED: bool = ROM_SHARED_PALETTES
-# Viewer default for the game-wide tile merge (tile_merge.py): ON, so the operator sees
-# what the step does before it goes into the ROM build (ROM_TILE_MERGE is False).
+# Viewer default for the game-wide tile merge (tile_merge.py): ON, matching the ROM
+# build (ROM_TILE_MERGE is True since 2026-10-06).
 VIEWER_DEFAULT_TILE_MERGE: bool = True
 _family_params: FamilyParams = VIEWER_DEFAULT_PARAMS
 _max_palettes: int = VIEWER_DEFAULT_MAX_PALETTES
@@ -587,6 +587,22 @@ def _render_pool_column(
     return _render_column(ck, raster, priorities, passages, terrain_tags, n_frames=n)
 
 
+def _pool_members(map_id: int) -> list[int]:
+    """Sorted map ids sharing *map_id*'s emitted ROM tileset (itself included).
+
+    Slice maps use ``load_slice_tileset_groups`` (the build's own grouping); a map
+    outside the slice, or a build dir with no connections.json, is its own pool."""
+    from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS, load_slice_tileset_groups
+
+    if map_id not in SLICE_MAP_IDS:
+        return [map_id]
+    out_dir = _maps_dir().parent
+    if not (out_dir / "connections.json").is_file():
+        return [map_id]
+    groups = load_slice_tileset_groups(out_dir, SLICE_MAP_IDS)
+    return sorted(m for m, g in groups.items() if g == groups[map_id])
+
+
 def _ensure_tileset_analysis(
     tileset_id: int,
     raster: TileRasterizer,
@@ -600,16 +616,17 @@ def _ensure_tileset_analysis(
 ) -> tuple[PaletteAnalysis, dict[tuple, int]]:
     """Build and cache the palette-quantization pool for a map (idempotent).
 
-    Pool = THIS MAP ALONE, for every map (slice or not). That is what the shipped ROM
-    does: since commit 4db0deb9 ``build_slice_tilesets`` is handed a unique synthetic
-    tileset id per map, so each map is quantized against its own 13 palettes and no
-    map shares tiles or palettes with a sibling that has the same real RMXP tileset
-    id. (Before that the viewer pooled every ``SLICE_MAP_IDS`` member sharing the
-    real ``tileset_id`` — e.g. Map031/032/033/035 — which showed sharing the ROM
-    does not have.) ``scripts/verify_viewer_rom_match.py`` Mode A rebuilds the real
-    per-map synthetic tilesets via ``build_slice_tilesets`` and matches the shipped
-    artifacts for all 18 slice maps with 0 px diff, which is the evidence that the
-    build is per-map; Mode B checks this viewer against the same artifacts.
+    Pool = the map's TILESET GROUP (``_pool_members``), exactly as the shipped ROM
+    builds it. ``build_slice_tilesets`` gives every slice map its own synthetic
+    tileset (1000+id) EXCEPT maps joined by an emitted in-slice connection, which
+    share ONE (``map_set.tileset_groups``: e.g. Kevlar Town 31 + Route 2 35 = 1031),
+    quantized/merged over the union of the members' metatile columns. A non-slice
+    map keeps its own pool. The analysis is cached per group, so every member shares
+    one entry (the key is the pool's map-id set, not *map_id*). All members of a group
+    share one real RMXP tileset, so *raster* (the caller's) renders every pooled key.
+    ``scripts/verify_viewer_rom_match.py`` Mode A rebuilds the real tilesets via
+    ``build_slice_tilesets`` and Mode B checks this viewer against the shipped
+    artifacts, 0 px diff for all 18 slice maps.
 
     ``seam_key`` / ``quantizer`` are the opt-in "seam palettes" view: the same
     per-map pool, but quantized by ``quantizer`` (a ``make_pinned_quantizer`` over the
@@ -618,9 +635,9 @@ def _ensure_tileset_analysis(
     """
     maps_dir = _maps_dir()
     docs: dict[int, dict] = {}
-    pool_map_ids = [map_id]
+    pool_map_ids = _pool_members(map_id)
 
-    # Cache key includes a stat-only fingerprint of the map's json (+ tilesets.json)
+    # Cache key includes a stat-only fingerprint of every pooled map's json (+ tilesets.json)
     # alongside the pool membership, so a rebuild that changes the map's content
     # invalidates the entry.
     pool_fp = tuple(_file_fingerprint(maps_dir / f"Map{m:03d}.json") for m in pool_map_ids)
@@ -730,12 +747,12 @@ def tileset_budget(map_id: int) -> dict:
     """The map's GBA tileset budget under the CURRENT knobs plus both merge variants.
 
     Input mirrors the build's metatile list minus door/stair copies (not modelled
-    here): the map's pool + the all-transparent void. ``merge_off`` = raw pool + void.
+    here): the map's tileset-group pool (``_pool_members``) + the all-transparent void. ``merge_off`` = raw pool + void.
     ``merge_on`` = tile-merged pool + void, then the lossless ``dedup_metatiles``.
     ``current`` is whichever matches the live tile-merge knob. Cached per
     (map, generation)."""
     from rpg2gba.tileset_converter.graphics.build_slice_tilesets import _void_metatile
-    from rpg2gba.tileset_converter.graphics.tile_merge import dedup_metatiles
+    from rpg2gba.tileset_converter.graphics.tile_merge import merge_and_dedup_metatiles
 
     with _budget_lock:
         gen, merge_now = _quant_generation, _tile_merge
@@ -746,14 +763,15 @@ def tileset_budget(map_id: int) -> dict:
         _ensure_loaded(map_id)
         st = _map_cache[map_id]
         pool_keys = column_keys_for_maps(
-            [(map_id, json.loads((_maps_dir() / f"Map{map_id:03d}.json").read_text(encoding="utf-8")))],
+            [(m, json.loads((_maps_dir() / f"Map{m:03d}.json").read_text(encoding="utf-8")))
+             for m in _pool_members(map_id)],
             max_static_tile_id=st.raster.max_static_tile_id(),
         )
         pool = [_render_pool_column(ck, st.raster, st.priorities, st.passages, st.terrain_tags)
                 for ck in pool_keys]
         off_list = [*pool, _void_metatile()]
         table = _get_merge_table()
-        on_list, _remap = dedup_metatiles([table.apply_metatile(mt) for mt in off_list])
+        on_list, _remap = merge_and_dedup_metatiles(off_list, table)
         out = {
             "map_id": map_id,
             "generation": gen,
@@ -1501,10 +1519,18 @@ def build_shared(profiles: dict[int, dict]) -> dict:
 def _rom_artifact_dirs(map_id: int) -> tuple[int, Path, Path] | None:
     """(synth tileset id, primary dir, secondary dir) of the map's emitted per-map
     tileset, or None if either directory is absent."""
-    from rpg2gba.tileset_converter.map_set import synth_tileset_id
-    from verify_viewer_rom_match import _resolve_fork
+    from rpg2gba.tileset_converter.map_set import (
+        SLICE_MAP_IDS,
+        load_slice_tileset_groups,
+        synth_tileset_id,
+    )
+    from verify_viewer_rom_match import _output_dir, _resolve_fork
 
-    synth = synth_tileset_id(map_id)
+    # Group id (maps joined by an emitted connection share one emitted tileset);
+    # a non-slice map keeps its own per-map id.
+    synth = load_slice_tileset_groups(_output_dir(), SLICE_MAP_IDS).get(
+        map_id, synth_tileset_id(map_id)
+    )
     base = _resolve_fork() / "data" / "tilesets"
     prim, sec = base / "primary" / f"uranium{synth}", base / "secondary" / f"uranium{synth}"
     if prim.is_dir() and sec.is_dir():

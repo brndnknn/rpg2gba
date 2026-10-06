@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
 # The playable slice, in boot order:
@@ -101,6 +102,91 @@ def synth_tileset_id(map_id: int) -> int:
     Real RMXP tileset ids are 0..60, so 1000+map_id can never collide.
     """
     return _SYNTH_BASE + map_id
+
+
+def tileset_groups(
+    rows: list,
+    map_ids: list[int] | set[int],
+    suppress_pairs: frozenset[frozenset[int]],
+    real_tileset_of: Mapping[int, int],
+) -> dict[int, int]:
+    """Map every id in *map_ids* to the synthetic tileset id it is built under.
+
+    A real scrolling connection draws the neighbour's raw metatile ids through
+    the CURRENT map's tileset (engine/src/fieldmap.c), so two maps joined by an
+    EMITTED connection must be one physical tileset. Maps joined (transitively)
+    by an emitted in-slice connection share ``synth_tileset_id(min(component))``;
+    an isolated map keeps ``synth_tileset_id(map_id)``. "Emitted" is exactly
+    `connections.emitted_rows` (both endpoints in *map_ids*, suppressed
+    seam_warps pairs excluded). *rows* are parsed `ConnectionRow`s;
+    *real_tileset_of* is `{map_id: real RMXP tileset id}`.
+
+    Fails loud (ValueError) if a component mixes real RMXP tileset ids: the
+    shared pool resolves art through ONE real tileset, so such a seam needs a
+    seam_warps.json arrow warp or border-strip import (PROJECT_TODO #27)."""
+    from rpg2gba.tileset_converter.connections import emitted_rows
+
+    ids = sorted(set(map_ids))
+    parent: dict[int, int] = {m: m for m in ids}
+
+    def find(m: int) -> int:
+        while parent[m] != m:
+            parent[m] = parent[parent[m]]
+            m = parent[m]
+        return m
+
+    for row in emitted_rows(rows, set(ids), suppress_pairs):
+        ra, rb = find(row.map_a), find(row.map_b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+
+    components: dict[int, list[int]] = {}
+    for m in ids:
+        components.setdefault(find(m), []).append(m)
+
+    out: dict[int, int] = {}
+    for root, members in sorted(components.items()):
+        reals = {m: int(real_tileset_of[m]) for m in members}
+        if len(set(reals.values())) > 1:
+            detail = ", ".join(f"map {m} (RMXP tileset {t})" for m, t in sorted(reals.items()))
+            raise ValueError(
+                f"maps joined by an emitted connection must share one real RMXP tileset, "
+                f"but this connected component mixes tilesets: {detail}. The seam needs "
+                f"either a reference/seam_warps.json arrow warp or border-strip import "
+                f"(PROJECT_TODO #27)."
+            )
+        for m in members:
+            out[m] = synth_tileset_id(root)
+    return out
+
+
+def load_slice_tileset_groups(
+    out_dir: Path, map_ids: list[int], *, seam_warps_path: Path | None = None
+) -> dict[int, int]:
+    """`tileset_groups` wired to the build's real inputs: `out_dir/connections.json`,
+    each map's `out_dir/maps/MapNNN.json` ``tileset_id``, and seam_warps.json's
+    suppressed pairs (restricted to *map_ids*, the frontier rule)."""
+    from rpg2gba.tileset_converter.connections import load_connections
+    from rpg2gba.tileset_converter.seam_warps import (
+        DEFAULT_SEAM_WARPS_PATH,
+        load_seam_warps,
+        seams_for_slice,
+        suppressed_pairs,
+    )
+
+    rows = load_connections(out_dir / "connections.json")
+    seams = seams_for_slice(
+        load_seam_warps(seam_warps_path or DEFAULT_SEAM_WARPS_PATH), set(map_ids)
+    )
+    real = {
+        m: int(
+            json.loads(
+                (out_dir / "maps" / f"Map{m:03d}.json").read_text(encoding="utf-8")
+            )["tileset_id"]
+        )
+        for m in map_ids
+    }
+    return tileset_groups(rows, map_ids, suppressed_pairs(seams), real)
 
 
 _MAP_FILE_RE = re.compile(r"^Map(\d+)\.json$")

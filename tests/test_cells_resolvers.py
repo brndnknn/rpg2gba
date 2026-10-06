@@ -100,34 +100,20 @@ def test_cell_for_local_id_fails_loud_on_an_unstaged_map() -> None:
 
 
 @requires_decoded_output
-def test_seam_cells_reproduces_the_kevlar_route_2_seam() -> None:
-    """`ch04.py`'s `KEVLAR_SEAM_ARROW = (32, 0)` is `seam_cells(...)[1]`;
-    `[0]` is the seam's other cell, (31, 0), whose Route 2 landing is
-    blocked and so is never used by any beat (see `ch04.py`'s module
-    docstring), but is still a real, geometry-verified seam cell."""
-    assert seam_cells("MAP_KEVLAR_TOWN", to="MAP_ROUTE_02") == ((31, 0), (32, 0))
+def test_seam_cells_kevlar_route_2_is_now_a_real_connection() -> None:
+    """The Kevlar<->Route 2 arrow-warp seam was retired 2026-10-06 (the maps
+    share one tileset, so the seam is a real connection); seam_cells must say
+    so rather than invent cells."""
+    with pytest.raises(ValueError) as exc:
+        seam_cells("MAP_KEVLAR_TOWN", to="MAP_ROUTE_02")
+    assert "real connections.json border" in str(exc.value)
 
 
 @requires_decoded_output
 def test_seam_cells_fails_loud_when_the_two_maps_share_no_seam() -> None:
     with pytest.raises(ValueError) as exc:
         seam_cells("MAP_KEVLAR_TOWN", to="MAP_ROUTE_01")
-    message = str(exc.value)
-    assert "no seam_warps.json entry touches" in message
-    assert "kevlar_town_route_02" in message
-
-
-@requires_decoded_output
-def test_seam_cells_fails_loud_when_the_near_map_is_not_a_party() -> None:
-    """Route 1 shares no seam with anything; Route 2 (`to=`) DOES have a
-    seam, but with Kevlar Town, not Route 1 -- a different, more specific
-    failure than "no seam at all", and the message must say who Route 2's
-    real partner is."""
-    with pytest.raises(ValueError) as exc:
-        seam_cells("MAP_ROUTE_01", to="MAP_ROUTE_02")
-    message = str(exc.value)
-    assert "has a seam, but not with" in message
-    assert "[31]" in message
+    assert "no seam_warps.json entry touches" in str(exc.value)
 
 
 @requires_decoded_output
@@ -144,23 +130,31 @@ def test_seam_cells_fails_loud_on_a_real_border_connection() -> None:
     assert "not a seam_warps.json arrow-warp substitution" in message
 
 
-@requires_decoded_output
+def test_seam_cells_fails_loud_when_the_near_map_is_not_a_party(monkeypatch) -> None:
+    """`to=` has a seam, but with a different map than `map_constant`: the
+    message must name the real partner. Injected tables (the real corpus has
+    no seam since 2026-10-06)."""
+    _inject_seam_tables(monkeypatch)
+    with pytest.raises(ValueError) as exc:
+        seam_cells("MAP_C", to="MAP_B")
+    message = str(exc.value)
+    assert "has a seam, but not with" in message
+    assert "[31]" in message
+
+
 def test_seam_cells_fails_loud_when_multiple_seams_match(monkeypatch) -> None:
-    """Ambiguity isn't reachable with today's single-seam corpus, so this
-    injects a second synthetic seam entry sharing both map ids with the real
-    Kevlar<->Route 2 one, to pin the behavior before the table ever grows
-    into it for real."""
+    """Ambiguity: two seam entries sharing both map ids (injected)."""
     import rpg2gba.playtest.cells as cells_mod
 
-    real_seams = cells_mod._seam_warps()
-    duplicate = dict(real_seams[0])
-    duplicate["id"] = "duplicate_kevlar_route_02"
-    monkeypatch.setattr(cells_mod, "_SEAM_WARPS_CACHE", [*real_seams, duplicate])
+    _inject_seam_tables(monkeypatch)
+    seams = cells_mod._seam_warps()
+    duplicate = dict(seams[0])
+    duplicate["id"] = "duplicate_synthetic"
+    monkeypatch.setattr(cells_mod, "_SEAM_WARPS_CACHE", [*seams, duplicate])
 
     with pytest.raises(ValueError) as exc:
-        seam_cells("MAP_KEVLAR_TOWN", to="MAP_ROUTE_02")
-    message = str(exc.value)
-    assert "distinct seam_warps.json entries" in message
+        seam_cells("MAP_A", to="MAP_B")
+    assert "distinct seam_warps.json entries" in str(exc.value)
 
 
 # --- arrival_cell ------------------------------------------------------------

@@ -313,6 +313,8 @@ def _clean_viewer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     mvc._tileset_analysis_cache.clear()
     mvc._png_paths_cache.clear()
     monkeypatch.setattr(mvc, "SLICE_MAP_IDS", [])
+    # Synthetic quads are not in the corpus merge table (and nothing here is about it).
+    monkeypatch.setattr(mvc, "_tile_merge", False)
     yield
     mvc._map_cache.clear()
     mvc._tile_png_cache.clear()
