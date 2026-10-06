@@ -238,6 +238,11 @@ sqrt-damped weights were **worse** everywhere.
   both 31 and 35 (182) is byte-identical; all 122 non-identical common quads are packer tiles.
   Possible palette-design follow-up: loosen the rock test (e.g. shift ≤5 with SSE ≤~350 catches
   9 of 11) or add a second rock-ish palette.
+- **"Palette sets" overlay (2026-10-05; operator eye-checked and approved 2026-10-06):** toolbar checkbox,
+  shortcut `p`, single-map + stitched. Tints each 8×8 quadrant by `shared_palettes.classify_tile`
+  (now the one classification the quantizer uses): rock / G0 / G1 / G2 / packer; hatched = in a
+  set but under the 8-tile threshold on this map. Layers are the ROM's bottom/top BG, not RMXP
+  layers. `GET /api/palsets/<id>`. Shown whether or not shared palettes are on.
 
 ### How this relates to steps 2–4 above
 

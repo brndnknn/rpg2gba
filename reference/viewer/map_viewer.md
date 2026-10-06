@@ -203,7 +203,14 @@ mechanism from the Advanced toggle below); unhide it by hand to restore the full
 layer inspector.
 
 **Overlays — core (always visible):** Collision (ours vs Uranium's passability),
-Events (on by default), Warps (on by default).
+Events (on by default), Warps (on by default), Animated, and **Palette sets**
+(shortcut `p`, added 2026-10-05). Palette sets tints each 8×8 quadrant by the
+shared-palette set `shared_palettes.classify_tile` puts it in — orange = rock V1,
+green/teal/lime = G0/G1/G2, untinted = per-map packer; hatched = in a set that is
+not reserved on this map (under the 8-tile threshold, so it goes to the packer).
+It shows the classification whether or not shared palettes are on. A layer select
+picks the ROM's bottom/top BG (not RMXP layers 1–3), and a summary box counts tiles
+per set. Data: `GET /api/palsets/<id>`. Works in stitched view too.
 
 **Overlays — Advanced only:** Diff (render mismatch), Priority (RMXP draw-above-
 player priority), Merge (palette-merge-loss heat-map) — see "Advanced" below.
