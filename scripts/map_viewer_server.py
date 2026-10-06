@@ -11,6 +11,7 @@ Routes:
   GET  /palettes/<id>               -> palette inspector HTML (server mode, lazy images)
   GET  /api/map/<id>                -> build_map_data JSON
   GET  /api/seamcheck/<id>          -> ROM seam check (neighbour strips missing from this map's pool)
+  GET  /api/budget/<id>             -> GBA tileset budget (tiles/metatiles vs 1024 caps, tile merge on and off)
   GET  /api/palsets/<id>            -> shared-palette set membership per 8x8 quadrant (rock / green G0-2 / packer)
   GET  /api/shared?maps=31,35,40    -> shared-tiles (RMXP id/image vs ROM metatile/8x8); or ?map=<id> = its seam component
   (?sp=1 on /map, /component, /palettes, /api/map, /api/metatile = seam-palette view)
@@ -54,6 +55,9 @@ from map_viewer_common import (  # noqa: E402
     build_map_data,
     current_quantize_state,
     current_shared_palettes,
+    current_tile_merge,
+    tile_merge_from_dict,
+    tileset_budget,
     shared_palettes_from_dict,
     export_feedback,
     get_quantize_params,
@@ -114,6 +118,7 @@ _RE_API_NPC = re.compile(r"^/api/npc/([A-Za-z0-9_\-]+)\.png$")
 _RE_API_FEEDBACK = re.compile(r"^/api/feedback/(\d+)$")
 _RE_API_SEAMCHECK = re.compile(r"^/api/seamcheck/(\d+)$")
 _RE_API_PALSETS = re.compile(r"^/api/palsets/(\d+)$")
+_RE_API_BUDGET = re.compile(r"^/api/budget/(\d+)$")
 # Segments captured loosely (not \d+) so a non-integer id falls through to our
 # own 400 JSON response instead of the generic 404 catch-all.
 _RE_API_EVENT = re.compile(r"^/api/event/([^/]+)/([^/]+)$")
@@ -261,6 +266,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._serve_seamcheck(int(m.group(1)))
             elif m := _RE_API_PALSETS.match(path):
                 self._serve_palsets(int(m.group(1)), sp)
+            elif m := _RE_API_BUDGET.match(path):
+                self._serve_budget(int(m.group(1)))
             elif path == "/api/shared":
                 self._serve_shared(qs)
             elif m := _RE_API_NPC.match(path):
@@ -329,13 +336,16 @@ class _Handler(BaseHTTPRequestHandler):
         with _quant_lock:
             prev_params, prev_max = current_quantize_state()
             prev_shared = current_shared_palettes()
+            prev_merge = current_tile_merge()
             gen = set_quantize_params(
-                params, max_pals, shared_palettes=shared_palettes_from_dict(body)
+                params, max_pals, shared_palettes=shared_palettes_from_dict(body),
+                tile_merge=tile_merge_from_dict(body),
             )
             try:
                 build_map_data(map_id)  # eager re-quant; raises ValueError on bad knobs
             except ValueError as exc:
-                set_quantize_params(prev_params, prev_max, shared_palettes=prev_shared)  # roll back; keep tool usable
+                set_quantize_params(prev_params, prev_max, shared_palettes=prev_shared,
+                                    tile_merge=prev_merge)  # roll back; keep tool usable
                 self._send(400, "application/json",
                            json.dumps({"error": str(exc)}).encode("utf-8"))
                 return
@@ -518,6 +528,13 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(400, "text/plain", b"palsets has no seam-palette (?sp=1) variant")
             return
         body = json.dumps(palette_sets(map_id), separators=(",", ":")).encode("utf-8")
+        self._send(200, "application/json", body, cache="no-cache")
+
+    def _serve_budget(self, map_id: int) -> None:
+        """Tileset budget JSON (tiles / metatiles vs the 1024 caps, merge on and off).
+        Slow (two emit probes) but cached per (map, generation); the page fetches it
+        async after the map has drawn."""
+        body = json.dumps(tileset_budget(map_id), separators=(",", ":")).encode("utf-8")
         self._send(200, "application/json", body, cache="no-cache")
 
     def _serve_shared(self, qs: dict[str, list[str]]) -> None:

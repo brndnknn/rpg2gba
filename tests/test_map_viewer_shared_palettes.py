@@ -13,14 +13,17 @@ import map_viewer_common as mvc  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _restore_state():
-    saved = (mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes)
+    saved = (mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes,
+             mvc._tile_merge)
     yield
-    mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes = saved
+    (mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes,
+     mvc._tile_merge) = saved
 
 
 def _apply(d: dict) -> int:
     params, mp = mvc.params_from_dict(d)
-    return mvc.set_quantize_params(params, mp, shared_palettes=mvc.shared_palettes_from_dict(d))
+    return mvc.set_quantize_params(params, mp, shared_palettes=mvc.shared_palettes_from_dict(d),
+                                    tile_merge=False)  # these tests are about P2 alone
 
 
 @pytest.mark.parametrize("val,want", [(True, True), (False, False), (None, False),
@@ -36,7 +39,8 @@ def test_missing_key_is_viewer_default():
 def _shared_off() -> None:
     """ROM params with shared palettes OFF (the ROM itself has them on since 10-06)."""
     mvc.set_quantize_params(
-        mvc.ROM_STOCK_PARAMS, mvc.ROM_STOCK_MAX_PALETTES, shared_palettes=False
+        mvc.ROM_STOCK_PARAMS, mvc.ROM_STOCK_MAX_PALETTES, shared_palettes=False,
+        tile_merge=False,
     )
 
 

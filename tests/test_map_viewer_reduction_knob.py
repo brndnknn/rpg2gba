@@ -15,9 +15,11 @@ from rpg2gba.tileset_converter.graphics.quantize import FamilyParams  # noqa: E4
 
 @pytest.fixture(autouse=True)
 def _restore_state():
-    saved = (mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes)
+    saved = (mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes,
+             mvc._tile_merge)
     yield
-    mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes = saved
+    (mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes,
+     mvc._tile_merge) = saved
 
 
 def test_ward_round_trips():

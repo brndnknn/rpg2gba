@@ -382,8 +382,13 @@ def emit_tileset(
     *,
     max_palettes: int = NUM_PALS_TOTAL,
     quantizer: Callable[..., QuantizeResult] = build_quantized_tileset,
+    enforce_caps: bool = True,
 ) -> EmittedTileset:
     """Pack ``metatiles`` (metatile id = list index) into a PRIMARY+SECONDARY pair.
+
+    ``enforce_caps=False`` skips the over-cap ValueErrors (tile total, metatile total,
+    animated-in-primary, animation ROM bytes) so a budget probe can read the counts of
+    an over-budget tileset; the artifacts written for such a tileset are NOT loadable.
 
     Writes ``tiles.png`` / ``palettes/NN.pal`` / ``metatiles.bin`` /
     ``metatile_attributes.bin`` under ``primary_dir`` and ``secondary_dir``.
@@ -470,7 +475,7 @@ def emit_tileset(
             next_idx += 1
         name = f"anim{n_frames}"
         effects.append(TilesetAnimEffect(name, first, len(group), n_frames, f"anim/{name}"))
-    if next_idx > NUM_TILES_IN_PRIMARY:
+    if enforce_caps and next_idx > NUM_TILES_IN_PRIMARY:
         raise ValueError(
             f"{primary_name}: {next_idx - 1} animated tiles (indices 1.."
             f"{next_idx - 1}) exceed the {NUM_TILES_IN_PRIMARY}-tile PRIMARY "
@@ -492,7 +497,7 @@ def emit_tileset(
             ", ".join(f"{eff.n_tiles}x{eff.n_frames}f" for eff in effects),
             anim_rom_bytes / 1024,
         )
-    if anim_rom_bytes > MAX_ANIM_ROM_BYTES:
+    if enforce_caps and anim_rom_bytes > MAX_ANIM_ROM_BYTES:
         raise ValueError(
             f"{primary_name}: animation frame art is {anim_rom_bytes} bytes "
             f"({anim_rom_bytes / 1024:.1f} KiB), over the {MAX_ANIM_ROM_BYTES}-byte "
@@ -537,12 +542,12 @@ def emit_tileset(
     # Fail loud on a budget overrun BEFORE writing any artifact (column-keying can
     # multiply tiles/metatiles past the hardware limits — don't leave a malformed
     # tiles.png in the fork on the way to raising).
-    if n_gba_tiles > NUM_TILES_TOTAL:
+    if enforce_caps and n_gba_tiles > NUM_TILES_TOTAL:
         raise ValueError(
             f"{primary_name}: {n_gba_tiles} GBA tiles exceeds the {NUM_TILES_TOTAL} "
             f"hardware limit (primary+secondary)"
         )
-    if n_metatiles > NUM_METATILES_TOTAL:
+    if enforce_caps and n_metatiles > NUM_METATILES_TOTAL:
         raise ValueError(
             f"{primary_name}: {n_metatiles} metatiles exceeds {NUM_METATILES_TOTAL}"
         )

@@ -16,9 +16,11 @@ BIG, SMALL, BELOW = 35, 48, 19  # 19: both groups below the 8-tile threshold
 
 @pytest.fixture(autouse=True)
 def _restore_state():
-    saved = (mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes)
+    saved = (mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes,
+             mvc._tile_merge)
     yield
-    mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes = saved
+    (mvc._family_params, mvc._max_palettes, mvc._quant_generation, mvc._shared_palettes,
+     mvc._tile_merge) = saved
     mvc._palsets_cache.clear()
 
 
@@ -64,7 +66,10 @@ def test_codes_consistent_with_tile_info_and_classify_tile():
 
 
 def test_reservation_matches_quantizer_info_when_on():
-    mvc.set_viewer_default_quantize()
+    # Merge off: the overlay classifies SOURCE quads, the quantizer's info counts the
+    # (possibly tile-merged) pool, so the two legitimately differ under tile merge.
+    mvc.set_quantize_params(mvc.VIEWER_DEFAULT_PARAMS, mvc.VIEWER_DEFAULT_MAX_PALETTES,
+                            shared_palettes=True, tile_merge=False)
     mvc._shared_info.pop(BIG, None)
     mvc._tileset_analysis_cache.clear()
     mvc._map_cache.pop(BIG, None)

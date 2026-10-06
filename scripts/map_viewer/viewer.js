@@ -920,6 +920,26 @@ function psCounts(d) {
   psCountCache[key] = {d: d, cnt: cnt};
   return cnt;
 }
+// Tileset budget readout: fetched async AFTER the map draws (the probe takes seconds).
+function loadBudget(mapId) {
+  const el = document.getElementById('budget-line');
+  if (!el) return;
+  el.style.display = 'inline-block';
+  el.textContent = 'tileset budget: computing\u2026';
+  fetch('/api/budget/' + mapId).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(b) {
+    const part = function(x) {
+      const bad = x.tiles > b.cap_tiles || x.metatiles > b.cap_metatiles;
+      return '<span style="color:' + (bad ? '#f66' : '#8f8') + '">tiles ' + x.tiles + '/' + b.cap_tiles +
+        ' \u00b7 metatiles ' + x.metatiles + '/' + b.cap_metatiles + '</span>';
+    };
+    const other = b.tile_merge ? b.merge_off : b.merge_on;
+    el.innerHTML = '<b>merge ' + (b.tile_merge ? 'on' : 'off') + '</b> ' + part(b.current) +
+      ' \u00b7 (merge ' + (b.tile_merge ? 'off' : 'on') + ': ' + other.metatiles + ' mt / ' + other.tiles + ' tiles)';
+  }).catch(function(e) { el.textContent = 'tileset budget: ' + e; });
+}
 function updatePalsetsPanel(html) {
   const el = document.getElementById('palsets-summary');
   if (!el) return;
@@ -2041,6 +2061,7 @@ function loadMemberFeedback(mem) {
   if (V.quant && V.quant.non_stock) {
     document.getElementById('nonstock-badge').classList.add('show');
   }
+  loadBudget(m.map_id);
   renderMapNav();
   const navp = document.getElementById('nav-palettes');
   navp.href = '/palettes/' + m.map_id;

@@ -37,13 +37,25 @@
     (rdl || rd).insertAdjacentElement('afterend', slab);
   }
   if (sh) sh.checked = !!q.shared_palettes;
+  // Tile merge (game-wide near-duplicate 8x8 merge): injected next to shared palettes.
+  var tm = document.getElementById('k_tilemerge');
+  if (!tm && sh) {
+    var tlab = document.createElement('label');
+    tlab.title = 'Preview: game-wide lossy merge of near-duplicate 8x8 tiles + lossless metatile dedup, to fit big maps under the 1024-tile / 1024-metatile caps (viewer only until adopted by the ROM build). Not combinable with seam palettes.';
+    tlab.appendChild(document.createTextNode('tile merge '));
+    tm = document.createElement('input'); tm.type = 'checkbox'; tm.id = 'k_tilemerge';
+    tlab.appendChild(tm);
+    var shl = sh.closest('label');
+    (shl || sh).insertAdjacentElement('afterend', tlab);
+  }
+  if (tm) tm.checked = !!q.tile_merge;
   var apply = document.getElementById('k_apply');
   var status = document.getElementById('k_status');
   // Badge text: default preview vs custom knobs (non_stock) vs ROM-equivalent (badge stays hidden).
   var badge = document.getElementById('nonstock-badge');
   if (badge && q.non_stock) {
     badge.textContent = q.viewer_default
-      ? '\u26a0 preview: Ward + shared palettes \u2014 not the ROM'
+      ? '\u26a0 preview: tile merge ON \u2014 not the ROM'
       : '\u26a0 custom quantize knobs \u2014 not the ROM';
   }
   // Reset (viewer default) / ROM view: Apply with an empty body = viewer default; explicit stock values = ROM.
@@ -61,9 +73,9 @@
       })
       .catch(function(e){ status.textContent = 'error: ' + e; });
   };
-  [['Reset', 'Viewer default: Ward + shared palettes (preview)', {}],
-   ['ROM view', 'ROM-equivalent: median cut, no shared palettes',
-    { reduction:'median_cut', shared_palettes:false }]].forEach(function(b){
+  [['Reset', 'Viewer default: ROM quantizer + tile merge (preview)', {}],
+   ['ROM view', 'ROM-equivalent: Ward + shared palettes, no tile merge (rom_quantize)',
+    { reduction:'ward', shared_palettes:true, tile_merge:false }]].forEach(function(b){
     var btn = document.createElement('button'); btn.className = 'btn'; btn.textContent = b[0]; btn.title = b[1];
     btn.addEventListener('click', function(){ post(b[2]); });
     apply.insertAdjacentElement('afterend', btn);
@@ -80,6 +92,7 @@
       overflow_weight: document.getElementById('k_overflow').value,
       reduction: rd ? rd.value : 'median_cut',
       shared_palettes: sh ? sh.checked : false,
+      tile_merge: tm ? tm.checked : false,
       max_palettes: parseInt(document.getElementById('k_maxpal').value, 10)
     };
     status.textContent = 're-quantizing…'; apply.disabled = true;

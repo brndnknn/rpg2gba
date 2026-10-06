@@ -15,6 +15,8 @@ import json
 import logging
 import os
 import sys
+import tempfile
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -54,6 +56,7 @@ from rpg2gba.tileset_converter.graphics.raster import TileRasterizer, column_in_
 from rpg2gba.tileset_converter.graphics.rom_quantize import (
     ROM_FAMILY_PARAMS,
     ROM_SHARED_PALETTES,
+    ROM_TILE_MERGE,
 )
 from rpg2gba.tileset_converter.graphics.shared_palettes import make_shared_quantizer
 from rpg2gba.tileset_converter.graphics.sources import (
@@ -377,9 +380,13 @@ _ENGINE_MAX_PALS = 13  # NUM_PALS_TOTAL — hardware/engine ceiling; knob can on
 ROM_STOCK_PARAMS: FamilyParams = ROM_FAMILY_PARAMS
 ROM_STOCK_MAX_PALETTES: int = _ENGINE_MAX_PALS
 ROM_STOCK_SHARED: bool = ROM_SHARED_PALETTES
+ROM_STOCK_TILE_MERGE: bool = ROM_TILE_MERGE
 VIEWER_DEFAULT_PARAMS: FamilyParams = ROM_FAMILY_PARAMS
 VIEWER_DEFAULT_MAX_PALETTES: int = _ENGINE_MAX_PALS
 VIEWER_DEFAULT_SHARED: bool = ROM_SHARED_PALETTES
+# Viewer default for the game-wide tile merge (tile_merge.py): ON, so the operator sees
+# what the step does before it goes into the ROM build (ROM_TILE_MERGE is False).
+VIEWER_DEFAULT_TILE_MERGE: bool = True
 _family_params: FamilyParams = VIEWER_DEFAULT_PARAMS
 _max_palettes: int = VIEWER_DEFAULT_MAX_PALETTES
 _quant_generation: int = int(time.time() * 1000)
@@ -387,6 +394,8 @@ _quant_generation: int = int(time.time() * 1000)
 # ROM_SHARED_PALETTES; this is the viewer's live copy). Not a FamilyParams field. `_shared_info` holds the latest per-map reservation counts.
 _shared_palettes: bool = VIEWER_DEFAULT_SHARED
 _shared_info: dict[int, dict] = {}
+# Game-wide near-duplicate tile merge on/off (viewer's live copy of ROM_TILE_MERGE).
+_tile_merge: bool = VIEWER_DEFAULT_TILE_MERGE
 
 
 def _make_quantizer(*, shared: bool = False):
@@ -418,6 +427,42 @@ def shared_palettes_from_dict(d: dict) -> bool:
     return d["shared_palettes"] is True
 
 
+def current_tile_merge() -> bool:
+    """Live tile-merge toggle — snapshot/rollback companion of ``current_quantize_state``."""
+    return _tile_merge
+
+
+def tile_merge_from_dict(d: dict) -> bool:
+    """Parse the Apply POST's ``tile_merge``. A MISSING key means the viewer default
+    (True); a present value is strict (only boolean True is on)."""
+    if "tile_merge" not in d:
+        return VIEWER_DEFAULT_TILE_MERGE
+    return d["tile_merge"] is True
+
+
+_merge_table_lock = threading.Lock()
+_merge_table = None  # tile_merge.MergeTable, loaded lazily once per process
+
+
+def _get_merge_table():
+    """The corpus tile-merge table (cache hit is instant; a stale cache rebuilds from
+    the whole corpus, which takes minutes). Loaded once per process."""
+    global _merge_table
+    with _merge_table_lock:
+        if _merge_table is None:
+            from rpg2gba.tileset_converter.graphics.tile_merge import (
+                MergeParams,
+                corpus_merge_table,
+            )
+
+            build = _maps_dir().parent
+            _merge_table = corpus_merge_table(
+                MergeParams(), out_dir=build, tilesets_json=_tilesets_json(),
+                cache_path=build / "tile_merge_table.npz",
+            )
+        return _merge_table
+
+
 def get_quantize_params() -> dict:
     """Current knob state for injection into the page config (seeds the UI + the
     `generation` cache-bust token). `non_stock` is True when the live knobs differ
@@ -429,14 +474,16 @@ def get_quantize_params() -> dict:
         "max_palettes": _max_palettes,
         "non_stock": (
             _family_params != ROM_STOCK_PARAMS or _max_palettes != ROM_STOCK_MAX_PALETTES
-            or _shared_palettes != ROM_STOCK_SHARED
+            or _shared_palettes != ROM_STOCK_SHARED or _tile_merge != ROM_STOCK_TILE_MERGE
         ),
         "viewer_default": (
             _family_params == VIEWER_DEFAULT_PARAMS
             and _max_palettes == VIEWER_DEFAULT_MAX_PALETTES
             and _shared_palettes == VIEWER_DEFAULT_SHARED
+            and _tile_merge == VIEWER_DEFAULT_TILE_MERGE
         ),
         "shared_palettes": _shared_palettes,
+        "tile_merge": _tile_merge,
         "dark_value": _family_params.dark_value,
         "neutral_sat": _family_params.neutral_sat,
         "green_cuts": list(_family_params.green_cuts),
@@ -447,7 +494,8 @@ def get_quantize_params() -> dict:
 
 
 def set_quantize_params(
-    params: FamilyParams, max_palettes: int, *, shared_palettes: bool | None = None
+    params: FamilyParams, max_palettes: int, *, shared_palettes: bool | None = None,
+    tile_merge: bool | None = None,
 ) -> int:
     """Update the live family-quant knobs, invalidate the quant-dependent caches, and
     return the new generation token.
@@ -462,13 +510,17 @@ def set_quantize_params(
 
     ``shared_palettes`` (viewer-only P2 preview toggle) is part of the applied state:
     it is keyword-only; ``None`` (omitted) keeps the live toggle unchanged (the server
-    snapshots it with ``current_shared_palettes()`` for rollback)."""
-    global _family_params, _max_palettes, _quant_generation, _shared_palettes
+    snapshots it with ``current_shared_palettes()`` for rollback). ``tile_merge`` is the
+    same kind of keyword-only toggle (``current_tile_merge()`` for rollback)."""
+    global _family_params, _max_palettes, _quant_generation, _shared_palettes, _tile_merge
     _family_params = params
     _max_palettes = max_palettes
     if shared_palettes is not None:
         _shared_palettes = bool(shared_palettes)
+    if tile_merge is not None:
+        _tile_merge = bool(tile_merge)
     _shared_info.clear()
+    _budget_cache.clear()
     _quant_generation += 1
     _tileset_analysis_cache.clear()
     _metatile_png_cache.clear()
@@ -482,7 +534,8 @@ def set_rom_stock_quantize() -> int:
     """Put the viewer in the ROM-equivalent config (median cut, no shared palettes,
     engine max palettes). The oracle/parity checks must call this first."""
     return set_quantize_params(
-        ROM_STOCK_PARAMS, ROM_STOCK_MAX_PALETTES, shared_palettes=ROM_STOCK_SHARED
+        ROM_STOCK_PARAMS, ROM_STOCK_MAX_PALETTES, shared_palettes=ROM_STOCK_SHARED,
+        tile_merge=ROM_STOCK_TILE_MERGE,
     )
 
 
@@ -490,7 +543,7 @@ def set_viewer_default_quantize() -> int:
     """Put the viewer in its default preview config (Ward + shared palettes)."""
     return set_quantize_params(
         VIEWER_DEFAULT_PARAMS, VIEWER_DEFAULT_MAX_PALETTES,
-        shared_palettes=VIEWER_DEFAULT_SHARED,
+        shared_palettes=VIEWER_DEFAULT_SHARED, tile_merge=VIEWER_DEFAULT_TILE_MERGE,
     )
 
 
@@ -619,6 +672,13 @@ def _ensure_tileset_analysis(
             _render_pool_column(ck, raster, priorities, passages, terrain_tags)
             for ck in pool_keys
         ]
+        if _tile_merge:
+            # Lossy game-wide near-duplicate tile merge. Substitute IN PLACE: pool key i
+            # must stay pool index i (verify_viewer_rom_match Mode B relies on it), so
+            # no dedup/reorder here — the lossless metatile dedup only enters the
+            # budget readout (``tileset_budget``).
+            table = _get_merge_table()
+            pool_metatiles = [table.apply_metatile(mt) for mt in pool_metatiles]
         if quantizer is not None:
             q = quantizer
         else:
@@ -632,6 +692,81 @@ def _ensure_tileset_analysis(
 
     _tileset_analysis_cache[cache_key] = (analysis, pool_key_to_idx)
     return analysis, pool_key_to_idx
+
+
+# ---------------------------------------------------------------------------
+# Tileset budget readout (GBA 1024 tiles / 1024 metatiles)
+# ---------------------------------------------------------------------------
+
+_BUDGET_CAP_TILES = 1024
+_BUDGET_CAP_METATILES = 1024
+# (map_id, generation) -> payload. Cleared by every knob Apply as well.
+_budget_cache: dict[tuple[int, int], dict] = {}
+_budget_lock = threading.Lock()
+
+
+def _budget_probe(metatiles: list[MetatileImage], max_palettes: int, shared: bool,
+                  params: FamilyParams) -> dict:
+    """Exact tile / metatile counts of ``metatiles`` through ``emit_tileset`` with
+    the caps disabled, quantized by the viewer's quantizer for the given knobs."""
+    from rpg2gba.tileset_converter.graphics.emit import emit_tileset
+
+    base = partial(build_quantized_tileset_family, params=params)
+    q = make_shared_quantizer(base, family_params=params) if shared else base
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        em = emit_tileset(
+            metatiles, root / "p", root / "s", "budget_p", "budget_s",
+            max_palettes=max_palettes, quantizer=q, enforce_caps=False,
+        )
+    return {
+        "metatiles": em.n_metatiles,
+        "tiles": em.n_tiles,
+        "over": em.n_metatiles > _BUDGET_CAP_METATILES or em.n_tiles > _BUDGET_CAP_TILES,
+    }
+
+
+def tileset_budget(map_id: int) -> dict:
+    """The map's GBA tileset budget under the CURRENT knobs plus both merge variants.
+
+    Input mirrors the build's metatile list minus door/stair copies (not modelled
+    here): the map's pool + the all-transparent void. ``merge_off`` = raw pool + void.
+    ``merge_on`` = tile-merged pool + void, then the lossless ``dedup_metatiles``.
+    ``current`` is whichever matches the live tile-merge knob. Cached per
+    (map, generation)."""
+    from rpg2gba.tileset_converter.graphics.build_slice_tilesets import _void_metatile
+    from rpg2gba.tileset_converter.graphics.tile_merge import dedup_metatiles
+
+    with _budget_lock:
+        gen, merge_now = _quant_generation, _tile_merge
+        params, max_pals, shared = _family_params, _max_palettes, _shared_palettes
+        hit = _budget_cache.get((map_id, gen))
+        if hit is not None:
+            return hit
+        _ensure_loaded(map_id)
+        st = _map_cache[map_id]
+        pool_keys = column_keys_for_maps(
+            [(map_id, json.loads((_maps_dir() / f"Map{map_id:03d}.json").read_text(encoding="utf-8")))],
+            max_static_tile_id=st.raster.max_static_tile_id(),
+        )
+        pool = [_render_pool_column(ck, st.raster, st.priorities, st.passages, st.terrain_tags)
+                for ck in pool_keys]
+        off_list = [*pool, _void_metatile()]
+        table = _get_merge_table()
+        on_list, _remap = dedup_metatiles([table.apply_metatile(mt) for mt in off_list])
+        out = {
+            "map_id": map_id,
+            "generation": gen,
+            "cap_tiles": _BUDGET_CAP_TILES,
+            "cap_metatiles": _BUDGET_CAP_METATILES,
+            "pool": len(pool),
+            "tile_merge": merge_now,
+            "merge_off": _budget_probe(off_list, max_pals, shared, params),
+            "merge_on": _budget_probe(on_list, max_pals, shared, params),
+        }
+        out["current"] = out["merge_on" if merge_now else "merge_off"]
+        _budget_cache[(map_id, gen)] = out
+        return out
 
 
 def _postquant_for(
@@ -709,6 +844,12 @@ def _seam_key(map_id: int, seam: bool) -> tuple | None:
         raise SeamSharedConflict(
             "seam palettes (?sp=1) cannot be combined with shared palettes (P2): "
             "untick \"shared palettes\" in the knob bar and Apply, then retry"
+        )
+    if _tile_merge:
+        raise SeamSharedConflict(
+            "seam palettes (?sp=1) cannot be combined with tile merge: the seam view "
+            "quantizes the unmerged pool. Untick \"tile merge\" in the knob bar and "
+            "Apply, then retry"
         )
     comp = _seam_component(map_id)
     if comp is None:
@@ -1924,6 +2065,7 @@ def build_map_data(map_id: int, seam: bool = False) -> dict:
             "height": state.map_height,
             "atlas": {"cols": ATLAS_COLS, "cell": ATLAS_CELL_PX, "count": len(state.metatile_imgs)},
             "shared_palettes": _shared_info.get(map_id) if _shared_palettes else None,
+            "tile_merge": bool(_tile_merge),
         },
         "colkeys_list": colkeys_list,
         "metatile_attrs": metatile_attrs,

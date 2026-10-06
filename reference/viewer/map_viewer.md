@@ -212,6 +212,15 @@ It shows the classification whether or not shared palettes are on. A layer selec
 picks the ROM's bottom/top BG (not RMXP layers 1–3), and a summary box counts tiles
 per set. Data: `GET /api/palsets/<id>`. Works in stitched view too.
 
+**Tile merge + budget (2026-10-06).** Knob-bar checkbox "tile merge" (viewer default ON;
+the ROM build's setting is `rom_quantize.ROM_TILE_MERGE`, False until approved, so the
+badge reads "preview: tile merge ON — not the ROM"). When on, every pool metatile goes
+through the game-wide `graphics/tile_merge.py` table (K=16 rock/green, K=4 other) before
+quantization; the RPG Maker view stays unmerged. A budget line next to the badge shows
+the map's exact tiles/metatiles vs 1024/1024 with the merge on and off
+(`GET /api/budget/<id>`; real `emit_tileset(enforce_caps=False)`; counts pool + void, not
+the build's door/stair copies). Merge + seam palettes (`?sp=1`) is refused with a 400.
+
 **Overlays — Advanced only:** Diff (render mismatch), Priority (RMXP draw-above-
 player priority), Merge (palette-merge-loss heat-map) — see "Advanced" below.
 
