@@ -347,6 +347,14 @@ helps every map, seam or not. The **Seam palettes** viewer toggle (step 4) previ
   K=6 1039/972 (metatiles over). By eye (`map40_k6_{north,southwest,east}.png`): K=6 ≈ K=4 —
   "SUBWAY" sign intact, gym roof panels intact; K=8 still garbles the sign. Already at K=4 the
   flat grey roofs' grid texture gets noisier than the original.
+- **Per-group K (`k_groups_map40.py`; `classify_tile` group: rock 81 / green 470 / other 1171
+  static quads; merges stay within a group):** (rock/green K, other K) → metatiles / tiles:
+  (4,4) 1011/1103 · (8,4) 994/1031 · **(12,4) 982/992 fits +42/+32** · (16,4) 976/960 ·
+  **(8,6) 993/996 fits +31/+28** · (12,6) 981/957 · (16,6) 975/925 (+49/+99). By eye
+  (`map40_kgroups_*.png`): trees, grass, cliffs fine at every level; **but "green" is a hue
+  family, not foliage** — the green-roofed building (east) loses its brick pattern at K=16 and
+  its door emblem softens from K=12. Fix if pursued: apply the high K only to green/rock tiles
+  from non-building columns (or exclude priority/solid building columns).
 - **Step 3: border-strip import.** Check fieldmap.c first: imported strip metatiles must sit
   at the SAME IDs in both tilesets, or the neighbour's raw IDs resolve wrong. That decides
   whether any stitched seam is possible, or whether every seam stays an arrow warp.
