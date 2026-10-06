@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -93,6 +94,58 @@ def fit_palette(
     return mx, sse
 
 
+@dataclass(frozen=True)
+class TileClass:
+    """Result of :func:`classify_tile`.
+
+    ``group`` is ``"rock"`` / ``"green"`` / None (None = ordinary packer, or an empty
+    tile).  ``palette`` is the index within the group (0 for rock, 0-2 for green).
+    ``rock_fit`` is ``(max_shift, sse)`` against ROCK_V1 (None = fully transparent).
+    ``green_fit`` is ``(best_index, max_shift, sse)`` of the best-SSE green palette; it
+    is always set for a green tile and, with ``detail=True``, for every non-empty tile."""
+
+    group: str | None
+    palette: int | None
+    rock_fit: tuple[int, int] | None
+    green_fit: tuple[int, int, int] | None
+
+    @property
+    def empty(self) -> bool:
+        return self.rock_fit is None
+
+
+def _best_green(
+    tile: np.ndarray, extra: np.ndarray | Sequence | None
+) -> tuple[int, int, int]:
+    fits = [fit_palette(tile, g, extra) for g in GREEN_G3T]
+    best = min(range(len(GREEN_G3T)), key=lambda k: (fits[k][1], k))  # type: ignore[index]
+    return best, fits[best][0], fits[best][1]  # type: ignore[index]
+
+
+def classify_tile(
+    tile: np.ndarray,
+    extra: np.ndarray | Sequence | None = None,
+    *,
+    rock_max_shift: int = 1,
+    family_params: FamilyParams | None = None,
+    detail: bool = False,
+) -> TileClass:
+    """The ONE shared-palette classification used by ``make_shared_quantizer``.
+
+    rock iff the ROCK_V1 fit's max shift <= *rock_max_shift*; green iff not rock, not
+    transparent and the dominant hue family is ``"green"`` (best-SSE green palette)."""
+    rf = fit_palette(tile, ROCK_V1, extra)
+    if rf is None:
+        return TileClass(None, None, None, None)
+    if rf[0] <= rock_max_shift:
+        gf = _best_green(tile, extra) if detail else None
+        return TileClass("rock", 0, rf, gf)
+    if _dominant_family(tile, family_params or FamilyParams()) == "green":
+        gf = _best_green(tile, extra)
+        return TileClass("green", gf[0], rf, gf)
+    return TileClass(None, None, rf, _best_green(tile, extra) if detail else None)
+
+
 def _pin(
     tile: np.ndarray,
     palette: np.ndarray,
@@ -144,15 +197,18 @@ def make_shared_quantizer(
         rock = [False] * n
         green = [False] * n
         empty = [False] * n
+        green_best = [0] * n
         for i, t in enumerate(tiles):
-            f = fit_palette(t, ROCK_V1, extra_of(i))
-            if f is None:
+            c = classify_tile(
+                t, extra_of(i), rock_max_shift=rock_max_shift, family_params=fparams
+            )
+            if c.empty:
                 empty[i] = True
-                continue
-            if f[0] <= rock_max_shift:
+            elif c.group == "rock":
                 rock[i] = True
-            elif _dominant_family(t, fparams) == "green":
+            elif c.group == "green":
                 green[i] = True
+                green_best[i] = c.palette  # type: ignore[assignment]
         n_rock, n_green = sum(rock), sum(green)
         rock_reserved = n_rock >= min_tiles
         green_reserved = n_green >= min_tiles
@@ -178,8 +234,7 @@ def make_shared_quantizer(
                 # Research used a hand-refined tile->palette table with an adjacency
                 # penalty; this preview takes best-fit, so mixed-palette grass cells
                 # may come out higher than in the research numbers.
-                fits = [fit_palette(t, g, extra_of(i)) for g in GREEN_G3T]
-                best = min(range(len(GREEN_G3T)), key=lambda k: (fits[k][1], k))
+                best = green_best[i]
                 _pin(t, GREEN_G3T[best], i, green_off + best, tile_palette, quantized, color_map)
             else:
                 rest.append(i)

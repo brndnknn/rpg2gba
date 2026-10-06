@@ -169,7 +169,7 @@ function drawNpcSprite(url, dx, dy, cp) {
 let zoom = 2;
 let panX = 0, panY = 0;
 let currentLayer = 'post-quant';   // default view = the quantized GBA render
-let overlays = {collision:false, diff:false, priority:false, merge:false, events:true, warps:true, animated:false, seamcheck:false, shared:false};
+let overlays = {collision:false, diff:false, priority:false, merge:false, events:true, warps:true, animated:false, seamcheck:false, shared:false, palsets:false};
 // Max merge severity across this map's metatiles, for normalizing the Merge heat-map.
 let maxMergeSeverity = 1;
 (function() {
@@ -724,6 +724,7 @@ function render() {
   drawSeamBands();
   drawSeamCheck(cp);
   drawShared(cp);
+  drawPalsets(cp);
 }
 
 // ---- ROM seam check overlay (stitched only) ---------------------------------
@@ -880,6 +881,160 @@ function drawShared(cp) {
   ctx.restore();
   updateSharedPanel(sharedPanelHTML(d) + (note ? '<span style="color:#fb6">' + escHtml(note).replace(/\n/g, '<br>') + '</span>' : ''));
 }
+
+// ---- Palette sets overlay (P2 shared palettes; single-map and stitched) -----
+// /api/palsets/<id> classifies every 8x8 quadrant against the fixed rock (V1) and green
+// (G0-G2) palettes: codes -1 empty, 0 packer, 1 rock, 2/3/4 green G0/G1/G2. The quantizer
+// sees composited columns, so layers are the ROM BG layers (bottom / top), not RMXP
+// layers; "all" = the top quadrant where non-empty, else the bottom. Tinted whether or not
+// shared palettes are ON ("would be pinned"); a set below its reservation threshold on
+// this map really goes to the packer, drawn hatched. Shortcut: p.
+const palsetsData = {};   // map id -> payload | 'loading' | 'error'
+let palsetsLayer = 'all';
+const PS_COLORS = {1: '230,120,30', 2: '40,220,90', 3: '0,200,200', 4: '190,235,40'};
+const PS_NAMES = {'-1': 'empty', '0': 'packer (rest)', '1': 'rock V1', '2': 'green G0', '3': 'green G1', '4': 'green G2'};
+function ensurePalsets(id) {
+  if (palsetsData[id]) return;
+  palsetsData[id] = 'loading';
+  fetch('/api/palsets/' + id).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(d) { palsetsData[id] = d; scheduleRender(); })
+    .catch(function(e) { console.error('palsets failed for ' + id, e); palsetsData[id] = 'error'; scheduleRender(); });
+}
+// code at quadrant index i for the chosen layer, plus which layer supplied it
+function psAt(d, i) {
+  if (palsetsLayer === 'bottom' || palsetsLayer === 'top') return {c: d.codes[palsetsLayer][i], l: palsetsLayer};
+  const t = d.codes.top[i];
+  return t !== -1 ? {c: t, l: 'top'} : {c: d.codes.bottom[i], l: 'bottom'};
+}
+const psCountCache = {};
+function psCounts(d) {
+  const key = d.map_id + ':' + palsetsLayer;
+  if (psCountCache[key] && psCountCache[key].d === d) return psCountCache[key].cnt;
+  const cnt = {};
+  for (let i = 0; i < d.codes.bottom.length; i++) {
+    const c = psAt(d, i).c;
+    cnt[c] = (cnt[c] || 0) + 1;
+  }
+  psCountCache[key] = {d: d, cnt: cnt};
+  return cnt;
+}
+function updatePalsetsPanel(html) {
+  const el = document.getElementById('palsets-summary');
+  if (!el) return;
+  el.style.display = html ? 'block' : 'none';
+  el.innerHTML = html || '';
+}
+function palsetsPanelHTML(d) {
+  const cnt = psCounts(d), r = d.reservation;
+  let h = '<b>Palette sets</b> Map' + String(d.map_id).padStart(3, '0') + ' (' + (palsetsLayer === 'all' ? 'all layers, topmost' : palsetsLayer + ' BG') + ')<br>';
+  h += d.shared_on ? 'shared palettes <b style="color:#8f8">ON</b><br>' : 'shared palettes <b style="color:#fb6">OFF</b>: tinted = would be pinned<br>';
+  [1, 2, 3, 4, 0].forEach(function(c) {
+    const n = cnt[c] || 0;
+    const sw = c === 0 ? 'rgba(150,150,150,0.35)' : 'rgba(' + PS_COLORS[c] + ',0.8)';
+    const unres = c !== 0 && !d.effective[String(c)];
+    h += '<span style="display:inline-block;width:10px;height:10px;background:' + sw + ';border:1px solid #888;vertical-align:middle"></span> ' +
+      PS_NAMES[String(c)] + ': ' + n + ' quads (' + (d.counts_unique_tiles[String(c)] || 0) + ' uniq)' +
+      (unres ? ' <span style="color:#fb6">hatched: not reserved</span>' : '') + '<br>';
+  });
+  h += 'rock ' + r.n_rock + '/' + r.threshold + ' ' + (r.rock_reserved ? 'reserved' : '<span style="color:#fb6">not reserved</span>') +
+    ', green ' + r.n_green + '/' + r.threshold + ' ' + (r.green_reserved ? 'reserved' : '<span style="color:#fb6">not reserved</span>') +
+    ' (unique tiles)';
+  return h;
+}
+function drawPalsets(cp) {
+  if (!overlays.palsets) { updatePalsetsPanel(''); return; }
+  const qp = cp / 2;
+  let loading = false, panelData = null;
+  ctx.save();
+  ctx.lineWidth = Math.max(1, qp / 8);
+  for (const m of members) {
+    ensurePalsets(m.id);
+    const d = palsetsData[m.id];
+    if (d === 'loading' || !d) { loading = true; continue; }
+    if (d === 'error') continue;
+    if (m === activeM) panelData = d;
+    const W = d.width;
+    const hatch = {};
+    for (let qy = 0; qy < d.height; qy++) {
+      const y0 = panY + m.oy * cp + qy * qp;
+      if (y0 + qp < 0 || y0 >= canvas.height) continue;
+      for (let qx = 0; qx < W; qx++) {
+        const x0 = panX + m.ox * cp + qx * qp;
+        if (x0 + qp < 0 || x0 >= canvas.width) continue;
+        const c = psAt(d, qy * W + qx).c;
+        if (c === -1) continue;
+        if (c === 0) { ctx.fillStyle = 'rgba(150,150,150,0.08)'; ctx.fillRect(x0, y0, qp, qp); continue; }
+        if (d.effective[String(c)]) {
+          ctx.fillStyle = 'rgba(' + PS_COLORS[c] + ',0.45)';
+          ctx.fillRect(x0, y0, qp, qp);
+        } else {
+          ctx.fillStyle = 'rgba(' + PS_COLORS[c] + ',0.15)';
+          ctx.fillRect(x0, y0, qp, qp);
+          (hatch[c] = hatch[c] || []).push(x0, y0);
+        }
+      }
+    }
+    const step = Math.max(3, qp / 2);
+    for (const c in hatch) {
+      ctx.strokeStyle = 'rgba(' + PS_COLORS[c] + ',0.95)';
+      ctx.beginPath();
+      const pts = hatch[c];
+      for (let i = 0; i < pts.length; i += 2) {
+        for (let t = step; t < 2 * qp; t += step) {
+          const ax = Math.min(t, qp), ay = Math.max(0, t - qp);
+          const bx = Math.max(0, t - qp), by = Math.min(t, qp);
+          ctx.moveTo(pts[i] + ax, pts[i + 1] + ay); ctx.lineTo(pts[i] + bx, pts[i + 1] + by);
+        }
+      }
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  updatePalsetsPanel(panelData ? palsetsPanelHTML(panelData) : (loading ? 'Palette sets: loading…' : 'Palette sets: failed (see console)'));
+}
+function palsetsTipText(e) {
+  if (!overlays.palsets) return '';
+  const rect = ptrRect();
+  const cp = cellPx(), qp = cp / 2;
+  const fx = (e.clientX - rect.left - panX) / qp, fy = (e.clientY - rect.top - panY) / qp;
+  const hit = memberAt(Math.floor(fx / 2), Math.floor(fy / 2));
+  if (!hit) return '';
+  const d = palsetsData[hit.id];
+  if (!d || d === 'loading' || d === 'error') return '';
+  const qx = Math.floor(fx - hit.ox * 2), qy = Math.floor(fy - hit.oy * 2);
+  if (qx < 0 || qy < 0 || qx >= d.width || qy >= d.height) return '';
+  const i = qy * d.width + qx;
+  const a = psAt(d, i);
+  const ti = d.tiles[a.l][i];
+  let t = 'Map' + String(hit.id).padStart(3, '0') + ' quad (' + qx + ',' + qy + ') ' + a.l + ' BG\n';
+  t += 'class: ' + PS_NAMES[String(a.c)];
+  if (a.c > 0 && !d.effective[String(a.c)]) t += '  [in set, NOT reserved here -> packer]';
+  if (ti >= 0) {
+    const f = d.tile_info[ti];  // [code, rock_shift, rock_sse, g_idx, g_shift, g_sse]
+    t += '\ntile #' + ti;
+    if (f[1] !== null) t += '\nrock V1 fit: shift ' + f[1] + ', SSE ' + f[2];
+    if (f[3] !== null) t += '\nbest green: G' + f[3] + ' shift ' + f[4] + ', SSE ' + f[5];
+  }
+  return t;
+}
+(function() {
+  const tip = document.createElement('div');
+  tip.id = 'palsets-tip';
+  tip.style.cssText = 'display:none;position:absolute;z-index:6;background:rgba(15,15,25,0.92);color:#dde;border:1px solid #668;border-radius:3px;padding:3px 6px;font:11px/1.35 monospace;white-space:pre;pointer-events:none';
+  document.getElementById('canvas-wrap').appendChild(tip);
+  canvas.addEventListener('pointermove', function(e) {
+    const txt = palsetsTipText(e);
+    if (!txt) { tip.style.display = 'none'; return; }
+    const wrap = document.getElementById('canvas-wrap').getBoundingClientRect();
+    tip.textContent = txt;
+    tip.style.display = 'block';
+    tip.style.left = Math.min(e.clientX - wrap.left + 14, wrap.width - 260) + 'px';
+    tip.style.top = (e.clientY - wrap.top + 14) + 'px';
+  });
+  canvas.addEventListener('pointerleave', function() { tip.style.display = 'none'; });
+})();
 
 // ---- pointer events (covers mouse + touch) --------------------------------
 function ptrRect() { return canvas.getBoundingClientRect(); }
@@ -1055,6 +1210,18 @@ document.querySelectorAll('input[name="view2"]').forEach(function(r) {
   document.getElementById('sh_partner').addEventListener('change', function(e) { sharedPartner = parseInt(e.target.value, 10); scheduleRender(); });
   document.getElementById('sh_basis').addEventListener('change', function(e) { sharedBasis = e.target.value; scheduleRender(); });
 })();
+// "Palette sets" overlay (graphics view; key p). Checkbox + layer select drive drawPalsets().
+function setPalsets(on) {
+  overlays.palsets = on;
+  const el = document.getElementById('ov_palsets');
+  el.checked = on;
+  document.getElementById('palsets-controls').style.display = on ? 'inline' : 'none';
+  try { localStorage.setItem('mv_palsets', on ? '1' : '0'); } catch (e) {}
+  scheduleRender();
+}
+document.getElementById('ov_palsets').addEventListener('change', function(e) { setPalsets(e.target.checked); });
+document.getElementById('ps_layer').addEventListener('change', function(e) { palsetsLayer = e.target.value; scheduleRender(); });
+try { if (localStorage.getItem('mv_palsets') === '1') setPalsets(true); } catch (e) {}
 ['collision','diff','priority','merge','events','warps','animated'].forEach(function(name) {
   const el = document.getElementById('ov_' + name);
   el.addEventListener('change', function() { overlays[name] = el.checked; scheduleRender(); });
@@ -1916,6 +2083,10 @@ document.addEventListener('keydown', function(e) {
     currentLayer = next;
     document.querySelectorAll('input[name="view2"]').forEach(function(r) { r.checked = r.value === next; });
     scheduleRender();
+    return;
+  }
+  if (e.key === 'p' && !e.ctrlKey && !e.metaKey && !e.altKey) {  // Palette sets overlay
+    setPalsets(!overlays.palsets);
     return;
   }
   if (e.key === 'e') {  // toggle Graphics <-> Events mode; see #mode-switch

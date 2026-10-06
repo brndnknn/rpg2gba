@@ -11,6 +11,7 @@ Routes:
   GET  /palettes/<id>               -> palette inspector HTML (server mode, lazy images)
   GET  /api/map/<id>                -> build_map_data JSON
   GET  /api/seamcheck/<id>          -> ROM seam check (neighbour strips missing from this map's pool)
+  GET  /api/palsets/<id>            -> shared-palette set membership per 8x8 quadrant (rock / green G0-2 / packer)
   GET  /api/shared?maps=31,35,40    -> shared-tiles (RMXP id/image vs ROM metatile/8x8); or ?map=<id> = its seam component
   (?sp=1 on /map, /component, /palettes, /api/map, /api/metatile = seam-palette view)
   GET  /api/tile/<mapid>/<tid>.png  -> single RMXP tile PNG
@@ -63,6 +64,7 @@ from map_viewer_common import (  # noqa: E402
     render_npc_png,
     render_tile_png,
     save_feedback,
+    palette_sets,
     seam_check,
     shared_default_maps,
     shared_tiles,
@@ -111,6 +113,7 @@ _RE_API_ATLAS = re.compile(r"^/api/atlas/(\d+)\.png$")
 _RE_API_NPC = re.compile(r"^/api/npc/([A-Za-z0-9_\-]+)\.png$")
 _RE_API_FEEDBACK = re.compile(r"^/api/feedback/(\d+)$")
 _RE_API_SEAMCHECK = re.compile(r"^/api/seamcheck/(\d+)$")
+_RE_API_PALSETS = re.compile(r"^/api/palsets/(\d+)$")
 # Segments captured loosely (not \d+) so a non-integer id falls through to our
 # own 400 JSON response instead of the generic 404 catch-all.
 _RE_API_EVENT = re.compile(r"^/api/event/([^/]+)/([^/]+)$")
@@ -256,6 +259,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._serve_atlas(int(m.group(1)), layer, sp)
             elif m := _RE_API_SEAMCHECK.match(path):
                 self._serve_seamcheck(int(m.group(1)))
+            elif m := _RE_API_PALSETS.match(path):
+                self._serve_palsets(int(m.group(1)), sp)
             elif path == "/api/shared":
                 self._serve_shared(qs)
             elif m := _RE_API_NPC.match(path):
@@ -503,6 +508,16 @@ class _Handler(BaseHTTPRequestHandler):
     def _serve_seamcheck(self, map_id: int) -> None:
         """ROM seam check JSON. Depends on on-disk maps, so never cached."""
         body = json.dumps(seam_check(map_id), separators=(",", ":")).encode("utf-8")
+        self._send(200, "application/json", body, cache="no-cache")
+
+    def _serve_palsets(self, map_id: int, sp: bool) -> None:
+        """Palette-sets JSON (which 8x8 tiles the P2 shared palettes pin). Depends on the
+        live quantize knobs, so never cached. ``?sp=1`` is rejected: the classification
+        is per-map and has no seam-palette variant."""
+        if sp:
+            self._send(400, "text/plain", b"palsets has no seam-palette (?sp=1) variant")
+            return
+        body = json.dumps(palette_sets(map_id), separators=(",", ":")).encode("utf-8")
         self._send(200, "application/json", body, cache="no-cache")
 
     def _serve_shared(self, qs: dict[str, list[str]]) -> None:

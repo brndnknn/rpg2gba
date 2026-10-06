@@ -166,3 +166,33 @@ def test_transparent_tiles_get_minus_one():
     r = q(tiles, max_palettes=13)
     assert r.tile_palette[0] == -1 and r.color_map[0] == []
     assert r.quantized[0].shape == (8, 8, 4)
+
+
+def test_classify_tile_groups():
+    r = sp.classify_tile(rock_tile(1))
+    assert (r.group, r.palette, r.rock_fit) == ("rock", 0, (0, 0))
+    g = sp.classify_tile(green_tile(2))
+    assert g.group == "green" and g.palette in (0, 1, 2)
+    assert g.green_fit is not None and g.green_fit[0] == g.palette
+    n = sp.classify_tile(noise_tile(3))
+    assert n.group is None and n.palette is None and n.rock_fit is not None
+    assert n.green_fit is None
+    assert sp.classify_tile(noise_tile(3), detail=True).green_fit is not None
+    e = sp.classify_tile(empty_tile())
+    assert e.empty and e.group is None and e.rock_fit is None
+
+
+def test_classify_tile_rock_threshold_and_extra():
+    t = rock_tile(4)
+    assert sp.classify_tile(t, rock_max_shift=0).group == "rock"
+    far = np.array([[0, 0, 248]], np.uint8)  # extra colour far from V1 -> not rock
+    assert sp.classify_tile(t, far).group != "rock"
+
+
+def test_classify_tile_matches_quantizer_counts():
+    tiles = [rock_tile(i) for i in range(8)] + [green_tile(i) for i in range(8)] + [noise_tile(0)]
+    q = sp.make_shared_quantizer(BASE)
+    q(tiles, max_palettes=13)
+    cls = [sp.classify_tile(t) for t in tiles]
+    assert q.info["n_rock"] == sum(c.group == "rock" for c in cls)
+    assert q.info["n_green"] == sum(c.group == "green" for c in cls)

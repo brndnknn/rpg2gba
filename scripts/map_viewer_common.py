@@ -1460,6 +1460,135 @@ def shared_default_maps(map_id: int) -> list[int]:
     return list(comp) if comp else [map_id]
 
 
+# ---------------------------------------------------------------------------
+# Palette-sets overlay (/api/palsets): which 8x8 tiles the P2 shared palettes pin
+# ---------------------------------------------------------------------------
+
+SHARED_MIN_TILES: int = 8  # make_shared_quantizer's default reservation threshold
+_PALSET_CODES = {-1: "empty", 0: "packer", 1: "rock V1", 2: "green G0", 3: "green G1", 4: "green G2"}
+_palsets_cache: dict[int, tuple[tuple, dict]] = {}
+
+
+def palette_sets(map_id: int) -> dict:
+    """Classify every 8x8 quadrant of *map_id* against the shared palettes (P2).
+
+    The quantizer sees COMPOSITED columns, not RMXP layers: each metatile has a bottom
+    and a top BG layer (slots 0-3 / 4-7), so the grids are per ROM BG layer
+    (``bottom`` / ``top``), each at 8x8-quadrant resolution (2W x 2H, row-major).
+    Codes: -1 empty, 0 packer, 1 rock V1, 2/3/4 green G0/G1/G2. Classification is
+    reported whether or not shared palettes are ON; a group below ``threshold`` unique
+    tiles is not reserved on the map, so its tiles really go to the packer
+    (``effective[code]`` False). Counts are over the flip-canonical unique tiles the
+    quantizer sees, same as ``make_shared_quantizer``'s ``info``."""
+    from rpg2gba.tileset_converter.graphics.emit import (
+        _effective_frames,
+        _flip_canonical_multi,
+        _slot_frames_for_metatile,
+    )
+    from rpg2gba.tileset_converter.graphics.quantize import frame_opaque_colors
+    from rpg2gba.tileset_converter.graphics.shared_palettes import classify_tile
+
+    _ensure_loaded(map_id)
+    state = _map_cache[map_id]
+    ckey = (id(state), _quant_generation, _family_params, _shared_palettes)
+    hit = _palsets_cache.get(map_id)
+    if hit is not None and hit[0] == ckey:
+        return hit[1]
+
+    # Same flip-canonical dedup as emit._canonicalize_and_quantize, minus quantizing.
+    canon_to_idx: dict[bytes, int] = {}
+    unique: list[np.ndarray] = []
+    frames_of: list[list[np.ndarray]] = []
+    slots_of: dict[int, list[int]] = {}  # colkey idx -> 8 canon idx
+    for ci, mt in enumerate(state.metatile_imgs):
+        if mt is None:
+            continue
+        row: list[int] = []
+        for fl in _slot_frames_for_metatile(mt):
+            key, transformed, _h, _v = _flip_canonical_multi(_effective_frames(fl))
+            idx = canon_to_idx.get(key)
+            if idx is None:
+                idx = len(unique)
+                canon_to_idx[key] = idx
+                unique.append(transformed[0])
+                frames_of.append(transformed)
+            row.append(idx)
+        slots_of[ci] = row
+
+    classes = []
+    for i, fr in enumerate(frames_of):
+        extra = None
+        if len(fr) > 1:
+            cols = [c for c in (frame_opaque_colors(f) for f in fr[1:]) if len(c)]
+            if cols:
+                extra = np.unique(np.concatenate(cols), axis=0)
+        classes.append(classify_tile(
+            unique[i], extra, family_params=_family_params, detail=True,
+        ))
+
+    def code_of(c) -> int:
+        if c.empty:
+            return -1
+        return {None: 0, "rock": 1}.get(c.group, 2 + (c.palette or 0))
+
+    codes = [code_of(c) for c in classes]
+    n_rock = sum(1 for c in codes if c == 1)
+    n_green = sum(1 for c in codes if c >= 2)
+    rock_res = n_rock >= SHARED_MIN_TILES
+    green_res = n_green >= SHARED_MIN_TILES
+    tile_info = [
+        [codes[i],
+         c.rock_fit[0] if c.rock_fit else None, c.rock_fit[1] if c.rock_fit else None,
+         c.green_fit[0] if c.green_fit else None, c.green_fit[1] if c.green_fit else None,
+         c.green_fit[2] if c.green_fit else None]
+        for i, c in enumerate(classes)
+    ]
+
+    grid = state.grid
+    W, H = grid.xsize, grid.ysize
+    tiles = {"bottom": [-1] * (4 * W * H), "top": [-1] * (4 * W * H)}
+    for y in range(H):
+        for x in range(W):
+            row = slots_of.get(state.colkey_to_idx[column_key(grid, x, y)])
+            if row is None:
+                continue
+            for layer, base in (("bottom", 0), ("top", 4)):
+                arr = tiles[layer]
+                for q in range(4):
+                    arr[(2 * y + q // 2) * 2 * W + 2 * x + q % 2] = row[base + q]
+    code_grids = {
+        k: [codes[t] if t >= 0 else -1 for t in v] for k, v in tiles.items()
+    }
+    count_by_code: dict[str, dict[str, int]] = {}
+    for k, v in code_grids.items():
+        cnt: dict[str, int] = {}
+        for c in v:
+            cnt[str(c)] = cnt.get(str(c), 0) + 1
+        count_by_code[k] = cnt
+    out = {
+        "map_id": map_id,
+        "width": 2 * W, "height": 2 * H,
+        "layers": ["bottom", "top"],
+        "code_names": {str(k): v for k, v in _PALSET_CODES.items()},
+        "codes": code_grids,
+        "tiles": tiles,
+        "tile_info": tile_info,  # [code, rock_shift, rock_sse, green_idx, green_shift, green_sse]
+        "counts_quadrants": count_by_code,
+        "counts_unique_tiles": {
+            str(c): codes.count(c) for c in sorted(set(codes))
+        },
+        "reservation": {
+            "n_rock": n_rock, "n_green": n_green, "threshold": SHARED_MIN_TILES,
+            "rock_reserved": rock_res, "green_reserved": green_res,
+        },
+        "effective": {"-1": False, "0": True, "1": rock_res,
+                      "2": green_res, "3": green_res, "4": green_res},
+        "shared_on": bool(_shared_palettes),
+    }
+    _palsets_cache[map_id] = (ckey, out)
+    return out
+
+
 def render_npc_png(character_name: str) -> bytes:
     """Render one NPC's sheet to PNG bytes (cached by lowercased name).
 
