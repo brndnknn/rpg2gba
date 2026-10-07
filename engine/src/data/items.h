@@ -15955,6 +15955,25 @@ const struct ItemInfo gItemsInfo[] =
         .iconPalette = gItemIconPalette_Bicycle,
     },
 // END URANIUM PATHFINDER SLICE
+
+// BEGIN URANIUM PATHFINDER SLICE — Maria's Key (CH06 key door, Map040 EV017)
+// Inert key item; reuses the vanilla Old Key icon (no new art).
+    [ITEM_MARIAS_KEY] =
+    {
+        .name = ITEM_NAME("Maria's Key"),
+        .price = 0,
+        .importance = 1,
+        .description = COMPOUND_STRING(
+            "A key given by a\n"
+            "creepy guy that\n"
+            "unlocks Maria's house."),
+        .pocket = POCKET_KEY_ITEMS,
+        .type = ITEM_USE_BAG_MENU,
+        .fieldUseFunc = ItemUseOutOfBattle_CannotUse,
+        .iconPic = gItemIcon_BasementKey,
+        .iconPalette = gItemIconPalette_OldKey,
+    },
+// END URANIUM PATHFINDER SLICE
 };
 
 #undef ITEM_NAME
