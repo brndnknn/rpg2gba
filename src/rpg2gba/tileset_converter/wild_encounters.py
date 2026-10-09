@@ -71,6 +71,8 @@ from collections.abc import Container, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from rpg2gba.map_split.ids import origin_of
+
 logger = logging.getLogger(__name__)
 
 _GROUP_LABEL = "gWildMonHeaders"
@@ -234,7 +236,7 @@ def build_encounter_entries(
     entries: list[EncounterEntry] = []
     seen_labels: dict[str, int] = {}
     for uid in map_ids:
-        table = maps.get(str(uid))
+        table = maps.get(str(origin_of(uid)))  # a split piece inherits its origin's table
         if table is None:
             logger.debug("map %d: no encounter table (null/absent) — skipped", uid)
             continue

@@ -307,7 +307,7 @@ warp_beat(
     beat_name='m037e002_warp',
     group='m037e002_warp',
     boundary=True,
-    dest_map_constant='MAP_NOWTOCH_CITY',
+    dest_map_constant='MAP_NOWTOCH_CITY_PARK',
     direction='UP',
     event_id=2,
     map_constant='MAP_PASSAGE_CAVE_2F',

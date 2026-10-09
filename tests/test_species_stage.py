@@ -575,3 +575,33 @@ def test_unsupported_evolution_method_still_fails_loud() -> None:
 
     with pytest.raises(ValueError, match="unsupported evolution method 5"):
         stage.build_staged_species((pre, post), [pre_rec, post_rec], pristine_species_egg=100)
+
+
+def test_uranium_original_ability_is_substituted_and_listed_for_the_fork_gate() -> None:
+    """LAZY (Feliger) -> ABILITY_TRUANT, operator-approved 2026-10-09; the set
+    `write_all` gates against the fork reflects the substitution."""
+    from types import SimpleNamespace
+
+    from rpg2gba.species_converter import stage as st
+
+    names = {1: "ABILITY_LAZY", 2: "ABILITY_NONE", 3: "ABILITY_INTIMIDATE"}
+    r = SimpleNamespace(ability_constant=names.__getitem__)
+    assert st._ability_constant(r, 1) == "ABILITY_TRUANT"
+    assert st._ability_constant(r, 3) == "ABILITY_INTIMIDATE"
+    rec = SimpleNamespace(abilities=[1, 2], hidden_abilities=[3])
+    staged = [SimpleNamespace(record=rec)]
+    assert st.staged_ability_constants(staged, r) == {
+        "ABILITY_TRUANT", "ABILITY_NONE", "ABILITY_INTIMIDATE"}
+
+
+def test_ability_gate_fails_loud_on_an_undefined_ability(tmp_path) -> None:
+    from rpg2gba.species_converter import stage as st
+
+    header = tmp_path / "include" / "constants" / "abilities.h"
+    header.parent.mkdir(parents=True)
+    header.write_text("#define ABILITY_NONE 0\n#define ABILITY_TRUANT 54\n", encoding="utf-8")
+    st.assert_fork_constants_exist(tmp_path, {"ABILITY_TRUANT"},
+                                   "include/constants/abilities.h", "ABILITY")
+    with pytest.raises(ValueError, match="ABILITY_GEIGER_SENSE"):
+        st.assert_fork_constants_exist(tmp_path, {"ABILITY_GEIGER_SENSE"},
+                                       "include/constants/abilities.h", "ABILITY")

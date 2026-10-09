@@ -14,7 +14,7 @@ these, so shipped chapters keep their colours.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from functools import partial
 
 from .quantize import FamilyParams, QuantizeResult, build_quantized_tileset_family
@@ -27,6 +27,20 @@ ROM_SHARED_PALETTES: bool = True
 # map. Operator-approved 2026-10-06 for all maps, to put Kevlar (31) +
 # Route 2 (35) on one shared tileset so their seam is a real connection.
 ROM_TILE_MERGE: bool = True
+
+
+def tile_merge_exempt(map_ids: Iterable[int]) -> bool:
+    """A tileset holding a split piece (`rpg2gba.map_split`) never gets the tile
+    merge: splitting a map is how it fits WITHOUT the merge's visual loss
+    (operator decision 2026-10-09, reference/guides/map_split_stage.md)."""
+    from rpg2gba.map_split.ids import is_piece
+
+    return any(is_piece(m) for m in map_ids)
+
+
+def rom_tile_merge_for(map_ids: Iterable[int]) -> bool:
+    """Whether the ROM applies the tile merge to a tileset holding `map_ids`."""
+    return ROM_TILE_MERGE and not tile_merge_exempt(map_ids)
 
 
 def make_rom_quantizer() -> Callable[..., QuantizeResult]:

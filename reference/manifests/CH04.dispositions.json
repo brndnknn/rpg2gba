@@ -180,10 +180,10 @@
     "assertable": false,
     "note": "Spent item-ball page."
   },
-  "map035/seam/N/map040": {
+  "map035/seam/N/map14000": {
     "disposition": "blocked:rock_smash",
-    "affirmed_hash": "d93b684022ff4828",
+    "affirmed_hash": "01673bb2d9ae187c",
     "assertable": false,
-    "note": "Overland seam 35 N<->S 40 to Nowtoch City. Walkable in principle, but row y=0 is not in the south-reachable set while the rocks are solid. Becomes usable in CH07 (was unreachable:rockslide_blocks_north_seam)."
+    "note": "Overland seam 35 N<->S 40 to Nowtoch City (map 40 is split since 2026-10-09; the seam now lands on its main piece, 14000). Walkable in principle, but row y=0 is not in the south-reachable set while the rocks are solid. Becomes usable in CH07 (was unreachable:rockslide_blocks_north_seam)."
   }
 }

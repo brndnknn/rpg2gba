@@ -24,8 +24,11 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 
-# The playable slice, in boot order:
-SLICE_MAP_IDS: list[int] = [
+from rpg2gba.map_split.spec import expand_split_ids
+
+# The playable slice, in boot order. Written in Uranium map ids; a split map
+# (reference/split_maps.json, rpg2gba.map_split) expands in place to its pieces.
+SLICE_MAP_IDS: list[int] = expand_split_ids([
 # CH01 Moki Town: Map 49 (Player's House 1F, spawn @7,7),
 # Map 48 (2F), Map 32 (Moki Town), plus the Moki building interiors added
 # 2026-07-13 (SLICE1_TODO #13): 50 (professor lab), 64/65 (houses),
@@ -42,7 +45,7 @@ SLICE_MAP_IDS: list[int] = [
     36, 37,
 # CH06 Nowtoch City: 40 (the city), 41 (Poke Mart), 42 (Gym), 43 (Pokemon Center), 44/45 (Metro station/platform), 46/47 (interior canvases)
     40, 41, 42, 43, 44, 45, 46, 47
-]
+])
 
 # Converter-level collision unblocks (user-approved fidelity calls, one entry per
 # cell): cells the emitted collision forces WALKABLE even though Uranium's tile

@@ -148,7 +148,14 @@ def _seam_warps(path: Path = DEFAULT_SEAM_WARPS_JSON) -> list[dict]:
     global _SEAM_WARPS_CACHE
     if _SEAM_WARPS_CACHE is None:
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
-        _SEAM_WARPS_CACHE = raw["seams"]
+        seams = list(raw["seams"])
+        # Arrow seams between split pieces (rpg2gba.map_split), alongside the
+        # hand-authored ones — `seam_warps.load_seam_warps` reads the same pair.
+        from rpg2gba.tileset_converter.seam_warps import DEFAULT_SPLIT_SEAMS_PATH
+
+        if Path(path) == DEFAULT_SEAM_WARPS_JSON and DEFAULT_SPLIT_SEAMS_PATH.is_file():
+            seams += json.loads(DEFAULT_SPLIT_SEAMS_PATH.read_text(encoding="utf-8"))["seams"]
+        _SEAM_WARPS_CACHE = seams
     return _SEAM_WARPS_CACHE
 
 
@@ -938,7 +945,8 @@ def seam_cells(map_constant: str, *, to: str) -> tuple[Cell, ...]:
     directly, so a bad `map_constant` argument produces a DIFFERENT error
     than an entirely unknown `to`:
 
-    1. No `seam_warps.json` entry touches `to` at all. Falls back to
+    1. No `seam_warps.json` entry joins the two maps (`to` may still seam with
+       OTHER maps, e.g. a split piece with its siblings). Falls back to
        `output/uranium-build/connections.json` (`tileset_converter.
        connections.load_connections`, the real per-pair adjacency data --
        see that module for the row schema) for the SAME map pair. A hit
@@ -967,7 +975,10 @@ def seam_cells(map_constant: str, *, to: str) -> tuple[Cell, ...]:
     touching_neighbor = [
         s for s in _seam_warps() if neighbor_uid in (s["map_a"], s["map_b"])
     ]
-    if not touching_neighbor:
+    party = [s for s in touching_neighbor if uid in (s["map_a"], s["map_b"])]
+    if not party:
+        # Checked before naming `to`'s seam partners: a split piece has arrow
+        # seams with its siblings AND can keep a real connection elsewhere.
         row = _connection_row_between(uid, neighbor_uid)
         if row is not None:
             raise ValueError(
@@ -977,15 +988,13 @@ def seam_cells(map_constant: str, *, to: str) -> tuple[Cell, ...]:
                 "with no fixed cell(s) to name, structurally outside what "
                 "warp_cell/arrival_cell/seam_cells can express"
             )
+    if not touching_neighbor:
         raise ValueError(
             f"seam_cells: no seam_warps.json entry touches {to} (Uranium "
             f"map {neighbor_uid}) at all -- known seam ids are "
             f"{sorted(s['id'] for s in _seam_warps())}"
         )
 
-    party = [
-        s for s in touching_neighbor if uid in (s["map_a"], s["map_b"])
-    ]
     if not party:
         partners = sorted(
             {s["map_a"] if s["map_a"] != neighbor_uid else s["map_b"] for s in touching_neighbor}

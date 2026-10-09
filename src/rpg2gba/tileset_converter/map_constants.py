@@ -387,6 +387,12 @@ def load_display_names(
         raw = json.loads(Path(overrides_path).read_text(encoding="utf-8"))
         for k, v in raw.get("overrides", {}).items():
             names[int(k)] = v["display_name"]
+    # Split pieces are named by reference/split_maps.json (rpg2gba.map_split).
+    from rpg2gba.map_split.spec import split_specs
+
+    for spec in split_specs().values():
+        for piece in spec.pieces:
+            names[piece.uid(spec.origin)] = piece.name
     return names
 
 
@@ -504,6 +510,14 @@ def build_map_constants(
     names = load_display_names(map_infos_path, overrides_path)
     registry = MapConstantRegistry(state_path, load_vanilla_map_consts(fork_path))
     registry.load()  # idempotent: reuse already-minted constants
+    # A split origin is replaced by its pieces (rpg2gba.map_split): it no longer
+    # builds, and its main piece inherits its name — retire its old identity.
+    from rpg2gba.map_split.ids import is_piece, origin_of
+
+    for origin in sorted({origin_of(u) for u in map_ids if is_piece(u)}):
+        if origin in registry._by_id:
+            logger.info("map %d is split; retiring %s", origin, registry._by_id[origin].map_const)
+            del registry._by_id[origin]
     for uid in sorted(map_ids):
         if uid not in names:
             raise KeyError(f"map {uid} has no name in map_infos/overrides")

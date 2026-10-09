@@ -59,6 +59,7 @@ from ..conversion_agent.flag_registry import (
     self_switch_flag_name,
 )
 from ..conversion_agent.orchestrator import load_map_event_strips
+from ..map_split.ids import origin_of, split_blocked_cells
 from .map_constants import MapConstantRegistry, MapConstants
 from .npc_gfx import _DIR_VECTOR as _TRAINER_DIR_VECTOR
 from .npc_gfx import _DIRECTION_TO_FACING as _TRAINER_SIGHT_FACING
@@ -2162,7 +2163,8 @@ def collect_through_block_cells(map_json: dict) -> set[tuple[int, int]]:
         # Non-blank + through=False DOES block the player, but it's already
         # a real object_event with native collision elsewhere — no cell added.
         continue
-    return cells
+    # A split piece's cut cells are walls with real art (rpg2gba.map_split).
+    return cells | split_blocked_cells(map_json)
 
 
 # Stair behavior-override kind strings (layout.convert_layout's
@@ -3658,7 +3660,7 @@ def _resolve_all_warp_events(
 def _metadata_entry_for(uid: int, metadata_path: Path) -> dict:
     """Load `map_metadata.json` and return this uid's entry, or `{}` if absent."""
     meta = json.loads(metadata_path.read_text(encoding="utf-8")).get("maps", {})
-    return meta.get(str(uid)) or {}
+    return meta.get(str(origin_of(uid))) or {}  # a split piece inherits its origin's
 
 
 def _map_type_for(uid: int, metadata_path: Path) -> str:

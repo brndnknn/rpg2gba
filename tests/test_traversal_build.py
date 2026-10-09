@@ -42,11 +42,11 @@ def test_stair_cells_match_the_detector(map037):
 
 def test_warp_exits_include_south_entrance_and_cave_exit(map037):
     assert (16, 27) in map037.warp_exits  # -> Map036 (south)
-    assert (16, 5) in map037.warp_exits  # -> Map040 (Nowtoch, north)
+    assert (16, 5) in map037.warp_exits  # -> Nowtoch (map 40's park piece), north
     south = map037.warp_exits[(16, 27)][0]
     assert south.dest_map == 36
     north = map037.warp_exits[(16, 5)][0]
-    assert north.dest_map == 40
+    assert north.dest_map == 14002  # map 40 is split (rpg2gba.map_split); 14002 = park piece
 
 
 def test_elevation_is_explicitly_unmodelled(map037):

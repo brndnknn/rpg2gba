@@ -7,6 +7,9 @@
 // BEGIN URANIUM PATHFINDER SLICE — connection id remap
 #include "uranium_connection_remap.h"
 // END URANIUM PATHFINDER SLICE
+// BEGIN URANIUM PATHFINDER SLICE — split-map popup
+#include "uranium_split_maps.h"
+// END URANIUM PATHFINDER SLICE
 // BEGIN URANIUM PATHFINDER SLICE — pulls FLAG_STARTING_OVER (the flag registry's
 // generated dump, keyed off config/rpg2gba.h's range bases), set in DoWhiteOut()
 // below. "../" for the same reason as new_game.c's uranium_berry_trees.h include.
@@ -2169,7 +2172,8 @@ void CB2_ReturnToFieldFadeFromBlack(void)
 
 static void FieldCB_FadeTryShowMapPopup(void)
 {
-    if (gMapHeader.showMapName == TRUE && SecretBaseMapPopupEnabled() == TRUE)
+    // URANIUM PATHFINDER SLICE: split-map popup — no popup between pieces of one split map
+    if (gMapHeader.showMapName == TRUE && SecretBaseMapPopupEnabled() == TRUE && !UraniumIsSplitSiblingWarp())
         ShowMapNamePopup();
     FieldCB_WarpExitFadeFromBlack();
 }
@@ -2417,7 +2421,8 @@ static bool32 LoadMapInStepsLocal(u8 *state, bool32 a2)
         (*state)++;
         break;
     case 11:
-        if (gMapHeader.showMapName == TRUE && SecretBaseMapPopupEnabled() == TRUE)
+        // URANIUM PATHFINDER SLICE: split-map popup — no popup between pieces of one split map
+        if (gMapHeader.showMapName == TRUE && SecretBaseMapPopupEnabled() == TRUE && !UraniumIsSplitSiblingWarp())
             ShowMapNamePopup();
         (*state)++;
         break;

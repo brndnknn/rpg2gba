@@ -792,7 +792,7 @@ def _page_candidate(verdicts: Mapping[str, RowVerdict], end_state, states: Mappi
     return candidate
 
 
-_DISPATCH_EVENT_RE = re.compile(r"^Map(\d{3})_EV(\d{3})_")
+_DISPATCH_EVENT_RE = re.compile(r"^Map(\d{3,})_EV(\d{3})_")
 
 
 class _StoryOccupancy(Mapping):

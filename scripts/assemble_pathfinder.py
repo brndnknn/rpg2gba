@@ -1439,6 +1439,14 @@ def main() -> int:
     run_fork_pass(out, fork, consts, staging, args.dry_run, batch_layouts=batch_layouts)
     run_berry_tree_pass(out, fork, args.dry_run)
 
+    # Split-map sibling table for the map-name popup check (rpg2gba.map_split).
+    if not args.dry_run:
+        from rpg2gba.map_split.engine import write_siblings_header
+
+        write_siblings_header(
+            fork, SLICE_MAP_IDS, {int(k): v["map_const"] for k, v in consts.items()}
+        )
+
     if args.dry_run:
         logger.info("=== dry-run complete, no files written ===")
     else:

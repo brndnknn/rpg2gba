@@ -716,8 +716,9 @@ def build_slice_tilesets(
 
         # Game-wide tile merge + lossless metatile dedup (ROM_TILE_MERGE). ``remap[old]``
         # is the surviving index; every recorded metatile index below goes through it.
+        # Split pieces are exempt (rom_quantize.tile_merge_exempt).
         remap = list(range(len(metatile_list)))
-        if do_merge:
+        if do_merge and not rom_quantize.tile_merge_exempt(m for m, _ in maplist):
             n_before = len(metatile_list)
             metatile_list, remap = merge_and_dedup_metatiles(metatile_list, merge_table)
             void_idx = remap[void_idx]

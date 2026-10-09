@@ -33,6 +33,7 @@ from pathlib import Path
 
 import click
 
+from rpg2gba.map_split.spec import expand_split_ids
 from ..chapter_manifest.__main__ import load_manifest
 from ..chapter_manifest.checker import (
     Finding,
@@ -92,7 +93,7 @@ def _load_chapter_maps(chapter_id: str, chapters_path: Path) -> list[int]:
     data = json.loads(chapters_path.read_text(encoding="utf-8"))
     for entry in data.get("chapters", []):
         if entry.get("id") == chapter_id:
-            return list(entry.get("maps", []))
+            return expand_split_ids(entry.get("maps", []))
     raise click.ClickException(f"no chapter {chapter_id!r} in {chapters_path}")
 
 

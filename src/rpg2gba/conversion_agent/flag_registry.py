@@ -32,6 +32,7 @@ from pathlib import Path
 
 import click
 
+from rpg2gba.map_split.ids import origin_of
 from rpg2gba.pbs_converter._naming import load_fork_constants, to_constant
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ def self_switch_flag_name(map_id: int, event_id: int, letter: str) -> str:
     global switch id — the name is derived from (map, event, letter): e.g.
     self-switch A on event 48 of map 31 -> ``FLAG_MAP031_EVENT048_SSA``.
     """
-    return f"FLAG_MAP{int(map_id):03d}_EVENT{int(event_id):03d}_SS{letter.upper()}"
+    return f"FLAG_MAP{origin_of(map_id):03d}_EVENT{int(event_id):03d}_SS{letter.upper()}"
 
 
 def hide_flag_name(map_id: int, event_id: int) -> str:
@@ -95,7 +96,7 @@ def hide_flag_name(map_id: int, event_id: int) -> str:
     next visit — CLAUDE.md's smashable-rock trap, deliberately NOT reused
     here). Hide flag on event 20 of map 50 -> ``FLAG_HIDE_MAP050_EV020``.
     """
-    return f"FLAG_HIDE_MAP{int(map_id):03d}_EV{int(event_id):03d}"
+    return f"FLAG_HIDE_MAP{origin_of(map_id):03d}_EV{int(event_id):03d}"
 
 
 def temp_switch_flag_name(map_id: int, event_id: int, key: str) -> str:
@@ -107,7 +108,7 @@ def temp_switch_flag_name(map_id: int, event_id: int, key: str) -> str:
     self-switch. Named like a self-switch but with a ``TS`` marker so the two idioms
     never collide: temp-switch A on event 11 of map 2 -> ``FLAG_MAP002_EVENT011_TSA``.
     """
-    return f"FLAG_MAP{int(map_id):03d}_EVENT{int(event_id):03d}_TS{key.upper()}"
+    return f"FLAG_MAP{origin_of(map_id):03d}_EVENT{int(event_id):03d}_TS{key.upper()}"
 
 
 def resolve_switch_flag(registry: FlagRegistry, switch_id: int) -> str | None:
@@ -268,7 +269,7 @@ class FlagRegistry:
         otherwise it's an undefined symbol at assembly. Keyed by (map, event,
         letter); re-minting the same key returns the existing name.
         """
-        key = (int(map_id), int(event_id), letter.upper())
+        key = (origin_of(map_id), int(event_id), letter.upper())
         existing = self._selfswitch_names.get(key)
         if existing is not None:
             return existing
@@ -294,7 +295,7 @@ class FlagRegistry:
         ``dump_header`` defines the constant — otherwise it's an undefined symbol at
         assembly. Keyed by (map, event, key); re-minting the same key is a no-op.
         """
-        tkey = (int(map_id), int(event_id), key.upper())
+        tkey = (origin_of(map_id), int(event_id), key.upper())
         existing = self._tempswitch_names.get(tkey)
         if existing is not None:
             return existing
@@ -332,7 +333,7 @@ class FlagRegistry:
         ``resolve_terminal_hide_setflags``). Keyed by (map, event); re-minting
         the same key returns the existing name.
         """
-        key = (int(map_id), int(event_id))
+        key = (origin_of(map_id), int(event_id))
         existing = self._hideflag_names.get(key)
         if existing is not None:
             return existing

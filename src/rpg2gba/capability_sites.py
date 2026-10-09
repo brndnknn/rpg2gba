@@ -115,6 +115,7 @@ from typing import Literal
 
 from rpg2gba.chapter_manifest.schema import page_row_id
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
+from rpg2gba.map_split.spec import expand_split_ids
 
 logger = logging.getLogger(__name__)
 
@@ -499,7 +500,7 @@ def _map_id_to_chapter(chapters_json: Path) -> dict[int, str | None]:
     owner: dict[int, str] = {}
     for chapter in data.get("chapters", []):
         chapter_id = chapter["id"]
-        for map_id in chapter.get("maps", []):
+        for map_id in expand_split_ids(chapter.get("maps", [])):
             owner.setdefault(map_id, chapter_id)
     return owner
 

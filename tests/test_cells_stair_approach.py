@@ -173,5 +173,5 @@ _MAP_CONSTANTS = {
     33: "MAP_ROUTE_01",
     31: "MAP_KEVLAR_TOWN",
     37: "MAP_PASSAGE_CAVE_2F",
-    40: "MAP_NOWTOCH_CITY",  # CH06: 4 diagonal-stair events
+    14002: "MAP_NOWTOCH_CITY_PARK",  # CH06: 4 diagonal-stair events (map 40's park piece)
 }

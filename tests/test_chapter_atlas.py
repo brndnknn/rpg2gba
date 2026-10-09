@@ -286,6 +286,7 @@ def test_built_chapters_match_the_slice_map_set() -> None:
     # stale the moment CH03 entered the build set): a chapter's maps belong in
     # SLICE_MAP_IDS once it is `in_progress` — it has to build before it can
     # pass its §9 gate and become `built`.
+    from rpg2gba.map_split.spec import expand_split_ids
     from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
 
     binding = load_binding()
@@ -295,7 +296,8 @@ def test_built_chapters_match_the_slice_map_set() -> None:
         if chapter.status in ("built", "in_progress")
         for map_id in chapter.maps
     ]
-    assert sorted(built) == sorted(SLICE_MAP_IDS)
+    # chapters.json names Uranium maps; a split map builds as its pieces
+    assert sorted(expand_split_ids(built)) == sorted(SLICE_MAP_IDS)
 
 
 def test_bound_and_unbound_maps_account_for_the_whole_corpus() -> None:
@@ -306,7 +308,7 @@ def test_bound_and_unbound_maps_account_for_the_whole_corpus() -> None:
     unbound = {int(k) for k in raw.get("unbound_maps", {}) if k != "_comment"}
     known = {int(k) for k in json.loads(
         infos_path.read_text(encoding="utf-8"))}
-    bound = set(load_binding().map_ids)
+    bound = set(load_binding().uranium_map_ids)
     assert not (bound & unbound), "a map is both bound and declared unbound"
     assert known - bound - unbound == set(), "some maps are unaccounted for"
 

@@ -35,6 +35,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from rpg2gba.map_split.spec import expand_split_ids
 from rpg2gba.chapter_atlas.census import (
     CODE_CONDITIONAL,
     CODE_SCRIPT,
@@ -983,7 +984,7 @@ def _load_chapter_maps(chapter_id: str, chapters_path: Path) -> list[int]:
     data = _load_json(chapters_path)
     for chapter in data.get("chapters", []):
         if chapter.get("id") == chapter_id:
-            return list(chapter.get("maps", []))
+            return expand_split_ids(chapter.get("maps", []))
     raise ValueError(f"chapter manifest: no chapter {chapter_id!r} in {chapters_path}")
 
 

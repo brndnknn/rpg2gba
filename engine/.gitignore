@@ -68,3 +68,5 @@ __pycache__
 .map_version
 # URANIUM PATHFINDER SLICE — connection id remap tables, written by the rpg2gba pipeline
 src/data/uranium_connection_remaps.gen.h
+# URANIUM PATHFINDER SLICE — split-map sibling table, written by the rpg2gba pipeline
+src/data/uranium_split_siblings.gen.h

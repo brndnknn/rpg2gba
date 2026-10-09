@@ -591,6 +591,32 @@ _MOVE_SUBSTITUTIONS: dict[int, str] = {
     568: "MOVE_FIRE_FANG",  # FLAMEIMPACT
 }
 
+# Uranium-original abilities (`uranium_id_map.json` `needs_engine.abilities`)
+# on a staged species, substituted with the closest fork ability until the
+# real one is engine work — same pattern as `_MOVE_SUBSTITUTIONS`. Keyed by
+# the resolved constant. User-approved substitution (2026-10-09): LAZY
+# (Feliger, top of the Feleng line staged for CH06; Uranium text "Lazy made
+# {1} sleep!") -> ABILITY_TRUANT, the fork's native "lazy" ability. Anything
+# else the fork lacks fails loud in `write_all` (`assert_fork_constants_exist`).
+_ABILITY_SUBSTITUTIONS: dict[str, str] = {
+    "ABILITY_LAZY": "ABILITY_TRUANT",
+}
+
+
+def _ability_constant(r: pokemon._Resolver, ability: int) -> str:
+    const = r.ability_constant(ability)
+    return _ABILITY_SUBSTITUTIONS.get(const, const)
+
+
+def staged_ability_constants(staged: list[StagedSpecies], r: pokemon._Resolver) -> set[str]:
+    """Every ability constant `emit_species_info` will write for `staged`."""
+    out: set[str] = set()
+    for s in staged:
+        rec = s.record
+        out |= {_ability_constant(r, a) for a in (rec.abilities[0], rec.abilities[1],
+                                                   rec.hidden_abilities[0])}
+    return out
+
 # `categoryName` is a hardware-fixed `u8[13]` slot (12 visible chars + NUL —
 # see `CATEGORY_NAME_MAX_LEN`); Uranium's own `species_kinds.json` text isn't
 # authored against that limit and can exceed it. Rather than silently
@@ -728,9 +754,9 @@ def emit_species_info(
         groups = f"MON_EGG_GROUPS({eg1})" if eg1 == eg2 else f"MON_EGG_GROUPS({eg1}, {eg2})"
         lines.append(f"        .eggGroups = {groups},")
 
-        a1 = r.ability_constant(rec.abilities[0])
-        a2 = r.ability_constant(rec.abilities[1])
-        hidden = r.ability_constant(rec.hidden_abilities[0])
+        a1 = _ability_constant(r, rec.abilities[0])
+        a2 = _ability_constant(r, rec.abilities[1])
+        hidden = _ability_constant(r, rec.hidden_abilities[0])
         lines.append(f"        .abilities = {{ {a1}, {a2}, {hidden} }},")
         extra_hidden = [h for h in rec.hidden_abilities[1:] if h]
         if extra_hidden:
@@ -1014,6 +1040,12 @@ def write_all(
         )
         staged = build_staged_species(selected, records, pristine_egg, overrides, resolver=resolver)
         assert_no_gfx_symbol_collisions(engine_dir, staged)
+        # Every ability written must exist in the fork (Uranium originals that
+        # aren't substituted above would only surface as a compile error).
+        assert_fork_constants_exist(
+            engine_dir, staged_ability_constants(staged, resolver),
+            "include/constants/abilities.h", "ABILITY",
+        )
     else:
         resolver = None
         staged = []

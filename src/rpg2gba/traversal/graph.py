@@ -88,6 +88,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from rpg2gba.map_split.ids import split_blocked_cells
 from rpg2gba.tileset_converter.layout import column_key
 from rpg2gba.tileset_converter.stairs import StairSide, stair_cell_sides
 
@@ -348,6 +349,9 @@ def build_map_graph(
     grid = collision.build_tile_grid(map_json)
     arrays = collision.load_tileset_arrays(tileset_id, tilesets_json)
     blocked = collision.build_blocked_grid(grid, arrays)
+    # A split piece's cut cells are walls with real art (rpg2gba.map_split).
+    for cell in split_blocked_cells(map_json):
+        blocked[cell] = True
 
     stair_sides = stair_cell_sides(map_json)
 

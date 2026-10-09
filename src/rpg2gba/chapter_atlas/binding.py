@@ -26,6 +26,9 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from rpg2gba.map_split.ids import origin_of, piece_uid
+from rpg2gba.map_split.spec import expand_split_ids, split_specs
+
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
@@ -130,8 +133,15 @@ class ChapterBinding:
 
     @property
     def map_ids(self) -> list[int]:
-        """Every map id bound to any chapter, sorted and de-duplicated."""
+        """Every map id bound to any chapter, sorted and de-duplicated (build
+        ids: a split map appears as its pieces)."""
         return sorted({m for c in self.chapters for m in c.maps})
+
+    @property
+    def uranium_map_ids(self) -> list[int]:
+        """`map_ids` folded back to Uranium maps (a split map's pieces count as
+        their origin) — for corpus coverage against `map_infos.json`."""
+        return sorted({origin_of(m) for m in self.map_ids})
 
 
 def default_binding_path() -> Path:
@@ -170,11 +180,16 @@ def load_binding(
         tier, status = entry.get("tier", "thin"), entry.get("status", "planned")
         _require(tier in TIERS, f"{cid}: tier {tier!r} not in {TIERS}")
         _require(status in STATUSES, f"{cid}: status {status!r} not in {STATUSES}")
-        maps = tuple(entry.get("maps", []))
-        _require(bool(maps), f"{cid}: has no maps")
+        raw_maps = tuple(entry.get("maps", []))
+        _require(bool(raw_maps), f"{cid}: has no maps")
         outdoor = entry.get("outdoor")
-        _require(outdoor is None or outdoor in maps,
-                 f"{cid}: outdoor map {outdoor} is not among its maps {maps}")
+        _require(outdoor is None or outdoor in raw_maps,
+                 f"{cid}: outdoor map {outdoor} is not among its maps {raw_maps}")
+        # chapters.json names Uranium maps; a split map (rpg2gba.map_split)
+        # binds as its pieces, and its main piece (k=0) is the outdoor map.
+        maps = tuple(expand_split_ids(raw_maps))
+        if outdoor is not None and outdoor in split_specs():
+            outdoor = piece_uid(outdoor, 0)
         chapters.append(Chapter(
             id=cid,
             act=entry["act"],
@@ -218,7 +233,7 @@ def load_binding(
         infos = json.loads(map_infos_path.read_text(encoding="utf-8"))
         known = {int(k) for k in infos}
         for c in chapters:
-            unknown = [m for m in c.maps if m not in known]
+            unknown = [m for m in c.maps if origin_of(m) not in known]
             _require(not unknown,
                      f"{c.id}: map ids not in map_infos.json: {unknown}")
 

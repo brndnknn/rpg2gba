@@ -1022,7 +1022,7 @@ def test_local_id_fails_loud_on_an_unstaged_map(
 def _boundary_warp(b: ChapterBuilder, rows: tuple[ManifestRow, ...], **extra) -> None:
     warp_beat(
         b, chapter_id="CH05", map_constant="MAP_PASSAGE_CAVE_2F", map_id=37,
-        event_id=2, dest_map_constant="MAP_NOWTOCH_CITY", mechanism="threshold",
+        event_id=2, dest_map_constant="MAP_NOWTOCH_CITY_PARK", mechanism="threshold",
         direction="UP", beat_name="EXIT", manifest_rows=rows, boundary=True, **extra,
     )
 
@@ -1035,7 +1035,7 @@ def test_boundary_warp_stops_on_the_approach_cell_and_still_claims_the_row(
     b = _builder()
     _boundary_warp(b, ch05_rows)
     (beat,) = b.build().beats
-    cx, cy = warp_cell("MAP_PASSAGE_CAVE_2F", to="MAP_NOWTOCH_CITY", event_id=2)
+    cx, cy = warp_cell("MAP_PASSAGE_CAVE_2F", to="MAP_NOWTOCH_CITY_PARK", event_id=2)
     loc = beat.locations[0]
     assert (loc.map_constant, loc.x, loc.y) == ("MAP_PASSAGE_CAVE_2F", cx, cy + 1)  # UP: south
     assert beat.rows == ("map037/ev002/p0",)

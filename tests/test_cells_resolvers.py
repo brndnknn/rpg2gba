@@ -118,7 +118,7 @@ def test_seam_cells_fails_loud_when_the_two_maps_share_no_seam() -> None:
 
 @requires_decoded_output
 def test_seam_cells_fails_loud_on_a_real_border_connection() -> None:
-    """Route 2 <-> Nowtoch City (map 40) is a genuine, un-substituted
+    """Route 2 <-> Nowtoch City (map 40's main piece, 14000) is a genuine, un-substituted
     pokeemerald connection in `connections.json` -- not a seam_warps.json
     arrow-warp pair -- so it is a whole-edge crossing this resolver
     structurally cannot reduce to a handful of cells, and must say so

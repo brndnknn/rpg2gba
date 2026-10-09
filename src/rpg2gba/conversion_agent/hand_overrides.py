@@ -43,7 +43,7 @@ _PKG = Path(__file__).resolve().parent
 _HAND_CONVERSIONS = _PKG / "hand_conversions"
 
 # Override filenames: MapNNN_EVNNN.pory.
-_FILENAME_RE = re.compile(r"^Map(\d{3})_EV(\d{3})\.pory$")
+_FILENAME_RE = re.compile(r"^Map(\d{3,})_EV(\d{3})\.pory$")
 
 # A top-level Poryscript definition: `script NAME {`, `text NAME {`,
 # `movement NAME {`, or `mart NAME {`, unindented (column 0).
@@ -53,7 +53,7 @@ _DEFINITION_RE = re.compile(
 
 # A definition name's namespace: MapNNN_EVNNN, optionally with a free-form
 # `_suffix` (e.g. `_Page1`, `_Mart`, `_Page1_Move1`).
-_NAMESPACE_RE = re.compile(r"^Map(\d{3})_EV(\d{3})(?:_.+)?$")
+_NAMESPACE_RE = re.compile(r"^Map(\d{3,})_EV(\d{3})(?:_.+)?$")
 
 
 @dataclass(frozen=True)

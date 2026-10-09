@@ -873,12 +873,21 @@ def load_map_event_strips(reference_dir: Path) -> dict[tuple[int, int], str | No
     if not path.is_file():
         return {}
     data = json.loads(path.read_text(encoding="utf-8"))
-    return {
+    out = {
         (m, e): expect_name
         for m, e, expect_name in (
             _parse_map_event_strip_entry(entry) for entry in data.get("map_events", [])
         )
     }
+    # strip_list.json names Uranium maps; a split map's events live in its
+    # pieces under their original ids, so each entry also keys every piece
+    # (event ids are unique per origin, so only the holding piece ever matches).
+    from rpg2gba.map_split.spec import expand_split_ids
+
+    for (m, e), expect_name in list(out.items()):
+        for uid in expand_split_ids([m]):
+            out.setdefault((uid, e), expect_name)
+    return out
 
 
 def _load_strip_list(reference_dir: Path) -> tuple[dict[int, dict], set[tuple[int, int]]]:

@@ -41,6 +41,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_SEAM_WARPS_PATH = Path("reference/seam_warps.json")
+# Arrow seams between split pieces, written by `rpg2gba.map_split.stage`.
+DEFAULT_SPLIT_SEAMS_PATH = Path("output/uranium-build/split_seam_warps.json")
 
 # pokeemerald-connection-style direction vocabulary (matches
 # connections.EDGE_TO_DIRECTION's *values*, not its N/S/E/W edge letters —
@@ -86,8 +88,17 @@ class SeamWarp:
         return frozenset((self.map_a, self.map_b))
 
 
-def load_seam_warps(path: Path = DEFAULT_SEAM_WARPS_PATH) -> list[SeamWarp]:
-    """Load + validate `reference/seam_warps.json`.
+def load_seam_warps(
+    path: Path = DEFAULT_SEAM_WARPS_PATH, *, split_path: Path | None = None
+) -> list[SeamWarp]:
+    """Load + validate `reference/seam_warps.json`, plus the arrow seams the
+    map-split stage generated between split pieces.
+
+    The generated seams (`output/uranium-build/split_seam_warps.json`,
+    `rpg2gba.map_split`) are included by default whenever `path` is the
+    repo's default file and the generated file exists; pass `split_path`
+    to name it explicitly. They obey the same validation, and the pair
+    uniqueness check spans both files.
 
     Fails loud on: a missing required field, `map_a == map_b`, mismatched or
     empty `cells_a`/`cells_b` lengths (must pair 1:1), an unknown direction,
@@ -95,7 +106,11 @@ def load_seam_warps(path: Path = DEFAULT_SEAM_WARPS_PATH) -> list[SeamWarp]:
     (mirrors `connections._check_duplicates` — a seam should appear once)."""
     path = Path(path)
     raw = json.loads(path.read_text(encoding="utf-8"))
-    seams_raw = raw.get("seams", [])
+    seams_raw = list(raw.get("seams", []))
+    if split_path is None and path == DEFAULT_SEAM_WARPS_PATH:
+        split_path = DEFAULT_SPLIT_SEAMS_PATH
+    if split_path is not None and Path(split_path).is_file():
+        seams_raw += json.loads(Path(split_path).read_text(encoding="utf-8")).get("seams", [])
     if not isinstance(seams_raw, list):
         raise ValueError(f"{path}: 'seams' must be a list")
 
@@ -184,5 +199,14 @@ def warp_pairs_for(seams: list[SeamWarp]) -> list[tuple[int, int, int, int, int,
 
 def suppressed_pairs(seams: list[SeamWarp]) -> frozenset[frozenset[int]]:
     """The set of map-id pairs whose CONNECTION `connections.build_slice_connections`
-    must omit (superseded by these seam warps)."""
-    return frozenset(s.pair_key for s in seams)
+    must omit (superseded by these seam warps). A seam between two pieces of
+    one split map (`rpg2gba.map_split`) replaces no connection — those pieces
+    never had one — so it suppresses nothing."""
+    return frozenset(s.pair_key for s in seams if not _is_split_seam(s))
+
+
+def _is_split_seam(seam: SeamWarp) -> bool:
+    from rpg2gba.map_split.ids import is_piece, origin_of
+
+    return (is_piece(seam.map_a) and is_piece(seam.map_b)
+            and origin_of(seam.map_a) == origin_of(seam.map_b))

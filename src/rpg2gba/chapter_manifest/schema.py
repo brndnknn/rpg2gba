@@ -927,10 +927,10 @@ def seam_row_id(map_id: int, direction: str, other_map_id: int) -> str:
 # grammars (`page_row_id`/`branch_row_id`/`seam_row_id`/`terrain_row_id`
 # above) are the only writers.
 
-_PAGE_ROW_RE = re.compile(r"^map(\d{3})/ev(\d{3})/p(\d+)$")
-_BRANCH_ROW_RE = re.compile(r"^map(\d{3})/ev(\d{3})/p(\d+)/b(\d+)$")
-_SEAM_ROW_RE = re.compile(r"^map(\d{3})/seam/([A-Za-z0-9_]+)/map(\d{3})$")
-_TERRAIN_ROW_RE = re.compile(r"^map(\d{3})/terrain/([^/]+)/(-?\d+),(-?\d+)$")
+_PAGE_ROW_RE = re.compile(r"^map(\d{3,})/ev(\d{3})/p(\d+)$")
+_BRANCH_ROW_RE = re.compile(r"^map(\d{3,})/ev(\d{3})/p(\d+)/b(\d+)$")
+_SEAM_ROW_RE = re.compile(r"^map(\d{3,})/seam/([A-Za-z0-9_]+)/map(\d{3,})$")
+_TERRAIN_ROW_RE = re.compile(r"^map(\d{3,})/terrain/([^/]+)/(-?\d+),(-?\d+)$")
 
 RowKind = Literal["page", "branch", "seam", "terrain"]
 

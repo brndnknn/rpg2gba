@@ -647,8 +647,13 @@ def main() -> int:
     # the map scripts reference, so they must be in the defined set) ---
     aux_texts: list[str] = []
     disp_dir = out / "porymap" / "dispatch"
-    if disp_dir.is_dir():
-        aux_texts += [f.read_text(encoding="utf-8") for f in sorted(disp_dir.glob("*.pory"))]
+    # Only this slice's dispatchers: a map that left the slice (e.g. a split
+    # origin, replaced by its pieces) leaves a stale file behind whose labels
+    # nothing defines any more.
+    for map_id in DEFAULT_SLICE:
+        disp = disp_dir / f"Map{map_id:03d}_dispatch.pory"
+        if disp.is_file():
+            aux_texts.append(disp.read_text(encoding="utf-8"))
     ce = out / "scripts" / "CommonEvents.pory"
     if ce.is_file():
         aux_texts.append(ce.read_text(encoding="utf-8"))

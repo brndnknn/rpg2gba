@@ -459,6 +459,23 @@ def phase3(clean: bool) -> None:
     validate.validate_output(out_dir)
     command_catalog.build(out_dir, REFERENCE_DIR)
     logger.info("phase3 complete: %d maps deserialized + validated + cataloged", n_maps)
+    _run_split_maps(out_dir)
+
+
+def _run_split_maps(out_dir: Path) -> None:
+    from rpg2gba.map_split import stage
+
+    results = stage.run(out_dir)
+    logger.info("split-maps: %d map(s) split into %d piece(s)",
+                len(results), sum(len(r.pieces) for r in results))
+
+
+@main.command("split-maps")
+def split_maps_cmd() -> None:
+    """Cut the maps named in reference/split_maps.json into arrow-warp pieces
+    (runs automatically after phase3; idempotent)."""
+    _uranium_src, out_dir = _resolve_paths()
+    _run_split_maps(out_dir)
 
 
 def _phase4_registry(out_dir: Path, clean: bool, fork_path: Path | None):

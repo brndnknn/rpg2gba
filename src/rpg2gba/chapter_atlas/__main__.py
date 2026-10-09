@@ -136,7 +136,7 @@ def coverage() -> None:
     infos = json.loads((out_dir / "map_infos.json").read_text(encoding="utf-8"))
     known = {int(k) for k in infos}
 
-    bound = set(binding.map_ids)
+    bound = set(binding.uranium_map_ids)
     missing = sorted(known - bound - unbound)
     overlap = sorted(bound & unbound)
 

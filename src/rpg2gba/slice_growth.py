@@ -35,6 +35,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from rpg2gba.map_split.spec import expand_split_ids
 from rpg2gba.tileset_converter.metadata_wiring import (
     TRANSFER_CODE,
     _event_transfers,
@@ -144,7 +145,7 @@ def _chapter_maps_in_build_order(
         seen.add(chapter_id)
         if wanted is not None and chapter.get("status") != wanted:
             continue
-        out.append((chapter_id, tuple(chapter["maps"])))
+        out.append((chapter_id, tuple(expand_split_ids(chapter["maps"]))))
     return out
 
 
