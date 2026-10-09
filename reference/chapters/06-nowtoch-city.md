@@ -282,6 +282,24 @@ briefing" that no longer exists. Re-measured the same day with
   (`python -m rpg2gba.story_state report --chapter CH05`) at CH06 open — still
   to be done.
 
+### Operator rulings (2026-10-06)
+
+- **35↔40 seam:** measure border-strip import cost (shared primary + strips, vs caps) before
+  choosing real seam vs arrow warp. *(Superseded 2026-10-07 01:12: the operator approved
+  **design R** — id-remapped scrolling connection, strip depth 6, each map keeps its own tileset
+  (40 → 1040; fits at 1020/1024 metatiles, 1013/1024 tiles). `map_set.tileset_groups` now splits
+  the pair into separate groups instead of failing loud; `connection_remap.py` builds the
+  tables. Not yet assembled with real tables or walked on device.)*
+- **Metro departure (map 45 event 3):** accept it inert for CH06. Any event with an
+  out-of-slice warp target is skipped whole today (`metadata_wiring.classify_event`, "out-of-slice
+  warp"; its .pory block pruned as an orphan), so the departure menu ships non-interactive until
+  maps 6/168/11 are in the build. Revisit when those chapters land.
+- **Map 40 "Luz" glow events:** all 74 `light`-sheet events (72 "Luz" + EV048/EV049, an autorun
+  self-re-pin with no flags/vars) are cosmetic → strip under the existing 2026-08-05 Luz no-port ruling (maps 31–33); lead's
+  application of that ruling, not a new operator call.
+- **Order:** pre-flight (real-build fit for 40–47, 35↔40 seam, map 40 "Luz" glow-event strip,
+  #111 only if it bites), then transpiler extensions (trade/tutor/cry) and the chapter loop.
+
 ### Before the branch opens / carried into CH06
 
 - ~~`PROJECT_TODO.md` #124 — re-key the manifest layer~~ — DONE 2026-10-04; `chapter_manifest check` is 0 errors on CH01–CH05.
