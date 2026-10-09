@@ -12,6 +12,10 @@ Routes:
   GET  /api/map/<id>                -> build_map_data JSON
   GET  /api/seamcheck/<id>          -> ROM seam check (neighbour strips missing from this map's pool)
   GET  /api/budget/<id>             -> GBA tileset budget (tiles/metatiles vs 1024 caps, tile merge on and off)
+  GET  /split/<id>                  -> hand-split planner: paint the map into pieces, live per-piece budget
+  GET  /api/split/<id>[?merge=0|1]  -> planner data (metatile id per cell, tile ids per metatile, saved layout)
+  POST /api/split/exact             -> exact per-piece tile/metatile counts (body: {map_id, pieces, merge?})
+  POST /api/split/save              -> persist a layout to reference/map_splits/ (body: {map_id, layout})
   GET  /api/palsets/<id>            -> shared-palette set membership per 8x8 quadrant (rock / green G0-2 / packer)
   GET  /api/shared?maps=31,35,40    -> shared-tiles (RMXP id/image vs ROM metatile/8x8); or ?map=<id> = its seam component
   (?sp=1 on /map, /component, /palettes, /api/map, /api/metatile = seam-palette view)
@@ -68,6 +72,9 @@ from map_viewer_common import (  # noqa: E402
     render_npc_png,
     render_tile_png,
     save_feedback,
+    save_split,
+    split_data,
+    split_exact,
     palette_sets,
     seam_check,
     shared_default_maps,
@@ -119,6 +126,9 @@ _RE_API_FEEDBACK = re.compile(r"^/api/feedback/(\d+)$")
 _RE_API_SEAMCHECK = re.compile(r"^/api/seamcheck/(\d+)$")
 _RE_API_PALSETS = re.compile(r"^/api/palsets/(\d+)$")
 _RE_API_BUDGET = re.compile(r"^/api/budget/(\d+)$")
+_RE_SPLIT_PAGE = re.compile(r"^/split/(\d+)$")
+_RE_API_SPLIT = re.compile(r"^/api/split/(\d+)$")
+_RE_SPLIT_ASSET = re.compile(r"^/split-assets/(split\.(?:js|css))$")
 # Segments captured loosely (not \d+) so a non-integer id falls through to our
 # own 400 JSON response instead of the generic 404 catch-all.
 _RE_API_EVENT = re.compile(r"^/api/event/([^/]+)/([^/]+)$")
@@ -147,6 +157,13 @@ header{background:#252525;border-bottom:1px solid #444;padding:10px 14px;positio
 h1{color:#8cf;font-size:16px;margin-bottom:8px}
 #q{width:100%;max-width:480px;background:#111;border:1px solid #555;color:#eee;font:13px monospace;padding:6px 8px;border-radius:3px}
 #meta{color:#777;font-size:11px;margin-top:6px}
+#nav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:8px}
+#nav .lbl{color:#888}
+#nav a{color:#5af;text-decoration:none}
+#nav a:hover{text-decoration:underline}
+#nav form{display:flex;gap:4px;align-items:center}
+#splitid{width:64px;background:#111;border:1px solid #555;color:#eee;font:13px monospace;padding:3px 6px;border-radius:3px}
+#nav button{background:#111;border:1px solid #555;color:#eee;font:12px monospace;padding:3px 8px;border-radius:3px;cursor:pointer}
 #tree{padding:10px 14px 40px}
 ul{list-style:none;margin:0;padding-left:18px}
 #tree>ul{padding-left:0}
@@ -165,6 +182,12 @@ li{margin:1px 0}
 </style></head><body>
 <header>
   <h1>Uranium Map Index</h1>
+  <nav id="nav">
+    <span id="chapters"><span class="lbl">Chapters:</span> <span id="chlinks">…</span></span>
+    <form id="splitform"><span class="lbl">Split planner, map #</span>
+      <input id="splitid" type="number" min="0" inputmode="numeric" placeholder="40">
+      <button type="submit">open</button></form>
+  </nav>
   <input id="q" type="search" placeholder="filter by map id or name… (e.g. 32, moki, gym)" autocomplete="off">
   <div id="meta"></div>
 </header>
@@ -182,6 +205,7 @@ function nodeHTML(n){
   h += '<a class="mname" href="/map/'+n.id+'">'+esc(n.name||('Map'+pad(n.id)))+'</a>';
   h += '<a class="lnk" href="/map/'+n.id+'">map</a>';
   h += '<a class="lnk" href="/palettes/'+n.id+'">pal</a>';
+  h += '<a class="lnk" href="/split/'+n.id+'">split</a>';
   h += '</div>';
   if (hasKids){ h += '<ul>'; n.children.forEach(function(c){ h += nodeHTML(c); }); h += '</ul>'; }
   h += '</li>';
@@ -218,6 +242,16 @@ function filterTree(q){
   });
 }
 document.getElementById('q').addEventListener('input', function(e){ filterTree(e.target.value); });
+fetch('/api/chapters').then(function(r){ return r.ok ? r.json() : []; }).then(function(list){
+  document.getElementById('chlinks').innerHTML = list.length
+    ? list.map(function(id){ return '<a href="/chapter/'+esc(id)+'">'+esc(id)+'</a>'; }).join(' ')
+    : '<span class="lbl">none</span>';
+}).catch(function(){ document.getElementById('chlinks').textContent = 'unavailable'; });
+document.getElementById('splitform').addEventListener('submit', function(e){
+  e.preventDefault();
+  const id = parseInt(document.getElementById('splitid').value, 10);
+  if (!isNaN(id)) location.href = '/split/' + id;
+});
 render();
 </script></body></html>
 """
@@ -268,6 +302,15 @@ class _Handler(BaseHTTPRequestHandler):
                 self._serve_palsets(int(m.group(1)), sp)
             elif m := _RE_API_BUDGET.match(path):
                 self._serve_budget(int(m.group(1)))
+            elif _RE_SPLIT_PAGE.match(path):
+                self._serve_chapter_asset("split.html", "text/html; charset=utf-8")
+            elif m := _RE_SPLIT_ASSET.match(path):
+                name = m.group(1)
+                self._serve_chapter_asset(name, _CHAPTER_ASSET_TYPES[name.rsplit(".", 1)[1]])
+            elif m := _RE_API_SPLIT.match(path):
+                merge = {"0": False, "1": True}.get(qs.get("merge", [""])[0])
+                body = json.dumps(split_data(int(m.group(1)), merge), separators=(",", ":")).encode("utf-8")
+                self._send(200, "application/json", body, cache="no-cache")
             elif path == "/api/shared":
                 self._serve_shared(qs)
             elif m := _RE_API_NPC.match(path):
@@ -316,6 +359,12 @@ class _Handler(BaseHTTPRequestHandler):
                 self._handle_feedback()
             elif path == "/api/feedback/export":
                 self._handle_feedback_export()
+            elif path == "/api/split/exact":
+                body = json.loads(self._post_body or b"{}")
+                res = split_exact(int(body["map_id"]), body["pieces"], body.get("merge"))
+                self._send(200, "application/json", json.dumps(res).encode("utf-8"))
+            elif path == "/api/split/save":
+                self._handle_split_save()
             else:
                 self._send(404, "text/plain", b"Not found")
         except Exception as exc:
@@ -383,6 +432,17 @@ class _Handler(BaseHTTPRequestHandler):
         log.info("exported %d flag(s) for Map%03d -> %s", len(flags), map_id, path)
         self._send(200, "application/json",
                    json.dumps({"path": str(path), "count": len(flags)}).encode("utf-8"))
+
+    def _handle_split_save(self) -> None:
+        """Persist a hand-split layout; a malformed one is a 400 with the reason."""
+        body = json.loads(self._post_body or b"{}")
+        try:
+            path = save_split(int(body["map_id"]), body["layout"])
+        except (ValueError, KeyError) as exc:
+            self._send(400, "application/json",
+                       json.dumps({"error": str(exc)}).encode("utf-8"))
+            return
+        self._send(200, "application/json", json.dumps({"path": str(path)}).encode("utf-8"))
 
     def _serve_feedback(self, map_id: int) -> None:
         body = json.dumps(load_feedback(map_id)).encode("utf-8")

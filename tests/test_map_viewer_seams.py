@@ -57,8 +57,16 @@ def test_strip_cells_geometry(edge, origin, a, b, expect) -> None:
 
 
 def test_strip_depth_clamped_to_small_neighbour() -> None:
-    cells = mvc.seam_strip_cells("S", (0, 4), (2, 4), (2, 1))  # default depth 7, B 1 row tall
+    cells = mvc.seam_strip_cells("S", (0, 4), (2, 4), (2, 1))  # default depth 5, B 1 row tall
     assert cells == [(0, 0), (1, 0)]
+
+
+def test_strip_default_depth_is_per_axis() -> None:
+    # Matches the ROM build (connection_remap.strip_depth): N/S 5 rows, E/W 7 columns.
+    south = mvc.seam_strip_cells("S", (0, 4), (1, 4), (1, 10))
+    assert sorted({y for _, y in south}) == list(range(0, 5))
+    east = mvc.seam_strip_cells("E", (1, 0), (1, 1), (10, 1))
+    assert sorted({x for x, _ in east}) == list(range(0, 7))
 
 
 def test_seam_entry_counts_by_unique_image_and_skips_empty() -> None:
@@ -134,7 +142,11 @@ def seam_env(monkeypatch):
     mvc._tileset_analysis_cache.clear()
 
 
-def test_component_uses_all_rows_not_only_slice_ids(seam_env) -> None:
+def test_component_uses_all_rows_not_only_slice_ids(seam_env, monkeypatch) -> None:
+    # Pin a slice WITHOUT 40 so the precondition holds by construction: the
+    # property is "components ignore slice membership", not "map 40 is unbuilt"
+    # (it joined the slice with CH06).
+    monkeypatch.setattr(mvc, "SLICE_MAP_IDS", [m for m in mvc.SLICE_MAP_IDS if m != 40])
     assert 40 not in mvc.SLICE_MAP_IDS
     assert mvc._seam_component(40) == (31, 35, 40)
     assert mvc._seam_component(31) == (31, 35, 40)

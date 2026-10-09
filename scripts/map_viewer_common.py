@@ -31,6 +31,7 @@ from rpg2gba.tileset_converter.connections import (
     ConnectionRow,
     parse_connections,
 )
+from rpg2gba.tileset_converter.connection_remap import STRIP_DEPTH_EW, STRIP_DEPTH_NS, strip_depth
 from rpg2gba.tileset_converter.graphics.autotile import autotile_frame_count
 from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
     _render_column,
@@ -787,6 +788,237 @@ def tileset_budget(map_id: int) -> dict:
         return out
 
 
+# ---------------------------------------------------------------------------
+# Hand-split planner (/split/<id>)
+# ---------------------------------------------------------------------------
+# The page paints cells into pieces and counts each piece's art itself: the metatiles
+# under its own cells plus those under every other piece's cell it can SEE (the player
+# camera's box around each of its cells). That needs, per cell, a metatile id, and per
+# metatile, its 8x8 tile ids; both ship once and every repaint is client-side.
+
+# (map_id, generation, merge) -> (payload, metatiles indexed by payload metatile id)
+_split_cache: dict[tuple[int, int, bool], tuple[dict, list[MetatileImage]]] = {}
+
+
+def _split_path(map_id: int) -> Path:
+    """Saved hand-split layout. Under reference/ like the tile feedback: it is
+    hand-authored operator data that must survive ``rm -rf output/``. Not read by
+    the build."""
+    d = _repo_root() / "reference" / "map_splits"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"Map{map_id:03d}.json"
+
+
+def load_split(map_id: int) -> dict | None:
+    path = _split_path(map_id)
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_split(map_id: int, layout: dict) -> Path:
+    """Persist a layout ``{"pieces": n, "assign": [piece per cell, row-major], ...}``
+    after checking it covers the map exactly."""
+    _ensure_loaded(map_id)
+    st = _map_cache[map_id]
+    assign = layout.get("assign")
+    n = int(layout.get("pieces", 0))
+    if not isinstance(assign, list) or len(assign) != st.grid.xsize * st.grid.ysize:
+        raise ValueError(f"assign must list {st.grid.xsize * st.grid.ysize} cells")
+    if n < 1 or any(not isinstance(a, int) or not 0 <= a < n for a in assign):
+        raise ValueError(f"every cell must name a piece in 0..{n - 1}")
+    path = _split_path(map_id)
+    path.write_text(json.dumps(layout, separators=(",", ":")) + "\n", encoding="utf-8")
+    return path
+
+
+def _split_state(map_id: int, merge: bool | None = None) -> tuple[dict, list[MetatileImage]]:
+    from rpg2gba.tileset_converter.graphics.emit import (
+        _effective_frames,
+        _flip_canonical_multi,
+        _slot_frames_for_metatile,
+    )
+    from rpg2gba.tileset_converter.graphics.tile_merge import (
+        dedup_metatiles,
+        merge_and_dedup_metatiles,
+    )
+
+    with _budget_lock:
+        gen = _quant_generation
+        merge_now = _tile_merge if merge is None else merge
+        _ensure_loaded(map_id)
+        hit = _split_cache.get((map_id, gen, merge_now))
+        if hit is not None:
+            return hit
+        st = _map_cache[map_id]
+        nonempty = [i for i, ck in enumerate(st.colkeys_sorted) if ck]
+        rendered = [
+            _render_pool_column(st.colkeys_sorted[i], st.raster, st.priorities,
+                                st.passages, st.terrain_tags)
+            for i in nonempty
+        ]
+        if merge_now:
+            mts, remap = merge_and_dedup_metatiles(rendered, _get_merge_table())
+        else:
+            mts, remap = dedup_metatiles(rendered)
+        colkey_mt = [-1] * len(st.colkeys_sorted)
+        for j, i in enumerate(nonempty):
+            colkey_mt[i] = remap[j]
+
+        tile_ids: dict[bytes, int] = {}
+        mt_tiles: list[list[int]] = []
+        for mt in mts:
+            ids: set[int] = set()
+            for frames in _slot_frames_for_metatile(mt):
+                frames = _effective_frames(frames)
+                if all(int(f[..., 3].max()) == 0 for f in frames):
+                    continue  # transparent quad -> the shared tile 0
+                key = _flip_canonical_multi(frames)[0]
+                ids.add(tile_ids.setdefault(key, len(tile_ids)))
+            mt_tiles.append(sorted(ids))
+
+        grid = st.grid
+        cells = [
+            colkey_mt[st.colkey_to_idx[column_key(grid, x, y)]]
+            for y in range(grid.ysize) for x in range(grid.xsize)
+        ]
+        events = [
+            {"x": e["x"], "y": e["y"], "name": e["name"], "warp": e["is_warp"]}
+            for e in _parse_events(st.events_raw)
+        ]
+        payload = {
+            "map_id": map_id,
+            "generation": gen,
+            "tile_merge": merge_now,
+            "width": grid.xsize,
+            "height": grid.ysize,
+            "cells": cells,
+            "mt_tiles": mt_tiles,
+            "n_tiles": len(tile_ids),
+            "cap_tiles": _BUDGET_CAP_TILES,
+            "cap_metatiles": _BUDGET_CAP_METATILES,
+            "events": events,
+        }
+        _split_cache[(map_id, gen, merge_now)] = (payload, mts)
+        return payload, mts
+
+
+_arrivals_cache: dict[int, list[tuple[int, int]]] | None = None
+_reach_cache: dict[int, dict] = {}
+
+
+def _warp_arrivals() -> dict[int, list[tuple[int, int]]]:
+    """Every direct transfer (event code 201, designation 0) target in the corpus:
+    map id -> sorted [(x, y)]. Variable-designated transfers can't be resolved
+    statically and are skipped. Built once per process."""
+    global _arrivals_cache
+    if _arrivals_cache is None:
+        out: dict[int, set[tuple[int, int]]] = {}
+        for path in sorted(_maps_dir().glob("Map*.json")):
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            for ev in doc.get("events", []):
+                for page in ev.get("pages", []):
+                    for cmd in page.get("list", []):
+                        p = cmd.get("parameters") or []
+                        if cmd.get("code") == 201 and len(p) >= 4 and p[0] == 0:
+                            out.setdefault(int(p[1]), set()).add((int(p[2]), int(p[3])))
+        _arrivals_cache = {m: sorted(v) for m, v in out.items()}
+    return _arrivals_cache
+
+
+def _blocked_from_json(map_id: int) -> np.ndarray:
+    """(H, W) bool, our collision (compare_collision.our_blocked) from the map JSON and
+    tilesets.json alone -- no rasterizer, so it is cheap for neighbour maps."""
+    doc = json.loads((_maps_dir() / f"Map{map_id:03d}.json").read_text(encoding="utf-8"))
+    ts = json.loads(_tilesets_json().read_text(encoding="utf-8"))[str(int(doc["tileset_id"]))]
+    t = doc["tiles"]
+    grid = TileGrid(t["xsize"], t["ysize"], t["zsize"], t["data"])
+    return np.array([[our_blocked(grid, ts["passages"], ts["priorities"], ts["terrain_tags"], x, y)
+                      for x in range(grid.xsize)] for y in range(grid.ysize)])
+
+
+def reachable_cells(map_id: int) -> dict:
+    """Cells of *map_id* the player can stand on. The map's whole seam component
+    (``map_graph.component_layout``) is laid out in one cell space and flood-filled
+    over our collision from every warp arrival into ANY member, so walking across a
+    connection is modelled and an unreachable plateau that merely continues over a
+    seam stays unreachable. Does not model ledges, surfing, or scripted player moves
+    through walls. Returns ``{"reach": [0/1 row-major], "seeds": [[x, y], ...] (this
+    map's own arrivals), "component": [member ids]}``."""
+    from map_graph import component_layout
+
+    if map_id in _reach_cache:
+        return _reach_cache[map_id]
+    layout = component_layout(map_id)
+    world = np.ones((layout["h"], layout["w"]), dtype=bool)   # True = blocked
+    placed: dict[int, tuple[int, int, int, int]] = {}
+    for m in layout["members"]:
+        try:
+            b = _blocked_from_json(m["id"])
+        except FileNotFoundError:
+            continue
+        h, w = b.shape
+        world[m["oy"]:m["oy"] + h, m["ox"]:m["ox"] + w] = b
+        placed[m["id"]] = (m["ox"], m["oy"], w, h)
+    arrivals = _warp_arrivals()
+    stack: list[tuple[int, int]] = []
+    for mid, (ox, oy, w, h) in placed.items():
+        for x, y in arrivals.get(mid, []):
+            if 0 <= x < w and 0 <= y < h and not world[oy + y, ox + x]:
+                stack.append((ox + x, oy + y))
+    reach = np.zeros_like(world)
+    for x, y in stack:
+        reach[y, x] = True
+    WH, WW = world.shape
+    while stack:
+        x, y = stack.pop()
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < WW and 0 <= ny < WH and not reach[ny, nx] and not world[ny, nx]:
+                reach[ny, nx] = True
+                stack.append((nx, ny))
+    ox, oy, w, h = placed[map_id]
+    out = {"reach": reach[oy:oy + h, ox:ox + w].astype(np.uint8).ravel().tolist(),
+           "seeds": [list(s) for s in arrivals.get(map_id, [])],
+           "component": sorted(placed)}
+    _reach_cache[map_id] = out
+    return out
+
+
+def split_data(map_id: int, merge: bool | None = None) -> dict:
+    """Planner payload (``merge`` None = the live tile-merge knob): ``cells`` (row-major metatile id per cell, -1 = empty column,
+    i.e. the void metatile) and ``mt_tiles`` (8x8 tile ids per metatile id), plus the
+    saved layout if any.
+
+    Metatiles are this map's columns rendered as the build renders them, then the
+    live tile-merge knob's transformation (``merge_and_dedup_metatiles`` on, the
+    lossless ``dedup_metatiles`` off). Tile ids are emit's dedup identity
+    (flip-canonical, whole animation) BEFORE quantization, so a piece's tile count
+    is a proxy that quantization can only lower; ``split_exact`` gives the real
+    number. Neither count includes the void metatile or the transparent tile 0.
+    Only this map's own columns: a tileset-group pool (``_pool_members``) is not
+    modelled. Cached per (map, generation)."""
+    payload, _mts = _split_state(map_id, merge)
+    blocked = _blocked_from_json(map_id).astype(np.uint8).ravel().tolist()
+    return {**payload, **reachable_cells(map_id), "blocked": blocked, "saved": load_split(map_id)}
+
+
+def split_exact(map_id: int, pieces: list[list[int]], merge: bool | None = None) -> list[dict]:
+    """Exact emitted counts per piece: each piece's metatile ids (own + seen, as the
+    page computed them) plus the void metatile, through ``_budget_probe`` under the
+    live knobs. Slow: one quantize + emit per piece."""
+    from rpg2gba.tileset_converter.graphics.build_slice_tilesets import _void_metatile
+
+    _payload, mts = _split_state(map_id, merge)
+    params, max_pals, shared = _family_params, _max_palettes, _shared_palettes
+    out = []
+    for ids in pieces:
+        if any(not 0 <= i < len(mts) for i in ids):
+            raise IndexError(f"metatile id out of range 0..{len(mts) - 1}")
+        chosen = [mts[i] for i in sorted(set(ids))] + [_void_metatile()]
+        out.append(_budget_probe(chosen, max_pals, shared, params))
+    return out
+
+
 def _postquant_for(
     map_id: int,
     state: _MapState,
@@ -1302,12 +1534,11 @@ def render_map_png(map_id: int) -> bytes:
 # ---------------------------------------------------------------------------
 # ROM seam check: cost of border-strip import
 # ---------------------------------------------------------------------------
-# fieldmap.c draws a connected map's metatile IDs, up to SEAM_DEPTH cells deep, through
-# the CURRENT map's tileset. A neighbour strip metatile whose image is not in the
+# fieldmap.c draws a connected map's metatile IDs through the CURRENT map's tileset;
+# the visible part is connection_remap.strip_depth deep (N/S 5, E/W 7), the depth the
+# ROM build imports. A neighbour strip metatile whose image is not in the
 # current map's own pool therefore has nothing to resolve to; the count of those is
 # what importing the strip into A's tileset would cost.
-
-SEAM_DEPTH = 7
 
 
 def metatile_image_hash(mt: MetatileImage | None) -> str | None:
@@ -1326,14 +1557,17 @@ def seam_strip_cells(
     origin: tuple[int, int],
     a_dims: tuple[int, int],
     b_dims: tuple[int, int],
-    depth: int = SEAM_DEPTH,
+    depth: int | None = None,
 ) -> list[tuple[int, int]]:
     """B-local cells of neighbour B's strip along the seam.
 
     ``edge`` is A's own edge the seam sits on and ``origin`` is B's (0,0) in A's
     frame (``map_graph.connections_for``'s fields). The strip is the ``depth`` rows
-    (N/S) or columns (E/W) of B nearest the shared edge, clamped to the span where
+    (N/S) or columns (E/W) of B nearest the shared edge (default per axis,
+    ``connection_remap.strip_depth``), clamped to the span where
     A's edge and B overlap. Row-major order."""
+    if depth is None:
+        depth = strip_depth(EDGE_TO_DIRECTION[edge])
     aw, ah = a_dims
     bw, bh = b_dims
     dx, dy = origin
@@ -1376,7 +1610,7 @@ def compute_seam_entry(
         "edge": conn["edge"],
         "direction": EDGE_TO_DIRECTION[conn["edge"]],
         "origin": list(conn["origin"]),
-        "depth": SEAM_DEPTH,
+        "depth": strip_depth(EDGE_TO_DIRECTION[conn["edge"]]),
         "strip": strip,
         "missing": missing,
         "strip_unique": len(strip_u),
@@ -1411,7 +1645,10 @@ def seam_check(map_id: int) -> dict:
             conn, (a.grid.xsize, a.grid.ysize), (b.grid.xsize, b.grid.ysize),
             a_hashes, b_hash_at,
         ))
-    return {"map_id": map_id, "depth": SEAM_DEPTH, "pool_unique": len(a_hashes), "seams": seams}
+    return {
+        "map_id": map_id, "depth_ns": STRIP_DEPTH_NS, "depth_ew": STRIP_DEPTH_EW,
+        "pool_unique": len(a_hashes), "seams": seams,
+    }
 
 
 # ---------------------------------------------------------------------------

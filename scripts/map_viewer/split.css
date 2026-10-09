@@ -1,0 +1,44 @@
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:#1a1a1a;color:#ddd;font:13px/1.4 monospace;display:flex;flex-direction:column}
+#top{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 8px;background:#252525;border-bottom:1px solid #444}
+#top a{color:#8cf;text-decoration:none;font-size:16px}
+#title{color:#8cf;margin-right:4px}
+button,select,input{background:#111;border:1px solid #555;color:#eee;font:12px monospace;padding:4px 7px;border-radius:3px}
+button{cursor:pointer}
+button:hover{border-color:#888}
+input[type=number]{width:44px}
+input[type=checkbox]{padding:0}
+label{display:flex;align-items:center;gap:3px;color:#aaa}
+.seg-group{display:flex}
+.seg{border-radius:0;margin-left:-1px}
+.seg:first-child{border-radius:3px 0 0 3px}
+.seg:last-child{border-radius:0 3px 3px 0}
+.seg.on{background:#2a4a6a;border-color:#5af}
+#pieces{display:flex;gap:3px}
+.pc{min-width:30px;font-weight:bold;color:#000;border:2px solid transparent}
+.pc.on{border-color:#fff;box-shadow:0 0 0 1px #000}
+#main{flex:1;display:flex;min-height:0}
+#stage{flex:1;overflow:auto;background:#0d0d0d;min-width:0}
+#cv{display:block;image-rendering:pixelated}
+#panel{width:430px;flex-shrink:0;overflow:auto;padding:8px;border-left:1px solid #444;background:#1e1e1e}
+#status{color:#aaa;margin-bottom:6px;white-space:pre-wrap}
+table{border-collapse:collapse;width:100%;margin-bottom:8px}
+th,td{padding:3px 4px;text-align:right;border-bottom:1px solid #333}
+th{color:#888;font-weight:normal;font-size:11px}
+td:first-child,th:first-child{text-align:left}
+tbody tr{cursor:pointer}
+tbody tr.on{background:#2a2a2a}
+.sw{display:inline-block;width:12px;height:12px;vertical-align:middle;margin-right:4px;border:1px solid #000}
+.over{color:#f66;font-weight:bold}
+.ok{color:#6d6}
+.stale{color:#777}
+#warn{list-style:none;margin-bottom:8px}
+#warn li{color:#fb5;padding:2px 0}
+#help{color:#888;font-size:11px;line-height:1.5}
+@media (max-width:800px){
+  #main{flex-direction:column}
+  #stage{flex:none;height:58vh}
+  #panel{width:auto;border-left:none;border-top:1px solid #444;flex:1}
+  button,select,input{padding:7px 9px}
+}

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Split planner</title>
+<link rel="stylesheet" href="/split-assets/split.css">
+</head>
+<body>
+<header id="top">
+  <a id="back" href="/">&#8962;</a>
+  <b id="title">Split</b>
+  <div id="pieces" role="group" aria-label="Pieces"></div>
+  <button id="addpiece" type="button" title="Add a piece">+ piece</button>
+  <div class="seg-group" role="group" aria-label="Tool">
+    <button class="seg tool" data-tool="rect" type="button" title="Rectangle fill (r)">rect</button>
+    <button class="seg tool" data-tool="paint" type="button" title="Brush (b)">brush</button>
+    <button class="seg tool" data-tool="fill" type="button" title="Flood-fill a region (f)">fill</button>
+    <button class="seg tool on" data-tool="pan" type="button" title="Scroll / pan (h)">pan</button>
+  </div>
+  <select id="brush" title="Brush size">
+    <option value="1">1&times;1</option><option value="3">3&times;3</option><option value="5">5&times;5</option>
+  </select>
+  <button id="undo" type="button" title="Undo (ctrl+z)">undo</button>
+  <button id="reset" type="button" title="Put every cell back in piece 1 (undoable)">reset</button>
+  <button id="zout" type="button" title="Zoom out (-)">&minus;</button>
+  <button id="zin" type="button" title="Zoom in (+)">+</button>
+  <label title="Cells visible left/right of the player (engine: 7)">H <input id="hdepth" type="number" min="1" max="7" value="7"></label>
+  <label title="Cells visible above/below the player (engine: 5, the 5th half-visible)">V <input id="vdepth" type="number" min="1" max="7" value="5"></label>
+  <label title="Game-wide near-duplicate tile merge (lossy). Off = lossless metatile dedup only. Applies to this page only, not the viewer's knobs."><input id="merge" type="checkbox"> merge</label>
+  <label title="Count only art visible from cells the player can stand on in that piece; everything else in the piece becomes the void metatile"><input id="sight" type="checkbox" checked> sight only</label>
+  <label><input id="showview" type="checkbox" checked> view</label>
+  <label><input id="showevents" type="checkbox" checked> events</label>
+  <label title="Red = blocked, amber = walkable but unreachable (no warp arrival or connection leads there); untinted = cells the player can stand on"><input id="showcoll" type="checkbox"> collision</label>
+  <button id="exact" type="button" title="Real quantize + emit per piece (slow)">exact</button>
+  <button id="save" type="button">save</button>
+</header>
+<main id="main">
+  <div id="stage"><canvas id="cv"></canvas></div>
+  <aside id="panel">
+    <div id="status">loading&hellip;</div>
+    <table id="tbl">
+      <thead><tr>
+        <th>piece</th><th>cells</th><th>bbox</th><th title="metatiles under its own cells">own mt</th>
+        <th title="extra metatiles under other pieces' cells it can see">+seen</th>
+        <th title="own + seen + void, cap 1024">metatiles</th>
+        <th title="8x8 tiles before quantization (proxy) + tile 0, cap 1024">tiles</th>
+        <th title="real quantize + emit (exact button)">exact t/mt</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <ul id="warn"></ul>
+    <div id="help">
+      Every cell belongs to one piece; paint with the selected piece. The <b>view</b> overlay
+      darkens everything the selected piece can't see: what stays lit is the art its tileset
+      must hold. With <b>sight only</b> that is everything within H/V of a cell the player can
+      stand on in this piece (reachable from any warp arrival or connection crossing; white
+      dots) and the rest of the piece becomes the void metatile; without it, all of the
+      piece's own cells + other pieces' cells within H/V of any own cell.
+      <b>Tiles</b> are counted before quantization, so the real number can only be lower;
+      <b>exact</b> runs the real emit. Red &times; = a cell the player can see that the engine
+      will draw as the border block (no N/S/E/W connection covers it, e.g. the diagonal piece
+      at a four-way corner). Only checked when every piece is a rectangle.
+    </div>
+  </aside>
+</main>
+<script src="/split-assets/split.js"></script>
+</body>
+</html>
