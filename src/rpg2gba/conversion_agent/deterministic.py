@@ -97,7 +97,6 @@ _DIALOGUE_STRIP_RE = re.compile(
     r"|set_fog2"
     r"|XInput\.vibrate"
     r"|pbSEPlay"
-    r"|pbPlayCry"
     r"|\$scene\.spriteset\.addUserSprite"
     r"|(?:Kernel\.)?pbRemoveDependency2"
     r"|(?:Kernel\.)?pbAddDependency2"
@@ -251,6 +250,10 @@ _TEXT_CODE_SUBS: tuple[_TextSub, ...] = (
     (re.compile(r"\\\."), "{PAUSE 0x0F}"),  # 15 frames — same value vanilla uses around ellipses
     (re.compile(r"\\\|"), "{PAUSE 0x3C}"),  # 1 second at 60fps; \wt's first-guess family
     (_COLOR_CODE_RE, ""),
+    # Uranium uses capital `\N` as a line break (Map047 EV013); emit the
+    # literal two-char `\n` (a callable repl, so re.sub doesn't turn it into
+    # a real newline). Lowercase `\n` is untouched.
+    (re.compile(r"\\N"), lambda _m: "\\n"),
     (_DRAWTEXTEX_BR_RE, "\\n"),
     (_DRAWTEXTEX_TAG_RE, ""),
     *_TEXT_SUBS,  # \PN -> {PLAYER}, the one pattern shared with the legacy path

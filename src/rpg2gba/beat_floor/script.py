@@ -601,6 +601,14 @@ SCRIPT_HEAD_EXTRACTORS: dict[str, ScriptHeadExtractor] = {
     # 101__PField_Field.rb:2863-2870 -- Kernel.pbPlayTrainerIntroME(trtype),
     # nothing else assertable.
     "pbTrainerIntro": _audio("pbTrainerIntro"),
+    # pbPlayCry(PBSpecies::X) -> playmoncry + waitmoncry; audio-only.
+    "pbPlayCry": _audio("pbPlayCry"),
+    # Party pick, NPC trade and the nickname prompt are real menu/state flows
+    # (ChoosePartyMon / sIngameTrades / ChangePokemonNickname), not
+    # presentation: service, like pbChooseNuclearCurePokemon.
+    "pbChoosePokemon": _service("choose_pokemon"),
+    "pbStartTrade": _service("ingame_trade"),
+    "pbTextEntry": _service("nickname_entry"),
 
     # state writes -- extracted by story_state.extract, not here (see module
     # docstring). Includes pbSet, the bare-call sibling of $game_variables[N]=

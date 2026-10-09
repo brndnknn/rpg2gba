@@ -24,6 +24,7 @@ from pathlib import Path
 
 import click
 
+from rpg2gba import ingame_trades
 from rpg2gba.conversion_agent import deterministic, fork_index, hand_overrides, transpiler
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry
 from rpg2gba.pbs_converter import heal_locations
@@ -568,6 +569,25 @@ def transpile_corpus(
         metadata_header=out_dir / "include" / "constants" / "metadata.h",
         staged_map_ids=frozenset(map_ids),
     )
+    # INGAME_TRADE_* const -> staged trade spec, from the same detector the
+    # assembler's S8b5b pass uses (ingame_trades.detect_trades_in_map), so the
+    # transpiler's pbStartTrade idiom can assert the call against the row.
+    # A map the detector rejects (unstaged species, over-long name, ...) gets
+    # no entry; its trade event then queues loudly instead of emitting.
+    _ingame_resolver = ingame_trades.load_species_resolver(
+        reference_dir, species_manifest_path)
+    _ingame_limits = ingame_trades.load_name_limits(
+        Path(os.environ.get("RPG2GBA_POKEEMERALD", "engine")))
+    for _map_id in map_ids:
+        _map_json = json.loads(
+            (maps_dir / f"Map{_map_id:03d}.json").read_text(encoding="utf-8"))
+        try:
+            _specs = ingame_trades.detect_trades_in_map(
+                _map_json, _map_id, _ingame_resolver, _ingame_limits)
+        except ValueError as exc:
+            logger.warning("Map%03d: in-game trade not staged (%s)", _map_id, exc)
+            continue
+        ctx.ingame_trades.update({spec.const: spec for spec in _specs})
     # Sheet name -> OBJ_EVENT_GFX_* for the code-41 live sprite swap. Read
     # unvalidated here (npc_gfx.load_npc_gfx_map's header check belongs to the
     # sprite pass); an unmapped sheet queues in the transpiler either way.
@@ -627,6 +647,8 @@ def transpile_corpus(
         # the git-tracked index can't see them. Common events never emit
         # setrespawn (they always queue), so the CE gate below needs no extras.
         extras |= set(ctx.heal_locations.values())
+        # INGAME_TRADE_* ids live in the assembler's generated enum fragment.
+        extras |= set(ctx.ingame_trades)
         violations = fork_index.verify_script(pory_text, index, extra_symbols=extras)
         if violations:
             lines = "\n".join(

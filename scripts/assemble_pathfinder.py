@@ -792,6 +792,52 @@ def run_rematch_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> None
 
 
 # ---------------------------------------------------------------------------
+# S8b5b: NPC in-game trade staging
+# ---------------------------------------------------------------------------
+
+def run_ingame_trade_pass(out: Path, fork: Path, dry_run: bool) -> None:
+    """Stage native `sIngameTrades[]` rows + `INGAME_TRADE_*` enum members for the
+    slice's Uranium `pbStartTrade` events (`rpg2gba.ingame_trades`).
+
+    Same hook shape as the rematch pass: two committed `URANIUM PATHFINDER SLICE`
+    `#include` hooks (`constants/trade.h`, `src/data/trade.h`) pull in gitignored
+    fragments, both ALWAYS written (empty-safe stubs for zero trades). Scans
+    `maps/` only (it holds the split pieces; `maps_presplit/` is the unsplit
+    original). Must run after the species pass: species gate on the staging manifest.
+    """
+    logger.info("=== S8b5b: NPC in-game trade staging ===")
+    from rpg2gba import ingame_trades as it
+
+    resolver = it.load_species_resolver(
+        Path("reference"), out / "species" / "species_manifest.json"
+    )
+    specs = it.scan_trades(out / "maps", SLICE_MAP_IDS, resolver, it.load_name_limits(fork))
+    logger.info("  %d in-game trade(s)", len(specs))
+    for s in specs:
+        logger.info(
+            "    map %d EV%03d p%d %s: give %s for %s (%r from %r)",
+            s.map_id, s.event_id, s.page, s.const, s.species, s.requested_species,
+            s.nickname, s.ot_name,
+        )
+
+    dest = out / "ingame_trades"
+    _write(dest / it.ENUM_FILENAME, it.emit_enum(specs), "in-game trade enum members", dry_run)
+    _write(dest / it.TABLE_FILENAME, it.emit_table(specs), "sIngameTrades rows", dry_run)
+    _write(
+        dest / "ingame_trade_manifest.json",
+        json.dumps(
+            {"version": 1, "generator": it.GENERATOR, "trades": it.build_manifest_records(specs)},
+            indent=2, ensure_ascii=False,
+        ) + "\n",
+        "in-game trade manifest", dry_run,
+    )
+    _copy(dest / it.ENUM_FILENAME, fork / "include" / "constants" / it.ENUM_FILENAME,
+          "in-game trade enum members", dry_run)
+    _copy(dest / it.TABLE_FILENAME, fork / "src" / "data" / it.TABLE_FILENAME,
+          "sIngameTrades rows", dry_run)
+
+
+# ---------------------------------------------------------------------------
 # S8b6: Heal-location overlay
 # ---------------------------------------------------------------------------
 
@@ -1384,6 +1430,8 @@ def main() -> int:
                     help="Skip S8b5 (PokePod rematch table already staged).")
     ap.add_argument("--skip-heal-locations", action="store_true",
                     help="Skip S8b6 (heal-location overlay already staged).")
+    ap.add_argument("--skip-ingame-trades", action="store_true",
+                    help="Skip S8b5b (NPC in-game trade rows already staged).")
     args = ap.parse_args()
 
     repo_root = Path(__file__).parent.parent
@@ -1432,6 +1480,9 @@ def main() -> int:
 
     if not args.skip_rematches:
         run_rematch_pass(out, fork, consts, args.dry_run)
+
+    if not args.skip_ingame_trades:
+        run_ingame_trade_pass(out, fork, args.dry_run)
 
     if not args.skip_heal_locations:
         run_heal_location_pass(out, fork, consts, args.dry_run)

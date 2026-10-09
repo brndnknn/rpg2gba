@@ -636,11 +636,15 @@ def test_stripped_codes_produce_no_output_or_queue(ctx: T.TranspileContext, code
     res = run_event(ctx, [[cmd(code), cmd(T.EXIT_EVENT)]], trigger=1)
     assert res.unhandled == []
     # trigger 1 (player-touch) with a non-empty body (the explicit EXIT_EVENT
-    # "end") now gets lock/release wrapping (no faceplayer).
+    # "end") now gets lock/release wrapping (no faceplayer). Expectation
+    # changed 2026-10-09: the early exit emits the page's `release` BEFORE its
+    # `end` (the closing release is skipped by `end`, which left the player
+    # frozen on every early exit), so the body reads lock/release/end.
     assert res.text.splitlines() == [
         "# npc",
         "script Map049_EV005_Page1 {",
         "    lock",
+        "    release",
         "    end",
         "    release",
         "    end",
@@ -960,8 +964,11 @@ def test_inline_choice_positive_ifcancel_branches_on_multi_b_pressed(
     assert "    copyvar(VAR_TEMP_MOVE_CHOICE, VAR_RESULT)" in res.text
 
 
-def test_inline_choice_negative_ifcancel_queues(ctx: T.TranspileContext) -> None:
-    text = "Pick one?\\ch[200,-1,First,Second]"
+def test_inline_choice_minus_two_ifcancel_still_queues(ctx: T.TranspileContext) -> None:
+    """Only ifCancel == -1 gets the 0x7FFF cancel sentinel (2026-10-09); any
+    other negative still queues. (This test was `-1` and asserted a queue
+    until the sentinel landed; -1 is covered in test_transpiler_idioms.py.)"""
+    text = "Pick one?\\ch[200,-2,First,Second]"
     res = run_event(ctx, [[cmd(T.SHOW_TEXT, [text])]], trigger=0)
     assert len(res.unhandled) == 1
     assert res.unhandled[0].command_code == T.SHOW_TEXT

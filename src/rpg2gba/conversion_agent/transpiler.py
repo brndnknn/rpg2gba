@@ -54,10 +54,13 @@ from rpg2gba.conversion_agent.flag_registry import (
 )
 from rpg2gba.conversion_agent import ruby_idioms
 from rpg2gba.conversion_agent.inline_choice import (
+    CANCEL_SENTINEL,
     InlineChoiceError,
+    cancel_sentinel_read_problem,
     has_inline_choice,
     parse_inline_choice,
 )
+from rpg2gba import ingame_trades as _trades
 from rpg2gba.pbs_converter._naming import to_constant
 from rpg2gba.pbs_converter.heal_locations import _CALL_RE as _SET_POKEMON_CENTER_RE
 from rpg2gba.tileset_converter.npc_gfx import is_door_sheet
@@ -178,8 +181,22 @@ _RECEIVE_ITEM_RE = re.compile(
 # _RECEIVE_ITEM_RE: a bare complete call with a literal symbol only — a dynamic
 # argument or a guard modifier still falls through to the queue.
 _DELETE_ITEM_RE = re.compile(
-    r"^\s*\$PokemonBag\.pbDeleteItem\(\s*(?:::)?PBItems::(\w+)\s*"
+    r"^\s*\$PokemonBag\.pbDeleteItem\(\s*(?::|(?:::)?PBItems::)(\w+)\s*"
     r"(?:,\s*(\d+)\s*)?\)\s*$"
+)
+
+# `pbPlayCry(PBSpecies::X)` / `pbPlayCry(:X)` — play the species cry. Fork:
+# `playmoncry species, mode` (engine/asm/macros/event.inc:1468) + `waitmoncry`
+# (:1723); CRY_MODE_NORMAL = 0 (engine/include/constants/sound.h). Previously
+# swallowed by deterministic._DIALOGUE_STRIP_RE (silent drop, no queue row).
+_PLAY_CRY_RE = re.compile(
+    r"^\s*pbPlayCry\(\s*(?::|(?:::)?PBSpecies::)([A-Za-z0-9_]+)\s*\)\s*$"
+)
+
+# `$Trainer.party.length <op> N` as a code-111 script condition. The party
+# count is an unsigned count, so only the zero / non-zero tests are mapped.
+_PARTY_LENGTH_CMP_RE = re.compile(
+    r"^\s*\$Trainer\.party\.length\s*(<=|==|<|>=|>|!=)\s*(\d+)\s*$"
 )
 
 # "$game_player.AXIS OP LITERAL" — a one-shot position guard/boundary check
@@ -277,6 +294,64 @@ _ROCK_SMASH_RE = re.compile(r"^\s*(?:Kernel\.)?pbRockSmash\s*$")
 # wrapper observed anywhere in the corpus) — a negated form is not handled
 # here and falls through to the generic script-condition queue like any
 # other non-matching type-12 shape.
+# pbMoveTutorChoose(PBMoves::NAME) as a code-111 script condition (Map046 EV003
+# page 1, Nowtoch City's tutor: eleven near-identical blocks). Essentials opens
+# the party screen, the player picks a compatible mon, the move is taught; the
+# call is true iff a move was taught. Exactly one move argument -- the optional
+# movelist / bymachine arguments are a different shape and fall through to the
+# generic script-condition queue.
+_MOVE_TUTOR_CHOOSE_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbMoveTutorChoose\(\s*(?:::)?PBMoves::([A-Za-z0-9_]+)\s*\)\s*$"
+)
+
+# -- party-pick family (Map046 EV014 NPC trade, EV002 Name Rater) -------------
+# Essentials' `pbChoosePokemon(v, n[, proc])` stores the chosen party index in
+# RMXP variable v (-1 on cancel) and the mon's name in variable n.
+#
+# Plain form -> the fork's party-only picker. `special(ChoosePartyMon)` (not
+# `chooseboxmon`) is deliberate: the Name Rater's readers are mixed --
+# `ScriptGetPartyMonSpecies` indexes `gPlayerParty[gSpecialVar_0x8004]` directly
+# (engine/src/field_specials.c:1641) and would read out of bounds on a PC-box
+# pick (PC_MON_CHOSEN), while BufferMonNickname / IsMonOTIDNotPlayers /
+# MonOTNameNotPlayer / TryPutNameRaterShowOnTheAir / ChangePokemonNickname all
+# go through GetSelectedBoxMonFromPcOrParty (engine/src/pokemon.c:7384,
+# tv.c:3267-3302, field_specials.c:1677), which is correct for a party index.
+# Party-only is also exactly what Essentials' screen offers.
+_PICK_PLAIN_RE = re.compile(r"^\s*pbChoosePokemon\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*$")
+_PICK_EGG_COND_RE = re.compile(r"^\s*pbGetPokemon\(\s*(\d+)\s*\)\.egg\?\s*$")
+_PICK_FOREIGN_COND_RE = re.compile(
+    r"^\s*pbGetPokemon\(\s*(\d+)\s*\)\.isForeign\?\(\s*\$Trainer\s*\)\s*$"
+)
+_PICK_PARTY_ROW_RE = re.compile(r"^\s*pkmn=\$Trainer\.party\[\s*pbGet\(\s*(\d+)\s*\)\s*\]\s*$")
+_PICK_SPECIES_ROW_RE = re.compile(r"^\s*species=PBSpecies\.getName\(\s*pkmn\.species\s*\)\s*$")
+_PICK_TEXTENTRY_ROW_RE = re.compile(
+    r'^\s*pbTextEntry\(\s*_I\(\s*"[^"]*"\s*,\s*species\s*\)\s*,\s*0\s*,\s*'
+    r"MAXPOKENAMELENGTH\s*,\s*(\d+)\s*,\s*pkmn\s*\)\s*$"
+)
+_PICK_RENAME_ROW_RE = re.compile(r"^\s*pkmn\.name=pbGet\(\s*(\d+)\s*\)\s*$")
+_PICK_NAME_CHANGED_COND_RE = re.compile(
+    r'^\s*\$game_variables\[\s*(\d+)\s*\]\s*==\s*""\s*\|\|\s*'
+    r"\$game_variables\[\s*\1\s*\]\s*==\s*pbGet\(\s*(\d+)\s*\)\s*$"
+)
+# Proc-filtered form (NPC trade): the filter is exactly "not an egg and species
+# == X" -- the one shape ingame_trades._CHOOSE_RE also accepts.
+_PICK_PROC_RE = re.compile(
+    r"^\s*pbChoosePokemon\(\s*(\d+)\s*,\s*(\d+)\s*,\s*proc\s*\{\s*\|(\w+)\|\s*"
+    r"!\s*\3\.egg\?\s*(?:and|&&)\s*\3\.species\s*==\s*(?:::)?PBSpecies::(\w+)\s*\}\s*\)\s*$"
+)
+# RMXP Control Variables comparison op codes (code 111, type 1) that mean
+# "a mon was chosen" (var != -1, >= 0, > -1) / "cancelled" (< 0, == -1, <= -1).
+_PICK_CHOSEN_CMPS = frozenset({(5, -1), (1, 0), (3, -1)})
+_PICK_CANCEL_CMPS = frozenset({(4, 0), (0, -1), (2, -1)})
+# Placeholder standing in for a recorded name variable while a text row goes
+# through translate_text_codes (which rejects `\v[n]` and any brace).
+_STRVAR_PLACEHOLDER = "§STRVAR1§"
+
+# Poryscript has no bare infinite loop (`while (true)` does not parse: the
+# condition must be var()/flag()/...; verified against the real compiler
+# 2026-10-09). A u16 var is always >= 0, so this is the always-true condition.
+_LOOP_ALWAYS_TRUE = "var(VAR_RESULT) >= 0"
+
 _HAS_SPECIES_RE = re.compile(r"^\s*pbHasSpecies\?\(\s*::PBSpecies::([A-Za-z0-9_]+)\s*\)\s*$")
 
 # Character-facing conditional (RMXP condition kind 6: `[6, character_id,
@@ -1095,6 +1170,14 @@ class TranspileContext:
     # queues, same disposition as an unresolved item symbol above).
     species: dict[str, str] = field(default_factory=dict)
 
+    # Uranium move internal name (``PBMoves::FEINT`` -> ``FEINT``) -> its
+    # MOVE_* constant, from reference/uranium_id_map.json's "moves" table
+    # (CLAUDE.md §4.3). Empty means "not wired by the driver": `move_constant`
+    # then lazy-loads the repo's id map itself (the driver does not populate
+    # this field yet). When ``fork_item_constants`` is non-empty a resolved
+    # constant must also exist in the fork (§4.7 forward check).
+    moves: dict[str, str] = field(default_factory=dict)
+
     # SPECIES_* constants that species_converter.stage has actually staged
     # into the fork (species_manifest.json), i.e. that the fork's headers
     # really define. A name resolving in `species` above is NOT sufficient
@@ -1154,6 +1237,21 @@ class TranspileContext:
     # ``_emit_script_call``) queues instead of inventing a HEAL_LOCATION_*
     # (CLAUDE.md §4.7 forward check).
     heal_locations: dict[tuple[int, int, int], str] = field(default_factory=dict)
+
+    # INGAME_TRADE_* const -> the staged ``ingame_trades.InGameTradeSpec`` for
+    # every NPC trade the driver detected (single source of truth for the
+    # sIngameTrades row). The pair idiom for ``pbChoosePokemon(.., proc{..})`` +
+    # ``pbStartTrade`` asserts the call text agrees with this spec; an event
+    # with no entry here queues rather than emitting an unverifiable trade.
+    ingame_trades: dict[str, "_trades.InGameTradeSpec"] = field(default_factory=dict)
+
+    # What the current page's closing wrapper releases (``release`` for the
+    # lock/faceplayer and lock pages, ``releaseall`` for lockall), set by
+    # ``transpile_event`` per page. RMXP's Exit Event Processing (115) leaves
+    # the script early, so it must emit this before its ``end`` or the player
+    # stays frozen. ``None`` for pages with no lock wrapper and for common
+    # events (those ``return``).
+    exit_epilogue: str | None = None
 
     # (uranium_map_id, x, y) -> HEAL_LOCATION_* constant for every minted heal
     # location's tile. Lets `Kernel.pbSetHealingSpot(m,x,y)` resolve ONLY when
@@ -1264,6 +1362,18 @@ class TranspileContext:
         assert self.event_id is not None
         return self.registry.mint_self_switch(self.map_id, self.event_id, letter)
 
+    def move_constant(self, internal_name: str) -> str | None:
+        """Uranium move internal name -> a MOVE_* constant the fork defines,
+        else None (caller queues). See the ``moves`` field."""
+        if not self.moves:
+            self.moves = _default_move_table()
+        const = self.moves.get(internal_name)
+        if const is None:
+            return None
+        if self.fork_item_constants and const not in self.fork_item_constants:
+            return None
+        return const
+
     def staged_species_constant(self, internal_name: str) -> str | None:
         """Resolve a Uranium species internal name to its SPECIES_* constant,
         but ONLY if the fork's headers actually define it. ``None`` (caller
@@ -1280,6 +1390,15 @@ class TranspileContext:
         if const in self.staged_species or const in self.vanilla_species:
             return const
         return None
+
+
+def _default_move_table() -> dict[str, str]:
+    """The repo's id map "moves" table (used only when the driver has not
+    wired `TranspileContext.moves`)."""
+    from rpg2gba.pbs_converter._id_map import IdMap
+
+    path = Path(__file__).resolve().parents[3] / "reference" / "uranium_id_map.json"
+    return dict(IdMap.load(path).by_category["moves"])
 
 
 # -- control-flow tree --------------------------------------------------------
@@ -1330,6 +1449,38 @@ class StarterRivalBattle(Node):
     ``IfNode`` and ``first_index`` the index of the 355 row."""
 
     cond: "IfNode | None" = None
+
+
+@dataclass
+class PickTrade(Node):
+    """Synthetic node: ``pbChoosePokemon(v, n, proc{not egg and species==X})``
+    plus the code-111 "a mon was chosen" test that immediately follows it
+    (Map046 EV014). Built by ``_PageEmitter._collapse_pick_groups``; ``cond`` is
+    the original ``IfNode`` and ``index`` the 355 row's."""
+
+    cond: "IfNode | None" = None
+    chosen_var: int = 0
+    requested: str = ""  # Uranium internal species name from the proc
+
+
+@dataclass
+class NameEntry(Node):
+    """Synthetic node: the three-row ``pkmn=$Trainer.party[pbGet(v)]`` /
+    ``species=PBSpecies.getName(pkmn.species)`` / ``pbTextEntry(..., m, pkmn)``
+    nickname-entry statement group (Map046 EV002)."""
+
+    chosen_var: int = 0
+    new_name_var: int = 0
+
+
+@dataclass
+class NameApply(Node):
+    """Synthetic node: ``pkmn=$Trainer.party[pbGet(v)]`` + ``pkmn.name=pbGet(m)``
+    -- applying the entered name to the mon, which the native rename has
+    already done."""
+
+    chosen_var: int = 0
+    new_name_var: int = 0
 
 
 def parse_tree(commands: list[dict]) -> list[Node]:
@@ -1522,6 +1673,47 @@ def hoistable_label_region(commands: list[dict]) -> tuple[int, int] | None:
                 and commands[j].get("code") == EXIT_EVENT):
             return i, j + 1  # region owns the `end`
     return i, len(commands)  # runs to the end of the page
+
+
+def loop_label_region(commands: list[dict]) -> tuple[int, int] | None:
+    """The backward-jump loop shape: ``(label_index, region_end_exclusive)``.
+
+    For a page `hoistable_label_region` rejects because the label sits inside
+    a choice/branch arm. Qualifies when: the page has exactly one label; it has
+    at least one ``119`` jump; every ``119`` names it, comes AFTER it and lies
+    inside the label's enclosing block (the label's region = label ..
+    first following row of lower indent, or the page end); and every jump is
+    the last statement of its own block (next row has lower indent) -- poryscript
+    requires ``continue`` to be last in its scope. Map046 EV003 page 1 (the
+    tutor's "teach another?" loop) is the corpus case. None otherwise: the
+    118/119 rows then queue as before."""
+    label_positions = [i for i, c in enumerate(commands) if c.get("code") == LABEL]
+    if len(label_positions) != 1:
+        return None
+    i = label_positions[0]
+    indent = commands[i].get("indent", 0)
+    name = (commands[i].get("parameters") or [""])[0]
+    end = len(commands)
+    for j in range(i + 1, len(commands)):
+        if commands[j].get("indent", 0) < indent:
+            end = j
+            break
+    jumps = [j for j, c in enumerate(commands) if c.get("code") == JUMP_TO_LABEL]
+    if not jumps:
+        return None
+    for j in jumps:
+        if (commands[j].get("parameters") or [None])[0] != name:
+            return None
+        if not (i < j < end):
+            return None
+        # RMXP pads each block with code-0 rows at the block's own indent.
+        k = j + 1
+        while k < len(commands) and commands[k].get("code") == 0:
+            k += 1
+        nxt = commands[k].get("indent", 0) if k < len(commands) else -1
+        if nxt >= commands[j].get("indent", 0):
+            return None
+    return i, end
 
 
 def _load_starter_selector_scene(reference_dir: Path) -> dict:
@@ -2040,6 +2232,13 @@ class _PageEmitter:
         # transpile_page for the one region it could prove terminates.
         # Anything not in here queues, both at the label and at every jump.
         self.label_blocks: dict[str, str] = {}
+        # RMXP label names emitted as a Poryscript loop (see
+        # `loop_label_region`): the label opens a `while`, each jump is a
+        # `continue`. Filled by transpile_page.
+        self.loop_labels: set[str] = set()
+        # The page's flat command list (set by transpile_page) -- lets an
+        # emitter check page-wide facts, e.g. every read of a \ch variable.
+        self.page_commands: list[dict] = []
         # Uranium variable id -> the scratch vars standing in for an array
         # value it was assigned (see _emit_array_literal).
         self._array_vars: dict[int, list[str]] = {}
@@ -2056,13 +2255,58 @@ class _PageEmitter:
         # string, the ordered values) for a \v[N] text substitution
         # (see ruby_idioms.match_var_from_list_index / _emit_value_var_text).
         self._value_text_choices: dict[int, tuple[str, list[str]]] = {}
+        # Party-pick family state (see _PICK_PLAIN_RE): RMXP var holding the
+        # chosen party index / the mon's name / the nickname just entered.
+        self._pick_chosen: int | None = None
+        self._pick_name: int | None = None
+        self._pick_new_name: int | None = None
+        # (spec, chosen var) while the then-arm of a PickTrade is emitting, so
+        # the pbStartTrade row inside it resolves; _trade_consumed records that
+        # it did.
+        self._active_trade: tuple["_trades.InGameTradeSpec", int] | None = None
+        self._trade_consumed = False
+
+    def _emit_loop(self, nodes: list[Node], split: int) -> list[str]:
+        """``nodes[split]`` is a loop label: what precedes it emits normally,
+        everything after it (the rest of the label's enclosing block -- the
+        region `loop_label_region` proved) becomes a ``while`` body whose
+        every ``119`` is a ``continue`` and which ``break``s at the end.
+        Queues (region dropped) if a ``continue`` ended up inside an emitted
+        ``switch``: verified against the real compiler, poryscript rejects it
+        ("'continue' must be the last statement in block scope")."""
+        label_cmd = nodes[split]
+        lines = self.emit_nodes(nodes[:split])
+        body = self.emit_nodes(nodes[split + 1:])
+        stripped = [ln.strip() for ln in body]
+        if "continue" in stripped and any(ln.startswith("switch (") for ln in stripped):
+            return lines + [self.ctx.queue(
+                label_cmd.index, LABEL,
+                "RMXP loop label: a jump back sits inside an emitted switch, "
+                "where poryscript rejects `continue` — loop not emitted",
+            )]
+        return [
+            *lines,
+            f"while ({_LOOP_ALWAYS_TRUE}) {{",
+            *[f"    {ln}" for ln in body],
+            "    break",
+            "}",
+        ]
 
     # -- leaf emitters -------------------------------------------------------
 
     def emit_nodes(self, nodes: list[Node]) -> list[str]:
+        if self.loop_labels:
+            split = next((
+                k for k, n in enumerate(nodes)
+                if type(n) is Leaf and n.cmd.get("code") == LABEL
+                and str((n.cmd.get("parameters") or [""])[0]) in self.loop_labels
+            ), None)
+            if split is not None:
+                return self._emit_loop(nodes, split)
         nodes = _merge_consecutive_routes(nodes)
         nodes = _merge_script_call_rows(nodes)
         nodes = self._collapse_starter_rival_battles(nodes)
+        nodes = self._collapse_pick_groups(nodes)
         warp_pos = next(
             (i for i, node in enumerate(nodes) if _is_real_warp_leaf(node)), None
         )
@@ -2117,6 +2361,9 @@ class _PageEmitter:
         if isinstance(node, TextRun):
             if has_inline_choice(node.text):
                 return self._emit_inline_choice(node)
+            named_text = self._emit_pick_name_text(node)
+            if named_text is not None:
+                return named_text
             value_text = self._emit_value_var_text(node.text)
             if value_text is not None:
                 return value_text
@@ -2141,6 +2388,12 @@ class _PageEmitter:
 
         if isinstance(node, StarterRivalBattle):
             return self._emit_starter_rival_battle(node)
+        if isinstance(node, PickTrade):
+            return self._emit_pick_trade(node)
+        if isinstance(node, NameEntry):
+            return self._emit_name_entry(node)
+        if isinstance(node, NameApply):
+            return self._emit_name_apply(node)
         if isinstance(node, IfNode):
             return self._emit_if(node)
         if isinstance(node, ChoiceNode):
@@ -2166,6 +2419,8 @@ class _PageEmitter:
             # the label is where fall-through enters the hoisted block, the
             # jump is where a branch enters it.
             name = str(params[0]) if params else ""
+            if code == JUMP_TO_LABEL and name in self.loop_labels:
+                return ["continue"]
             block = self.label_blocks.get(name)
             if block is None:
                 return [ctx.queue(
@@ -2178,7 +2433,12 @@ class _PageEmitter:
         if code == EXIT_EVENT:
             # In a called common event, exiting means returning to the caller;
             # `end` there would kill the whole script context.
-            return ["return" if ctx.common_event_id is not None else "end"]
+            if ctx.common_event_id is not None:
+                return ["return"]
+            # Leave the script early, but release first: the page's closing
+            # release/releaseall (added by transpile_event) is skipped by `end`,
+            # which froze the player on every early exit (Map046 EV002).
+            return [*([ctx.exit_epilogue] if ctx.exit_epilogue else []), "end"]
         if code == ERASE_EVENT:
             if ctx.event_id is None:
                 return [ctx.queue(node.index, code, "erase event in a common event")]
@@ -2385,6 +2645,18 @@ class _PageEmitter:
         has_species = self._emit_has_species_idiom(node)
         if has_species is not None:
             return has_species
+        move_tutor = self._emit_move_tutor_choose_idiom(node)
+        if move_tutor is not None:
+            return move_tutor
+        for pick_idiom in (
+            self._emit_pick_cancel_idiom,
+            self._emit_pick_egg_idiom,
+            self._emit_pick_foreign_idiom,
+            self._emit_pick_name_changed_idiom,
+        ):
+            pick = pick_idiom(node)
+            if pick is not None:
+                return pick
         canlose_battle = self._emit_canlose_trainer_battle_idiom(node)
         if canlose_battle is not None:
             return canlose_battle
@@ -2397,6 +2669,9 @@ class _PageEmitter:
         pokerus = self._emit_pokerus_branch(node)
         if pokerus is not None:
             return pokerus
+        party_len = self._emit_party_length_idiom(node)
+        if party_len is not None:
+            return party_len
         expr = condition_expr(node.cmd.get("parameters", []), self.ctx)
         if expr is None:
             marker = self.ctx.queue(
@@ -2407,6 +2682,392 @@ class _PageEmitter:
             )
             return [marker]
         lines = [f"if ({expr}) {{"]
+        lines += [f"    {ln}" for ln in self.emit_nodes(node.then)]
+        if node.otherwise is not None:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in self.emit_nodes(node.otherwise)]
+        lines.append("}")
+        return lines
+
+    # -- party-pick family: NPC trade + Name Rater ----------------------------
+
+    def _script_rows(self) -> list[tuple[int, str]]:
+        """The page's logical script rows -- 355/655 runs fused exactly as
+        ``emit_nodes`` fuses them, plus every code-111 script condition --
+        as ``(flat index, text)``."""
+        leaves: list[Node] = [Leaf(cmd=c, index=i) for i, c in enumerate(self.page_commands)]
+        rows: list[tuple[int, str]] = []
+        for leaf in _merge_script_call_rows(leaves):
+            text = _script_call_text(leaf.cmd) or _script_condition_text(leaf.cmd)
+            if text is not None:
+                rows.append((leaf.index, text))
+        return rows
+
+    def _pick_refs_clean(self, chosen: int, name: int, *, trade: bool) -> bool:
+        """True iff every read of the pick's RMXP variables on this page is one
+        of the shapes the party-pick idioms translate. Anything else (a stray
+        ``pbGet(1)``, ``\\v[1]``, ``var1 > 3``, a Control Variables write) would
+        read a variable the native flow never fills, so the whole family
+        queues instead (CLAUDE.md §4.5)."""
+        rows = self._script_rows()
+        known = {chosen, name}
+        for _, text in rows:
+            entry = _PICK_TEXTENTRY_ROW_RE.match(text)
+            if entry:
+                known.add(int(entry.group(1)))
+        new_vars = known - {chosen, name}
+        ref_re = re.compile(
+            r"pbGet\(\s*(\d+)\s*\)|\$game_variables\[\s*(\d+)\s*\]|pbGetPokemon\(\s*(\d+)\s*\)"
+        )
+
+        def row_allowed(text: str) -> bool:
+            for rx in (_PICK_EGG_COND_RE, _PICK_FOREIGN_COND_RE, _PICK_PARTY_ROW_RE):
+                m = rx.match(text)
+                if m:
+                    return int(m.group(1)) == chosen
+            m = _PICK_RENAME_ROW_RE.match(text)
+            if m:
+                return int(m.group(1)) in new_vars
+            m = _PICK_NAME_CHANGED_COND_RE.match(text)
+            if m:
+                return int(m.group(1)) in new_vars and int(m.group(2)) == name
+            m = _trades._TRADE_RE.search(text.strip())
+            if m:
+                return trade and int(m.group(1)) == chosen
+            return False
+
+        for _, text in rows:
+            refs = {int(g) for m in ref_re.finditer(text) for g in m.groups() if g}
+            if refs & known and not row_allowed(text):
+                return False
+        for cmd in self.page_commands:
+            code, params = cmd.get("code"), cmd.get("parameters", [])
+            if code == CONDITIONAL_BRANCH and params and params[0] == 1 and len(params) >= 5:
+                if params[2] == 1 and params[3] in known:
+                    return False
+                if params[1] in known and not (
+                    params[1] == chosen and params[2] == 0
+                    and (params[4], params[3]) in _PICK_CHOSEN_CMPS | _PICK_CANCEL_CMPS
+                ):
+                    return False
+            elif code == CONTROL_VARIABLES and len(params) >= 5:
+                if any(params[0] <= x <= params[1] for x in known):
+                    return False
+                if params[3] == 1 and params[4] in known:
+                    return False
+            elif code in (SHOW_TEXT, SHOW_TEXT_CONT) and params and isinstance(params[0], str):
+                for m in _VALUE_VAR_RE.finditer(params[0]):
+                    x = int(m.group(1))
+                    if x == chosen or (trade and x in known):
+                        return False
+        return True
+
+    @staticmethod
+    def _pick_cmp(node: Node) -> tuple[int, int, str] | None:
+        """``(variable, op, "chosen"|"cancel")`` of a code-111 variable-vs-
+        constant test shaped like a pick result (``var != -1`` / ``>= 0`` /
+        ``> -1`` = chosen, ``< 0`` / ``== -1`` / ``<= -1`` = cancel), else
+        ``None``. Comparing the u16 VAR_* against -1 is never emitted; the
+        idioms test PARTY_NOTHING_CHOSEN instead."""
+        params = node.cmd.get("parameters", [])
+        if node.cmd.get("code") != CONDITIONAL_BRANCH or len(params) < 5 or params[0] != 1:
+            return None
+        if params[2] != 0 or not all(isinstance(v, int) for v in params[1:5]):
+            return None
+        key = (params[4], params[3])
+        if key in _PICK_CHOSEN_CMPS:
+            return params[1], params[4], "chosen"
+        if key in _PICK_CANCEL_CMPS:
+            return params[1], params[4], "cancel"
+        return None
+
+    def _collapse_pick_groups(self, nodes: list[Node]) -> list[Node]:
+        """Replace the exact multi-row shapes of the party-pick family with one
+        synthetic node each (a node claims its successors): the proc-filtered
+        ``pbChoosePokemon`` + its "was chosen" test, the three-row
+        nickname-entry group, and the two-row apply-name group. Anything that
+        doesn't match exactly is left for the generic path to queue."""
+
+        def leaf_text(i: int, code: int | None = None) -> str | None:
+            if i >= len(nodes) or type(nodes[i]) is not Leaf:
+                return None
+            if code is not None and nodes[i].cmd.get("code") != code:
+                return None
+            return _script_call_text(nodes[i].cmd)
+
+        out: list[Node] = []
+        i = 0
+        while i < len(nodes):
+            text = leaf_text(i)
+            m = _PICK_PROC_RE.match(text) if text is not None else None
+            if m and i + 1 < len(nodes) and type(nodes[i + 1]) is IfNode:
+                cmp = self._pick_cmp(nodes[i + 1])
+                chosen, name = int(m.group(1)), int(m.group(2))
+                if (
+                    cmp is not None and cmp[0] == chosen and cmp[2] == "chosen"
+                    and self._pick_refs_clean(chosen, name, trade=True)
+                ):
+                    out.append(PickTrade(
+                        cmd=nodes[i + 1].cmd, index=nodes[i].index, cond=nodes[i + 1],
+                        chosen_var=chosen, requested=m.group(4),
+                    ))
+                    i += 2
+                    continue
+            party = _PICK_PARTY_ROW_RE.match(text) if text is not None and \
+                leaf_text(i, SCRIPT) is not None else None
+            if party:
+                chosen = int(party.group(1))
+                t2, t3 = leaf_text(i + 1), leaf_text(i + 2)
+                entry = _PICK_TEXTENTRY_ROW_RE.match(t3) if t3 is not None else None
+                if t2 is not None and _PICK_SPECIES_ROW_RE.match(t2) and entry:
+                    out.append(NameEntry(
+                        cmd=nodes[i].cmd, index=nodes[i].index,
+                        chosen_var=chosen, new_name_var=int(entry.group(1)),
+                    ))
+                    i += 3
+                    continue
+                rename = _PICK_RENAME_ROW_RE.match(t2) if t2 is not None else None
+                if rename:
+                    out.append(NameApply(
+                        cmd=nodes[i].cmd, index=nodes[i].index,
+                        chosen_var=chosen, new_name_var=int(rename.group(1)),
+                    ))
+                    i += 2
+                    continue
+            out.append(nodes[i])
+            i += 1
+        return out
+
+    def _emit_pick_statement(self, text: str) -> list[str] | None:
+        """``pbChoosePokemon(v, n)`` (no proc) and, inside a PickTrade's
+        then-arm, ``pbStartTrade(pbGet(v), PBSpecies::Y, "nick", "ot")``."""
+        m = _PICK_PLAIN_RE.match(text)
+        if m:
+            chosen, name = int(m.group(1)), int(m.group(2))
+            if self._pick_chosen is not None or not self._pick_refs_clean(
+                    chosen, name, trade=False):
+                return None
+            self._pick_chosen, self._pick_name = chosen, name
+            return ["special(ChoosePartyMon)", "waitstate"]
+        if self._active_trade is not None:
+            m = _trades._TRADE_RE.search(text.strip())
+            if m:
+                spec, chosen = self._active_trade
+                if int(m.group(1)) != chosen:
+                    return None
+                given = self.ctx.staged_species_constant(m.group(2))
+                got = (given, m.group(3), m.group(4), int(m.group(5) or 0))
+                want = (spec.species, spec.nickname, spec.ot_name, spec.ot_gender)
+                if got != want:
+                    raise ValueError(
+                        f"in-game trade drift on {spec.const}: pbStartTrade call gives "
+                        f"(species, nickname, OT, OT gender)={got} but the staged "
+                        f"sIngameTrades row (ingame_trades.py) has {want}"
+                    )
+                self._trade_consumed = True
+                return [
+                    "special(CreateInGameTradePokemon)",
+                    "special(DoInGameTradeScene)",
+                    "waitstate",
+                ]
+        return None
+
+    def _emit_pick_trade(self, node: PickTrade) -> list[str]:
+        """Map046 EV014's NPC trade, natively: the fork's ``ingame_trade`` macro
+        (engine/asm/macros/event.inc:2684) minus its own prompts -- the RMXP
+        event supplies the dialogue.
+
+        ``chooseboxmon SELECT_PC_MON_TRADE`` (party AND PC, chooseboxmon.c:47)
+        only *greys* non-matching mons (non-strict, chooseboxmon.c:44-52), so the
+        species is re-checked with ``GetTradeSpecies`` -- which reads the mon via
+        the same ``GetSelectedBoxMonFromPcOrParty`` as ``CreateInGameTradePokemon``
+        (trade.c:4563/4630) and must not run on PARTY_NOTHING_CHOSEN (it would
+        index gPlayerParty[0xFF]). The "mon chosen AND right species" result is
+        folded into VAR_RESULT so the RMXP then/else arms are each emitted once.
+        The species is compared against the constant the call site names, which
+        the sIngameTrades row's ``requestedSpecies`` is asserted equal to."""
+        ctx = self.ctx
+        cond = node.cond
+        assert cond is not None
+        if ctx.event_id is None or ctx.common_event_id is not None:
+            return [ctx.queue(node.index, SCRIPT,
+                              "NPC trade outside a map event: no trade row to bind")]
+        const = _trades.trade_const(ctx.map_id, ctx.event_id)
+        spec = ctx.ingame_trades.get(const)
+        if spec is None or spec.page != ctx.page_no:
+            return [ctx.queue(
+                node.index, SCRIPT,
+                f"NPC trade (pbChoosePokemon proc + pbStartTrade): no staged "
+                f"in-game trade row {const} for this page — cannot verify the call "
+                f"against sIngameTrades, not emitting",
+            )]
+        requested = ctx.staged_species_constant(node.requested)
+        if requested != spec.requested_species:
+            raise ValueError(
+                f"in-game trade drift on {const}: the proc filter requests "
+                f"{node.requested} -> {requested} but the staged sIngameTrades row "
+                f"requests {spec.requested_species}"
+            )
+        self._active_trade, self._trade_consumed = (spec, node.chosen_var), False
+        try:
+            then = self.emit_nodes(cond.then)
+        finally:
+            self._active_trade = None
+        if not self._trade_consumed:
+            then.append(ctx.queue(
+                node.index, SCRIPT,
+                f"NPC trade {const}: no pbStartTrade call inside the chosen-mon arm",
+            ))
+        lines = [
+            f"setvar(VAR_0x8005, {const})",
+            "specialvar(VAR_0x8009, GetInGameTradeSpeciesInfo)",
+            "chooseboxmon(SELECT_PC_MON_TRADE)",
+            "waitstate",
+            "setvar(VAR_RESULT, FALSE)",
+            "if (var(VAR_0x8004) != PARTY_NOTHING_CHOSEN) {",
+            "    specialvar(VAR_0x800B, GetTradeSpecies)",
+            f"    if (var(VAR_0x800B) == {requested}) {{",
+            "        setvar(VAR_RESULT, TRUE)",
+            "    }",
+            "}",
+            "if (var(VAR_RESULT) == TRUE) {",
+            *[f"    {ln}" for ln in then],
+        ]
+        if cond.otherwise:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in self.emit_nodes(cond.otherwise)]
+        lines.append("}")
+        return lines
+
+    def _emit_name_entry(self, node: NameEntry) -> list[str]:
+        """``pbTextEntry`` nickname prompt -> the fork's own rename script
+        (event_scripts.s:1334: fadescreen + ``special ChangePokemonNickname``,
+        which also stashes the old name in STR_VAR_3 for
+        TryPutNameRaterShowOnTheAir)."""
+        if self._pick_chosen != node.chosen_var:
+            return [self.ctx.queue(
+                node.index, SCRIPT,
+                "nickname entry on a mon not chosen by a recognised pbChoosePokemon(v, n)",
+            )]
+        self._pick_new_name = node.new_name_var
+        return ["call(Common_EventScript_NameReceivedPartyMon)"]
+
+    def _emit_name_apply(self, node: NameApply) -> list[str]:
+        if self._pick_chosen != node.chosen_var or self._pick_new_name != node.new_name_var:
+            return [self.ctx.queue(
+                node.index, SCRIPT,
+                "pkmn.name= apply on a variable that is not the recorded new-name entry",
+            )]
+        return []  # the native rename already applied the entered name
+
+    def _pick_branch(self, head: list[str], cond: str, node: IfNode,
+                     invert: bool = False) -> list[str]:
+        then, otherwise = (node.otherwise or [], node.then) if invert else (node.then, node.otherwise)
+        lines = [*head, f"if ({cond}) {{"]
+        lines += [f"    {ln}" for ln in self.emit_nodes(then)]
+        if otherwise:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in self.emit_nodes(otherwise)]
+        lines.append("}")
+        return lines
+
+    def _emit_pick_cancel_idiom(self, node: IfNode) -> list[str] | None:
+        """The pick's result test -> ``VAR_0x8004 == PARTY_NOTHING_CHOSEN``
+        (party_menu.c:7929 writes it on cancel)."""
+        cmp = self._pick_cmp(node)
+        if cmp is None or self._pick_chosen is None or cmp[0] != self._pick_chosen:
+            return None
+        op = "==" if cmp[2] == "cancel" else "!="
+        return self._pick_branch([], f"var(VAR_0x8004) {op} PARTY_NOTHING_CHOSEN", node)
+
+    def _emit_pick_egg_idiom(self, node: IfNode) -> list[str] | None:
+        """``pbGetPokemon(v).egg?`` -> ScriptGetPartyMonSpecies == SPECIES_EGG
+        (field_specials.c:1641 returns MON_DATA_SPECIES_OR_EGG)."""
+        text = _script_condition_text(node.cmd)
+        m = _PICK_EGG_COND_RE.match(text) if text is not None else None
+        if not m or self._pick_chosen is None or int(m.group(1)) != self._pick_chosen:
+            return None
+        return self._pick_branch(
+            ["specialvar(VAR_RESULT, ScriptGetPartyMonSpecies)"],
+            "var(VAR_RESULT) == SPECIES_EGG", node)
+
+    def _emit_pick_foreign_idiom(self, node: IfNode) -> list[str] | None:
+        """``pbGetPokemon(v).isForeign?($Trainer)`` -> vanilla's two OT checks:
+        OT id differs (IsMonOTIDNotPlayers, tv.c:3295), else OT name/language
+        differs (MonOTNameNotPlayer, field_specials.c:1675 -- clobbers
+        STR_VAR_1, which the name text re-buffers itself)."""
+        text = _script_condition_text(node.cmd)
+        m = _PICK_FOREIGN_COND_RE.match(text) if text is not None else None
+        if not m or self._pick_chosen is None or int(m.group(1)) != self._pick_chosen:
+            return None
+        return self._pick_branch(
+            [
+                "special(IsMonOTIDNotPlayers)",
+                "if (var(VAR_RESULT) == FALSE) {",
+                "    specialvar(VAR_RESULT, MonOTNameNotPlayer)",
+                "}",
+            ],
+            "var(VAR_RESULT) == TRUE", node)
+
+    def _emit_pick_name_changed_idiom(self, node: IfNode) -> list[str] | None:
+        """"entered name empty or unchanged" -> ``TryPutNameRaterShowOnTheAir``
+        (tv.c:3265): FALSE iff the nickname equals the one stashed before the
+        rename; TRUE also puts the Name Rater show on the air (kept, per the
+        operator ruling)."""
+        text = _script_condition_text(node.cmd)
+        m = _PICK_NAME_CHANGED_COND_RE.match(text) if text is not None else None
+        if (
+            not m or self._pick_new_name is None or self._pick_name is None
+            or int(m.group(1)) != self._pick_new_name or int(m.group(2)) != self._pick_name
+        ):
+            return None
+        return self._pick_branch(
+            ["specialvar(VAR_RESULT, TryPutNameRaterShowOnTheAir)"],
+            "var(VAR_RESULT) == FALSE", node)
+
+    def _emit_pick_name_text(self, node: TextRun) -> list[str] | None:
+        """Dialogue whose ``\\v[n]`` names a recorded pick-name variable ->
+        ``{STR_VAR_1}`` filled by ``special(BufferMonNickname)`` immediately
+        before the msgbox (tv.c:3288), so it always shows the mon's current
+        nickname. Mixed or unrecorded variables fall through to the generic
+        path (which queues)."""
+        known = {x for x in (self._pick_name, self._pick_new_name) if x is not None}
+        if not known or has_inline_choice(node.text):
+            return None
+        refs = [int(m.group(1)) for m in _VALUE_VAR_RE.finditer(node.text)]
+        if not refs or any(r not in known for r in refs):
+            return None
+        raw = _VALUE_VAR_RE.sub(_STRVAR_PLACEHOLDER, node.text)
+        source = _COLOUR_TEXT_CODE_RE.sub("", _BLUE_TEXT_CODE_RE.sub("", raw))
+        result = translate_text_codes(source.strip())
+        if result is None or result.sign:
+            return None
+        text = format_pory_dialogue(result.text.replace(_STRVAR_PLACEHOLDER, "{STR_VAR_1}"))
+        auto = ", MSGBOX_AUTOCLOSE" if result.autoclose else ""
+        return ["special(BufferMonNickname)", f"msgbox({text}{auto})"]
+
+    def _emit_party_length_idiom(self, node: IfNode) -> list[str] | None:
+        """``$Trainer.party.length <op> N`` — zero / non-zero party test.
+
+        Fork ``getpartysize`` (engine/asm/macros/event.inc:558) writes
+        ``CalculatePlayerPartyCount()`` to VAR_RESULT. The count is unsigned,
+        so ``<=0``/``==0``/``<1`` mean "== 0" and ``>0``/``>=1``/``!=0`` mean
+        "!= 0"; any other comparison returns ``None`` (queued, not guessed).
+        """
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        m = _PARTY_LENGTH_CMP_RE.match(params[1])
+        if not m:
+            return None
+        op, n = m.group(1), int(m.group(2))
+        if (op, n) in {("<=", 0), ("==", 0), ("<", 1)}:
+            cmp = "=="
+        elif (op, n) in {(">", 0), (">=", 1), ("!=", 0)}:
+            cmp = "!="
+        else:
+            return None
+        lines = ["getpartysize", f"if (var(VAR_RESULT) {cmp} 0) {{"]
         lines += [f"    {ln}" for ln in self.emit_nodes(node.then)]
         if node.otherwise is not None:
             lines.append("} else {")
@@ -2837,6 +3498,51 @@ class _PageEmitter:
         self.ctx.record_trait("smashable_rock")
         return [breadcrumb, "goto(EventScript_RockSmash)"]
 
+    def _emit_move_tutor_choose_idiom(self, node: IfNode) -> list[str] | None:
+        """``pbMoveTutorChoose(PBMoves::X)`` as a code-111 script condition --
+        true iff the player picked a mon that learned the move.
+
+        Fork analog: the ``move_tutor`` macro (engine/asm/macros/event.inc:2700)
+        does ``setvar VAR_0x8005, <move>`` then ``call
+        MoveTutor_EventScript_OpenBox`` (engine/data/scripts/move_tutors.inc:169:
+        ``chooseboxmon SELECT_PC_MON_MOVE_TUTOR`` + ``waitstate`` + re-``lock``/
+        ``faceplayer``) and branches ``goto_if_eq VAR_RESULT, FALSE, declined``
+        -- so after OpenBox, VAR_RESULT is TRUE iff the move was taught.
+        OpenBox (not OpenPartyMenu, which is just ``special
+        ChooseMonForMoveTutor``) is the macro's own choice: it covers party AND
+        PC-box mons (chooseboxmon.c:49) and is the contract the macro tests.
+        The macro's own YES/NO prompt, "which mon" text and per-move taught
+        flag are NOT emitted -- the RMXP event supplies its dialogue, and
+        Essentials' tutor has no once-only flag.
+
+        Returns None (generic script-condition queue) for any other shape or
+        a move the id map / fork does not resolve."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        m = _MOVE_TUTOR_CHOOSE_RE.match(params[1])
+        if not m:
+            return None
+        const = self.ctx.move_constant(m.group(1))
+        if const is None:
+            return None
+        lines = [
+            f"setvar(VAR_0x8005, {const})",
+            "call(MoveTutor_EventScript_OpenBox)",
+        ]
+        then, otherwise = node.then, node.otherwise
+        if not then and otherwise:
+            cond, then, otherwise = "FALSE", otherwise, None
+        else:
+            cond = "TRUE"
+        lines.append(f"if (var(VAR_RESULT) == {cond}) {{")
+        lines += [f"    {ln}" for ln in self.emit_nodes(then)]
+        if otherwise:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in self.emit_nodes(otherwise)]
+        lines.append("}")
+        return lines
+
     def _emit_has_species_idiom(self, node: IfNode) -> list[str] | None:
         """``pbHasSpecies?(::PBSpecies::NAME)`` — see ``_HAS_SPECIES_RE`` for
         the corpus evidence (Map049 EV001 page 3, Auntie's farewell dialogue).
@@ -3257,9 +3963,21 @@ class _PageEmitter:
         """
         text = node.text
         try:
-            choice = parse_inline_choice(text)
+            choice = parse_inline_choice(text, allow_cancel_sentinel=True)
         except InlineChoiceError as exc:
             return [self.ctx.queue(node.index, SHOW_TEXT, exc.message)]
+        if choice.if_cancel < 0:
+            # ifCancel -1: Essentials stores -1 on cancel, unrepresentable in a
+            # u16 var. Store CANCEL_SENTINEL instead, but only when every read
+            # of the var on this page is an ==/!= against a non-negative
+            # option index (see inline_choice.cancel_sentinel_read_problem).
+            problem = cancel_sentinel_read_problem(self.page_commands, choice.var_id)
+            if problem is not None:
+                return [self.ctx.queue(
+                    node.index, SHOW_TEXT,
+                    f"inline choice: ifCancel {choice.if_cancel} stores a "
+                    f"negative value a u16 var cannot hold, and {problem}",
+                )]
 
         prompt_text = choice.prompt_text
         if_cancel = choice.if_cancel
@@ -3295,6 +4013,7 @@ class _PageEmitter:
             self.text_blocks.append((label, format_pory_dialogue(opt_text)))
             opt_labels.append(label)
 
+        cancel_value = CANCEL_SENTINEL if if_cancel < 0 else if_cancel - 1
         ignore_b_press = "TRUE" if if_cancel == 0 else "FALSE"
         argv = ", ".join(opt_labels)
         lines.append(
@@ -3306,7 +4025,7 @@ class _PageEmitter:
         else:
             lines += [
                 "if (var(VAR_RESULT) == MULTI_B_PRESSED) {",
-                f"    setvar({var_name}, {if_cancel - 1})",
+                f"    setvar({var_name}, {cancel_value})",
                 "} else {",
                 f"    copyvar({var_name}, VAR_RESULT)",
                 "}",
@@ -3548,12 +4267,14 @@ class _PageEmitter:
         if target_id == -1:
             who = "OBJ_EVENT_ID_PLAYER"
         elif target_id == 0:
-            # Self-target animation — no clean self-reference in v1 (not
-            # exercised on the slice); queue rather than guess.
-            return [self.ctx.queue(
-                node.index, SHOW_ANIMATION,
-                "show animation on self (target 0) — no v1 self-reference",
-            )]
+            # RMXP "this event" -> the event's own id, exactly as the 209
+            # self-target path does (local_id_remap rewrites it post-transpile).
+            if self.ctx.event_id is None:
+                return [self.ctx.queue(
+                    node.index, SHOW_ANIMATION,
+                    "show animation on self (target 0) in a common event",
+                )]
+            who = str(self.ctx.event_id)
         else:
             # task-4: local id = RMXP event id (same assumption _emit_move_route
             # makes for a 209 target — pokeemerald localids map 1:1 in our
@@ -4033,6 +4754,10 @@ class _PageEmitter:
         # CLAUDE.md §4.3, one source of truth, not re-derived here. An
         # unresolved-or-un-forked symbol returns None so the caller queues
         # the row instead of guessing/inventing a constant (§4.5, §4.7).
+        pick = self._emit_pick_statement(text)
+        if pick is not None:
+            return pick
+
         m = _RECEIVE_ITEM_RE.match(text)
         if m:
             symbol, qty = m.group(1), m.group(2)
@@ -4052,6 +4777,13 @@ class _PageEmitter:
             if const is None:
                 return None  # unresolved item symbol — fall through to the queue
             return [f"removeitem({const}, {qty})" if qty else f"removeitem({const})"]
+
+        m = _PLAY_CRY_RE.match(text)
+        if m:
+            const = self.ctx.staged_species_constant(m.group(1))
+            if const is None:
+                return None  # unstaged / unknown species — queue, don't guess
+            return [f"playmoncry({const}, CRY_MODE_NORMAL)", "waitmoncry"]
 
         m = _ADD_POKEMON_SILENT_RE.match(text)
         if m:
@@ -4708,6 +5440,11 @@ def transpile_page(
     region = hoistable_label_region(commands)
     hoisted: list[tuple[str, list[str]]] = []
     emitter = _PageEmitter(ctx, page_label)
+    emitter.page_commands = commands
+    if region is None:
+        loop = loop_label_region(commands)
+        if loop is not None:
+            emitter.loop_labels.add(str(commands[loop[0]].get("parameters", [""])[0]))
 
     if region is not None:
         label_index, region_end = region
@@ -4755,14 +5492,18 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
         page_no = page_idx + 1
         ctx.page_no = page_idx
         label = _page_label(map_id, event, page_no)
-        body, movements, text_blocks, hoisted, aux_blocks = transpile_page(page, ctx, label)
         trigger = page.get("trigger")
+        epilogue = {ACTION_BUTTON_TRIGGER: "release", 1: "release",
+                    2: "release", 3: "releaseall"}.get(trigger)
+        ctx.exit_epilogue = epilogue
+        try:
+            body, movements, text_blocks, hoisted, aux_blocks = transpile_page(page, ctx, label)
+        finally:
+            ctx.exit_epilogue = None
         # Hoisted label blocks are entered by `goto` with the page's lock
         # already held, so they need the epilogue but not the prologue. Without
         # it a `goto`-ed block would end without ever releasing — the exact
         # freeze the Map050 EV005 hand conversion had to patch by hand.
-        epilogue = {ACTION_BUTTON_TRIGGER: "release", 1: "release",
-                    2: "release", 3: "releaseall"}.get(trigger)
         if body and trigger == ACTION_BUTTON_TRIGGER:
             body = ["lock", "faceplayer", *body, "release"]
         elif body and trigger in (1, 2):
@@ -4784,7 +5525,10 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
             # emitted its own `end`; the epilogue has to go BEFORE it, or the
             # release is dead code after the terminator.
             if h_body and h_body[-1] in ("end", "return"):
-                h_body = [*h_body[:-1], *([epilogue] if epilogue else []),
+                # A trailing 115 already emitted its own release before `end`.
+                already = len(h_body) >= 2 and h_body[-2] == epilogue
+                h_body = [*h_body[:-1],
+                          *([epilogue] if epilogue and not already else []),
                           h_body[-1]]
             else:
                 h_body = [*h_body, *([epilogue] if epilogue else []), "end"]

@@ -331,6 +331,16 @@ EFFECT_CALLS: frozenset[str] = frozenset({
     # written by the sibling pbDisposePokemon at 197_BW_Utilities.rb:476-485,
     # both pure presentation), never a story-state key.
     "pbShowPokemon",
+    # Plays a species cry (transpiler: playmoncry + waitmoncry); pure audio,
+    # no state write.
+    "pbPlayCry",
+    # Party pick / NPC trade / nickname prompt (Map046 EV014, EV002): screens
+    # whose result lands in RMXP variables, not a story-state key; the
+    # transpiler maps them to ChoosePartyMon / the sIngameTrades flow /
+    # Common_EventScript_NameReceivedPartyMon.
+    "pbChoosePokemon",
+    "pbStartTrade",
+    "pbTextEntry",
     "pbDisposePokemon",
     # 229_GenderSelect.rb:399-403 -- launches a screen whose deep internal
     # flow (229_GenderSelect.rb:257-264/271-280/288-297) reassigns
@@ -387,6 +397,12 @@ INPUT_CALLS: dict[str, InputSpec] = {
     # 109_PField_BerryPlants.rb:616+ -- confirms "Want to pick it?" before
     # a bag-capacity check; both arms player input (pb_pick_berry family).
     "pbPickBerry": InputSpec(kind="confirm", domain=(True, False)),
+    # Essentials' move tutor: opens the party screen, returns true iff the
+    # player picked a compatible mon and the move was taught (false on
+    # cancel / nobody eligible). Both arms player input; taught-first follows
+    # the table's "success first" convention (transpiler:
+    # _emit_move_tutor_choose_idiom -> MoveTutor_EventScript_OpenBox).
+    "pbMoveTutorChoose": InputSpec(kind="menu_choice", domain=(True, False)),
     # Not found as a head in CH01-CH05 but named in
     # chapter_manifest/conditions.py's pb_pokerus family docstring;
     # registered defensively so a corpus refresh that stages it doesn't

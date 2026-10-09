@@ -70,3 +70,6 @@ __pycache__
 src/data/uranium_connection_remaps.gen.h
 # URANIUM PATHFINDER SLICE — split-map sibling table, written by the rpg2gba pipeline
 src/data/uranium_split_siblings.gen.h
+# URANIUM PATHFINDER SLICE — NPC in-game trade enum members + rows, written by the rpg2gba pipeline
+include/constants/uranium_ingame_trades.gen.h
+src/data/uranium_ingame_trade_table.gen.h

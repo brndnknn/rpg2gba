@@ -365,10 +365,10 @@ def test_show_animation_unmapped_ids_queue(ctx: T.TranspileContext, animation_id
     assert "Common_Movement_" not in res.text
 
 
-def test_show_animation_self_target_queues(ctx: T.TranspileContext) -> None:
-    res = run_event(ctx, [[cmd(T.SHOW_ANIMATION, [0, 17])]])
-    assert len(res.unhandled) == 1
-    assert res.unhandled[0].command_code == T.SHOW_ANIMATION
+def test_show_animation_self_target_uses_own_event_id(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SHOW_ANIMATION, [0, 17])]], event_id=18)
+    assert "applymovement(18, Common_Movement_ExclamationMark)" in res.text
+    assert res.unhandled == []
 
 
 # ----------------------------------------------------------------------------
@@ -1695,3 +1695,160 @@ def test_wrapped_call_does_not_merge_across_a_structural_boundary(
     # Both halves of the never-joined call queue on their own.
     script_entries = [e for e in res.unhandled if e.command_code == T.SCRIPT]
     assert len(script_entries) == 2
+
+
+# ----------------------------------------------------------------------------
+# \ch[var,-1,...] cancel sentinel + backward-jump loop labels (CH06, Map046 EV003)
+# ----------------------------------------------------------------------------
+
+_BRANCH_ELSE = 411
+
+
+def _ch_page(extra_reads: list[dict] | None = None, if_cancel: int = -1) -> list[dict]:
+    return [
+        cmd(T.SHOW_TEXT, [f"Pick?\\ch[2,{if_cancel},First,Second]"]),
+        cmd(T.CONDITIONAL_BRANCH, [1, 2, 0, 1, 0]),  # var2 == 1
+        cmd(T.SHOW_TEXT, ["second"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+        *(extra_reads or []),
+    ]
+
+
+def test_inline_choice_minus_one_cancel_stores_sentinel(ctx: T.TranspileContext) -> None:
+    ctx.registry.propose_var(2, "VAR_TEMP_MOVE_CHOICE")
+    res = run_event(ctx, [_ch_page([cmd(T.CONTROL_VARIABLES, [2, 2, 0, 0, 0])])], trigger=0)
+    assert res.unhandled == []
+    assert "dynmultichoice(0, 0, FALSE, 6, 0, DYN_MULTICHOICE_CB_NONE" in res.text
+    assert "if (var(VAR_RESULT) == MULTI_B_PRESSED) {" in res.text
+    assert "    setvar(VAR_TEMP_MOVE_CHOICE, 32767)" in res.text
+    assert "    copyvar(VAR_TEMP_MOVE_CHOICE, VAR_RESULT)" in res.text
+    assert "if (var(VAR_TEMP_MOVE_CHOICE) == 1) {" in res.text
+
+
+@pytest.mark.parametrize("read", [
+    cmd(T.CONDITIONAL_BRANCH, [1, 2, 0, 1, 1]),            # var2 >= 1
+    cmd(T.CONDITIONAL_BRANCH, [1, 2, 0, 1, 4]),            # var2 < 1
+    cmd(T.CONDITIONAL_BRANCH, [1, 2, 1, 7, 0]),            # var2 == var7
+    cmd(T.CONTROL_VARIABLES, [2, 2, 1, 0, 1]),             # var2 += 1
+    cmd(T.CONTROL_VARIABLES, [7, 7, 0, 1, 2]),             # var7 = var2
+    cmd(T.SHOW_TEXT, ["you picked \\v[2]"]),               # textual read
+])
+def test_inline_choice_minus_one_cancel_queues_on_non_equality_read(
+    ctx: T.TranspileContext, read: dict
+) -> None:
+    ctx.registry.propose_var(2, "VAR_TEMP_MOVE_CHOICE")
+    res = run_event(ctx, [_ch_page([read])], trigger=0)
+    queued = [q for q in res.unhandled if q.command_code == T.SHOW_TEXT
+              and "ifCancel -1" in q.description]
+    assert len(queued) == 1
+    assert "dynmultichoice" not in res.text
+    assert "32767" not in res.text
+
+
+def test_inline_choice_other_negative_cancel_still_queues(ctx: T.TranspileContext) -> None:
+    ctx.registry.propose_var(2, "VAR_TEMP_MOVE_CHOICE")
+    res = run_event(ctx, [_ch_page(if_cancel=-2)], trigger=0)
+    assert any("negative ifCancel (-2)" in q.description for q in res.unhandled)
+
+
+def _loop_page(jump_in_switch: bool = False) -> list[dict]:
+    """Outer Yes/No; the Yes arm opens the label then jumps back from a nested
+    branch (the Map046 EV003 tutor shape, reduced)."""
+    body: list[dict]
+    if jump_in_switch:
+        body = [
+            cmd(T.SHOW_CHOICES, [["Orchynx", "Raptorch", "Eletux"], 0], indent=1),
+            cmd(T.CHOICE_WHEN, [0, "Orchynx"], indent=1),
+            cmd(T.JUMP_TO_LABEL, ["Top"], indent=2),
+            cmd(T.CHOICE_WHEN, [1, "Raptorch"], indent=1),
+            cmd(T.SHOW_TEXT, ["b"], indent=2),
+            cmd(T.CHOICE_WHEN, [2, "Eletux"], indent=1),
+            cmd(T.SHOW_TEXT, ["c"], indent=2),
+            cmd(T.CHOICES_END, indent=1),
+        ]
+    else:
+        body = [
+            cmd(T.CONDITIONAL_BRANCH, [0, 7, 0], indent=1),
+            cmd(T.JUMP_TO_LABEL, ["Top"], indent=2),
+            cmd(_BRANCH_ELSE, indent=1),
+            cmd(T.SHOW_TEXT, ["not again"], indent=2),
+            cmd(T.BRANCH_END, indent=1),
+        ]
+    return [
+        cmd(T.SHOW_CHOICES, [["Yes", "No"]]),
+        cmd(T.CHOICE_WHEN, [0, "Yes"]),
+        cmd(T.LABEL, ["Top"], indent=1),
+        cmd(T.SHOW_TEXT, ["body"], indent=1),
+        *body,
+        cmd(T.CHOICE_WHEN, [1, "No"]),
+        cmd(T.SHOW_TEXT, ["nope"], indent=1),
+        cmd(T.CHOICES_END),
+        cmd(T.SHOW_TEXT, ["after"]),
+    ]
+
+
+def test_loop_label_region_shape() -> None:
+    page = _loop_page()
+    assert T.hoistable_label_region(page) is None
+    assert T.loop_label_region(page) == (2, 9)  # label .. the `402 No` row
+
+
+def test_backward_jump_in_choice_arm_becomes_while_loop(ctx: T.TranspileContext) -> None:
+    ctx.registry.propose_flag(7, "FLAG_RETAKE")
+    res = run_event(ctx, [_loop_page()], trigger=0)
+    assert res.unhandled == []
+    lines = [ln.strip() for ln in res.text.splitlines()]
+    assert "while (var(VAR_RESULT) >= 0) {" in lines
+    assert lines.count("continue") == 1
+    i_while = lines.index("while (var(VAR_RESULT) >= 0) {")
+    i_break = lines.index("break")
+    assert i_while < lines.index("continue") < i_break
+    assert i_break - i_while > 3
+    # the label row itself emits nothing (no goto into a hoisted block)
+    assert "goto(" not in res.text
+    assert "script Map032_EV005_Page1_Top {" not in res.text
+    # region ends with the Yes arm: the No arm and the tail are outside the loop
+    assert lines.index('msgbox(format("nope"))') > i_break
+    assert lines.index('msgbox(format("after"))') > i_break
+
+
+def test_loop_jump_inside_switch_queues(ctx: T.TranspileContext) -> None:
+    """poryscript rejects `continue` inside a switch ("must be the last
+    statement in block scope", verified against the real compiler)."""
+    res = run_event(ctx, [_loop_page(jump_in_switch=True)], trigger=0)
+    assert "while (" not in res.text
+    assert any(q.command_code == T.LABEL and "switch" in q.description
+               for q in res.unhandled)
+
+
+def test_loop_shapes_that_do_not_qualify() -> None:
+    # jump BEFORE the label
+    assert T.loop_label_region([
+        cmd(T.JUMP_TO_LABEL, ["A"]), cmd(T.LABEL, ["A"]), cmd(T.SHOW_TEXT, ["x"]),
+    ]) is None
+    # jump to a different/unknown name
+    page = _loop_page()
+    page[5] = cmd(T.JUMP_TO_LABEL, ["Other"], indent=2)
+    assert T.loop_label_region(page) is None
+    # jump outside the label's enclosing block (after the arm closes)
+    page = _loop_page()
+    page.append(cmd(T.JUMP_TO_LABEL, ["Top"]))
+    assert T.loop_label_region(page) is None
+    # jump not last in its block (poryscript requires `continue` last)
+    page = _loop_page()
+    page.insert(6, cmd(T.SHOW_TEXT, ["dead"], indent=2))
+    assert T.loop_label_region(page) is None
+    # two labels
+    page = _loop_page()
+    page.insert(4, cmd(T.LABEL, ["Second"], indent=1))
+    assert T.loop_label_region(page) is None
+    # a label with no jumps stays on the old (queue) path
+    assert T.loop_label_region([cmd(T.LABEL, ["A"], indent=1)]) is None
+
+
+@pytest.mark.skipif(not poryscript.is_available(), reason="poryscript binary not installed")
+def test_loop_shape_compiles_through_real_poryscript(ctx: T.TranspileContext) -> None:
+    ctx.registry.propose_flag(7, "FLAG_RETAKE")
+    res = run_event(ctx, [_loop_page()], trigger=0)
+    result = poryscript.compile_script(res.text)
+    assert result.ok, result.stderr

@@ -134,6 +134,23 @@ MECHANIC_BY_HEAD: dict[str, str] = {
     # was misclassified STRIP; now resolves to setrespawn(HEAL_LOCATION_*) on
     # a staged call site, else queues (transpiler._SET_POKEMON_CENTER_RE).
     "pbSetPokemonCenter": "white-out respawn anchor",
+    # Species cry -> playmoncry + waitmoncry (transpiler._PLAY_CRY_RE); was
+    # silently dropped by deterministic._DIALOGUE_STRIP_RE until 2026-10-09.
+    "pbPlayCry": "species cry",
+    # Move tutor condition -> setvar VAR_0x8005 + call MoveTutor_EventScript_OpenBox
+    # + VAR_RESULT branch (transpiler._emit_move_tutor_choose_idiom).
+    "pbMoveTutorChoose": "move tutor",
+    # Party pick + NPC trade (Map046 EV014): chooseboxmon SELECT_PC_MON_TRADE +
+    # CreateInGameTradePokemon/DoInGameTradeScene against a staged
+    # sIngameTrades row (transpiler._emit_pick_trade, ingame_trades.py).
+    "pbStartTrade": "npc trade",
+    # Plain pbChoosePokemon -> special(ChoosePartyMon) (Name Rater); the proc
+    # form is the trade's picker. pbGetPokemon(v).egg?/.isForeign? and the
+    # pbTextEntry nickname prompt are the Name Rater's other heads
+    # (transpiler._emit_pick_*, Common_EventScript_NameReceivedPartyMon).
+    "pbChoosePokemon": "party pick",
+    "pbGetPokemon": "party pick",
+    "pbTextEntry": "nickname entry",
     # REDERIVATION_PLAN.md §15.1 item 8: already handled in transpiler.py
     # (resolve_native_object_template / detect_push_boulder) as a native
     # object-template idiom (TF_KIND_PUSHABLE_BOULDER), same family as
