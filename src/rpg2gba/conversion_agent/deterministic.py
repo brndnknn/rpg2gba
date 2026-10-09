@@ -1090,6 +1090,40 @@ def extract_trainer_reference(event: dict, ctx: "Context") -> "TrainerReference 
     )
 
 
+def _trainer_page_text(page: dict) -> str:
+    """Joined Show-Text content of ``page`` (all runs concatenated)."""
+    parts: list[str] = []
+    for cmd in page.get("list", []):
+        if cmd.get("code") in (SHOW_TEXT, SHOW_TEXT_CONT):
+            p = cmd.get("parameters", [])
+            parts.append(p[0] if p and isinstance(p[0], str) else "")
+    return join_text_lines(parts).strip()
+
+
+def _is_repeat_chat_page3(page1: dict, page2: dict, page3: dict) -> bool:
+    """True if ``page3`` is a switch-gated, same-sprite repeat of page 2's
+    post-battle chat (see :func:`classify_trainer_battle`)."""
+    cond = page3.get("condition") or {}
+    if not cond.get("switch1_valid") or cond.get("self_switch_valid"):
+        return False
+    if cond.get("switch2_valid") or cond.get("variable_valid"):
+        return False
+    g1 = page1.get("graphic") or {}
+    g3 = page3.get("graphic") or {}
+    if not g3.get("character_name") or g3.get("character_name") != g1.get("character_name"):
+        return False
+    for cmd in page3.get("list", []):
+        code = cmd.get("code", 0)
+        if code not in _PAGE2_TRAINER_ALLOWED:
+            return False
+        if code in (SCRIPT, SCRIPT_CONT):
+            p = cmd.get("parameters", [""])
+            if not _is_trainer_strip(p[0] if p else ""):
+                return False
+    text3 = _trainer_page_text(page3)
+    return bool(text3) and text3 == _trainer_page_text(page2)
+
+
 def classify_trainer_battle(
     map_id: int, event: dict, ctx: "Context | None" = None
 ) -> str | None:
@@ -1098,10 +1132,20 @@ def classify_trainer_battle(
     to the LLM).
     """
     pages = event.get("pages", [])
-    if len(pages) != 2:
+    if len(pages) not in (2, 3):
         return None
 
-    # Count code-111 across BOTH pages; exactly one allowed, must be on page 1
+    # Optional 3rd page (CH06 Map042 EV001/EV002 gym-guard trainers): a
+    # global-switch-gated repeat of the page-2 post-battle chat, same sprite.
+    # Folding it away is lossless only when it repeats page 2's text verbatim
+    # AND keeps the sprite visible. A blank-graphic third page is a *vanish*
+    # page (Map019 EV004/EV005, "VanishIfSwitch") — dropping that would lose
+    # behaviour silently, so it stays unhandled (fail loud).
+    page3 = pages[2] if len(pages) == 3 else None
+    if page3 is not None and not _is_repeat_chat_page3(pages[0], pages[1], page3):
+        return None
+
+    # Count code-111 across ALL pages; exactly one allowed, must be on page 1
     branch_count = 0
     branch_cmd: dict | None = None
     branch_page: int | None = None

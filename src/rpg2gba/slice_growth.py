@@ -120,7 +120,7 @@ class ChapterSliceGrowthReport:
 
 
 def _chapter_maps_in_build_order(
-    chapters_json: Path, *, only_built: bool = True
+    chapters_json: Path, *, only_built: bool = True, status: str | None = None
 ) -> list[tuple[str, tuple[int, ...]]]:
     """`(chapter_id, maps)` for every chapter in `chapters.json`, in file
     order, deduplicated to each id's first occurrence (a handful of ids like
@@ -128,9 +128,12 @@ def _chapter_maps_in_build_order(
     build-order appearance is relevant to an authoring-time union).
 
     `only_built` restricts to `status == "built"` -- the gated chapters this
-    detector is defined over. `reference/chapters.json` is the §4.3 source of
-    truth for chapter/map binding; this reads it, it does not hardcode a list.
+    detector is defined over. `status`, when given, restricts to that status
+    instead (and overrides `only_built`). `reference/chapters.json` is the
+    §4.3 source of truth for chapter/map binding; this reads it, it does not
+    hardcode a list.
     """
+    wanted = status if status is not None else ("built" if only_built else None)
     data = json.loads(chapters_json.read_text(encoding="utf-8"))
     seen: set[str] = set()
     out: list[tuple[str, tuple[int, ...]]] = []
@@ -139,7 +142,7 @@ def _chapter_maps_in_build_order(
         if chapter_id in seen:
             continue
         seen.add(chapter_id)
-        if only_built and chapter.get("status") != "built":
+        if wanted is not None and chapter.get("status") != wanted:
             continue
         out.append((chapter_id, tuple(chapter["maps"])))
     return out
@@ -209,11 +212,29 @@ def gated_chapter_slices(
                 "reconcile them before trusting this detector's output"
             )
 
-    if cumulative != current_slice:
-        only_in_chapters = sorted(cumulative - current_slice)
-        only_in_slice_ids = sorted(current_slice - cumulative)
+    # An `in_progress` chapter's maps are in SLICE_MAP_IDS (it has to build
+    # before it can pass its §9 gate -- the same rule `test_chapter_atlas`
+    # pins), so they count toward reconciliation. They are NOT gated: no
+    # ChapterSlice is produced for them, so the detector never scans a
+    # chapter whose warps are still being authored. (CH05 went planned ->
+    # in_progress -> built 2026-09-04..06; this module postdates that and
+    # first met an in_progress chapter with CH06.)
+    in_progress = _chapter_maps_in_build_order(chapters_json, status="in_progress")
+    reconcile = set(cumulative)
+    for chapter_id, own_maps in in_progress:
+        overlap = reconcile & set(own_maps)
+        if overlap:
+            raise SliceGrowthError(
+                f"in-progress {chapter_id} in {chapters_json} re-introduces map id(s) "
+                f"{sorted(overlap)} already claimed by an earlier chapter"
+            )
+        reconcile |= set(own_maps)
+
+    if reconcile != current_slice:
+        only_in_chapters = sorted(reconcile - current_slice)
+        only_in_slice_ids = sorted(current_slice - reconcile)
         raise SliceGrowthError(
-            "the union of every built chapter's maps in "
+            "the union of every built and in-progress chapter's maps in "
             f"{chapters_json} does not equal the current SLICE_MAP_IDS.\n"
             f"  in chapters.json but not SLICE_MAP_IDS: {only_in_chapters}\n"
             f"  in SLICE_MAP_IDS but not chapters.json: {only_in_slice_ids}"

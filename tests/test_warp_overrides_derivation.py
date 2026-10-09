@@ -32,11 +32,22 @@ GOLDEN = FIXTURES / "warp_overrides_ch01_ch05.json"
 BUILD = Path("output/uranium-build")
 
 
+#: Cells a LATER chapter legitimately adds to a golden map: a warp whose target
+#: was out of slice (skipped, no door metatile) becomes a real warp once the
+#: target map joins. Kept separate so the frozen, human-verified golden stays
+#: exactly what the five gates signed off on.
+#:   CH06: Map037 EV002 (16, 5) -- Passage Cave exit -> Nowtoch City (map 40).
+GROWN_CELLS: dict[int, set[tuple[int, int]]] = {37: {(16, 5)}}
+
+
 def _golden() -> dict[int, set[tuple[int, int]]]:
     payload = json.loads(GOLDEN.read_text(encoding="utf-8"))
-    return {
+    cells = {
         int(uid): {(x, y) for x, y in cells} for uid, cells in payload["cells"].items()
     }
+    for uid, grown in GROWN_CELLS.items():
+        cells[uid] = cells[uid] | grown
+    return cells
 
 
 # --- the handoff -------------------------------------------------------------

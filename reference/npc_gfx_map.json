@@ -342,5 +342,85 @@
   "PU-MegaStone": {
     "gfx": "OBJ_EVENT_GFX_POKE_BALL",
     "note": "Sparkling ground-item prop (Map036 EV009, the Sableyeite item ball) - a glint animation, not a character sheet. Converts to the fork's native item ball, so the native ball graphic is reused rather than staging a sheet for a sparkle overlay - the same call PU-POKEBALL records. The item itself is terrain-sealed behind Surf in CH05 (blocked:surf, B7)."
+  },
+  "HGSS_002": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_002",
+    "fallback": "OBJ_EVENT_GFX_SCIENTIST_1",
+    "note": "HGSS overworld sheet: man, olive-brown hair, blue-framed glasses, olive vest over tan shirt"
+  },
+  "HGSS_013": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_013",
+    "fallback": "OBJ_EVENT_GFX_NURSE",
+    "note": "HGSS overworld sheet: woman, blonde hair under a cross-marked cap, purple dress"
+  },
+  "HGSS_049": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_049",
+    "fallback": "OBJ_EVENT_GFX_PICNICKER",
+    "note": "HGSS overworld sheet: girl, green cap with red badge, green outfit, blue-grey hair"
+  },
+  "HGSS_057": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_057",
+    "fallback": "OBJ_EVENT_GFX_MAN_3",
+    "note": "HGSS overworld sheet: man, brown hair and beard, dark sunglasses, purple shirt with tan vest"
+  },
+  "HGSS_067": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_067",
+    "fallback": "OBJ_EVENT_GFX_SCIENTIST_2",
+    "note": "HGSS overworld sheet: man, grey hair, teal-framed glasses, teal-grey coat"
+  },
+  "HGSS_119": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_119",
+    "fallback": "OBJ_EVENT_GFX_GIRL_2",
+    "note": "HGSS overworld sheet: girl, long brown hair, olive top with blue skirt"
+  },
+  "HGSS_161": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_161",
+    "fallback": "OBJ_EVENT_GFX_BOY_3",
+    "note": "HGSS overworld sheet: boy, brown hair, black shirt with white collar-band"
+  },
+  "PU-Maria": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_MARIA",
+    "fallback": "OBJ_EVENT_GFX_LASS",
+    "note": "Custom sheet: girl, black hair with grey sheen, white top with red/pink trim; sheet is 224x264 (not 256x256)"
+  },
+  "PU-RangerFemale": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_RANGERFEMALE",
+    "fallback": "OBJ_EVENT_GFX_PICNICKER",
+    "note": "Custom sheet: female ranger, dark green hair in top bun, green headband and green outfit"
+  },
+  "Pu-Tancoon": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_TANCOON",
+    "fallback": "OBJ_EVENT_GFX_ZIGZAGOON_1",
+    "note": "Custom sheet: Pokemon sheet: brown raccoon-like creature, dark tail pointing up (front frame)"
+  },
+  "HGSS_006": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_006",
+    "fallback": "OBJ_EVENT_GFX_BEAUTY",
+    "note": "HGSS overworld sheet: woman, blonde hair in a top ponytail with blue band, orange top. Used by Map040 EV006/EV023 (Nowtoch City) - chapter-6 Nowtoch City expansion"
+  },
+  "HGSS_015": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_015",
+    "fallback": "OBJ_EVENT_GFX_NURSE",
+    "note": "HGSS overworld sheet: woman, dark teal-grey hair under a cross-marked cap, orange top. Used by Map040 EV008 (Nowtoch City) - chapter-6 Nowtoch City expansion"
+  },
+  "HGSS_037": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_037",
+    "fallback": "OBJ_EVENT_GFX_POLICEMAN",
+    "note": "HGSS overworld sheet: man, blue peaked cap with gold badge, dark-blue uniform (police-officer look). Used by Map040 EV004/EV005 and Map045 EV003 - chapter-6 Nowtoch City expansion"
+  },
+  "HGSS_084": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_084",
+    "fallback": "OBJ_EVENT_GFX_OLD_MAN_1",
+    "note": "HGSS overworld sheet: elderly man, white hair and white beard, blue headband, round glasses, olive coat. Used by Map040 EV003 (Nowtoch City) - chapter-6 Nowtoch City expansion"
+  },
+  "HGSS_120": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_120",
+    "fallback": "OBJ_EVENT_GFX_BOY_1",
+    "note": "HGSS overworld sheet: young person, brown hair under a cross-marked cap, light-blue top with brown trousers. Used by Map040 EV063 (Nowtoch City) - chapter-6 Nowtoch City expansion"
+  },
+  "HGSS_130": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_130",
+    "fallback": "OBJ_EVENT_GFX_WOMAN_3",
+    "note": "HGSS overworld sheet: woman, dark grey-green hair under a cross-marked cap, pink top with teal overalls. Used by Map040 EV009/EV018 (Nowtoch City) - chapter-6 Nowtoch City expansion"
   }
 }

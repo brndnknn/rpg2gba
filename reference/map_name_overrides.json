@@ -53,6 +53,22 @@
     "37": {
       "display_name": "Passage Cave 2F",
       "evidence": "CH05 scope pass (2026-08-31), operator ruling; SUPERSEDES this map's former `reviewed` verdict (see map 36 for the collision that forced it). Map 37 is the inner/upper floor -- reachable only from map 36, and the floor whose four sideways staircases are its only vertical traversal. -> MAP_PASSAGE_CAVE_2F, dir PassageCave2F. No engine/data/maps/ entry existed for either map when this was decided, so nothing downstream was pinned to the old name."
+    },
+    "44": {
+      "display_name": "Nowtoch City Metro Station",
+      "evidence": "CH06 first build (2026-10-06), operator ruling (names from reference/chapters/06-nowtoch-city.md §2). Maps 44 and 45 share the map_infos name 'Nowtoch City(Metro)', so `mint` failed loud (map 45 -> MAP_NOWTOCH_CITY_METRO collides with map 44). Map 44 is the street-level room: entered from Nowtoch City (map 40), holds the ticket kiosk and region-map viewer, and is the parent (parent_id) of map 45. -> MAP_NOWTOCH_CITY_METRO_STATION."
+    },
+    "45": {
+      "display_name": "Nowtoch City Metro Platform",
+      "evidence": "CH06 first build (2026-10-06), operator ruling (see map 44). Map 45 is the child map of 44 (parent_id 44), reachable only through it, and holds the departure-menu event (event 3) that warps to other cities' metro maps. -> MAP_NOWTOCH_CITY_METRO_PLATFORM."
+    },
+    "46": {
+      "display_name": "Nowtoch City Interiors 1",
+      "evidence": "CH06 first build (2026-10-06), operator ruling (names from 06-nowtoch-city.md §2). map_infos names maps 40, 46 and 47 all bare 'Nowtoch City' (MAP_NOWTOCH_CITY collides). Map 46 is an indoor canvas (60x40, interior tileset 19, parent_id 40) reached from several separate doors on map 40 with internal self-warps — several buildings/floors packed on one RMXP map. Whether it should be split is open (06-nowtoch-city.md §6.3). -> MAP_NOWTOCH_CITY_INTERIORS_1."
+    },
+    "47": {
+      "display_name": "Nowtoch City Leader House",
+      "evidence": "CH06 first build (2026-10-06), operator ruling (names from 06-nowtoch-city.md §2; see map 46 for the collision). Map 47 is a 35x15 two-room interior (tileset 19, parent_id 40) reached from map 40's key-checked door (event 17) and event 66; it hosts the event that sets FLAG_GYM1. -> MAP_NOWTOCH_CITY_LEADER_HOUSE."
     }
   },
 

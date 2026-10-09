@@ -139,6 +139,524 @@
       "reason": "See map 32 EV021."
     },
     {
+      "map_id": 40,
+      "event_id": 24,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 28,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 29,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 30,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 31,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 32,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 33,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 34,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 35,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 36,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 37,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 38,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 39,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 40,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 41,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 42,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 43,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 44,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 45,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 46,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 47,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 48,
+      "expect_name": "EV048",
+      "feature": "RMXP ambient-lighting event (light-sheet glow, autorun self re-pin)",
+      "reason": "Autorun on switch 106: wait 2 frames + Set Event Location to its own cell — re-pins the glow sprite; no flags/vars/dialogue. Cosmetic like map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 49,
+      "expect_name": "EV049",
+      "feature": "RMXP ambient-lighting event (light-sheet glow, autorun self re-pin)",
+      "reason": "Autorun on switch 106: wait 2 frames + Set Event Location to its own cell — re-pins the glow sprite; no flags/vars/dialogue. Cosmetic like map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 53,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 54,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 56,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 58,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 59,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 81,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 82,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 83,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 84,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 85,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 86,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 87,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 88,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 89,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 90,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 91,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 92,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 93,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 94,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 95,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 96,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 97,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 98,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 99,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 100,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 101,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 102,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 103,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 104,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 105,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 106,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 107,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 108,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 109,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 110,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 111,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 112,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 113,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 114,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 115,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 116,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 117,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 118,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 119,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 120,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 121,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 122,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 123,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 124,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 125,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
+      "map_id": 40,
+      "event_id": 126,
+      "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028."
+    },
+    {
       "map_id": 49, "event_id": 17, "expect_name": "Lucille",
       "feature": "Post-game NPC in the player's house: one action page gated on switch 125 (FINAL_EVENT), sprite sheet PU-CURIEend",
       "reason": "Deferred, not a no-port. 2026-10-02 the converter began placing late NPCs (no boot page, a visible page) as flag-hidden actors (ROM run 69, map068/ev017); this one's sheet has no reference/npc_gfx_map.json entry and nothing in reach of the chain can show her. Operator ruling 2026-10-02: strip for now; revisit (map the sheet, drop this entry) when the post-game is in scope."

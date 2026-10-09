@@ -60,6 +60,7 @@ from rpg2gba.conversion_agent.inline_choice import (
 )
 from rpg2gba.pbs_converter._naming import to_constant
 from rpg2gba.pbs_converter.heal_locations import _CALL_RE as _SET_POKEMON_CENTER_RE
+from rpg2gba.tileset_converter.npc_gfx import is_door_sheet
 
 logger = logging.getLogger(__name__)
 
@@ -296,9 +297,13 @@ _HAS_SPECIES_RE = re.compile(r"^\s*pbHasSpecies\?\(\s*::PBSpecies::([A-Za-z0-9_]
 # Map073.json). Only the two comparison shapes actually observed in the
 # corpus are handled: `>0` (player HAS at least one) and `==0` (player LACKS
 # it entirely) — any other operator or non-zero RHS falls through to the
-# generic script-condition queue rather than being guessed at.
+# generic script-condition queue rather than being guessed at. The item may be
+# spelled as a `PBItems::` constant or as a bare Ruby symbol (`:MARIAKEY` —
+# Map040 EV017 page 0 cmd 0, the Nowtoch key door); both name the same
+# Essentials internal item symbol.
 _BAG_QUANTITY_CMP_RE = re.compile(
-    r"^\s*\$PokemonBag\.pbQuantity\(\s*(?:::)?PBItems::([A-Za-z0-9_]+)\s*\)\s*(>|==)\s*0\s*$"
+    r"^\s*\$PokemonBag\.pbQuantity\(\s*(?:(?:::)?PBItems::|:)([A-Za-z0-9_]+)\s*\)"
+    r"\s*(>|==)\s*0\s*$"
 )
 
 # $PokemonGlobal.nuzlocke==true — Nuzlocke mode is not ported (user-approved
@@ -491,6 +496,30 @@ _POKEDEX_GRANT_RE = re.compile(r"^\s*\$Trainer\.pokedex\s*=\s*true\s*$")
 # asserts; before this the row queued as UNHANDLED and the flag never set
 # (ROM run 47). Exact literal only; `=false` still queues.
 _POKEGEAR_ON_RE = re.compile(r"^\s*\$Trainer\.pokegear\s*=\s*true\s*$")
+
+# $Trainer.badges[N]=true — gym badge grant. Fork-native: vanilla's own
+# FLAG_BADGE01_GET..FLAG_BADGE08_GET (engine/include/constants/flags.h:1378-1385,
+# consecutive SYSTEM_FLAGS slots), so literal N in 0..7 maps to
+# FLAG_BADGE0{N+1}_GET. Emitted as fork constants (like FLAG_SYS_*), not
+# registry-minted. Only the exact literal `=true` form with an in-range
+# literal index resolves; `=false`, a variable index, or N outside 0..7
+# fall through to the generic queue (CLAUDE.md §4.5).
+_BADGE_TRUE_RE = re.compile(
+    r"^\s*\$Trainer\.badges\[\s*(\d+)\s*\]\s*=\s*true\s*$"
+)
+_NUM_BADGES = 8
+
+# Kernel.pbSetHealingSpot(map, x, y) — Uranium's TELEPORT/region-map anchor,
+# NOT the white-out respawn (pbs_converter/heal_locations.py docstring). The
+# fork's single `lastHealLocation` slot serves both white-out and teleport
+# (engine/include/global.h:1106), so a `setrespawn` here would overwrite the
+# white-out anchor that `pbSetPokemonCenter` just set. It resolves only when
+# the literal (map, x, y) equals a minted heal location's tile; otherwise it
+# queues with the precise reason.
+_SET_HEALING_SPOT_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbSetHealingSpot\s*\(\s*(-?\d+)\s*,\s*(-?\d+)\s*,"
+    r"\s*(-?\d+)\s*\)\s*$"
+)
 
 # -- Essentials one-line Ruby guards (`<statement> if $game_variables[V]==K`) ---
 # RMXP script rows routinely carry a whole statement plus a trailing modifier-if
@@ -717,6 +746,22 @@ _CANLOSE_NAME_RE = re.compile(r'"([^"]*)"')
 # shape falls through to the generic queue rather than being guessed
 # (CLAUDE.md §4.5).
 _CANLOSE_PBGET_PLUS_RE = re.compile(r"^pbGet\(\s*(\d+)\s*\)\s*\+\s*(\d+)$")
+
+# -- starter-dependent rival battle (CH06 Map040 EV079) -----------------------
+# The exact script-row run, in order. Switch -> party mapping is RMXP's own
+# (61 -> p=1, 59 -> p=2, 60 -> p=3); any deviation (other ids, extra/missing
+# rows, non-literal values) does not collapse and falls to the generic queue.
+_STARTER_RIVAL_ROWS: tuple[tuple[str, int, int], ...] = (
+    (r"p=1 if $game_switches[61] == true", 61, 1),
+    (r"p=2 if $game_switches[59] == true", 59, 2),
+    (r"p=3 if $game_switches[60] == true", 60, 3),
+)
+_STARTER_RIVAL_VAR_ROW = "$game_variables[1]=p"
+_STARTER_RIVAL_VAR_ID = 1
+_STARTER_RIVAL_CALL_RE = re.compile(
+    r'^pbTrainerBattle\(PBTrainers::(\w+),"([^"]+)",'
+    r'_I\("((?:[^"\\]|\\.)*)"\),false,pbGet\(1\)\)$'
+)
 
 # -- native object-template idioms (item balls, berry trees, pushable boulders) --
 # rpg2gba wave 2026-08-08 (boulders added 2026-09-12, REDERIVATION_PLAN.md
@@ -1110,6 +1155,12 @@ class TranspileContext:
     # (CLAUDE.md §4.7 forward check).
     heal_locations: dict[tuple[int, int, int], str] = field(default_factory=dict)
 
+    # (uranium_map_id, x, y) -> HEAL_LOCATION_* constant for every minted heal
+    # location's tile. Lets `Kernel.pbSetHealingSpot(m,x,y)` resolve ONLY when
+    # its literal triple is exactly a minted heal location; empty by default
+    # (the driver does not populate it yet), so every call queues loudly.
+    healing_spots: dict[tuple[int, int, int], str] = field(default_factory=dict)
+
     # per-event cursor, set by transpile_event / transpile_common_event
     map_id: int = 0
     event_id: int | None = None
@@ -1118,6 +1169,10 @@ class TranspileContext:
     event_y: int | None = None
     page_no: int = 0
     common_event_id: int | None = None
+    # Character-sheet name of the page being transpiled (set by transpile_page);
+    # lets a self-targeted move route recognise a door-sheet event (native door
+    # animation, see ``_door_self_route``).
+    page_graphic: str = ""
 
     # Per-event traits recorded during transpile (e.g. "smashable_rock" from
     # the rock-smash native idiom below), keyed by (map_id, event_id). The
@@ -1263,6 +1318,18 @@ class ChoiceNode(Node):
 @dataclass
 class LoopNode(Node):
     children: list[Node] = field(default_factory=list)
+
+
+@dataclass
+class StarterRivalBattle(Node):
+    """Synthetic node: the four-row ``p=N if $game_switches[S] == true`` /
+    ``$game_variables[1]=p`` script run plus the ``pbTrainerBattle(...,
+    pbGet(1))`` code-111 that follows it (Map040 EV079, rival Theo's CH06
+    starter-dependent battle). Built by
+    ``Emitter._collapse_starter_rival_battles``; ``cond`` is the original
+    ``IfNode`` and ``first_index`` the index of the 355 row."""
+
+    cond: "IfNode | None" = None
 
 
 def parse_tree(commands: list[dict]) -> list[Node]:
@@ -1901,6 +1968,41 @@ def _describe_route(route: dict, target: object) -> str:
     )
 
 
+# -- door-sheet self animation ("native opendoor", operator-approved 2026-10-07) --
+# An RMXP door-sheet event (``is_door_sheet``) animates itself by turning through
+# its four direction rows: the rows are animation frames, not facings. Row down
+# is the closed door, row left the fully open one. The fork has no such object;
+# the door is a metatile the engine animates natively (``opendoor`` /
+# ``closedoor`` / ``setdooropen`` / ``setdoorclosed`` — engine/src/scrcmd.c
+# ScrCmd_opendoor et al., all no-ops on a metatile without door behavior or door
+# graphics, field_door.c FieldAnimateDoorOpen / FieldSetDoorOpened).
+_DOOR_FACE_CODES = {16: "closed", 17: "open", 18: "mid", 19: "mid"}
+_DOOR_INERT_CODES = frozenset({15, *_MOVE_DROP_CODES})  # delays + SOFT-C drops
+
+
+def _door_route_plan(route: dict) -> tuple[str, bool] | str:
+    """Classify a door sheet's self-route: ``(final_state, animated)`` where
+    final_state is ``"open"``/``"closed"`` and animated means more than one
+    face step (intermediate frames). Returns a reason string if the route is
+    anything but face-turns + delays (never silently dropped, CLAUDE.md §4.5)."""
+    if route.get("repeat"):
+        return "repeating route"
+    faces: list[str] = []
+    for step in route.get("list", []):
+        code = step.get("code", 0)
+        if code == 0:
+            break
+        if code in _DOOR_FACE_CODES:
+            faces.append(_DOOR_FACE_CODES[code])
+        elif code not in _DOOR_INERT_CODES:
+            return f"step code {code} is not a face-turn or delay"
+    if not faces:
+        return "no face-turn step to give a terminal door state"
+    if faces[-1] == "mid":
+        return "ends facing up/right, which is neither the open nor the closed door row"
+    return faces[-1], len(faces) > 1
+
+
 # -- page emitter --------------------------------------------------------------
 
 _TONE_FADES = {
@@ -1960,6 +2062,7 @@ class _PageEmitter:
     def emit_nodes(self, nodes: list[Node]) -> list[str]:
         nodes = _merge_consecutive_routes(nodes)
         nodes = _merge_script_call_rows(nodes)
+        nodes = self._collapse_starter_rival_battles(nodes)
         warp_pos = next(
             (i for i, node in enumerate(nodes) if _is_real_warp_leaf(node)), None
         )
@@ -2036,6 +2139,8 @@ class _PageEmitter:
                 return ["lock", f"msgbox({text})", "release"]
             return [f"msgbox({text})"]
 
+        if isinstance(node, StarterRivalBattle):
+            return self._emit_starter_rival_battle(node)
         if isinstance(node, IfNode):
             return self._emit_if(node)
         if isinstance(node, ChoiceNode):
@@ -2901,6 +3006,130 @@ class _PageEmitter:
         lines.append("}")
         return lines
 
+    def _collapse_starter_rival_battles(self, nodes: list[Node]) -> list[Node]:
+        """Replace each exact ``[355 p=1 if sw61, 655 p=2 if sw59, 655 p=3 if
+        sw60, 655 $game_variables[1]=p, IfNode(pbTrainerBattle(...,false,
+        pbGet(1)))]`` run with one ``StarterRivalBattle`` node. Strict: every
+        row's text and the call shape must match exactly, the class/name must
+        resolve to parties 1/2/3 in ``ctx.trainers``, the three switches must
+        have registry flags, variable 1 must have a registry VAR_*, and the
+        ``otherwise`` must be exactly one Exit Event (the non-canlose loss arm,
+        unreachable: a loss blacks out). Anything else is left untouched so the
+        generic path queues it loudly."""
+        out: list[Node] = []
+        i = 0
+        n_rows = len(_STARTER_RIVAL_ROWS) + 1
+        while i < len(nodes):
+            window = nodes[i:i + n_rows + 1]
+            if len(window) == n_rows + 1 and self._starter_rival_match(window):
+                out.append(StarterRivalBattle(
+                    cmd=window[-1].cmd, index=window[0].index, cond=window[-1],
+                ))
+                i += n_rows + 1
+                continue
+            out.append(nodes[i])
+            i += 1
+        return out
+
+    def _starter_rival_resolve(self, node: IfNode) -> tuple[str, str, str] | None:
+        """(class_const, name, defeat_raw) when ``node`` is the exact call."""
+        call = _script_condition_text(node.cmd)
+        if call is None:
+            return None
+        m = _STARTER_RIVAL_CALL_RE.match(call)
+        if not m:
+            return None
+        return to_constant("TRAINER_CLASS", m.group(1)), m.group(2), m.group(3)
+
+    def _starter_rival_match(self, window: list[Node]) -> bool:
+        ctx = self.ctx
+        rows, cond = window[:-1], window[-1]
+        for leaf, (text, _sw, _party) in zip(rows[:3], _STARTER_RIVAL_ROWS):
+            if type(leaf) is not Leaf or leaf.cmd.get("code") not in (SCRIPT, SCRIPT_CONT):
+                return False
+            if _script_call_text(leaf.cmd) != text:
+                return False
+        if rows[0].cmd.get("code") != SCRIPT:
+            return False
+        last = rows[3]
+        if type(last) is not Leaf or _script_call_text(last.cmd) != _STARTER_RIVAL_VAR_ROW:
+            return False
+        if type(cond) is not IfNode:
+            return False
+        resolved = self._starter_rival_resolve(cond)
+        if resolved is None:
+            return False
+        class_const, name, _defeat = resolved
+        if not (
+            len(cond.otherwise or []) == 1
+            and type(cond.otherwise[0]) is Leaf
+            and cond.otherwise[0].cmd.get("code") == EXIT_EVENT
+        ):
+            return False
+        for _text, sw, party in _STARTER_RIVAL_ROWS:
+            if ctx.trainers.get((class_const, name, party)) is None:
+                return False
+            if ctx.flag_for_switch(sw) is None:
+                return False
+        return ctx.var_for_variable(_STARTER_RIVAL_VAR_ID) is not None
+
+    def _emit_starter_rival_battle(self, node: StarterRivalBattle) -> list[str]:
+        """Rival Theo's starter-dependent battle (CH06 Map040 EV079).
+
+        RMXP computes ``p`` from the starter switches, stores it in game
+        variable 1, then calls ``pbTrainerBattle(RIVAL,"Theo",...,false,
+        pbGet(1))``. Emitted as an ``if / elif`` chain over the registry flags,
+        one ``trainerbattle_no_intro`` per party (defeat text is shared); the
+        win body is emitted once after the chain. The ``$game_variables[1]=p``
+        write is KEPT (as ``setvar`` per arm): Map049 EV20 / Map172 EV1 read
+        variable 1's prior value as a persistent dialogue counter, so dropping
+        the write would change their behaviour.
+
+        The ``otherwise`` arm (single Exit Event) is dropped: ``canlose`` is
+        false, so a loss blacks the player out and control never returns.
+
+        No-starter ``else`` arm: RMXP's ``p`` would be nil, ``pbGet(1)``
+        would not select a party and pbTrainerBattle would raise — there is
+        no RIVAL "Theo" party 0 to fall back to. Emitted as a comment only;
+        nothing is invented."""
+        ctx = self.ctx
+        cond = node.cond
+        assert cond is not None
+        class_const, name, defeat_raw = self._starter_rival_resolve(cond)  # type: ignore[misc]
+        var_name = ctx.var_for_variable(_STARTER_RIVAL_VAR_ID)
+        defeat_result = translate_text_codes(defeat_raw)
+        if defeat_result is None:
+            return [ctx.queue(
+                node.index, SCRIPT,
+                f"starter-dependent rival battle: untranslatable defeat text {defeat_raw[:80]!r}",
+            )]
+        lose_label = f"{self.page_label}_StarterRivalLoseText"
+        self.text_blocks.append((lose_label, format_pory_dialogue(defeat_result.text)))
+
+        lines = [
+            "# rival battle: party chosen by starter switch "
+            "(RMXP p=1/2/3 -> $game_variables[1] -> pbGet(1))"
+        ]
+        # RMXP runs the `p=` rows in order, so the LAST true row wins: test
+        # them in reverse so the if/elif chain has the same precedence.
+        for k, (_text, sw, party) in enumerate(reversed(_STARTER_RIVAL_ROWS)):
+            flag = ctx.flag_for_switch(sw)
+            const = ctx.trainers[(class_const, name, party)]
+            head = "if" if k == 0 else "} elif"
+            lines += [
+                f"{head} (flag({flag})) {{",
+                f"    setvar({var_name}, {party})",
+                f"    trainerbattle_no_intro({const}, {lose_label})",
+            ]
+        lines += [
+            "} else {",
+            "    # no starter switch set: RMXP p=nil (no RIVAL Theo party 0) — "
+            "pbTrainerBattle would fail; nothing invented",
+            "}",
+        ]
+        lines += self.emit_nodes(cond.then)
+        return lines
+
     def _emit_facility_trainer_battle_idiom(self, node: IfNode) -> list[str] | None:
         """A repeatable, non-canlose ``pbTrainerBattle(...)`` embedded as a
         code-111 script condition inside a Yes/No offer — CH03's Mawuli
@@ -2956,13 +3185,20 @@ class _PageEmitter:
             return None
         if node.otherwise:
             return None
-        if _tree_writes_self_switch(node.then):
-            return None
 
         m_class = _CANLOSE_TRAINER_CLASS_RE.search(call)
         if not m_class:
             return None
         class_const = to_constant("TRAINER_CLASS", m_class.group(1))
+
+        # A Gym Leader badge battle (``LEADER_*`` class — CH06's Maria,
+        # Map042 EV003) legitimately writes self-switch A in its win-body: it
+        # is a one-time gate, not a sight trainer. The battle line is the same
+        # ``trainerbattle_no_intro``; only the repeatable-facility
+        # ``cleartrainerflag`` is dropped, because a leader must stay beaten.
+        is_leader = m_class.group(1).startswith("LEADER_")
+        if not is_leader and _tree_writes_self_switch(node.then):
+            return None
 
         m_name = _CANLOSE_NAME_RE.search(call)
         if not m_name:
@@ -3002,10 +3238,9 @@ class _PageEmitter:
         lose_label = f"{self.page_label}_FacilityLoseText"
         self.text_blocks.append((lose_label, format_pory_dialogue(defeat_result.text)))
 
-        lines = [
-            f"trainerbattle_no_intro({trainer_const}, {lose_label})",
-            f"cleartrainerflag({trainer_const})",
-        ]
+        lines = [f"trainerbattle_no_intro({trainer_const}, {lose_label})"]
+        if not is_leader:
+            lines.append(f"cleartrainerflag({trainer_const})")
         lines += self.emit_nodes(node.then)
         return lines
 
@@ -3348,6 +3583,32 @@ class _PageEmitter:
             "waitmovement(0)",
         ]
 
+    def _emit_door_self_route(self, node: Node, route: dict) -> list[str]:
+        """A door-sheet event turning through its own rows -> native door
+        animation at the event's tile. Multi-frame: ``opendoor``/``closedoor``
+        + ``waitdooranim`` (the paired 210 is neutralized — waitdooranim is the
+        wait). Single-facing snap: ``setdooropen``/``setdoorclosed``."""
+        self._last_route_ok = False  # the 210 must not become a waitmovement
+        ctx = self.ctx
+        plan = _door_route_plan(route)
+        if isinstance(plan, str):
+            return [ctx.queue(
+                node.index, SET_MOVE_ROUTE,
+                f"door-sheet {ctx.page_graphic!r} self-route: {plan}",
+            )]
+        if not isinstance(ctx.event_x, int) or not isinstance(ctx.event_y, int):
+            return [ctx.queue(
+                node.index, SET_MOVE_ROUTE,
+                f"door-sheet {ctx.page_graphic!r} self-route without event coordinates",
+            )]
+        state, animated = plan
+        x, y = ctx.event_x, ctx.event_y
+        if animated:
+            verb = "opendoor" if state == "open" else "closedoor"
+            return [f"{verb}({x}, {y})", "waitdooranim"]
+        verb = "setdooropen" if state == "open" else "setdoorclosed"
+        return [f"{verb}({x}, {y})"]
+
     def _emit_move_route(self, node: Node) -> list[str]:
         params = node.cmd.get("parameters", [])
         if len(params) < 2 or not isinstance(params[1], dict):
@@ -3381,6 +3642,10 @@ class _PageEmitter:
             who = str(self.ctx.event_id)
         else:
             who = str(target)
+
+        if (target == 0 or (target != -1 and target == self.ctx.event_id)) \
+                and is_door_sheet(self.ctx.page_graphic):
+            return self._emit_door_self_route(node, route)
 
         # A code-41 Change Graphic step is script-level, not a movement token,
         # so a route carrying one is emitted as alternating applymovement runs
@@ -3601,6 +3866,28 @@ class _PageEmitter:
                 "or a common event — no single owning map/event to resolve "
                 "a respawn tile against)",
             )]
+
+        # Kernel.pbSetHealingSpot(m,x,y) — teleport anchor (see
+        # _SET_HEALING_SPOT_RE). Resolves only on an exact minted-tile match.
+        m = _SET_HEALING_SPOT_RE.match(text)
+        if m:
+            triple = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            spot = self.ctx.healing_spots.get(triple)
+            if spot is not None:
+                return [f"setrespawn({spot})"]
+            return [self.ctx.queue(
+                node.index, SCRIPT,
+                f"script call: {text.strip()!r} — pbSetHealingSpot is the "
+                f"teleport anchor; (map, x, y)={triple} matches no minted "
+                "HEAL_LOCATION_* tile, and the fork's single lastHealLocation "
+                "slot is shared with white-out (setrespawn here would clobber "
+                "the pbSetPokemonCenter anchor)",
+            )]
+
+        # $Trainer.badges[N]=true — FLAG_BADGE0{N+1}_GET (see _BADGE_TRUE_RE).
+        m = _BADGE_TRUE_RE.match(text)
+        if m and int(m.group(1)) < _NUM_BADGES:
+            return [f"setflag(FLAG_BADGE0{int(m.group(1)) + 1}_GET)"]
 
         if _DIALOGUE_STRIP_RE.match(text):
             return []
@@ -4417,6 +4704,7 @@ def transpile_page(
     block; the caller appends them to its output verbatim.
     """
     commands = page.get("list", [])
+    ctx.page_graphic = (page.get("graphic") or {}).get("character_name") or ""
     region = hoistable_label_region(commands)
     hoisted: list[tuple[str, list[str]]] = []
     emitter = _PageEmitter(ctx, page_label)

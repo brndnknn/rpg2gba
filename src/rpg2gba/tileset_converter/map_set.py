@@ -39,7 +39,9 @@ SLICE_MAP_IDS: list[int] = [
 # CH04 Route 2
     35,
 # CH05 Passage Cave: 36 (1F), 37 (2F)
-    36, 37
+    36, 37,
+# CH06 Nowtoch City: 40 (the city), 41 (Poke Mart), 42 (Gym), 43 (Pokemon Center), 44/45 (Metro station/platform), 46/47 (interior canvases)
+    40, 41, 42, 43, 44, 45, 46, 47
 ]
 
 # Converter-level collision unblocks (user-approved fidelity calls, one entry per

@@ -64,6 +64,13 @@ def test_golden_map068_kevlar_town_pokemon_center() -> None:
             x=8,
             y=13,
         ),
+        # CH06 (2026-10-07): Nowtoch City's Center (Map043).
+        hl.HealLocationEntry(
+            id="HEAL_LOCATION_NOWTOCH_CITY_POKEMON_CENTER",
+            map="MAP_NOWTOCH_CITY_POKEMON_CENTER",
+            x=8,
+            y=13,
+        ),
     ]
 
     map068_resolutions = [r for r in resolutions if r.call_site.map_id == 68]
@@ -79,12 +86,14 @@ def test_golden_map068_kevlar_town_pokemon_center() -> None:
 
 def test_call_site_census_matches_measured_ground_truth() -> None:
     """64 `pbSetPokemonCenter` call sites across 42 distinct maps in the
-    corpus (measured 2026-09-12); Map068 is the only staged one."""
+    corpus (measured 2026-09-12). Staged: Map068 (CH03, Kevlar Center), and
+    from CH06 Map042 (gym leader Maria's explicit-args call) + Map043
+    (Nowtoch Center nurse)."""
     sites = hl.find_call_sites(MAPS_DIR)
     assert len(sites) == 64
     assert len({s.map_id for s in sites}) == 42
     staged_sites = [s for s in sites if s.map_id in hl.SLICE_MAP_IDS]
-    assert [s.map_id for s in staged_sites] == [68]
+    assert [s.map_id for s in staged_sites] == [42, 43, 68]
 
 
 def test_idempotent() -> None:
@@ -171,15 +180,21 @@ def test_initial_anchor_reads_from_generated_header() -> None:
 
 
 def test_call_site_heal_locations_real_corpus() -> None:
-    """The transpiler-facing lookup returns exactly the one staged call site,
-    mapped to the same id `generate_entries` mints for it."""
+    """The transpiler-facing lookup returns exactly the staged call sites,
+    mapped to the ids `generate_entries` mints. Map042 EV003's explicit
+    (43,8,13,8) and Map043 EV001's derived across-counter tile land on the
+    same Nowtoch entry — two independent resolutions agreeing."""
     mapping = hl.call_site_heal_locations(
         maps_dir=MAPS_DIR,
         tilesets_json=TILESETS_JSON,
         map_constants_json=MAP_CONSTANTS_JSON,
         metadata_header=METADATA_HEADER,
     )
-    assert mapping == {(68, 1, 0): "HEAL_LOCATION_KEVLAR_TOWN_POKEMON_CENTER"}
+    assert mapping == {
+        (42, 3, 0): "HEAL_LOCATION_NOWTOCH_CITY_POKEMON_CENTER",
+        (43, 1, 0): "HEAL_LOCATION_NOWTOCH_CITY_POKEMON_CENTER",
+        (68, 1, 0): "HEAL_LOCATION_KEVLAR_TOWN_POKEMON_CENTER",
+    }
 
 
 # -- synthetic (no real corpus needed) tests for the new resolution rule ----

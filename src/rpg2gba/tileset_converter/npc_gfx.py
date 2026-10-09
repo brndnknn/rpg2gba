@@ -17,7 +17,7 @@ can ask "what's this event's graphic":
     instead of freezing every NPC in place; a route this can't represent
     natively is demoted to a static facing (`MovementSpec.demoted` set, logged
     loud by the caller, never silent).
-  - `is_door_sheet` — the two Uranium door-tile sheet families, which are STRIPPED
+  - `is_door_sheet` — the Uranium door-tile sheet families, which are STRIPPED
     (never emitted as an object_event; a warp_event/tileset door tile is what
     actually makes the door work) rather than mapped to a gfx constant.
 """
@@ -145,8 +145,10 @@ _TURN_COMBO_TO_MOVEMENT_TYPE: dict[frozenset[str], str] = {
     frozenset({"DOWN", "LEFT", "RIGHT"}): "MOVEMENT_TYPE_FACE_DOWN_LEFT_AND_RIGHT",
 }
 
-# Uranium's two door-tile sheet families (case-insensitive prefix match).
-_DOOR_SHEET_PREFIXES = ("pu-doors", "fkdoors")
+# Uranium's door-tile sheet families (case-insensitive prefix match).
+# "door habidome" is the glass dome-door sheet (Map040 EV014 Nowtoch gym door;
+# also Map101/121/127/143/144) — same role as the PU-doors/FKdoors sheets.
+_DOOR_SHEET_PREFIXES = ("pu-doors", "fkdoors", "door habidome")
 
 _DEFINE_RE = re.compile(r"^\s*#define\s+([A-Za-z_][A-Za-z0-9_]*)")
 
@@ -974,8 +976,9 @@ class MapPassability:
 
 
 def is_door_sheet(character_name: str) -> bool:
-    """True for Uranium's two door-tile sheet families (case-insensitive prefix
-    match on ``"PU-doors"`` / ``"FKdoors"``). These are the door's own tile
+    """True for Uranium's door-tile sheet families (case-insensitive prefix
+    match on ``"PU-doors"`` / ``"FKdoors"`` / ``"door habidome"``). These are
+    the door's own tile
     graphic riding along as an "event" — the real door behavior is the warp_event
     plus the tileset's door metatile, so a door-sheet event is stripped rather
     than mapped to a gfx constant."""

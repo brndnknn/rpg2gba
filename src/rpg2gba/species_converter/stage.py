@@ -126,6 +126,9 @@ CATEGORY_NAME_MAX_LEN = 12
 _EVO_METHOD_HAPPINESS = 1
 _EVO_METHOD_LEVEL = 4
 _EVO_METHOD_ITEM = 7
+#: evolutions.dat "HasMove": evolves (at level-up) knowing move `param`. Emitted
+#: as EVO_LEVEL 0 + CONDITIONS({IF_KNOWS_MOVE, MOVE_*}) (constants/pokemon.h:295).
+_EVO_METHOD_HAS_MOVE = 20
 
 #: Fork friendship-evolution threshold macro (src/pokemon.c) — resolves to 160
 #: or 220 depending on P_FRIENDSHIP_EVO_THRESHOLD. Every vanilla friendship
@@ -316,7 +319,7 @@ def build_staged_species(
     (append-only — never renumber). An evolution whose target isn't itself in
     the selection is a dangling reference and fails loud.
 
-    Three Uranium evolution methods are understood, each mapped onto a real
+    Four Uranium evolution methods are understood, each mapped onto a real
     fork evolution shape copied from a vanilla precedent (never invented):
 
       * Level (4)     -> `EVO_LEVEL` with the Uranium param as the level.
@@ -333,6 +336,10 @@ def build_staged_species(
                           resolve to a real fork ITEM_* fails loud rather than
                           being substituted. `resolver` must be supplied when
                           any staged species uses Item evolution.
+      * HasMove (20)  -> `EVO_LEVEL` with param 0 plus
+                          `CONDITIONS({IF_KNOWS_MOVE, MOVE_*})` (vanilla
+                          Yanmega/Mamoswine/Tangrowth shape); the move must be
+                          one the fork defines or it fails loud.
 
     Every other method index fails loud exactly as before — no permissive
     default.
@@ -383,6 +390,21 @@ def build_staged_species(
                         "is not defined in the fork's include/constants/items.h — refusing to "
                         "substitute a different item"
                     )
+            elif method_idx == _EVO_METHOD_HAS_MOVE:
+                if resolver is None:
+                    raise ValueError(
+                        f"{spec.internal_name}: HasMove evolution (method {_EVO_METHOD_HAS_MOVE}) "
+                        "requires a resolver to look up the MOVE_* constant"
+                    )
+                move_constant = resolver.move_constant(param)
+                if move_constant not in resolver.fork_moves:
+                    raise ValueError(
+                        f"{spec.internal_name}: evolution move resolves to {move_constant}, which "
+                        "the fork does not define -- refusing to substitute"
+                    )
+                evo_kind = "EVO_LEVEL"
+                evo_level = 0
+                evo_condition = f"CONDITIONS({{IF_KNOWS_MOVE, {move_constant}}})"
             else:
                 method_name = (
                     pokemon._EVONAMES[method_idx] if method_idx < len(pokemon._EVONAMES) else f"#{method_idx}"

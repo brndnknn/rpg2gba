@@ -698,6 +698,63 @@ def _page_has_transfer(page: dict) -> bool:
     return any(cmd["code"] == TRANSFER_CODE for cmd in page.get("list", []))
 
 
+# RMXP command codes that are pure DOOR PLUMBING — presentation around a
+# transfer that a native warp_event + door metatile already reproduces (or
+# that the port deliberately does not carry): 0 end-of-list, 106 wait, 201
+# transfer, 204 change map settings (fog/panorama — not ported), 208 change
+# transparent flag, 209/509 set move route (door-open animation frames), 210
+# wait for move completion, 223 change screen tone (fade), 250 play SE.
+# Anything else on a touch page (text, conditional branches, switch/var/
+# self-switch writes, item ops, ...) is LOGIC a warp_event cannot express.
+_DOOR_PLUMBING_CODES = frozenset({0, 106, TRANSFER_CODE, 204, 208, 209, 210, 223, 250, 509})
+# Script calls (355, and their 655 continuation lines) that are presentation
+# only: Essentials' cave fade-in/out transition helpers (Map036/037 cave
+# warps, Map031-33 Route cave mouths).
+_DOOR_PLUMBING_SCRIPTS = frozenset({"pbCaveEntrance", "pbCaveExit"})
+
+
+def door_page_logic_codes(page: dict) -> list[int]:
+    """The sorted, distinct non-plumbing command codes on `page` (see
+    `_DOOR_PLUMBING_CODES` / `_DOOR_PLUMBING_SCRIPTS`). Empty means the page
+    is nothing but a door: collapsing it into a warp_event loses nothing."""
+    codes: set[int] = set()
+    for cmd in page.get("list", []):
+        code = cmd["code"]
+        if code in _DOOR_PLUMBING_CODES:
+            continue
+        if code in (355, 655):
+            params = cmd.get("parameters") or [""]
+            if str(params[0]).strip() in _DOOR_PLUMBING_SCRIPTS:
+                continue
+        codes.add(code)
+    return sorted(codes)
+
+
+def door_collapse_losses(event: dict) -> dict[int, list[int]]:
+    """page index -> non-plumbing codes, over the event's PLAYER-TOUCH pages
+    (the only pages a warp_event stands in for — see `classify_event`). Empty
+    dict: collapsing this event into a warp_event (or dropping it as a door
+    sheet) discards no logic."""
+    out: dict[int, list[int]] = {}
+    for i, page in enumerate(event["pages"]):
+        if page.get("trigger") != TRIGGER_PLAYER_TOUCH:
+            continue
+        codes = door_page_logic_codes(page)
+        if codes:
+            out[i] = codes
+    return out
+
+
+def _lossy_door_message(uid: int | None, event: dict, losses: dict[int, list[int]], what: str) -> str:
+    where = f"map {uid} " if uid is not None else ""
+    detail = "; ".join(f"page {i}: codes {codes}" for i, codes in sorted(losses.items()))
+    return (
+        f"{where}EV{event['id']:03d} at ({event['x']}, {event['y']}): {what} would "
+        f"discard non-plumbing commands on its player-touch page(s) — {detail}. "
+        f"Route it through the scripted (gated-door) path instead."
+    )
+
+
 def classify_event(event: dict, slice_ids: set[int]) -> tuple[str, WarpSpec | str | None]:
     """Decide how an event is realized (generic rule that reproduces the S1 keep-list):
 
@@ -727,7 +784,14 @@ def classify_event(event: dict, slice_ids: set[int]) -> tuple[str, WarpSpec | st
     reaches the player through a different channel (ON_FRAME_TABLE) and does not
     make the door conditional: Moki Town's five house doors each pair a
     touch-triggered transfer page with a switch-22 autorun cutscene page, and
-    they are correctly still plain warps."""
+    they are correctly still plain warps.
+
+    **Every touch page must also be pure door plumbing** (`door_page_logic_codes`,
+    2026-10-07). A touch page that transfers but ALSO branches, prints text,
+    writes a switch, etc. (Map040 EV017: the transfer and a switch-102 write
+    sit in the then-arm of a `$PokemonBag.pbQuantity(:MARIAKEY)>0` branch whose
+    else-arm says the door is locked) is logic a warp_event cannot carry, so
+    it too stays ("object", None) and goes through the gated-door path."""
     transfers = _event_transfers(event)
     if transfers:
         targets = {t[0] for t in transfers}
@@ -739,6 +803,20 @@ def classify_event(event: dict, slice_ids: set[int]) -> tuple[str, WarpSpec | st
                 if p.get("trigger") == TRIGGER_PLAYER_TOUCH
             ]
             gate_pages = [i for i, p in touch_pages if not _page_has_transfer(p)]
+            losses = door_collapse_losses(event)
+            if not gate_pages and losses:
+                # Every touch page transfers, but some page also carries
+                # LOGIC (Map040 EV017: an item-check branch whose then-arm
+                # transfers and sets a switch, else-arm says "locked"). A
+                # warp_event would discard all of it — keep it an event so
+                # the dispatcher + per-page script (with its own warp())
+                # runs, exactly like a gated door.
+                logger.info(
+                    "EV%03d at (%d, %d): door with logic — touch pages %s carry "
+                    "non-plumbing commands, so it stays an event, not a warp_event",
+                    event["id"], event["x"], event["y"], losses,
+                )
+                return ("object", None)
             if not gate_pages:
                 dest_uid, dx, dy, ddir = transfers[0]
                 return ("warp", WarpSpec(event["x"], event["y"], dest_uid, dx, dy, ddir))
@@ -2230,7 +2308,12 @@ def build_object_events(
         otherwise -> dropped (`opacity0`).
     - boot page has a visible graphic:
         a door sheet (`npc_gfx.is_door_sheet`) -> dropped (`door_sheet`) — the
-        real door is the warp_event + tileset door tile, not this sprite.
+        real door is the warp_event + tileset door tile, not this sprite —
+        UNLESS its boot page is player-touch and it transfers (a gated or
+        logic-bearing door classify_event refused to collapse): then a gated-
+        door `trigger` coord_event on the door cell, like a blank gated door.
+        Dropping a transferring door sheet whose touch pages carry logic
+        fails loud (`door_collapse_losses`).
         otherwise -> an object_event with `graphics_id = npc_gfx[character_name]`
                      (KeyError if `npc_gfx` is None or the name is unmapped — no
                      silent default, CLAUDE.md §4.5), or, for a sheet whose art
@@ -2410,6 +2493,12 @@ def build_object_events(
                     f"map {uid}: required_actor_ids references event {eid} "
                     f"absent from this map's events"
                 )
+            if stripped_event_ids is not None and eid in stripped_event_ids:
+                # A strip decision wins over the actor scan (Map040 EV048/049:
+                # stripped "Luz" glow events whose own autorun pages re-pin
+                # them). The placement loop drops it as DROP_STRIPPED before
+                # any graphics lookup; it must not become a hidden actor first.
+                continue
             if eid not in objects_by_id:
                 # A warp/out-of-slice event (e.g. an animated-door sprite whose
                 # only object-command refs live in its own page block, which the
@@ -2570,6 +2659,11 @@ def build_object_events(
     def _drop(event_id: int, reason: str) -> None:
         result.drops.append((event_id, reason))
         logger.info("map %d EV%03d: dropped (%s)", uid, event_id, reason)
+
+    # Events the placement loop gave a walk-on `coord_event` host (its touch
+    # pages, plus `_emit_action_host`'s sign for its action pages). A hidden
+    # actor for the same event must not mint a second `dispatch_label`.
+    touch_hosted: set[int] = set()
 
     for event in objects:
         eid = event["id"]
@@ -2818,8 +2912,24 @@ def build_object_events(
                 _drop(eid, DROP_OPACITY0)
                 continue
         elif is_door_sheet(name):
-            _drop(eid, DROP_DOOR_SHEET)
-            continue
+            if trigger == TRIGGER_PLAYER_TOUCH and _event_transfers(event):
+                # A door-sheet event reaches here only when classify_event
+                # refused to collapse it (a gated door — Map040 EV014's
+                # "Gym is closed" page — or a door whose touch page carries
+                # logic — Map040 EV017's key check). The sprite itself is
+                # still not emitted (the tileset door tile is the art), but
+                # the door is live: same coord_event-on-the-door-cell
+                # realization as a blank gated door (branch above).
+                emit_kind = "coord"
+                gated_door = True
+            else:
+                losses = door_collapse_losses(event)
+                if losses and _event_transfers(event):
+                    raise ValueError(
+                        _lossy_door_message(uid, event, losses, "dropping this door sheet")
+                    )
+                _drop(eid, DROP_DOOR_SHEET)
+                continue
         else:
             emit_kind = "object"
 
@@ -2924,6 +3034,7 @@ def build_object_events(
                     used.add((nx, ny))
             else:
                 result.coord_events.append(CoordEvent(x=ex, y=ey, script=script))
+            touch_hosted.add(eid)
             _emit_action_host(
                 event, consts, result, pory_labels, flag_registry,
                 collapsed=eid in collapsed_ids,
@@ -3179,10 +3290,18 @@ def build_object_events(
             "§3.3/§5)",
         )
 
-        actor_script, actor_dispatcher = _resolve_script(
-            actor_event, consts, pory_labels, flag_registry,
-            collapsed=eid in collapsed_ids,
-        )
+        if eid in touch_hosted:
+            # Already hosted as a walk-on event (Map040 EV141: an invisible
+            # Trainer(N) sight tripwire that another script also addobject()s).
+            # Its pages are reachable through those hosts; a scriptless object
+            # lets an A-press fall through to the action-page sign on the same
+            # tile (`GetInteractionScript`, engine/src/field_control_avatar.c).
+            actor_script, actor_dispatcher = NO_SCRIPT, None
+        else:
+            actor_script, actor_dispatcher = _resolve_script(
+                actor_event, consts, pory_labels, flag_registry,
+                collapsed=eid in collapsed_ids,
+            )
         if actor_dispatcher is not None:
             if "goto(" in actor_dispatcher:
                 result.dispatchers.append(actor_dispatcher)

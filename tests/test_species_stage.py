@@ -40,6 +40,7 @@ def _make_resolver(
     item_internal: dict[int, str] | None = None,
     item_names: dict[int, str] | None = None,
     fork_items: set[str] | None = None,
+    fork_moves: set[str] | None = None,
 ) -> pokemon._Resolver:
     """Minimal `_Resolver` for unit-level tests that don't need real Uranium
     data or a real fork checkout — just enough dicts for the fields exercised."""
@@ -57,7 +58,7 @@ def _make_resolver(
         item_names=item_names or {},
         type_internal={0: "NORMAL"},
         fork_species=set(),
-        fork_moves=set(),
+        fork_moves=fork_moves if fork_moves is not None else set(),
         fork_abilities=set(),
         fork_items=fork_items if fork_items is not None else set(),
     )
@@ -527,8 +528,44 @@ def test_item_evolution_without_resolver_fails_loud() -> None:
         stage.build_staged_species((pre, post), [pre_rec, post_rec], pristine_species_egg=100)
 
 
+def test_has_move_evolution_emits_knows_move_condition() -> None:
+    """Uranium evolution method 20 (HasMove, Feleng line, CH06) is staged as
+    EVO_LEVEL 0 + CONDITIONS({IF_KNOWS_MOVE, MOVE_*}) — the fork's own shape
+    for Yanmega/Mamoswine/Tangrowth (species_info/gen_2_families.h)."""
+    pre = SpeciesSpec(1, "PREMON")
+    post = SpeciesSpec(2, "POSTMON")
+    pre_rec = _make_species(id=1, internal_name="PREMON", evolutions=[(20, 246, 2)])
+    post_rec = _make_species(id=2, internal_name="POSTMON")
+    resolver = _make_resolver(
+        move_internal={246: "ANCIENTPOWER"}, fork_moves={"MOVE_ANCIENTPOWER"}
+    )
+
+    staged = stage.build_staged_species(
+        (pre, post), [pre_rec, post_rec], pristine_species_egg=100, resolver=resolver
+    )
+
+    assert staged[0].evolution_kind == "EVO_LEVEL"
+    assert staged[0].evolution_level == 0
+    assert staged[0].evolution_condition == "CONDITIONS({IF_KNOWS_MOVE, MOVE_ANCIENTPOWER})"
+
+
+def test_has_move_evolution_unresolved_fork_move_fails_loud() -> None:
+    """A HasMove evolution whose move resolves to a constant the fork lacks
+    fails loud — including when the resolver carries no fork moves at all."""
+    pre = SpeciesSpec(1, "PREMON")
+    post = SpeciesSpec(2, "POSTMON")
+    pre_rec = _make_species(id=1, internal_name="PREMON", evolutions=[(20, 246, 2)])
+    post_rec = _make_species(id=2, internal_name="POSTMON")
+    resolver = _make_resolver(move_internal={246: "ANCIENTPOWER"})
+
+    with pytest.raises(ValueError, match="does not define"):
+        stage.build_staged_species(
+            (pre, post), [pre_rec, post_rec], pristine_species_egg=100, resolver=resolver
+        )
+
+
 def test_unsupported_evolution_method_still_fails_loud() -> None:
-    """Every Uranium evolution method other than Level/Happiness/Item still
+    """Every Uranium evolution method other than Level/Happiness/Item/HasMove still
     fails loud exactly as before — no permissive default was added."""
     pre = SpeciesSpec(1, "PREMON")
     post = SpeciesSpec(2, "POSTMON")

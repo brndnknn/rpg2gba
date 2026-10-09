@@ -95,6 +95,10 @@ SLICE_TRAINER_PICS: tuple[TrainerPicSpec, ...] = (
     # pinning. Manny and Nunes need no new entry -- both are HIKER, already
     # staged for CH04's Chuck.
     TrainerPicSpec(16, "BLACKBELT"),
+    # CH06 (Kevlar gym): Maria, TRAINER_CLASS_LEADER_ROXANNE. trainertypes.dat
+    # id 71 (intermediate/trainer_types.json, display name "LEADER" ->
+    # TRAINER_CLASS_LEADER), Graphics/Characters/trainer071.png.
+    TrainerPicSpec(71, "LEADER_ROXANNE"),
 )
 
 #: internal_name values in `SLICE_TRAINER_PICS` that additionally get a player
@@ -155,6 +159,17 @@ SLICE_TRAINER_BATTLES: tuple[str, ...] = (
     "TRAINER_MANNY_5",
     "TRAINER_KEICHI_248",
     "TRAINER_NUNES_128",
+    # CH06 (Nowtoch City): the Gym's two trainers then the leader, in map
+    # event order -- Myla (Map042 EV001) and Jack (Map042 EV002), both
+    # `trainerbattle_single`, then Maria (Map042 EV003, the badge battle,
+    # `trainerbattle_no_intro` via the facility idiom's LEADER_ carve-out).
+    "TRAINER_MYLA_7",
+    "TRAINER_JACK_8",
+    "TRAINER_MARIA_15",
+    # CH06 (Nowtoch City): rival Theo, starter-dependent party 1/2/3 (Map040 EV079).
+    "TRAINER_THEO_12",
+    "TRAINER_THEO_13",
+    "TRAINER_THEO_14",
 )
 
 

@@ -1446,3 +1446,48 @@ def test_emitted_item_constants_are_real() -> None:
                     assert tok in real, f"Map{mid:03d}: {tok} not a Phase-2 item constant"
                     checked += 1
     assert checked > 0, "no item constants validated — corpus out of sync?"
+
+
+# ----------------------------------------------------------------------------
+# Classifier 5 — optional 3rd page (CH06 Map042 EV001/EV002 gym-guard trainers)
+# ----------------------------------------------------------------------------
+
+
+def _with_graphic_and_cond(page: dict, character: str, **cond: object) -> dict:
+    return dict(page, graphic={"character_name": character}, condition=cond)
+
+
+def _three_page_trainer(
+    page3_text: str, page3_character: str = "HGSS_007"
+) -> dict:
+    p1 = _with_graphic_and_cond(_FISHERMAN_PAGE1, "HGSS_007")
+    p2 = _with_graphic_and_cond(_FISHERMAN_PAGE2, "HGSS_007", self_switch_valid=True)
+    p3 = _with_graphic_and_cond(
+        _page(_cmd(D.SCRIPT, "pbCallBub(2)"), _text(page3_text)),
+        page3_character,
+        switch1_valid=True,
+        switch1_id=58,
+    )
+    return _event(p1, p2, p3, id=5, name="Fisherman_Matt")
+
+
+def test_trainer_third_page_repeat_chat_is_folded() -> None:
+    ev = _three_page_trainer("Y'know, the Gym Leader is tough.")
+    out = D.classify_trainer_battle(8, ev, _FISHERMAN_CTX)
+    assert out is not None
+    assert "trainerbattle_single(TRAINER_BRANDON_16," in out
+
+
+def test_trainer_third_page_different_text_returns_none() -> None:
+    ev = _three_page_trainer("Something else entirely.")
+    assert D.classify_trainer_battle(8, ev, _FISHERMAN_CTX) is None
+
+
+def test_trainer_third_page_vanish_returns_none() -> None:
+    """Blank-graphic page 3 (Map019 'VanishIfSwitch') is a visibility change
+    that folding would silently drop -> stays unhandled."""
+    p1 = _with_graphic_and_cond(_FISHERMAN_PAGE1, "HGSS_007")
+    p2 = _with_graphic_and_cond(_FISHERMAN_PAGE2, "HGSS_007", self_switch_valid=True)
+    p3 = _with_graphic_and_cond(_page(), "", switch1_valid=True, switch1_id=100)
+    ev = _event(p1, p2, p3, id=5, name="Fisherman_Matt")
+    assert D.classify_trainer_battle(8, ev, _FISHERMAN_CTX) is None

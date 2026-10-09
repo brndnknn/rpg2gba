@@ -169,4 +169,9 @@ def test_every_detected_stair_cell_resolves_or_fails_loud() -> None:
     assert checked > 0, "no stair cells found in the slice — corpus out of sync?"
 
 
-_MAP_CONSTANTS = {33: "MAP_ROUTE_01", 31: "MAP_KEVLAR_TOWN", 37: "MAP_PASSAGE_CAVE_2F"}
+_MAP_CONSTANTS = {
+    33: "MAP_ROUTE_01",
+    31: "MAP_KEVLAR_TOWN",
+    37: "MAP_PASSAGE_CAVE_2F",
+    40: "MAP_NOWTOCH_CITY",  # CH06: 4 diagonal-stair events
+}

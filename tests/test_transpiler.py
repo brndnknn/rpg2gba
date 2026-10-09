@@ -42,6 +42,9 @@ _SWITCHES = {
     "2": "Rival Battled",
     "3": "s: time of day check",
     "10": "Switch Ten",
+    "59": "Has Raptorch",
+    "60": "Has Eletux",
+    "61": "Has Orchynx",
 }
 _VARIABLES = {
     "1": "Result Var",
@@ -1417,6 +1420,40 @@ def test_bag_quantity_equals_zero_lacks_item(ctx: T.TranspileContext) -> None:
     assert "lacks it" in res.text
 
 
+def test_bag_quantity_ruby_symbol_form_checkitem(ctx: T.TranspileContext) -> None:
+    # Map040 EV017 page 0 cmd 0: `$PokemonBag.pbQuantity(:MARIAKEY)>0` — the
+    # bare Ruby-symbol spelling names the same Essentials item symbol.
+    ctx.items = {"MARIAKEY": "ITEM_MARIAS_KEY"}
+    ctx.fork_item_constants = frozenset({"ITEM_MARIAS_KEY"})
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$PokemonBag.pbQuantity(:MARIAKEY)>0"], indent=0),
+        cmd(T.SHOW_TEXT, ["used key"], indent=1),
+        cmd(T.ELSE_BRANCH, indent=0),
+        cmd(T.SHOW_TEXT, ["locked"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], map_id=40, event_id=17, trigger=1)
+    assert res.unhandled == []
+    assert "checkitem(ITEM_MARIAS_KEY)" in res.text
+    assert "if (var(VAR_RESULT) == TRUE) {" in res.text
+    assert "used key" in res.text and "locked" in res.text
+
+
+def test_bag_quantity_ruby_symbol_form_unforked_still_queues(ctx: T.TranspileContext) -> None:
+    # The real fork today lacks ITEM_MARIAS_KEY (Phase-2 items not yet in
+    # engine/include/constants/items.h): §4.7 forward gate -> queue, no invention.
+    ctx.items = {"MARIAKEY": "ITEM_MARIAS_KEY"}
+    ctx.fork_item_constants = frozenset({"ITEM_POTION"})
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$PokemonBag.pbQuantity(:MARIAKEY)>0"], indent=0),
+        cmd(T.SHOW_TEXT, ["used key"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=1)
+    assert len(res.unhandled) == 1
+    assert "ITEM_MARIAS_KEY" not in res.text
+
+
 def test_bag_quantity_unresolvable_item_symbol_still_queues(ctx: T.TranspileContext) -> None:
     ctx.items = {}
     commands = [
@@ -1642,3 +1679,281 @@ def test_colour_text_code_does_not_swallow_other_codes(
         ctx, [[cmd(T.SHOW_TEXT, ["\\C[3]Red \\r text"])]], trigger=1,
     )
     assert len(res.unhandled) == 1
+
+
+# ----------------------------------------------------------------------------
+# door-sheet self animation -> native door commands
+# ----------------------------------------------------------------------------
+
+
+def _run_door_event(
+    ctx: T.TranspileContext, steps: list[dict], sheet: str = "door habidome",
+    target: int = 0,
+) -> T.TranspiledEvent:
+    ev = {
+        "id": 14, "name": "door", "x": 49, "y": 14,
+        "pages": [{
+            "trigger": 1, "graphic": {"character_name": sheet},
+            "list": [
+                cmd(T.SET_MOVE_ROUTE, [target, _route(steps)]),
+                cmd(T.WAIT_MOVE_COMPLETION),
+            ],
+        }],
+    }
+    return T.transpile_event(40, ev, ctx)
+
+
+_DELAY2 = {"code": 15, "parameters": [2]}
+# RMXP face codes: 16 down, 17 left, 18 right, 19 up
+_OPENING = [{"code": 44, "parameters": [{}]}, _DELAY2, {"code": 18}, _DELAY2,
+            {"code": 19}, _DELAY2, {"code": 17}, _DELAY2]
+_CLOSING = [_DELAY2, {"code": 19}, _DELAY2, {"code": 18}, _DELAY2,
+            {"code": 16}, _DELAY2]
+
+
+def test_door_self_route_opening_emits_opendoor(ctx: T.TranspileContext) -> None:
+    res = _run_door_event(ctx, _OPENING)
+    assert "opendoor(49, 14)" in res.text
+    assert "waitdooranim" in res.text
+    assert "applymovement" not in res.text
+    assert "waitmovement" not in res.text
+    assert res.unhandled == []
+
+
+def test_door_self_route_closing_emits_closedoor(ctx: T.TranspileContext) -> None:
+    res = _run_door_event(ctx, _CLOSING, sheet="PU-doorsdew")
+    assert "closedoor(49, 14)" in res.text
+    assert "waitdooranim" in res.text
+    assert "applymovement" not in res.text
+    assert res.unhandled == []
+
+
+def test_door_self_route_snap_open_and_closed(ctx: T.TranspileContext) -> None:
+    res = _run_door_event(ctx, [{"code": 17}, {"code": 15, "parameters": [6]}])
+    assert "setdooropen(49, 14)" in res.text
+    assert "waitdooranim" not in res.text
+    assert "waitmovement" not in res.text
+    assert res.unhandled == []
+    res = _run_door_event(ctx, [{"code": 16}])
+    assert "setdoorclosed(49, 14)" in res.text
+
+
+def test_door_self_route_by_own_event_id(ctx: T.TranspileContext) -> None:
+    res = _run_door_event(ctx, _OPENING, target=14)
+    assert "opendoor(49, 14)" in res.text
+
+
+def test_non_door_self_route_unchanged(ctx: T.TranspileContext) -> None:
+    res = _run_door_event(ctx, _OPENING, sheet="NPC 01")
+    assert "applymovement(14, Map040_EV014_Page1_Move1)" in res.text
+    assert "opendoor" not in res.text
+    assert "waitmovement(0)" in res.text
+
+
+def test_door_sheet_player_route_unchanged(ctx: T.TranspileContext) -> None:
+    res = _run_door_event(ctx, [{"code": 1}], target=-1)
+    assert "applymovement(OBJ_EVENT_ID_PLAYER" in res.text
+
+
+@pytest.mark.parametrize("steps", [
+    [{"code": 17}, {"code": 1}],            # walk step
+    [{"code": 18}],                         # ends facing right: neither row
+    [_DELAY2],                              # no face step at all
+])
+def test_door_self_route_unsupported_fails_loud(
+    ctx: T.TranspileContext, steps: list[dict]
+) -> None:
+    res = _run_door_event(ctx, steps)
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SET_MOVE_ROUTE
+    assert "door-sheet" in res.unhandled[0].description
+    assert "applymovement" not in res.text
+    assert "waitmovement" not in res.text
+
+
+# ----------------------------------------------------------------------------
+# Gym Leader badge battle (CH06 Map042 EV003): LEADER_* class, win-body writes
+# a self-switch -> trainerbattle_no_intro WITHOUT cleartrainerflag.
+# ----------------------------------------------------------------------------
+
+
+def _leader_commands(class_sym: str, then_body: list[dict]) -> list[dict]:
+    call = (
+        f'pbTrainerBattle(PBTrainers::{class_sym},"Maria",'
+        '_I("There!~\\nThat\'s the fighting spirit!"),false,0)'
+    )
+    cmds = [cmd(T.CONDITIONAL_BRANCH, [12, call], indent=0)]
+    cmds += [dict(c, indent=1) for c in then_body]
+    cmds += [cmd(T.ELSE_BRANCH, indent=0), cmd(T.BRANCH_END, indent=0)]
+    return cmds
+
+
+def test_leader_battle_self_switch_win_body_emits_no_intro_without_clear(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.trainers = {("TRAINER_CLASS_LEADER_ROXANNE", "Maria", 0): "TRAINER_MARIA_15"}
+    commands = _leader_commands(
+        "LEADER_Roxanne",
+        [cmd(T.SHOW_TEXT, ["Congrats!"]), cmd(T.CONTROL_SELF_SWITCH, ["A", 0])],
+    )
+    res = run_event(ctx, [commands], map_id=42, event_id=3)
+    assert "trainerbattle_no_intro(TRAINER_MARIA_15, Map042_EV003_Page1_FacilityLoseText)" in res.text
+    assert "cleartrainerflag" not in res.text
+    assert 'format("Congrats!")' in res.text
+    assert "text Map042_EV003_Page1_FacilityLoseText {" in res.text
+    assert not any("pbTrainerBattle" in str(u) for u in res.unhandled)
+
+
+def test_non_leader_self_switch_win_body_still_queues(ctx: T.TranspileContext) -> None:
+    """The self-switch guard stays for every non-LEADER class (Map019 EV6)."""
+    ctx.trainers = {("TRAINER_CLASS_BIKER", "Maria", 0): "TRAINER_MARIA_15"}
+    commands = _leader_commands("BIKER", [cmd(T.CONTROL_SELF_SWITCH, ["A", 0])])
+    res = run_event(ctx, [commands], map_id=42, event_id=3)
+    assert "trainerbattle_no_intro" not in res.text
+    assert len(res.unhandled) == 1
+
+
+# ----------------------------------------------------------------------------
+# $Trainer.badges[N]=true / Kernel.pbSetHealingSpot
+# ----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("n", range(8))
+def test_badge_true_emits_native_badge_flag(ctx: T.TranspileContext, n: int) -> None:
+    res = run_event(ctx, [[cmd(T.SCRIPT, [f"$Trainer.badges[{n}]=true"])]], trigger=1)
+    assert res.unhandled == []
+    assert f"setflag(FLAG_BADGE0{n + 1}_GET)" in res.text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "$Trainer.badges[0]=false",
+        "$Trainer.badges[$game_variables[5]]=true",
+        "$Trainer.badges[8]=true",
+    ],
+)
+def test_badge_non_literal_true_queues(ctx: T.TranspileContext, text: str) -> None:
+    res = run_event(ctx, [[cmd(T.SCRIPT, [text])]], trigger=1)
+    assert len(res.unhandled) == 1
+    assert "badges" in res.unhandled[0].description
+    assert "FLAG_BADGE" not in res.text
+
+
+def test_set_healing_spot_known_triple_emits_setrespawn(
+    ctx: T.TranspileContext,
+) -> None:
+    ctx.healing_spots[(40, 24, 56)] = "HEAL_LOCATION_NOWTOCH_CITY"
+    res = run_event(
+        ctx, [[cmd(T.SCRIPT, ["Kernel.pbSetHealingSpot(40,24,56)"])]], trigger=1
+    )
+    assert res.unhandled == []
+    assert "setrespawn(HEAL_LOCATION_NOWTOCH_CITY)" in res.text
+
+
+@pytest.mark.parametrize(
+    "text", ["Kernel.pbSetHealingSpot(40,24,56)", "pbSetHealingSpot(40,24,56)"]
+)
+def test_set_healing_spot_unknown_triple_queues(
+    ctx: T.TranspileContext, text: str
+) -> None:
+    res = run_event(ctx, [[cmd(T.SCRIPT, [text])]], trigger=1)
+    assert len(res.unhandled) == 1
+    assert "(40, 24, 56)" in res.unhandled[0].description
+    assert "setrespawn(" not in "\n".join(
+        l for l in res.text.splitlines() if not l.lstrip().startswith("#")
+    )
+
+
+
+# ----------------------------------------------------------------------------
+# Starter-dependent rival battle (CH06 Map040 EV079): p=N if sw -> var1 -> pbGet(1)
+# ----------------------------------------------------------------------------
+
+_STARTER_ROWS = [
+    "p=1 if $game_switches[61] == true",
+    "p=2 if $game_switches[59] == true",
+    "p=3 if $game_switches[60] == true",
+    "$game_variables[1]=p",
+]
+_STARTER_CALL = (
+    'pbTrainerBattle(PBTrainers::RIVAL,"Theo",'
+    '_I("No! Not even my new Pokemon could help me win...?"),false,pbGet(1))'
+)
+
+
+def _starter_rival_commands(
+    rows: list[str] | None = None,
+    call: str = _STARTER_CALL,
+    otherwise: list[dict] | None = None,
+) -> list[dict]:
+    rows = _STARTER_ROWS if rows is None else rows
+    cmds = [cmd(T.SCRIPT if i == 0 else T.SCRIPT_CONT, [r]) for i, r in enumerate(rows)]
+    cmds.append(cmd(T.CONDITIONAL_BRANCH, [12, call], indent=0))
+    cmds.append(cmd(T.ELSE_BRANCH, indent=0))
+    cmds += otherwise if otherwise is not None else [cmd(T.EXIT_EVENT, indent=1)]
+    cmds.append(cmd(T.BRANCH_END, indent=0))
+    return cmds
+
+
+def _theo_ctx(ctx: T.TranspileContext) -> T.TranspileContext:
+    ctx.trainers = {
+        ("TRAINER_CLASS_RIVAL", "Theo", 1): "TRAINER_THEO_12",
+        ("TRAINER_CLASS_RIVAL", "Theo", 2): "TRAINER_THEO_13",
+        ("TRAINER_CLASS_RIVAL", "Theo", 3): "TRAINER_THEO_14",
+    }
+    return ctx
+
+
+def test_starter_rival_battle_emits_three_arms(ctx: T.TranspileContext) -> None:
+    res = run_event(_theo_ctx(ctx), [_starter_rival_commands()], map_id=40, event_id=79)
+    assert res.unhandled == []
+    text = res.text
+    lose = "Map040_EV079_Page1_StarterRivalLoseText"
+    assert f"trainerbattle_no_intro(TRAINER_THEO_12, {lose})" in text
+    assert f"trainerbattle_no_intro(TRAINER_THEO_13, {lose})" in text
+    assert f"trainerbattle_no_intro(TRAINER_THEO_14, {lose})" in text
+    # RMXP's last true `p=` row wins (sw60 > sw59 > sw61), so the chain tests
+    # them in that order: Eletux (party 3) first, Orchynx (party 1) last.
+    i_eletux = text.index("if (flag(FLAG_HAS_ELETUX)) {")
+    i_raptorch = text.index("} elif (flag(FLAG_HAS_RAPTORCH)) {")
+    i_orchynx = text.index("} elif (flag(FLAG_HAS_ORCHYNX)) {")
+    assert i_eletux < text.index("TRAINER_THEO_14") < i_raptorch
+    assert i_raptorch < text.index("TRAINER_THEO_13") < i_orchynx
+    assert i_orchynx < text.index("TRAINER_THEO_12")
+    # var-1 write preserved per arm (Kellyn/Cam read its prior value)
+    assert "setvar(VAR_RESULT_VAR, 1)" in text and "setvar(VAR_RESULT_VAR, 3)" in text
+    assert f"text {lose} {{" in text
+    assert "UNHANDLED" not in text
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        ["p=1 if $game_switches[62] == true", *_STARTER_ROWS[1:]],
+        [*_STARTER_ROWS[:2], "p=3 if $game_switches[10] == true", _STARTER_ROWS[3]],
+        [*_STARTER_ROWS, "p=4 if $game_switches[1] == true"],
+        _STARTER_ROWS[:3],
+        [*_STARTER_ROWS[:3], "$game_variables[2]=p"],
+    ],
+)
+def test_starter_rival_battle_variant_rows_unhandled(
+    ctx: T.TranspileContext, rows: list[str]
+) -> None:
+    res = run_event(_theo_ctx(ctx), [_starter_rival_commands(rows=rows)], map_id=40, event_id=79)
+    assert res.unhandled
+    assert "TRAINER_THEO_12" not in res.text
+
+
+def test_starter_rival_battle_nonmatching_call_or_else_unhandled(
+    ctx: T.TranspileContext,
+) -> None:
+    _theo_ctx(ctx)
+    bad_call = _STARTER_CALL.replace("false,pbGet(1)", "true,pbGet(1)")
+    res = run_event(ctx, [_starter_rival_commands(call=bad_call)], map_id=40, event_id=79)
+    assert res.unhandled and "TRAINER_THEO_12" not in res.text
+    res = run_event(
+        ctx, [_starter_rival_commands(otherwise=[cmd(T.SHOW_TEXT, ["Hi"], indent=1)])],
+        map_id=40, event_id=79,
+    )
+    assert res.unhandled and "TRAINER_THEO_12" not in res.text

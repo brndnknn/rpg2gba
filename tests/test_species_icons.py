@@ -51,6 +51,10 @@ EXPECTED_ICON_PAL_INDEX = {
     "BAASHAUN": 0,
     "BAASCHAF": 5,
     "BAARIETTE": 0,
+    # Pinned 2026-10-07 for CH06's Feleng family (Myla's FELENG).
+    "FELENG": 1,
+    "FELUNGE": 1,
+    "FELIGER": 1,
     "ORCHYNX": 1,
     "METALYNX": 1,
     "RAPTORCH": 1,

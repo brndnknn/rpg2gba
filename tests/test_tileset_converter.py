@@ -1182,6 +1182,145 @@ def test_classify_event_autorun_page_does_not_gate_the_door() -> None:
     assert kind == "warp" and spec.dest_uid == 49
 
 
+def _door_plumbing(dest_uid: int = 32) -> list[dict]:
+    """Map040 EV017 page 1's shape: SE-bearing move route, fade, wait,
+    transparent, transfer, fade back — nothing a warp_event loses."""
+    return [
+        {"code": 209, "indent": 0, "parameters": [0, {}]},
+        {"code": 509, "indent": 0, "parameters": [{}]},
+        {"code": 210, "indent": 0, "parameters": []},
+        {"code": 223, "indent": 0, "parameters": [{}, 6]},
+        {"code": 106, "indent": 0, "parameters": [8]},
+        {"code": 208, "indent": 0, "parameters": [1]},
+        _transfer(dest_uid, 5, 9),
+        {"code": 223, "indent": 0, "parameters": [{}, 6]},
+        {"code": 0, "indent": 0, "parameters": []},
+    ]
+
+
+def _key_door_page() -> dict:
+    """Map040 EV017 page 0: item-check branch -> SE/text/transfer/switch write;
+    else -> "locked" text."""
+    return _page(trigger=1, name="PU-doorsdew", cmds=[
+        {"code": 111, "indent": 0, "parameters": [12, "$PokemonBag.pbQuantity(:MARIAKEY)>0"]},
+        {"code": 250, "indent": 1, "parameters": [{}]},
+        {"code": 101, "indent": 1, "parameters": ["used key"]},
+        {**_transfer(32, 5, 9), "indent": 1},
+        {"code": 121, "indent": 1, "parameters": [102, 102, 0]},
+        {"code": 411, "indent": 0, "parameters": []},
+        {"code": 101, "indent": 1, "parameters": ["locked"]},
+        {"code": 412, "indent": 0, "parameters": []},
+        {"code": 0, "indent": 0, "parameters": []},
+    ])
+
+
+def test_is_door_sheet_recognizes_door_habidome() -> None:
+    """Map040 EV014's glass gym door sheet is a door sheet like PU-doors/FKdoors."""
+    from rpg2gba.tileset_converter.npc_gfx import is_door_sheet
+
+    assert is_door_sheet("door habidome")
+    assert is_door_sheet("Door Habidome")
+    assert is_door_sheet("PU-doorsdew") and is_door_sheet("FKdoors1")
+    assert not is_door_sheet("door2") and not is_door_sheet("HGSS_000")
+
+
+def test_door_page_logic_codes_plumbing_vs_logic() -> None:
+    assert mw.door_page_logic_codes(_page(trigger=1, cmds=_door_plumbing())) == []
+    cave = _page(trigger=1, cmds=[
+        {"code": 355, "indent": 0, "parameters": ["pbCaveEntrance"]},
+        {"code": 204, "indent": 0, "parameters": [1, "", 0, 0, 0, 250, 0, 0]},
+        _transfer(32, 1, 1),
+    ])
+    assert mw.door_page_logic_codes(cave) == []
+    assert mw.door_page_logic_codes(_key_door_page()) == [101, 111, 121, 411, 412]
+
+
+def test_classify_event_pure_plumbing_door_still_collapses() -> None:
+    door = _event(16, 10, 11, [
+        _page(trigger=1, name="PU-doorsdew", cmds=_door_plumbing()),
+        _page(trigger=3, cond=_sw_cond(22), name="PU-doorsdew", cmds=[
+            {"code": 111, "indent": 0, "parameters": [12, "get_character(0).onEvent?"]},
+            {"code": 355, "indent": 0, "parameters": ['setTempSwitchOn("A")']},
+        ]),
+    ])
+    kind, spec = mw.classify_event(door, _SLICE)
+    assert kind == "warp" and spec.dest_uid == 32
+
+
+def test_classify_event_logic_bearing_door_is_not_collapsed() -> None:
+    """Map040 EV017: every touch page transfers, but page 0's transfer sits in
+    an item-check branch with text + a switch write — a warp_event would drop
+    all of it, so the event stays an event."""
+    door = _event(17, 47, 61, [
+        _key_door_page(),
+        _page(trigger=1, cond=_sw_cond(101), name="PU-doorsdew", cmds=_door_plumbing()),
+    ])
+    assert mw.classify_event(door, _SLICE) == ("object", None)
+
+
+def _door_map(event: dict) -> tuple[dict, object]:
+    map_json = {"map_id": 40, "events": [event]}
+    consts = mc.MapConstantRegistry(Path("x")).mint(40, "Test Map")
+    return map_json, consts
+
+
+def test_build_object_events_gated_door_sheet_takes_gated_door_path() -> None:
+    """Map040 EV014: "door habidome" sheet, page 0 refuses (text only), page 1
+    (switch 101) transfers. Before the fix the door-sheet drop ran first and
+    the gym entrance vanished; now it is a gated-door coord_event on the door
+    cell, sprite still not emitted."""
+    ev = _event(14, 49, 14, [
+        _page(trigger=1, name="door habidome",
+              cmds=[{"code": 101, "indent": 0, "parameters": ["closed"]}]),
+        _page(trigger=1, cond=_sw_cond(101), name="door habidome", cmds=_door_plumbing()),
+    ])
+    assert mw.classify_event(ev, _SLICE) == ("object", None)
+    map_json, consts = _door_map(ev)
+    result = mw.build_object_events(map_json, consts, _SLICE)
+    assert result.object_events == []
+    assert [(ce.x, ce.y) for ce in result.coord_events] == [(49, 14)]
+    assert result.gated_door_cells == {(49, 14)}
+    assert not any(d[1] == mw.DROP_DOOR_SHEET for d in result.drops)
+
+
+def test_build_object_events_logic_door_sheet_is_scripted() -> None:
+    """Map040 EV017: the logic-bearing key door is a coord_event on its cell
+    (its page script carries the checkitem/warp), not dropped."""
+    ev = _event(17, 47, 61, [
+        _key_door_page(),
+        _page(trigger=1, cond=_sw_cond(101), name="PU-doorsdew", cmds=_door_plumbing()),
+    ])
+    map_json, consts = _door_map(ev)
+    result = mw.build_object_events(map_json, consts, _SLICE)
+    assert [(ce.x, ce.y) for ce in result.coord_events] == [(47, 61)]
+    assert result.gated_door_cells == {(47, 61)}
+
+
+def test_build_object_events_ungated_door_sheet_without_touch_boot_still_drops() -> None:
+    """A door sheet with no transfer (e.g. an action-trigger "it's locked"
+    prop) keeps today's drop."""
+    ev = _event(26, 3, 3, [_page(trigger=0, name="door habidome")])
+    map_json, consts = _door_map(ev)
+    result = mw.build_object_events(map_json, consts, _SLICE)
+    assert result.coord_events == [] and result.object_events == []
+    assert (26, mw.DROP_DOOR_SHEET) in result.drops
+
+
+def test_build_object_events_lossy_door_sheet_drop_fails_loud() -> None:
+    """A transferring door sheet whose boot page is NOT player-touch would be
+    dropped — discarding its touch page's logic. That must fail loud, naming
+    map/event/page and the non-plumbing codes."""
+    ev = _event(17, 47, 61, [
+        _key_door_page(),
+        _page(trigger=0, cond=_sw_cond(101), name="PU-doorsdew"),
+    ])
+    # Force page 1 (action trigger) to be the boot page: no condition on it.
+    ev["pages"][1]["condition"] = {}
+    map_json, consts = _door_map(ev)
+    with pytest.raises(ValueError, match=r"map 40 EV017 .*page 0: codes \[101, 111, 121, 411, 412\]"):
+        mw.build_object_events(map_json, consts, _SLICE)
+
+
 def test_event_transfers_dest_dir_carried_through() -> None:
     """_event_transfers / classify_event carry parameters[4] (dir) through into
     the resulting WarpSpec.dest_dir, for every non-default direction value."""
@@ -1879,6 +2018,30 @@ def test_trainer_sight_ray_no_boot_page_still_emits() -> None:
     assert result.drops == []
 
 
+def test_tripwire_that_is_also_a_hidden_actor_mints_one_dispatcher() -> None:
+    """Map040 EV141: an invisible Trainer(N) tripwire (touch host: sight-ray
+    coord_events) that another script also addobject()s (hidden actor). The
+    actor must not emit a second `Map040_EV141_Dispatch` — it is placed
+    scriptless, so an A-press falls through to the action-page sign."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(40, "Nowtoch City")
+    pages = [
+        _page(trigger=2, name="HGSS_000", opacity=0, direction=2, through=True, cond=_sw_cond(101)),
+        _page(trigger=0, cond=_sw_cond(55)),
+    ]
+    map_json = {"map_id": 40, "events": [_event(141, 10, 10, pages, name="Trainer(4)")]}
+    labels = {"Map040_EV141_Page1", "Map040_EV141_Page2"}
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, pory_labels=labels, npc_gfx=_npc_gfx_fixture(),
+        passability=_passability_fixture(30, 30, blocked_cells=set()),
+        required_actor_ids={141},
+    )
+    headers = [d.splitlines()[0] for d in result.dispatchers]
+    assert headers.count("script Map040_EV141_Dispatch {") <= 1
+    assert result.coord_events  # the sight ray is still emitted
+    (actor,) = result.object_events
+    assert actor.script == mw.NO_SCRIPT
+
+
 def test_no_boot_page_non_trainer_still_drops() -> None:
     """Regression guard: a NON-Trainer event with no boot-active page still
     drops with DROP_NO_BOOT_PAGE -- the tripwire carve-out is scoped to
@@ -2210,6 +2373,25 @@ def test_build_object_events_stripped_event_dropped_before_gfx_lookup() -> None:
     )
     assert dict(result.drops)[28] == mw.DROP_STRIPPED
     assert len(result.object_events) == 1  # only event 1 survives
+
+
+def test_build_object_events_stripped_event_wins_over_required_actor() -> None:
+    """A stripped event that is ALSO a required actor (Map040 EV048: a glow
+    whose only page — parallel, gated on switch 106, so no boot page — re-pins
+    itself) is dropped, not placed as a hidden actor: the actor pass must not
+    reach its unmapped "light" sheet."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(40, "Nowtoch City")
+    gated = {"switch1_valid": True, "switch1_id": 106}
+    map_json = {
+        "map_id": 40,
+        "events": [_event(48, 4, 4, [_page(trigger=4, cond=gated, name="light")], name="EV048")],
+    }
+    result = mw.build_object_events(
+        map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
+        stripped_event_ids={48: "EV048"}, required_actor_ids={48},
+    )
+    assert dict(result.drops)[48] == mw.DROP_STRIPPED
+    assert result.object_events == []
 
 
 def test_build_object_events_stripped_expect_name_mismatch_fails_loud() -> None:

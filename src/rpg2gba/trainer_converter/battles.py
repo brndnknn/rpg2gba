@@ -78,6 +78,21 @@ _CLASS_PIC_INTERNAL_NAME: dict[str, str] = {
     # CH05 (Passage Cave), Keichi. Matches the internal name pinned in
     # common.SLICE_TRAINER_PICS for trainertypes.dat id 16.
     "TRAINER_CLASS_BLACK_BELT": "BLACKBELT",
+    # CH06, Maria (Uranium class LEADER_ROXANNE, trainertypes id 71). NOTE the
+    # map is per real fork class, so every Uranium LEADER_* type collapses onto
+    # this one pic; a second leader needs a per-trainer pic, not this row.
+    "TRAINER_CLASS_LEADER": "LEADER_ROXANNE",
+}
+
+#: Classes whose music the fork picks per trainer gender, not per class: vanilla
+#: `Class: Leader` uses `Music: Female` for Roxanne and `Music: Male` for
+#: Brawly (engine/src/data/trainers.party:4791-4830). Gender is the staged
+#: trainer type's (Maria -> Female).
+_CLASS_GENDER_ENCOUNTER_MUSIC: dict[str, dict[str, str]] = {
+    "TRAINER_CLASS_LEADER": {
+        "TRAINER_GENDER_FEMALE": "TRAINER_ENCOUNTER_MUSIC_FEMALE",
+        "TRAINER_GENDER_MALE": "TRAINER_ENCOUNTER_MUSIC_MALE",
+    },
 }
 
 #: Real `TRAINER_CLASS_*` constant -> real `TRAINER_ENCOUNTER_MUSIC_*`
@@ -244,8 +259,19 @@ def resolve_gender(gender_str: str, fork_genders: set[str]) -> str:
     return candidate
 
 
-def resolve_encounter_music(class_const: str, fork_music: set[str]) -> str:
-    music = _CLASS_ENCOUNTER_MUSIC.get(class_const)
+def resolve_encounter_music(
+    class_const: str, fork_music: set[str], gender_const: str | None = None
+) -> str:
+    by_gender = _CLASS_GENDER_ENCOUNTER_MUSIC.get(class_const)
+    if by_gender is not None:
+        music = by_gender.get(gender_const or "")
+        if music is None:
+            raise ValueError(
+                f"{class_const}: no gender-keyed encounter-music row for {gender_const!r} "
+                f"(have {sorted(by_gender)})"
+            )
+    else:
+        music = _CLASS_ENCOUNTER_MUSIC.get(class_const)
     if music is None:
         raise ValueError(
             f"{class_const}: no encounter-music mapping -- _CLASS_ENCOUNTER_MUSIC must be "
@@ -341,7 +367,7 @@ def build_staged_battles(
             class_const = resolve_trainer_class(rec["trainer_class"], trainer_types, fork_classes)
             tt = trainer_types[rec["trainer_class"]]
             gender_const = resolve_gender(tt["gender"], fork_genders)
-            music_const = resolve_encounter_music(class_const, fork_music)
+            music_const = resolve_encounter_music(class_const, fork_music, gender_const)
             pic_const = resolve_pic_constant(class_const, staged_pic_internal_names)
             verify_party_species(rec["party"], fork_species, staged_species)
             verify_party_moves(rec["party"], fork_moves)

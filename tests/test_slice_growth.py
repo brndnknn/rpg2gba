@@ -73,6 +73,30 @@ def test_planned_chapters_are_excluded(tmp_path: Path) -> None:
     assert [s.chapter_id for s in slices] == ["CH01"]
 
 
+def test_in_progress_chapter_reconciles_but_is_not_gated(tmp_path: Path) -> None:
+    """An `in_progress` chapter's maps are in SLICE_MAP_IDS (it must build
+    before its §9 gate -- CH05's lifecycle, CH06 now), so they count toward
+    reconciliation; but no ChapterSlice is produced for it, so the detector
+    never scans warps still being authored."""
+    path = _write_chapters_json(
+        tmp_path,
+        [_chapter("CH01", [1]), _chapter("CH02", [2, 3], status="in_progress")],
+    )
+    slices = gated_chapter_slices(path, current_slice_ids=[1, 2, 3])
+    assert [s.chapter_id for s in slices] == ["CH01"]
+    with pytest.raises(SliceGrowthError, match="does not equal"):
+        gated_chapter_slices(path, current_slice_ids=[1])  # in-progress maps missing
+
+
+def test_in_progress_overlapping_a_built_chapter_fails_loud(tmp_path: Path) -> None:
+    path = _write_chapters_json(
+        tmp_path,
+        [_chapter("CH01", [1, 2]), _chapter("CH02", [2, 3], status="in_progress")],
+    )
+    with pytest.raises(SliceGrowthError, match="already claimed"):
+        gated_chapter_slices(path, current_slice_ids=[1, 2, 3])
+
+
 def test_duplicate_chapter_id_uses_only_first_occurrence(tmp_path: Path) -> None:
     """CH07/CH07A-style reruns of an earlier map roster later in the corpus
     must not be double-counted into the cumulative union."""

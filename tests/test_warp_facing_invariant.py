@@ -169,6 +169,17 @@ def reachable(slice_data, door_cells) -> dict[int, set[tuple[int, int]]]:
     for uid, cells in seam_cells.items():
         for cell in cells:
             base[uid] |= _starts(uid, cell)
+    # Scripted transfers: an event that is NOT collapsed into a warp_event (a
+    # gated door, a story transfer) still moves the player via its page's
+    # `warp()`. CH06's gym (Map042) and Maria's house (Map047) are entered
+    # ONLY this way (Map040 EV014 / EV017), so without these seeds neither
+    # building is reachable and its exit warp looks unenterable.
+    for uid in built:
+        objects, _warps, _skips = mw.classify_map_events(maps[uid], built)
+        for event in objects:
+            for dest_uid, x, y, _dir in mw._event_transfers(event):
+                if dest_uid in built and _in_bounds(maps[dest_uid], x, y):
+                    base[dest_uid] |= _starts(dest_uid, (x, y))
     connections = json.loads((_OUT / "connections.json").read_text(encoding="utf-8"))
     for a, a_dir, _ao, b, b_dir, _bo in connections:
         if a in built and b in built:
@@ -291,6 +302,14 @@ def _landing(arrival: Arrival, door_cells: dict[int, set[tuple[int, int]]]) -> t
     return (x + dx, y + dy)
 
 
+#: Arrivals that face straight back into a warp IN URANIUM ITSELF, kept
+#: faithful by operator ruling rather than corrected:
+#:   Map045 EV010 (Metro platform gate, (5,12)) -> station (14,5), RMXP dir 6
+#:   (right) -- facing Map044 EV001's gate at (15,5). Same behaviour in
+#:   Uranium (apparent authoring slip); ruled 2026-10-07: keep faithful.
+_FAITHFUL_FACE_BACK: set[Arrival] = {(45, 5, 12, 44, 14, 5, "DIR_EAST")}
+
+
 def test_arrival_never_faces_the_warp_it_came_out_of(
     slice_data, door_cells, reachable,
 ) -> None:
@@ -302,6 +321,8 @@ def test_arrival_never_faces_the_warp_it_came_out_of(
     maps, warp_lists, _tilesets = slice_data
     bad = []
     for arrival in _arrivals(slice_data, reachable):
+        if arrival in _FAITHFUL_FACE_BACK:
+            continue
         dest_uid, facing = arrival[3], arrival[6]
         lx, ly = _landing(arrival, door_cells)
         dx, dy = _DIR_VECTOR[facing]

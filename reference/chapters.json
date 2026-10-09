@@ -116,7 +116,7 @@
     {
       "id": "CH06", "act": "A1", "title": "Nowtoch City", "wiki_page": "Nowtoch City",
       "visit": 1, "outdoor": 40, "maps": [40, 41, 42, 43, 44, 45, 46, 47],
-      "predecessor": "CH05", "tier": "medium", "status": "planned",
+      "predecessor": "CH05", "tier": "medium", "status": "in_progress",
       "notes": "Gym 1 (map 42). First Gym, first metro/Tandor-Underground station (44, 45), and the Rock Smash grant. Novelty-promoted."
     },
 

@@ -149,6 +149,13 @@ STARTER_SPECIES: tuple[SpeciesSpec, ...] = (
     SpeciesSpec(60, "BAASHAUN"),
     SpeciesSpec(61, "BAASCHAF"),
     SpeciesSpec(62, "BAARIETTE"),
+    # --- Feleng family (2026-10-07), CH06 trainer party ----------------------
+    # TRAINER_MYLA_7 carries a FELENG. FELENG -> FELUNGE -> FELIGER; the
+    # whole line is staged because build_staged_species fails loud on a
+    # dangling evolution target (FELUNGE was demanded; FELIGER follows).
+    SpeciesSpec(29, "FELENG"),
+    SpeciesSpec(30, "FELUNGE"),
+    SpeciesSpec(31, "FELIGER"),
 )
 
 
