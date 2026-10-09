@@ -545,6 +545,10 @@ $(OBJ_DIR)/sym_ewram.ld: sym_ewram.txt
 	$(RAMSCRGEN) ewram_data $< ENGLISH > $@
 
 TEACHABLE_DEPS := $(ALL_LEARNABLES_JSON) $(INCLUDE_DIRS)/constants/tms_hms.h $(INCLUDE_DIRS)/config/pokemon.h $(DATA_SRC_SUBDIR)/pokemon/special_movesets.json $(INCLUDE_DIRS)/config/pokedex_plus_hgss.h $(LEARNSET_HELPERS_DIR)/make_teachables.py
+# BEGIN URANIUM PATHFINDER SLICE — rebuild teachables when the assembler-generated
+# learnables overlay changes (make_teachables.py itself picks it over all_learnables.json).
+TEACHABLE_DEPS += $(wildcard $(DATA_SRC_SUBDIR)/pokemon/all_learnables.gen.json)
+# END URANIUM PATHFINDER SLICE
 
 $(LEARNSET_HELPERS_BUILD_DIR):
 	@mkdir -p $@
@@ -555,7 +559,10 @@ $(ALL_LEARNABLES_JSON):  | $(wildcard $(LEARNSET_HELPERS_DATA_DIR)/*.json)
 $(ALL_TUTORS_JSON): $(shell find data/ -type f -name '*.inc')  $(LEARNSET_HELPERS_DIR)/make_tutors.py | $(LEARNSET_HELPERS_BUILD_DIR)
 	python3 $(LEARNSET_HELPERS_DIR)/make_tutors.py $@
 
-$(ALL_TEACHING_TYPES_JSON): $(wildcard $(DATA_SRC_SUBDIR)/pokemon/species_info/*_families.h)  $(LEARNSET_HELPERS_DIR)/make_teaching_types.py | $(LEARNSET_HELPERS_BUILD_DIR)
+# BEGIN URANIUM PATHFINDER SLICE — this rule also depends on uranium_species_info.h (second
+# wildcard prerequisite) because make_teaching_types.py scans it for staged species.
+$(ALL_TEACHING_TYPES_JSON): $(wildcard $(DATA_SRC_SUBDIR)/pokemon/species_info/*_families.h) $(wildcard $(DATA_SRC_SUBDIR)/pokemon/uranium_species_info.h) $(LEARNSET_HELPERS_DIR)/make_teaching_types.py | $(LEARNSET_HELPERS_BUILD_DIR)
+# END URANIUM PATHFINDER SLICE
 	python3 $(LEARNSET_HELPERS_DIR)/make_teaching_types.py $@
 
 $(DATA_SRC_SUBDIR)/pokemon/teachable_learnsets.h: $(TEACHABLE_DEPS) | $(ALL_TUTORS_JSON) $(ALL_TEACHING_TYPES_JSON)

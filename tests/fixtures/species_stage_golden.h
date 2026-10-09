@@ -39,6 +39,7 @@
         .iconSprite = gMonIcon_Orchynx,
         .iconPalIndex = 0,
         .levelUpLearnset = sUraniumLevelUpLearnset_ORCHYNX,
+        .teachableLearnset = sUraniumORCHYNXTeachableLearnset,
         .evolutions = EVOLUTION({EVO_LEVEL, 28, SPECIES_METALYNX}),
     },
     [SPECIES_METALYNX] =
@@ -84,4 +85,5 @@
         .iconSprite = gMonIcon_Metalynx,
         .iconPalIndex = 0,
         .levelUpLearnset = sUraniumLevelUpLearnset_METALYNX,
+        .teachableLearnset = sUraniumMETALYNXTeachableLearnset,
     },

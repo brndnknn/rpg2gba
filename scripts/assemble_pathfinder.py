@@ -39,6 +39,13 @@ Pass 2.7 (S8b6) — heal-location overlay
     docstring for the URANIUM_HEAL_LOCATIONS hook in
     engine/json_data_rules.mk that selects it over the committed file).
 
+Pass 2.8 (S8b7) — teachable-learnset overlay
+    Merge Uranium's TM/HM/tutor compatibility (the tm_hm.py sidecar) into an
+    overlay of the fork's `src/data/pokemon/all_learnables.json`
+    (src/data/pokemon/all_learnables.gen.json, gitignored) that the fenced hook
+    in engine/tools/learnset_helpers/make_teachables.py prefers when present;
+    see run_teachables_pass and rpg2gba.species_converter.teachables.
+
 Pass 3 (S8d) — berry tree seed table
     Emit fork data/scripts/uranium_berry_trees.h (gitignored): the pre-planted
     berry-tree save-slot table consumed by new_game.c's NewGameInitData, right
@@ -939,6 +946,54 @@ def run_heal_location_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -
 
 
 # ---------------------------------------------------------------------------
+# S8b7: Teachable-learnset overlay
+# ---------------------------------------------------------------------------
+
+def run_teachables_pass(out: Path, fork: Path, dry_run: bool) -> None:
+    """Feed Uranium's TM/HM/tutor compatibility into the fork's build-generated
+    teachable learnsets.
+
+    Merges `out/intermediate/uranium_tm_learnables.json` (the
+    `pbs_converter.tm_hm` sidecar -- the single source of Uranium
+    compatibility) into the fork's `src/data/pokemon/all_learnables.json` via
+    `rpg2gba.species_converter.teachables.generate`, and writes
+    `fork/src/data/pokemon/all_learnables.gen.json` (gitignored). The fenced
+    hook in `engine/tools/learnset_helpers/make_teachables.py` reads that
+    overlay when present and the pristine upstream file otherwise.
+
+    Staged Uranium-custom species get exactly Uranium's list; vanilla-reuse
+    species get the union of the fork's stock list and Uranium's (see the
+    module docstring for the fidelity trade-off). The upstream file is
+    always re-read fresh as the base, so reruns are byte-identical (CLAUDE.md
+    4.2). Must run AFTER the species pass (reads `species/species_manifest.json`
+    to tell custom species from vanilla ones); a stale manifest would mis-key
+    species. With zero staged species the overlay is still valid (vanilla union
+    only). Tutor moves taught by transpiled map scripts are picked up by the
+    fenced `make_tutors.py` hook, not here.
+    """
+    logger.info("=== S8b7: teachable learnset overlay ===")
+    from rpg2gba.species_converter import teachables
+
+    overlay = teachables.generate(out=out, fork=fork, reference_dir=Path("reference"))
+    if overlay.dropped_moves:
+        logger.warning(
+            "  dropped %d Uranium-original move(s) the fork lacks: %s",
+            len(overlay.dropped_moves), ", ".join(overlay.dropped_moves),
+        )
+    logger.info(
+        "  %d custom species, %d vanilla species (+%d pairs), %d Uranium species skipped "
+        "(not staged / not in fork)",
+        overlay.custom_species, overlay.vanilla_species, overlay.added_pairs,
+        len(overlay.skipped_species),
+    )
+    if dry_run:
+        logger.info("  [dry] would write %s", teachables.OVERLAY_RELPATH.name)
+        return
+    path = teachables.write_overlay(overlay, fork)
+    logger.info("  wrote %s", path.name)
+
+
+# ---------------------------------------------------------------------------
 # S8c: Fork assembly
 # ---------------------------------------------------------------------------
 
@@ -1432,6 +1487,8 @@ def main() -> int:
                     help="Skip S8b6 (heal-location overlay already staged).")
     ap.add_argument("--skip-ingame-trades", action="store_true",
                     help="Skip S8b5b (NPC in-game trade rows already staged).")
+    ap.add_argument("--skip-teachables", action="store_true",
+                    help="Skip S8b7 (teachable-learnset overlay already staged).")
     args = ap.parse_args()
 
     repo_root = Path(__file__).parent.parent
@@ -1486,6 +1543,9 @@ def main() -> int:
 
     if not args.skip_heal_locations:
         run_heal_location_pass(out, fork, consts, args.dry_run)
+
+    if not args.skip_teachables:
+        run_teachables_pass(out, fork, args.dry_run)
 
     run_fork_pass(out, fork, consts, staging, args.dry_run, batch_layouts=batch_layouts)
     run_berry_tree_pass(out, fork, args.dry_run)

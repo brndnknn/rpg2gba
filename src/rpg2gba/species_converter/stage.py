@@ -91,7 +91,7 @@ from rpg2gba.pbs_converter import pokemon
 from rpg2gba.pbs_converter._c_emit import generated_banner, wrap_header
 from rpg2gba.pbs_converter._id_map import IdMap
 from rpg2gba.pbs_converter._naming import load_fork_constants
-from rpg2gba.species_converter import common
+from rpg2gba.species_converter import common, teachables
 from rpg2gba.species_converter.common import STARTER_SPECIES, SpeciesSpec, gfx_ident
 from rpg2gba.text_validator.engine_metrics import (
     DEX_DESCRIPTION_MAX_LINES,
@@ -829,6 +829,9 @@ def emit_species_info(
         lines.append(f"        .iconPalIndex = {s.icon_pal_index},")
 
         lines.append(f"        .levelUpLearnset = {_learnset_symbol(spec)},")
+        # TM/HM/tutor list is build-generated (make_teachables.py) from the
+        # all_learnables.gen.json overlay (`teachables.py`); never hand-emit the array.
+        lines.append(f"        .teachableLearnset = {teachables.teachable_symbol(spec.internal_name)},")
 
         if s.evolution_target_fork_id is not None:
             target_const = f"SPECIES_{_internal_name_for_fork_id(staged, s.evolution_target_fork_id)}"

@@ -18,6 +18,12 @@ import typing
 CONFIG_ENABLED_PAT = re.compile(r"^#define P_LEARNSET_HELPER_TEACHABLE\s+(?P<cfg_val>[^ ]*)", flags=re.MULTILINE)
 INCFILE_HAS_TUTOR_PAT = re.compile(r"special ChooseMonForMoveTutor")
 INCFILE_HAS_TUTOR_PAT2 = re.compile(r"chooseboxmon SELECT_PC_MON_MOVE_TUTOR")
+# BEGIN URANIUM PATHFINDER SLICE — transpiled tutor idiom. The rpg2gba transpiler emits
+# `setvar(VAR_0x8005, MOVE_X)` + `call(MoveTutor_EventScript_OpenBox)` into a map's scripts.inc;
+# the `special ChooseMonForMoveTutor` / `chooseboxmon` gate above lives only in the shared
+# data/scripts/move_tutors.inc, so without this a map script's tutor moves are filtered out.
+INCFILE_HAS_TUTOR_PAT3 = re.compile(r"^\s*call\s+MoveTutor_EventScript_Open(?:Box|PartyMenu)\b", flags=re.MULTILINE)
+# END URANIUM PATHFINDER SLICE
 INCFILE_MOVE_PAT = re.compile(r"setvar VAR_0x8005, (MOVE_[A-Z_]*)")
 INCFILE_MOVE_PAT2 = re.compile(r"move_tutor (MOVE_[A-Z_]*)")
 
@@ -38,8 +44,11 @@ def extract_repo_tutors() -> typing.Generator[str, None, None]:
     for inc_fname in chain(glob.glob("./data/scripts/*.inc"), glob.glob("./data/maps/*/scripts.inc")):
         with open(inc_fname, "r") as inc_fp:
             incfile = inc_fp.read()
-            if not INCFILE_HAS_TUTOR_PAT.search(incfile) and not INCFILE_HAS_TUTOR_PAT2.search(incfile):
+            # BEGIN URANIUM PATHFINDER SLICE — also accept the transpiled call-form (see PAT3)
+            if (not INCFILE_HAS_TUTOR_PAT.search(incfile) and not INCFILE_HAS_TUTOR_PAT2.search(incfile)
+                    and not INCFILE_HAS_TUTOR_PAT3.search(incfile)):
                 continue
+            # END URANIUM PATHFINDER SLICE
 
             for move in INCFILE_MOVE_PAT.finditer(incfile):
                 yield move.group(1)

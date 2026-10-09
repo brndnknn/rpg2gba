@@ -224,6 +224,7 @@ def _stub_out_other_passes(monkeypatch) -> None:
     monkeypatch.setattr(ap, "run_rematch_pass", lambda *a, **kw: None)
     monkeypatch.setattr(ap, "run_heal_location_pass", lambda *a, **kw: None)
     monkeypatch.setattr(ap, "run_ingame_trade_pass", lambda *a, **kw: None)
+    monkeypatch.setattr(ap, "run_teachables_pass", lambda *a, **kw: None)
 
 
 def _prep_main_env(tmp_path: Path, monkeypatch) -> None:

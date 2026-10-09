@@ -1,0 +1,48 @@
+# hand conversion (2026-10-09): operator-approved fidelity deviation (ruling 2026-10-09) — Uranium source bug: in Map046 EV014 page 0 (NPC trade, Fortog for Baashaun) the "You don't have a Fortog, I guess..." line sits AFTER the end of the `VAR_RESULT == TRUE` branch, so it also plays after a successful trade. Fixed here by making it the else arm of that branch. Everything else is the transpiler's own output for this event, copied verbatim (page 1 / "Page2" unchanged). Do not "fix" the transpiler: it must stay faithful to the source.
+
+script Map046_EV014_Page1 {
+    lock
+    faceplayer
+    msgbox(format("Hey! You look like a trainer, so that means you collect Pokemon! I'm looking for a Fortog. If you've got one, I'll trade you my Baashaun for it."))
+    yesnobox(0, 0)
+    if (var(VAR_RESULT) == 1) {
+        getpartysize
+        if (var(VAR_RESULT) == 0) {
+            msgbox(format("You don't have any Pokémon..."))
+        } else {
+            setvar(VAR_0x8005, INGAME_TRADE_MAP046_EV014)
+            specialvar(VAR_0x8009, GetInGameTradeSpeciesInfo)
+            chooseboxmon(SELECT_PC_MON_TRADE)
+            waitstate
+            setvar(VAR_RESULT, FALSE)
+            if (var(VAR_0x8004) != PARTY_NOTHING_CHOSEN) {
+                specialvar(VAR_0x800B, GetTradeSpecies)
+                if (var(VAR_0x800B) == SPECIES_FARTOG) {
+                    setvar(VAR_RESULT, TRUE)
+                }
+            }
+            if (var(VAR_RESULT) == TRUE) {
+                special(CreateInGameTradePokemon)
+                special(DoInGameTradeScene)
+                waitstate
+                msgbox(format("Take care of him! Woot, I have a happy Fortog now!"))
+                setflag(FLAG_MAP046_EVENT014_SSA)
+            } else {
+                msgbox(format("You don't have a Fortog, I guess..."))
+            }
+        }
+    } else {
+        msgbox(format("Don't come back 'til you've got Fortog!"))
+    }
+    release
+    end
+}
+
+script Map046_EV014_Page2 {
+    lock
+    faceplayer
+    msgbox(format("Yay, I'm happy with my Fortog!"))
+    msgbox(format("I wish I could change its nickname, though... you can't change the name of Pokémon you get in a trade."))
+    release
+    end
+}
