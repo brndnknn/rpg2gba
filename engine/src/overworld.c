@@ -4,6 +4,9 @@
 // breaks those call sites; reverting them too restores vanilla map-load/spawn behavior.
 #include "uranium_map_walker.h"
 // END URANIUM MAP WALKER
+// BEGIN URANIUM PATHFINDER SLICE — connection id remap
+#include "uranium_connection_remap.h"
+// END URANIUM PATHFINDER SLICE
 // BEGIN URANIUM PATHFINDER SLICE — pulls FLAG_STARTING_OVER (the flag registry's
 // generated dump, keyed off config/rpg2gba.h's range bases), set in DoWhiteOut()
 // below. "../" for the same reason as new_game.c's uranium_berry_trees.h include.
@@ -897,6 +900,11 @@ bool8 SetDiveWarpDive(u16 x, u16 y)
 
 void LoadMapFromCameraTransition(u8 mapGroup, u8 mapNum)
 {
+    // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+    const struct Tileset *oldPrimaryTileset = gMapHeader.mapLayout->primaryTileset;
+    bool32 primaryChanged;
+    // END URANIUM PATHFINDER SLICE
+
     SetWarpDestination(mapGroup, mapNum, WARP_ID_NONE, -1, -1);
 
     // Dont transition map music between BF Outside West/East
@@ -925,12 +933,29 @@ void LoadMapFromCameraTransition(u8 mapGroup, u8 mapNum)
     Overworld_ClearSavedMusic();
     RunOnTransitionMapScript();
     InitMap();
+    // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+    // Vanilla never changes primary tileset across a connection (this function
+    // only ever reloaded the secondary); Uranium cross-tileset connections do.
+    // The whole-view redraw happens in CameraMove after MoveMapViewToBackup.
+    primaryChanged = (gMapHeader.mapLayout->primaryTileset != oldPrimaryTileset);
+    if (primaryChanged)
+    {
+        UraniumCopyPrimaryTilesetToVramUsingHeap(gMapHeader.mapLayout);
+        UraniumLoadPrimaryTilesetPalette(gMapHeader.mapLayout, TRUE); // gamma shift below fills Faded
+        ApplyWeatherColorMapToPals(0, GetNumPalsInPrimary(gMapHeader.mapLayout)); // palettes [0,5]
+    }
+    // END URANIUM PATHFINDER SLICE
     CopySecondaryTilesetToVramUsingHeap(gMapHeader.mapLayout);
     LoadSecondaryTilesetPalette(gMapHeader.mapLayout, TRUE); // skip copying to Faded, gamma shift will take care of it
 
     ApplyWeatherColorMapToPals(GetNumPalsInPrimary(gMapHeader.mapLayout), NUM_PALS_TOTAL - GetNumPalsInPrimary(gMapHeader.mapLayout)); // palettes [6,12]
 
-    InitSecondaryTilesetAnimation();
+    // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+    if (primaryChanged)
+        InitTilesetAnimations(); // primary + secondary
+    else
+        InitSecondaryTilesetAnimation();
+    // END URANIUM PATHFINDER SLICE
     UpdateLocationHistoryForRoamer();
     MoveAllRoamers();
     DoCurrentWeather();

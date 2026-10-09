@@ -74,6 +74,18 @@ from .emit import (
 from . import rom_quantize
 from .rom_quantize import make_rom_quantizer
 from .tile_merge import MergeTable, merge_and_dedup_metatiles, rom_merge_table
+from rpg2gba.tileset_converter.connection_remap import (
+    NUM_METATILES_TOTAL,
+    RemapDirection,
+    RemapTable,
+    build_remap_table,
+    check_both_directions,
+    composite_key,
+    source_key,
+    strip_cells,
+    strip_depth as default_strip_depth,
+    write_remap_header,
+)
 from .raster import TileRasterizer, column_in_atlas
 from .sources import load_tileset_sources
 
@@ -375,6 +387,9 @@ def build_slice_tilesets(
     dry_run: bool = False,
     tile_merge: bool | None = None,
     merge_table: MergeTable | None = None,
+    remap_directions: list[RemapDirection] | None = None,
+    map_const_of: Callable[[int], str] | None = None,
+    strip_depth: int | None = None,
 ) -> dict[int, EmittedTileset]:
     """Emit real Uranium tilesets for the slice and write the engine + overlay glue.
 
@@ -415,6 +430,19 @@ def build_slice_tilesets(
     (column tiles, void bucket, door/stair copies and fallbacks) is remapped to the
     dedup survivor so layouts resolve to the right metatile. `merge_table` overrides
     the corpus table (tests); default `tile_merge.rom_merge_table(tilesets_json)`.
+
+    `remap_directions` (`map_set.load_slice_remap_directions`) are the id-remapped
+    seams between maps on different tilesets (design R, `connection_remap`): for each
+    direction, the neighbour's border strip (`strip_depth` deep, default per axis:
+    `connection_remap.strip_depth`, N/S 5, E/W 7 — the cells
+    `FillConnection` copies) is resolved to the neighbour's final metatile ids; every
+    strip metatile whose pre-quantization art (`connection_remap.source_key`, then
+    `composite_key`) is not already in the current tileset is appended to it (the
+    neighbour's own metatile: its source art and behavior), and a neighbour-id ->
+    current-id table is built (current void elsewhere). Appending never moves an
+    existing id, so the overlay stays valid. Tables go to the
+    ``uranium_connection_remaps.gen.h`` fragment via `_write_fragments` (stub when
+    there are none); `map_const_of` names each map's ``MAP_*`` constant there.
     Returns the per-tileset `EmittedTileset`. Writes nothing when `dry_run`."""
     fork = Path(fork)
     do_merge = _rom_tile_merge_enabled() if tile_merge is None else tile_merge
@@ -449,6 +477,9 @@ def build_slice_tilesets(
     }
     stair_cells = stair_cells or {}
     results: dict[int, EmittedTileset] = {}
+    # Per-tileset state held until every tileset's list exists (strip imports need
+    # the neighbour's final ids), then emitted in the second loop below.
+    pending: dict[int, dict] = {}
 
     for ts, maplist in sorted(by_ts.items()):
         rast = make_rast(ts)
@@ -701,16 +732,15 @@ def build_slice_tilesets(
             logger.info("  tileset %d tile merge: %d -> %d metatiles after dedup",
                         ts, n_before, len(metatile_list))
 
-        # The ROM quantizer (family packer + Ward + shared palettes) is defined once in
-        # rom_quantize; the map viewer's ROM view and the oracle read the same config.
-        rom_q = make_rom_quantizer()
-        emit = emit_tileset(
-            metatile_list, primary_dir, secondary_dir, primary_name, secondary_name,
-            quantizer=rom_q,
-        )
-        if getattr(rom_q, "info", None):
-            logger.info("  tileset %d shared palettes: %s", ts, dict(rom_q.info))
-        results[ts] = emit
+        pending[ts] = {
+            "metatiles": metatile_list,
+            "dirs": (primary_dir, secondary_dir, primary_name, secondary_name),
+            "grids": grid_cache,
+            "maps": [m for m, _ in maplist],
+            "n_columns": len(ordered),
+            "stairs": (n_stair_metatiles, n_stair_inlined),
+            "void": void_idx,
+        }
 
         overlay["tilesets"][str(ts)] = {"primary": primary_name, "secondary": secondary_name}
         if source_tileset_of is not None:
@@ -751,16 +781,36 @@ def build_slice_tilesets(
                 }
                 for kind in stair_kinds
             }
+
+    remap_tables: list[RemapTable] = []
+    if not dry_run and remap_directions:
+        remap_tables = _import_connection_strips(
+            pending, overlay, remap_directions, warp_coords, stair_cells, strip_depth
+        )
+
+    for ts, st in sorted(pending.items()):
+        primary_dir, secondary_dir, primary_name, secondary_name = st["dirs"]
+        # The ROM quantizer (family packer + Ward + shared palettes) is defined once in
+        # rom_quantize; the map viewer's ROM view and the oracle read the same config.
+        rom_q = make_rom_quantizer()
+        emit = emit_tileset(
+            st["metatiles"], primary_dir, secondary_dir, primary_name, secondary_name,
+            quantizer=rom_q,
+        )
+        if getattr(rom_q, "info", None):
+            logger.info("  tileset %d shared palettes: %s", ts, dict(rom_q.info))
+        results[ts] = emit
+        n_stair_metatiles, n_stair_inlined = st["stairs"]
         logger.info(
             "S8a tileset %d: %d columns -> %d metatiles, %d GBA tiles, "
             "%d palettes (mean shift %.2f/31), %d stair metatile(s) "
             "[+%d inlined at no cost]",
-            ts, len(ordered), emit.n_metatiles, emit.n_tiles, emit.n_palettes,
+            ts, st["n_columns"], emit.n_metatiles, emit.n_tiles, emit.n_palettes,
             emit.stats.get("mean_shift_5bit", 0.0), n_stair_metatiles, n_stair_inlined,
         )
 
     if not dry_run:
-        _write_fragments(fork, results)
+        _write_fragments(fork, results, remap_tables=remap_tables, map_const_of=map_const_of)
         Path(overlay_out).write_text(
             json.dumps(overlay, indent=2) + "\n", encoding="utf-8"
         )
@@ -774,9 +824,144 @@ _GEN_HEADER = (
 )
 
 
-def _write_fragments(fork: Path, results: dict[int, EmittedTileset]) -> None:
-    """Write the five generated engine fragments registering every emitted tileset
-    (four static-art fragments + `uranium_anims.gen.h` for animated tiles)."""
+def _resolve_cell(
+    overlay: dict, ts: int, grid: TileGrid, x: int, y: int,
+    warp_xy: set[tuple[int, int]], stair_xy: dict[tuple[int, int], str],
+) -> int:
+    """The metatile id the layout converter writes for cell (x, y) of a map built
+    under tileset `ts` (mirrors `layout.convert_layout`: door copy at warp cells,
+    behavior copy at stair/arrow cells, exact column key, else the void bucket)."""
+    key = str(ts)
+    k = column_key(grid, x, y)
+    sk = serialize_column_key(k) if k else None
+    if (x, y) in warp_xy:
+        w = overlay["warps"][key]
+        mid = w["tiles"].get(sk, w["fallback"]) if sk else w["fallback"]
+    elif (x, y) in stair_xy:
+        b = overlay["behavior_overrides"][key][stair_xy[(x, y)]]
+        mid = b["tiles"].get(sk, b["fallback"]) if sk else b["fallback"]
+    elif sk:
+        mid = overlay["tiles"][key][sk]["metatile"]
+    else:
+        mid = overlay["buckets"][key]["void"]
+    if mid is None:
+        raise ValueError(f"tileset {ts}: cell ({x}, {y}) resolves to no metatile")
+    return int(mid)
+
+
+def _import_connection_strips(
+    pending: dict[int, dict],
+    overlay: dict,
+    directions: list[RemapDirection],
+    warp_coords: dict[int, set[tuple[int, int]]],
+    stair_cells: dict[int, dict[tuple[int, int], str]],
+    depth: int | None,
+) -> list[RemapTable]:
+    """Design R strip import (see `build_slice_tilesets` docstring). Mutates each
+    current tileset's pending metatile list (append only) and returns one table per
+    direction."""
+    ts_of: dict[int, int] = {m: ts for ts, st in pending.items() for m in st["maps"]}
+    keys: dict[int, tuple[dict, dict]] = {}
+
+    def index_of(ts: int) -> tuple[dict, dict]:
+        if ts not in keys:
+            src: dict = {}
+            comp: dict = {}
+            for i, mt in enumerate(pending[ts]["metatiles"]):
+                src.setdefault(source_key(mt), i)
+                comp.setdefault(composite_key(mt), i)
+            keys[ts] = (src, comp)
+        return keys[ts]
+
+    check_both_directions(directions)
+
+    # Pass 1: import every direction's strip art (append-only).
+    strips: list[tuple[RemapDirection, int, int, list[int]]] = []
+    # tileset -> (metatile count before its first import, total imported, source maps)
+    imported_by_ts: dict[int, tuple[int, int, set[int]]] = {}
+    for d in directions:
+        if d.cur not in ts_of or d.nbr not in ts_of:
+            raise ValueError(f"remapped connection {d}: map not in this build")
+        cts, nts = ts_of[d.cur], ts_of[d.nbr]
+        if cts == nts:
+            raise ValueError(
+                f"remapped connection {d}: both maps are built under tileset {cts} — "
+                "a shared tileset needs no remap (map_set.tileset_groups disagrees)"
+            )
+        cgrid, ngrid = pending[cts]["grids"][d.cur], pending[nts]["grids"][d.nbr]
+        d_depth = default_strip_depth(d.direction) if depth is None else depth
+        cells = strip_cells(cgrid.xsize, cgrid.ysize, ngrid.xsize, ngrid.ysize,
+                            d.direction, d.offset, d_depth)
+        nbr_ids = sorted({
+            _resolve_cell(overlay, nts, ngrid, x, y,
+                          warp_coords.get(d.nbr, set()), stair_cells.get(d.nbr, {}))
+            for x, y in cells
+        })
+        src_idx, comp_idx = index_of(cts)
+        cur_list = pending[cts]["metatiles"]
+        n_src = n_comp = n_new = 0
+        n_before = len(cur_list)
+        for nid in nbr_ids:
+            mt = pending[nts]["metatiles"][nid]
+            sk, ck = source_key(mt), composite_key(mt)
+            if sk in src_idx:
+                n_src += 1
+            elif ck in comp_idx:
+                n_comp += 1
+            else:
+                idx = len(cur_list)
+                cur_list.append(mt)
+                src_idx[sk] = comp_idx[ck] = idx
+                n_new += 1
+        strips.append((d, cts, nts, nbr_ids))
+        prev = imported_by_ts.get(cts, (n_before, 0, set()))
+        imported_by_ts[cts] = (prev[0], prev[1] + n_new, prev[2] | {d.nbr})
+        logger.info(
+            "connection remap %d<-%d (%s, depth %d): %d strip cells, %d strip metatiles: "
+            "%d source-identical, %d same composite, %d imported into tileset %d",
+            d.cur, d.nbr, d.direction, d_depth, len(cells), len(nbr_ids),
+            n_src, n_comp, n_new, cts,
+        )
+
+    # Fail loud at the engine's metatile cap HERE, with the numbers — otherwise the
+    # over-cap list only surfaces as an out-of-range id inside build_remap_table.
+    for ts, (before, imported, from_maps) in imported_by_ts.items():
+        total = len(pending[ts]["metatiles"])
+        if total > NUM_METATILES_TOTAL:
+            raise ValueError(
+                f"tileset {ts}: {before} metatiles + {imported} imported from map "
+                f"{'/'.join(str(m) for m in sorted(from_maps))}'s strip = {total} "
+                f"> {NUM_METATILES_TOTAL} cap"
+            )
+
+    # Pass 2: tables over the FINAL lists — every neighbour id (incl. what the
+    # neighbour imported from cur, which maps back to cur's original id) whose art
+    # cur holds; strip ids are guaranteed by pass 1.
+    tables: list[RemapTable] = []
+    for d, cts, nts, nbr_ids in strips:
+        src_idx, comp_idx = index_of(cts)
+        mapping: dict[int, int] = {}
+        for nid, mt in enumerate(pending[nts]["metatiles"]):
+            cid = src_idx.get(source_key(mt))
+            if cid is None:
+                cid = comp_idx.get(composite_key(mt))
+            if cid is not None:
+                mapping[nid] = cid
+        table = build_remap_table(nbr_ids, mapping, pending[cts]["void"])
+        tables.append(RemapTable(d.cur, d.nbr, table))
+        logger.info("connection remap %d<-%d: %d of %d neighbour ids mapped",
+                    d.cur, d.nbr, len(mapping), len(pending[nts]["metatiles"]))
+    return tables
+
+
+def _write_fragments(
+    fork: Path, results: dict[int, EmittedTileset], *,
+    remap_tables: list[RemapTable] | None = None,
+    map_const_of: Callable[[int], str] | None = None,
+) -> None:
+    """Write the generated engine fragments registering every emitted tileset
+    (four static-art fragments + `uranium_anims.gen.h` for animated tiles) and the
+    connection remap tables (`connection_remap.write_remap_header`)."""
     graphics: list[str] = []
     metatiles: list[str] = []
     structs: list[str] = []
@@ -849,6 +1034,9 @@ def _write_fragments(fork: Path, results: dict[int, EmittedTileset]) -> None:
     (fork / "include" / "uranium_externs.gen.h").write_text(
         _GEN_HEADER + "\n".join(externs) + "\n", encoding="utf-8"
     )
+    # Connection remap tables (design R): always (over)written, the zero-entry stub
+    # when there are none, so the engine's #include always compiles.
+    write_remap_header(fork, list(remap_tables or []), map_const_of)
     _write_anim_fragment(fork, results)
 
 

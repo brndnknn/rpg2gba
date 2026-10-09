@@ -18,6 +18,10 @@
 #include "constants/metatile_behaviors.h"
 #include "constants/metatile_behaviors_frlg.h"
 #include "wild_encounter.h"
+// BEGIN URANIUM PATHFINDER SLICE — connection id remap
+#include "uranium_connection_remap.h"
+#include "field_camera.h"
+// END URANIUM PATHFINDER SLICE
 
 struct ConnectionFlags
 {
@@ -38,10 +42,12 @@ static const struct ConnectionFlags sDummyConnectionFlags = {0};
 
 static void InitMapLayoutData(struct MapHeader *mapHeader);
 static void InitBackupMapLayoutData(const u16 *map, u16 width, u16 height);
-static void FillSouthConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset);
-static void FillNorthConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset);
-static void FillWestConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset);
-static void FillEastConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset);
+// BEGIN URANIUM PATHFINDER SLICE — connection id remap (added `remap` param)
+static void FillSouthConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap);
+static void FillNorthConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap);
+static void FillWestConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap);
+static void FillEastConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap);
+// END URANIUM PATHFINDER SLICE
 static void InitBackupMapLayoutConnections(struct MapHeader *mapHeader);
 static void LoadSavedMapView(void);
 static bool8 SkipCopyingMetatileFromSavedMap(u16 *mapBlock, u16 mapWidth, u8 yMode);
@@ -208,22 +214,25 @@ static void InitBackupMapLayoutConnections(struct MapHeader *mapHeader)
         {
             struct MapHeader const *cMap = GetMapHeaderFromConnection(connection);
             s32 offset = connection->offset;
+            // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+            const u16 *remap = UraniumGetConnectionRemap(connection->mapGroup, connection->mapNum);
+            // END URANIUM PATHFINDER SLICE
             switch (connection->direction)
             {
             case CONNECTION_SOUTH:
-                FillSouthConnection(mapHeader, cMap, offset);
+                FillSouthConnection(mapHeader, cMap, offset, remap);
                 sMapConnectionFlags.south = TRUE;
                 break;
             case CONNECTION_NORTH:
-                FillNorthConnection(mapHeader, cMap, offset);
+                FillNorthConnection(mapHeader, cMap, offset, remap);
                 sMapConnectionFlags.north = TRUE;
                 break;
             case CONNECTION_WEST:
-                FillWestConnection(mapHeader, cMap, offset);
+                FillWestConnection(mapHeader, cMap, offset, remap);
                 sMapConnectionFlags.west = TRUE;
                 break;
             case CONNECTION_EAST:
-                FillEastConnection(mapHeader, cMap, offset);
+                FillEastConnection(mapHeader, cMap, offset, remap);
                 sMapConnectionFlags.east = TRUE;
                 break;
             }
@@ -231,7 +240,8 @@ static void InitBackupMapLayoutConnections(struct MapHeader *mapHeader)
     }
 }
 
-static void FillConnection(int x, int y, struct MapHeader const *connectedMapHeader, int x2, int y2, int width, int height)
+// URANIUM PATHFINDER SLICE: connection id remap — added `remap` param (NULL = vanilla)
+static void FillConnection(int x, int y, struct MapHeader const *connectedMapHeader, const u16 *remap, int x2, int y2, int width, int height)
 {
     int i;
     const u16 *src;
@@ -245,12 +255,16 @@ static void FillConnection(int x, int y, struct MapHeader const *connectedMapHea
     for (i = 0; i < height; i++)
     {
         CpuCopy16(src, dest, width * 2);
+        // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+        if (remap != NULL)
+            UraniumApplyConnectionRemap(dest, width, remap);
+        // END URANIUM PATHFINDER SLICE
         dest += gBackupMapLayout.width;
         src += mapWidth;
     }
 }
 
-static void FillSouthConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset)
+static void FillSouthConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap)
 {
     int x, y;
     int x2;
@@ -283,13 +297,13 @@ static void FillSouthConnection(struct MapHeader const *mapHeader, struct MapHea
 
         FillConnection(
             x, y,
-            connectedMapHeader,
+            connectedMapHeader, remap, // URANIUM PATHFINDER SLICE: connection id remap
             x2, /*y2*/ 0,
             width, /*height*/ MAP_OFFSET);
     }
 }
 
-static void FillNorthConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset)
+static void FillNorthConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap)
 {
     int x;
     int x2, y2;
@@ -323,14 +337,14 @@ static void FillNorthConnection(struct MapHeader const *mapHeader, struct MapHea
 
         FillConnection(
             x, /*y*/ 0,
-            connectedMapHeader,
+            connectedMapHeader, remap, // URANIUM PATHFINDER SLICE: connection id remap
             x2, y2,
             width, /*height*/ MAP_OFFSET);
 
     }
 }
 
-static void FillWestConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset)
+static void FillWestConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap)
 {
     int y;
     int x2, y2;
@@ -362,13 +376,13 @@ static void FillWestConnection(struct MapHeader const *mapHeader, struct MapHead
 
         FillConnection(
             /*x*/ 0, y,
-            connectedMapHeader,
+            connectedMapHeader, remap, // URANIUM PATHFINDER SLICE: connection id remap
             x2, y2,
             /*width*/ MAP_OFFSET, height);
     }
 }
 
-static void FillEastConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset)
+static void FillEastConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap)
 {
     int x, y;
     int y2;
@@ -399,7 +413,7 @@ static void FillEastConnection(struct MapHeader const *mapHeader, struct MapHead
 
         FillConnection(
             x, y,
-            connectedMapHeader,
+            connectedMapHeader, remap, // URANIUM PATHFINDER SLICE: connection id remap
             /*x2*/ 0, y2,
             /*width*/ MAP_OFFSET + 1, height);
     }
@@ -800,6 +814,12 @@ bool8 CameraMove(int x, int y)
             return gCamera.active;
         }
 
+        // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+        u8 oldMapGroup = gSaveBlock1Ptr->location.mapGroup;
+        u8 oldMapNum = gSaveBlock1Ptr->location.mapNum;
+        const struct Tileset *oldPrimaryTileset = gMapHeader.mapLayout->primaryTileset;
+        const u16 *viewRemap;
+        // END URANIUM PATHFINDER SLICE
         SetPositionFromConnection(connection, direction, x, y);
         LoadMapFromCameraTransition(connection->mapGroup, connection->mapNum);
         gCamera.active = TRUE;
@@ -807,7 +827,33 @@ bool8 CameraMove(int x, int y)
         gCamera.y = old_y - gSaveBlock1Ptr->pos.y;
         gSaveBlock1Ptr->pos.x += x;
         gSaveBlock1Ptr->pos.y += y;
-        MoveMapViewToBackup(direction);
+        // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+        // location is now the new map, so this is the new map's table for
+        // viewing the map just left (NULL = vanilla).
+        viewRemap = UraniumGetConnectionRemap(oldMapGroup, oldMapNum);
+        if (viewRemap == NULL && gMapHeader.mapLayout->primaryTileset == oldPrimaryTileset)
+        {
+            MoveMapViewToBackup(direction);
+        }
+        else
+        {
+            // Cross-tileset crossing: the saved view holds the OLD map's ids, and
+            // copying it back would overwrite the new map's own cells with a lossy
+            // round trip (unmappable ids fall back to void). InitMap already loaded
+            // the new grid with correct ids, so drop the saved view instead — the
+            // only loss is runtime metatile edits in view at the seam.
+            ClearSavedMapView();
+            // On-screen BG tiles still index the old tileset(s): redraw the whole
+            // view from the new layout. The caller advances the BG tile offset and
+            // draws the incoming edge only after we return, so draw at the
+            // pre-step position to stay aligned with the current tile offset.
+            gSaveBlock1Ptr->pos.x -= x;
+            gSaveBlock1Ptr->pos.y -= y;
+            DrawWholeMapView();
+            gSaveBlock1Ptr->pos.x += x;
+            gSaveBlock1Ptr->pos.y += y;
+        }
+        // END URANIUM PATHFINDER SLICE
     }
 
     return gCamera.active;
@@ -1063,6 +1109,20 @@ void LoadSecondaryTilesetPalette(struct MapLayout const *mapLayout, bool8 skipFa
 {
     LoadTilesetPalette(mapLayout->secondaryTileset, GetNumPalsInPrimary(mapLayout) * 16, (NUM_PALS_TOTAL - GetNumPalsInPrimary(mapLayout)) * PLTT_SIZE_4BPP, skipFaded, GetNumPalsInPrimary(mapLayout));
 }
+
+// BEGIN URANIUM PATHFINDER SLICE — connection id remap
+// Primary-tileset counterparts of the secondary reload used by
+// LoadMapFromCameraTransition, for connections that change primary tileset.
+void UraniumCopyPrimaryTilesetToVramUsingHeap(struct MapLayout const *mapLayout)
+{
+    CopyTilesetToVramUsingHeap(mapLayout->primaryTileset, GetNumTilesInPrimary(mapLayout), 0);
+}
+
+void UraniumLoadPrimaryTilesetPalette(struct MapLayout const *mapLayout, bool8 skipFaded)
+{
+    LoadTilesetPalette(mapLayout->primaryTileset, 0, GetNumPalsInPrimary(mapLayout) * PLTT_SIZE_4BPP, skipFaded, GetNumPalsInPrimary(mapLayout));
+}
+// END URANIUM PATHFINDER SLICE
 
 void CopyMapTilesetsToVram(struct MapLayout const *mapLayout)
 {

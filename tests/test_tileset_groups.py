@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from rpg2gba.tileset_converter.connections import parse_connections
-from rpg2gba.tileset_converter.map_set import synth_tileset_id, tileset_groups
+from rpg2gba.tileset_converter.map_set import (
+    remapped_connections,
+    synth_tileset_id,
+    tileset_groups,
+)
 
 ROWS = parse_connections([[31, "N", 11, 35, "S", 0], [35, "N", 0, 40, "S", 0]])
 REAL = {31: 22, 35: 22, 40: 23, 99: 5}
@@ -44,11 +48,31 @@ def test_transitive_component_uses_min_of_component() -> None:
     assert set(got.values()) == {synth_tileset_id(2)}
 
 
-def test_mixed_real_tilesets_fail_loud() -> None:
-    with pytest.raises(ValueError) as exc:
-        tileset_groups(ROWS, [31, 35, 40], frozenset(), REAL)
-    msg = str(exc.value)
-    assert "map 35 (RMXP tileset 22)" in msg
-    assert "map 40 (RMXP tileset 23)" in msg
-    assert "seam_warps.json" in msg
-    assert "#27" in msg
+def test_mixed_real_tilesets_stay_split_as_remapped_connection() -> None:
+    got = tileset_groups(ROWS, [31, 35, 40], frozenset(), REAL)
+    assert got[31] == got[35] == synth_tileset_id(31)
+    assert got[40] == synth_tileset_id(40)
+    remapped = remapped_connections(ROWS, [31, 35, 40], frozenset(), REAL)
+    assert [(r.map_a, r.map_b) for r in remapped] == [(35, 40)]
+
+
+def test_same_tileset_connection_is_not_remapped() -> None:
+    assert remapped_connections(ROWS, [31, 35], frozenset(), REAL) == []
+
+
+def test_suppressed_mixed_pair_is_not_remapped() -> None:
+    assert remapped_connections(
+        ROWS, [31, 35, 40], frozenset({frozenset({35, 40})}), REAL
+    ) == []
+
+
+def test_mixed_transitive_chain_splits_only_at_the_tileset_change() -> None:
+    # 5 -(same ts)- 9 -(different ts)- 2 -(same ts as 2)- 7
+    rows = parse_connections([
+        [5, "N", 0, 9, "S", 0], [9, "E", 0, 2, "W", 0], [2, "N", 0, 7, "S", 0],
+    ])
+    real = {5: 1, 9: 1, 2: 3, 7: 3}
+    got = tileset_groups(rows, [2, 5, 7, 9], frozenset(), real)
+    assert got[5] == got[9] == synth_tileset_id(5)
+    assert got[2] == got[7] == synth_tileset_id(2)
+    assert [(r.map_a, r.map_b) for r in remapped_connections(rows, [2, 5, 7, 9], frozenset(), real)] == [(9, 2)]

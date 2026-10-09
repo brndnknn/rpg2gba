@@ -245,6 +245,16 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
     # other map keeps its own. Fails loud if a joined pair has different real
     # RMXP tilesets.
     groups = load_slice_tileset_groups(out, SLICE_MAP_IDS)
+    # Emitted connections between maps on DIFFERENT real RMXP tilesets don't share
+    # a tileset; they become id-remapped seams (design R, connection_remap): the
+    # neighbour's border strip is imported and a remap table is generated.
+    from rpg2gba.tileset_converter.map_set import load_slice_remap_directions
+
+    remaps = load_slice_remap_directions(out, SLICE_MAP_IDS)
+    consts_path = out / "porymap" / "map_constants.json"
+    map_consts = (
+        json.loads(consts_path.read_text(encoding="utf-8")) if remaps else {}
+    )
 
     maps: list[tuple[int, dict]] = []
     synth_to_real: dict[int, int] = {}
@@ -273,6 +283,8 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
         source_tileset_of=lambda s: synth_to_real[s],
         stair_cells=stair_cells,
         dry_run=dry_run,
+        remap_directions=remaps,
+        map_const_of=lambda mid: map_consts[str(mid)]["map_const"],
     )
 
 

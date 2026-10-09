@@ -114,16 +114,19 @@ def tileset_groups(
 
     A real scrolling connection draws the neighbour's raw metatile ids through
     the CURRENT map's tileset (engine/src/fieldmap.c), so two maps joined by an
-    EMITTED connection must be one physical tileset. Maps joined (transitively)
-    by an emitted in-slice connection share ``synth_tileset_id(min(component))``;
-    an isolated map keeps ``synth_tileset_id(map_id)``. "Emitted" is exactly
+    EMITTED connection that share a real RMXP tileset are one physical tileset:
+    such maps (transitively) share ``synth_tileset_id(min(component))``; every
+    other map keeps ``synth_tileset_id(map_id)``. "Emitted" is exactly
     `connections.emitted_rows` (both endpoints in *map_ids*, suppressed
     seam_warps pairs excluded). *rows* are parsed `ConnectionRow`s;
     *real_tileset_of* is `{map_id: real RMXP tileset id}`.
 
-    Fails loud (ValueError) if a component mixes real RMXP tileset ids: the
-    shared pool resolves art through ONE real tileset, so such a seam needs a
-    seam_warps.json arrow warp or border-strip import (PROJECT_TODO #27)."""
+    An emitted connection between maps on DIFFERENT real RMXP tilesets does not
+    join them: it is a *remapped connection* (`remapped_connections`) — each side
+    keeps its own tileset, imports the neighbour's border-strip art, and the
+    engine translates the neighbour's ids through a generated table
+    (`connection_remap`, design R, 2026-10-06). Fails loud (ValueError) if a
+    component nevertheless mixes real tilesets (an internal invariant)."""
     from rpg2gba.tileset_converter.connections import emitted_rows
 
     ids = sorted(set(map_ids))
@@ -136,6 +139,8 @@ def tileset_groups(
         return m
 
     for row in emitted_rows(rows, set(ids), suppress_pairs):
+        if int(real_tileset_of[row.map_a]) != int(real_tileset_of[row.map_b]):
+            continue  # remapped connection: the two sides stay separate tilesets
         ra, rb = find(row.map_a), find(row.map_b)
         if ra != rb:
             parent[max(ra, rb)] = min(ra, rb)
@@ -150,22 +155,33 @@ def tileset_groups(
         if len(set(reals.values())) > 1:
             detail = ", ".join(f"map {m} (RMXP tileset {t})" for m, t in sorted(reals.items()))
             raise ValueError(
-                f"maps joined by an emitted connection must share one real RMXP tileset, "
-                f"but this connected component mixes tilesets: {detail}. The seam needs "
-                f"either a reference/seam_warps.json arrow warp or border-strip import "
-                f"(PROJECT_TODO #27)."
+                f"internal: a shared-tileset component mixes RMXP tilesets: {detail}"
             )
         for m in members:
             out[m] = synth_tileset_id(root)
     return out
 
 
-def load_slice_tileset_groups(
-    out_dir: Path, map_ids: list[int], *, seam_warps_path: Path | None = None
-) -> dict[int, int]:
-    """`tileset_groups` wired to the build's real inputs: `out_dir/connections.json`,
-    each map's `out_dir/maps/MapNNN.json` ``tileset_id``, and seam_warps.json's
-    suppressed pairs (restricted to *map_ids*, the frontier rule)."""
+def remapped_connections(
+    rows: list,
+    map_ids: list[int] | set[int],
+    suppress_pairs: frozenset[frozenset[int]],
+    real_tileset_of: Mapping[int, int],
+) -> list:
+    """The emitted connection rows whose two maps sit on DIFFERENT real RMXP
+    tilesets (see `tileset_groups`): each becomes an id-remapped seam. Returned
+    in source order as parsed `ConnectionRow`s."""
+    from rpg2gba.tileset_converter.connections import emitted_rows
+
+    return [
+        row for row in emitted_rows(rows, set(map_ids), suppress_pairs)
+        if int(real_tileset_of[row.map_a]) != int(real_tileset_of[row.map_b])
+    ]
+
+
+def _slice_group_inputs(
+    out_dir: Path, map_ids: list[int], seam_warps_path: Path | None
+) -> tuple[list, frozenset[frozenset[int]], dict[int, int]]:
     from rpg2gba.tileset_converter.connections import load_connections
     from rpg2gba.tileset_converter.seam_warps import (
         DEFAULT_SEAM_WARPS_PATH,
@@ -186,7 +202,28 @@ def load_slice_tileset_groups(
         )
         for m in map_ids
     }
-    return tileset_groups(rows, map_ids, suppressed_pairs(seams), real)
+    return rows, suppressed_pairs(seams), real
+
+
+def load_slice_tileset_groups(
+    out_dir: Path, map_ids: list[int], *, seam_warps_path: Path | None = None
+) -> dict[int, int]:
+    """`tileset_groups` wired to the build's real inputs: `out_dir/connections.json`,
+    each map's `out_dir/maps/MapNNN.json` ``tileset_id``, and seam_warps.json's
+    suppressed pairs (restricted to *map_ids*, the frontier rule)."""
+    rows, suppress, real = _slice_group_inputs(out_dir, map_ids, seam_warps_path)
+    return tileset_groups(rows, map_ids, suppress, real)
+
+
+def load_slice_remap_directions(
+    out_dir: Path, map_ids: list[int], *, seam_warps_path: Path | None = None
+) -> list:
+    """`remapped_connections` on the build's real inputs, expanded to the two
+    per-direction `connection_remap.RemapDirection`s each seam needs."""
+    from rpg2gba.tileset_converter.connection_remap import remap_directions
+
+    rows, suppress, real = _slice_group_inputs(out_dir, map_ids, seam_warps_path)
+    return remap_directions(remapped_connections(rows, map_ids, suppress, real))
 
 
 _MAP_FILE_RE = re.compile(r"^Map(\d+)\.json$")

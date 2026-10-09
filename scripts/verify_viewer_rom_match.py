@@ -180,6 +180,9 @@ def run_build_capture(
         out_dir, SLICE_MAP_IDS, seam_behavior_cells,
     )
 
+    from rpg2gba.tileset_converter.map_set import load_slice_remap_directions
+
+    remaps = load_slice_remap_directions(out_dir, SLICE_MAP_IDS)
     captured: dict[int, Captured] = {}
 
     def _capture_emit(metatile_list, primary_dir, secondary_dir, primary_name,
@@ -205,6 +208,7 @@ def run_build_capture(
             source_tileset_of=lambda s: synth_to_real[s],
             stair_cells=stair_cells,
             dry_run=False,
+            remap_directions=remaps,
         )
     finally:
         bst.emit_tileset, bst._write_fragments = real_emit, real_frag
