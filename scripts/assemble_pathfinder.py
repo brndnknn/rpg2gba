@@ -844,6 +844,20 @@ def run_ingame_trade_pass(out: Path, fork: Path, dry_run: bool) -> None:
           "sIngameTrades rows", dry_run)
 
 
+def ingame_trade_gate_symbols(out: Path) -> set[str]:
+    """`INGAME_TRADE_*` names for the staging gate, read from the S8b5b manifest.
+
+    The members land in the gitignored `uranium_ingame_trades.gen.h`, so the fork
+    index never carries them. Empty when the manifest is absent (e.g.
+    `--skip-ingame-trades` with no prior pass) — any trade reference then fails
+    the gate, as it should.
+    """
+    manifest = out / "ingame_trades" / "ingame_trade_manifest.json"
+    if not manifest.is_file():
+        return set()
+    return {t["const"] for t in json.loads(manifest.read_text(encoding="utf-8"))["trades"]}
+
+
 # ---------------------------------------------------------------------------
 # S8b6: Heal-location overlay
 # ---------------------------------------------------------------------------
@@ -1087,6 +1101,7 @@ def run_fork_pass(
     gate_extras |= {
         e["id"] for e in json.loads(heal_json.read_text(encoding="utf-8"))["heal_locations"]
     }
+    gate_extras |= ingame_trade_gate_symbols(out)
     def _gate(pory_text: str, label: str) -> None:
         violations = fi.verify_script(pory_text, gate_index, extra_symbols=gate_extras)
         if violations:
