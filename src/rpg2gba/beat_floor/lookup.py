@@ -63,19 +63,49 @@ def _door_cells(build_dir: str) -> dict[int, frozenset[tuple[int, int]]]:
 
 @cache
 def resolved_rows(build_dir: str) -> dict:
-    """The story model's resolved computed rows over its modelled chain
+    """The story model's resolved computed rows over the active chain
     (`story_state.model.build_chapter_stories(resolved_out=)`), for
     `walk.floor_for_map`. Empty for a build dir with no `system.json`: a
-    synthetic test corpus has no chapter chain to resolve against."""
+    synthetic test corpus has no chapter chain to resolve against.
+
+    The chain runs from the root to the latest chapter that is not
+    `planned` in `chapters.json` -- the same root-to-chapter chain
+    `beat_gen.build_plan` resolves against. It was the story CLI's fixed
+    CH01-CH05 scope until CH06, whose rows (map14000/ev079's Theo battle)
+    then never resolved and refused as `search_unknown_read`. The model
+    seeds each chapter from its predecessor only, so extending the chain
+    never changes an earlier chapter's rows."""
     if not (Path(build_dir) / "system.json").is_file():
         return {}
-    from rpg2gba.story_state.__main__ import _CHAIN
     from rpg2gba.story_state.model import build_chapter_stories
 
+    chapters_path = _REF_DIR / "chapters.json"
     out: dict = {}
-    build_chapter_stories(list(_CHAIN), build_dir=Path(build_dir),
-                          chapters_path=_REF_DIR / "chapters.json", resolved_out=out)
+    build_chapter_stories(_active_chain(chapters_path), build_dir=Path(build_dir),
+                          chapters_path=chapters_path, resolved_out=out)
     return out
+
+
+def _active_chain(chapters_path: Path) -> list[str]:
+    """Root-first chapter ids up to the deepest non-`planned` chapter."""
+    from rpg2gba.chapter_atlas.binding import load_binding
+
+    binding = load_binding(chapters_path)
+
+    def chain_to(cid: str) -> list[str]:
+        chain: list[str] = []
+        current: str | None = cid
+        while current is not None:
+            if current in chain:
+                raise ValueError(f"{cid}: predecessor cycle through {current}")
+            chain.append(current)
+            current = binding.chapter(current).predecessor
+        return chain[::-1]
+
+    active = [c.id for c in binding.chapters if c.status != "planned"]
+    if not active:
+        return []
+    return max((chain_to(cid) for cid in active), key=len)
 
 
 @cache

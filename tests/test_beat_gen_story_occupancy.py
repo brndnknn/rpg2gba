@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from rpg2gba.beat_gen.__main__ import _StoryOccupancy
+from rpg2gba.beat_gen.__main__ import _StoryOccupancy, actor_never_blocks
 from rpg2gba.routing.occupancy import MapOccupancy, OccupiedTile
 
 BUILD = Path("output/uranium-build")
@@ -37,3 +37,38 @@ def test_a_never_visible_hidden_actor_blocks_nothing():
 def test_a_possibly_visible_object_still_blocks():
     occ = _occ(lambda rid: True)
     assert occ[50].blocked_cells() == frozenset({(12, 13), (18, 14)})
+
+
+# --- `actor_never_blocks`: the page rule, including actors that clear -----
+# First "clears" user: Fufufu (map14001/ev018), visible on p0/p1 and
+# graphic-less on p2 (self-switch B) and p3 (switch 55), standing on the gym
+# door's only approach (operator call 2026-10-09).
+
+_SEEN = {"graphic": {"character_name": "HGSS_130", "opacity": 255}}
+_GONE = {"graphic": {"character_name": ""}}
+
+
+def test_actor_that_clears_in_chapter_does_not_block():
+    assert actor_never_blocks([_SEEN, _SEEN, _GONE, _GONE], lambda i: True)
+
+
+def test_actor_whose_clearing_page_cannot_be_live_blocks():
+    assert not actor_never_blocks([_SEEN, _SEEN, _GONE], lambda i: i < 2)
+
+
+def test_invisible_page_below_a_visible_one_does_not_clear():
+    # p0 graphic-less, p1 visible: p1 outranks p0 whenever both are live.
+    assert not actor_never_blocks([_GONE, _SEEN], lambda i: True)
+
+
+def test_actor_never_visible_in_chapter_does_not_block():
+    assert actor_never_blocks([_SEEN, _GONE], lambda i: False)
+
+
+def test_event_with_no_visible_page_is_not_an_actor():
+    assert not actor_never_blocks([_GONE, _GONE], lambda i: True)
+
+
+def test_zero_opacity_counts_as_invisible():
+    faded = {"graphic": {"character_name": "HGSS_130", "opacity": 0}}
+    assert actor_never_blocks([_SEEN, faded], lambda i: True)

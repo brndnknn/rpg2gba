@@ -101,9 +101,15 @@ def _arrival_nudge_delta(
 # arrival-position check `_forward`/`_back` always make; `visual`/`audio`
 # assert nothing beyond the page completing (assertion.py's own kind
 # docstrings), which `_cross`'s `emu.settle_field()` drive/observe -- so
-# declaring them is honest, not aspirational. `text`, `item_grant`, etc.
-# are deliberately absent: nothing in this body reads a text box, so a warp
-# page that also shows one stays honestly uncovered for it.
+# declaring them is honest, not aspirational. `item_grant` etc. are
+# deliberately absent: nothing in this body checks them, so a warp page
+# that also grants one stays honestly uncovered for it.
+#
+# `text` is executed only in the one shape the body drives: messages that
+# show BEFORE the claimed transfer on a threshold crossing (CH06's Maria's
+# Key door, map14006/ev017/p0/b0: "used Maria's House Key!", then the
+# transfer). `_cross` presses through them between the step and the map
+# change; any other text shape fails loud at registration.
 #
 # The page's absolute state writes (`_STATE_KINDS`, added 2026-09-25 for the
 # lab exit's switch 104, map050/ev001/p1) are read after the claimed
@@ -115,6 +121,29 @@ _STATE_KINDS: frozenset[str] = frozenset({
 _EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "warp", "visual", "audio",
 }) | _STATE_KINDS
+
+def _pre_warp_texts(beat_name: str, claimed_rows: tuple[str, ...], lookup: FloorLookup,
+                    *, mechanism: str, boundary: bool) -> tuple[FloorAssertion, ...]:
+    """The claimed rows' `text` assertions, in list order, when every one of
+    them shows before the claimed transfer -- the shape `_cross` drives (see
+    `_EXECUTED_KINDS`). Empty when the rows show no text. Raises for text the
+    body can't drive: after the transfer, or on a non-threshold crossing."""
+    if boundary:
+        return ()
+    found = [a for rid in claimed_rows for a in lookup(rid).assertions]
+    texts = sorted((a for a in found if a.kind == "text"), key=lambda a: a.list_index)
+    if not texts:
+        return ()
+    warps = [a for a in found if a.kind == "warp"]
+    first_warp = min(a.list_index for a in warps)
+    late = [a for a in texts if a.list_index > first_warp]
+    if late or mechanism != "threshold":
+        raise ValueError(
+            f"warp_beat({beat_name}): claimed rows {list(claimed_rows)} show text the "
+            f"crossing can't drive ({'after the transfer' if late else mechanism!r} "
+            f"crossing); only pre-transfer messages on a threshold warp are read")
+    return tuple(texts)
+
 
 Mechanism = Literal["door", "threshold", "arrow"]
 _MECHANISMS: frozenset[str] = frozenset({"door", "threshold", "arrow"})
@@ -527,8 +556,12 @@ def warp_beat(
 
     arm_rows = walked_arms(row_id, "warp", floor_lookup=lookup)
     claimed_rows = (row_id,) + arm_rows
+    pre_warp_texts = _pre_warp_texts(beat_name, claimed_rows, lookup,
+                                     mechanism=mechanism, boundary=boundary)
     declared = declare_assertions(
-        claimed_rows, executed_kinds=frozenset() if boundary else _EXECUTED_KINDS,
+        claimed_rows,
+        executed_kinds=(frozenset() if boundary
+                        else _EXECUTED_KINDS | ({"text"} if pre_warp_texts else frozenset())),
         template="warp", extras=extras, floor_lookup=lookup,
     )
 
@@ -566,6 +599,8 @@ def warp_beat(
         (Step(a.row_id, a.kind, a.list_index, a.params)
          for a in declared if a.kind in _STATE_KINDS),
         key=lambda st: (st.list_index, st.row_id, st.kind)))
+    text_steps = tuple(Step(a.row_id, a.kind, a.list_index, a.params)
+                       for a in pre_warp_texts)
 
     return_crossing: tuple[int, int] | None = None
     return_arrival: tuple[int, int] | None = None
@@ -629,9 +664,11 @@ def warp_beat(
 
     def _cross(emu: Emulator, crossing_cell: tuple[int, int],
                crossing_direction: str | None, dest_map: str,
-               from_map: str) -> tuple[tuple[int, int], int]:
+               from_map: str, texts: tuple = ()) -> tuple[tuple[int, int], int]:
         """Cross, then drain arrival scripts. Returns (the player's position
-        on the frame the map changed, the number of scripts drained)."""
+        on the frame the map changed, the number of scripts drained).
+        `texts` are the claimed page's pre-transfer messages, read and
+        dismissed in order between the step and the map change."""
         # Proving a warp fired means proving the player LEFT, not just that
         # they are standing on the destination -- when `from_map` and
         # `dest_map` are the same map, `wait_for_map`/`require_map` both
@@ -649,6 +686,16 @@ def warp_beat(
             )
         if mechanism == "door":
             assertions.enter_door(emu, beat_name, crossing_cell, dest_map)
+        elif mechanism == "threshold" and texts:
+            # `cross_threshold` with the page's messages pressed through
+            # between the step and the map change; `wait_for_map` alone
+            # would sit on the first text box until its budget ran out.
+            dx, dy = _APPROACH_DELTA[crossing_direction]
+            emu.walk_to(crossing_cell[0] + dx, crossing_cell[1] + dy, absorb_wild=True)
+            assertions.try_step(emu, crossing_direction)
+            for step in texts:
+                STEP_HANDLERS["text"](emu, beat_name, step)
+            assertions.wait_for_map(emu, beat_name, dest_map)
         elif mechanism == "threshold":
             dx, dy = _APPROACH_DELTA[crossing_direction]
             approach = (crossing_cell[0] + dx, crossing_cell[1] + dy)
@@ -685,7 +732,8 @@ def warp_beat(
         reciprocal leg would test the arrival on the wrong map, which is
         the mistake `start_side="dest"` exists to stop making.
         """
-        arrived = _cross(emu, crossing, direction, dest_map_constant, map_constant)
+        arrived = _cross(emu, crossing, direction, dest_map_constant, map_constant,
+                         texts=text_steps)
         assertions.require_map(emu, beat_name, dest_map_constant)
         # Exact, not `_assert_near`'s tolerance-1 (task brief point 1):
         # `cells.arrival_cell` and the generic floor's warp target are the

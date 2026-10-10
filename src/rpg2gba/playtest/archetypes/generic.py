@@ -1035,9 +1035,13 @@ def generic_beat(
     walk_rows: Sequence[str] = (),
     choice_answers: Sequence[tuple[int, int]] = (),
     gift_ceremonies: Sequence[int] = (),
+    archetype: Sequence[tuple[str, str]] = (),
 ) -> None:
     """Register one generic beat claiming `rows` (a page row and/or its
-    arms). `random_arms` (ruling 19) pairs each RNG-selected arm among
+    arms). `archetype` pairs rows with the archetype this beat claims for
+    them: set when beat_gen hands an archetype match to the generic template
+    because it checks the page more fully (`_generic_reads_it_better`), so
+    the manifest's conformance rule still sees the archetype claimed. `random_arms` (ruling 19) pairs each RNG-selected arm among
     `rows` with its guard path `((var_id, op, value), ...)`: those arms are
     claimed but not declared, and the body checks only the one whose guard
     holds on the ROM's values once the page has rolled.
@@ -1337,6 +1341,7 @@ def generic_beat(
         map_constant=cell.map_constant, at=(x, y), group=group,
         rows=resolved_rows, assertions=declared,
         drain_answers=(cell.map_constant, arrival_answers) if arrival_answers else None,
+        archetype={r: a for r, a in archetype if r in resolved_rows} or None,
     )
     def body(emu: "Emulator") -> None:
         from rpg2gba.playtest.emulator import WalkInterrupted

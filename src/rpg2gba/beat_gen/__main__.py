@@ -46,8 +46,10 @@ from rpg2gba.beat_gen.adapt import (
     escort_kwargs,
     is_boundary_warp,
     route_kwargs,
+    trainer_consts_for,
     warp_candidates,
 )
+from rpg2gba.pbs_converter._naming import to_constant
 from rpg2gba.beat_gen.arms import annotate_random_arms, blocked_arms, split_choice_arms
 from rpg2gba.beat_gen.boundary import inbound_rows, split_outbound
 from rpg2gba.beat_gen.continuity import thread_maps
@@ -183,6 +185,18 @@ def _battle_on_page(match: ArchetypeMatch, floors: Mapping[str, RowFloor]) -> bo
     return page in floors and any(a.kind == "battle" for a in floors[page].assertions)
 
 
+def _party_ambiguous(match: ArchetypeMatch, floors: Mapping[str, RowFloor]) -> bool:
+    """More than one trainers.json party matches the page's battle identity."""
+    page = next(rid for rid, role in match.roles.items() if role == "battle")
+    battles = [a for a in floors[page].assertions if a.kind == "battle"]
+    if len(battles) != 1 or battles[0].param("kind") != "trainer":
+        return False  # trainer_kwargs owns that error
+    battle = battles[0]
+    return len(trainer_consts_for(
+        battle.param("name"), to_constant("TRAINER_CLASS", battle.param("trainer_type")),
+        row_id=page)) > 1
+
+
 def _generic_reads_it_better(match: ArchetypeMatch, floors: Mapping[str, RowFloor]) -> bool:
     """Matches whose page the generic template checks in full and the
     archetype's template only in part:
@@ -192,9 +206,14 @@ def _generic_reads_it_better(match: ArchetypeMatch, floors: Mapping[str, RowFloo
     - a randomized flavour NPC (the TV, map048/ev011): generic checks the
       roll's write, the arm it picked (ruling 19's random arms) and the
       lines around it in one talk, while `flavour_npc_beat` checks only
-      "one of the lines"."""
+      "one of the lines";
+    - a trainer whose party is picked at run time (Theo in Nowtoch,
+      map14000/ev079: `pbGet(1)` from the starter): `trainer_beats` needs
+      one trainer const, while generic accepts any staged party of that
+      identity -- the check CH01's lab battle already gets (operator call
+      2026-10-09)."""
     if match.archetype == "trainer":
-        return not _battle_on_page(match, floors)
+        return not _battle_on_page(match, floors) or _party_ambiguous(match, floors)
     return match.archetype == "flavour_npc" and match.params.get("variant") == "randomized"
 
 
@@ -210,6 +229,17 @@ def _match_for(beat: PlannedBeat, matches: Sequence[ArchetypeMatch]) -> Archetyp
             f"beat {beat.name!r}: expected one {beat.template} match on "
             f"map {beat.map_id} event {event_id}, found {len(found)}")
     return found[0]
+
+
+def claim_generic_archetypes(beats: Sequence[PlannedBeat], claims: Mapping[str, str]
+                             ) -> tuple[PlannedBeat, ...]:
+    """Each generic beat holding a row in `claims` (row -> archetype of a
+    match handed to the generic template) gets `archetype=` pairs for those
+    rows, so the conformance rule sees the archetype claimed."""
+    return tuple(
+        _merge_kwargs(b, {"archetype": tuple((r, claims[r]) for r in b.rows if r in claims)})
+        if b.template == "generic" and any(r in claims for r in b.rows) else b
+        for b in beats)
 
 
 def _merge_kwargs(beat: PlannedBeat, extra: Mapping[str, object], *, drop: tuple[str, ...] = ()
@@ -799,6 +829,24 @@ def _page_candidate(verdicts: Mapping[str, RowVerdict], end_state, states: Mappi
 _DISPATCH_EVENT_RE = re.compile(r"^Map(\d{3,})_EV(\d{3})_")
 
 
+def _page_visible(page: Mapping) -> bool:
+    graphic = page.get("graphic") or {}
+    return bool(graphic.get("character_name")) and graphic.get("opacity", 255) > 0
+
+
+def actor_never_blocks(pages: Sequence[Mapping], can_live: Callable[[int], bool]) -> bool:
+    """`_StoryOccupancy`'s rule for one event's pages: no visible page can be
+    live in the chapter, or a graphic-less page above every visible one can
+    (the actor clears). An event with no visible page isn't an actor here."""
+    visible = [i for i, p in enumerate(pages) if _page_visible(p)]
+    if not visible:
+        return False
+    if not any(can_live(i) for i in visible):
+        return True
+    return any(not _page_visible(pages[j]) and can_live(j)
+               for j in range(max(visible) + 1, len(pages)))
+
+
 class _StoryOccupancy(Mapping):
     """`_LazyOccupancy` without the objects that can never be visible in the
     chapter: a flag-hidden actor (2026-10-02, late NPCs placed by the
@@ -806,7 +854,16 @@ class _StoryOccupancy(Mapping):
     (`_page_candidate`). On the ROM such an object is never spawned, so it
     blocks nothing -- map050's FINAL_EVENT-gated EV024/EV025 had taken
     EV007's only approach cell away. An event with no story verdict for a
-    visible page stays blocking (`_page_candidate` answers True)."""
+    visible page stays blocking (`_page_candidate` answers True).
+
+    Also dropped, optimistically: an actor that CLEARS within the chapter --
+    a graphic-less page above every visible page that can be live in it
+    (RMXP: the highest live page wins, so once it is live the actor is gone
+    for good). Fufufu (map14001/ev018) stands on the gym door's only
+    approach until a switch-101 scene sets her self-switch B; as a permanent
+    wall she pushed the whole gym out of CH06 (operator call 2026-10-09).
+    The route still orders the gym after that scene through the door's own
+    switch-101 page."""
 
     def __init__(self, inner: Mapping, *, build_dir: Path, candidate_for) -> None:  # noqa: ANN001
         self._inner = inner
@@ -820,11 +877,9 @@ class _StoryOccupancy(Mapping):
         if event is None:
             return False
         candidate = self._candidate_for(map_id)
-        visible = [i for i, p in enumerate(event.get("pages", []))
-                   if (p.get("graphic") or {}).get("character_name")
-                   and (p.get("graphic") or {}).get("opacity", 255) > 0]
-        return bool(visible) and not any(
-            candidate(f"map{map_id:03d}/ev{event_id:03d}/p{i}") for i in visible)
+        return actor_never_blocks(
+            event.get("pages", []),
+            lambda i: candidate(f"map{map_id:03d}/ev{event_id:03d}/p{i}"))
 
     def __getitem__(self, map_id: int) -> MapOccupancy:
         if map_id not in self._cache:
@@ -833,8 +888,8 @@ class _StoryOccupancy(Mapping):
             for tile in occ.tiles:
                 m = _DISPATCH_EVENT_RE.match(tile.script)
                 if m and int(m.group(1)) == map_id and self._never_visible(map_id, int(m.group(2))):
-                    logger.info("occupancy: map %d %s is never visible in this chapter -- "
-                                "not blocking %s", map_id, tile.script, tile.cell)
+                    logger.info("occupancy: map %d %s is never visible, or clears, in this "
+                                "chapter -- not blocking %s", map_id, tile.script, tile.cell)
                     continue
                 kept.append(tile)
             self._cache[map_id] = dataclasses.replace(occ, tiles=tuple(kept))
@@ -1184,13 +1239,19 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     # generic template, which reads each row's own floor; the arm stays a
     # named refusal.
     refused_ids = {r.row_id for r in selection.refusals}
-    matches = tuple(
+    all_matches = [
         m for m in classify_manifest(inbound) + classify_manifest(rows)
-        if not any(rid.startswith(f"{page}/") for page in m.roles for rid in refused_ids)
-        and not _generic_reads_it_better(m, floors))
+        if not any(rid.startswith(f"{page}/") for page in m.roles for rid in refused_ids)]
+    matches = tuple(m for m in all_matches if not _generic_reads_it_better(m, floors))
+    # A match handed to the generic template is still that archetype: the
+    # generic beat claims it, or the conformance rule reads the row as
+    # unclaimed (CH06's TVs, map046/ev006+ev008; CH01's map048/ev011).
+    generic_claims = {row: m.archetype for m in all_matches
+                      if _generic_reads_it_better(m, floors) for row in m.roles}
     fork_rows = tuple(r.row_id for r in selection.owned if r.row_id in fork_owned)
     beats = plan_beats(tuple(r for r in selection.owned if r.row_id not in fork_owned),
                        matches, floors)
+    beats = claim_generic_archetypes(beats, generic_claims)
     inbound_ids = frozenset(r.row_id for r in inbound)
     beats = tuple(
         _merge_kwargs(b, {"manifest_chapter_id": predecessor})
