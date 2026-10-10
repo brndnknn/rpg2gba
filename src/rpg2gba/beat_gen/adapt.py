@@ -25,7 +25,7 @@ from collections.abc import Callable, Mapping, Sequence
 
 from rpg2gba.beat_floor.assertion import RowFloor
 from rpg2gba.beat_gen.plan import Kwargs, PlannedBeat, make_kwargs
-from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch
+from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch, classify_manifest
 from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
 from rpg2gba.pbs_converter._naming import to_constant
 from rpg2gba.playtest.archetypes.item_ball import _uranium_item_constants
@@ -84,6 +84,41 @@ def _one_assertion(floor: RowFloor, kind: str, *, row_id: str):
             f"{kind!r} assertions (expected exactly 1)"
         )
     return found[0]
+
+
+def arm_row_ids(floors: Mapping[str, RowFloor], row_id: str) -> list[str]:
+    """Every branch row whose owning page row is `row_id`, sorted."""
+    return sorted(
+        rid for rid in floors
+        if rid != row_id and parse_row_id(rid).kind == "branch"
+        and parse_row_id(rid).owning_page_row_id == row_id)
+
+
+def _warp_assertion(floors: Mapping[str, RowFloor], row_id: str):
+    """The one warp assertion of a warp-role row, arm-aware. The archetype
+    matcher classifies from whole-page views that fold branch-arm effects
+    into the page, but the floor builder attributes an arm's Transfer Player
+    to the arm row (`.../pN/bM`), leaving the trunk `pN` floor empty (key-gated
+    doors: map14006/ev017/p0). So gather from the row's floor plus its arms'.
+
+    Strict: exactly one distinct destination (`map_id`) across all of them.
+    Identical duplicates on different arms count as one (same destination is
+    all the kwargs carry); a row whose own floor is the only source keeps the
+    old exactly-one-assertion rule unchanged."""
+    own = _floor(floors, row_id)
+    arm_ids = [rid for rid in arm_row_ids(floors, row_id)
+               if any(a.kind == "warp" for a in floors[rid].assertions)]
+    if not arm_ids:
+        return _one_assertion(own, "warp", row_id=row_id)
+    found = [a for rid in (row_id, *arm_ids) for a in floors[rid].assertions
+             if a.kind == "warp"]
+    dests = {a.param("map_id") for a in found}
+    if len(dests) != 1:
+        raise ValueError(
+            f"archetype_kwargs: {row_id}: trunk + arm floors carry "
+            f"{len(dests)} distinct 'warp' destinations {sorted(dests)} "
+            "(expected exactly 1)")
+    return min(found, key=lambda a: (a.row_id, a.list_index))
 
 
 def _role_row(match: ArchetypeMatch, role: str) -> str | None:
@@ -161,13 +196,26 @@ def _trainer_const_for(name: str, trainer_class: str, *, row_id: str) -> str:
 
 # -- per-template kwarg derivation --------------------------------------
 
+def _event_warp_match_count(rows: Sequence[ManifestRow], match: ArchetypeMatch) -> int:
+    """How many `warp` archetype matches the manifest has on `match`'s event --
+    the same candidate set `playtest.archetypes.find_match` disambiguates."""
+    if not rows:
+        return 1
+    return sum(1 for m in _classify(tuple(rows))
+               if (m.map_id, m.event_id, m.archetype) == (match.map_id, match.event_id, "warp"))
+
+
+@functools.lru_cache(maxsize=4)
+def _classify(rows: tuple[ManifestRow, ...]) -> tuple[ArchetypeMatch, ...]:
+    return tuple(classify_manifest(rows))
+
+
 def _warp_kwargs(
     beat: PlannedBeat, match: ArchetypeMatch, floors: Mapping[str, RowFloor],
     map_constant_fn: MapConstantFn, rows: Sequence[ManifestRow] = (),
 ) -> dict:
     row_id = _require_role_row(match, "warp")
-    floor = _floor(floors, row_id)
-    warp = _one_assertion(floor, "warp", row_id=row_id)
+    warp = _warp_assertion(floors, row_id)
     out = {
         "map_constant": map_constant_fn(beat.map_id),
         "map_id": beat.map_id,
@@ -176,9 +224,11 @@ def _warp_kwargs(
         "mechanism": _WARP_MECHANISM,
     }
     # Page-level: two pages of one event can each be a warp (CH01's
-    # map049/ev002 p1 and p3), so a non-zero page is named.
+    # map049/ev002 p1 and p3), so a non-zero page is named -- and page 0
+    # too when another page of the event also matches (CH06's
+    # map14002/ev019 p0 and p2), or `find_match` sees two candidates.
     page_idx = parse_row_id(row_id).page_idx
-    if page_idx:
+    if page_idx or _event_warp_match_count(rows, match) > 1:
         out["page_idx"] = page_idx
     return out
 
@@ -372,7 +422,7 @@ def escort_kwargs(
     event, and the map its page's one transfer lands on. The landing cell
     the template reads off the same floor itself."""
     row_id = beat.rows[0]
-    warp = _one_assertion(_floor(floors, row_id), "warp", row_id=row_id)
+    warp = _warp_assertion(floors, row_id)
     return make_kwargs(
         map_constant=map_constant_fn(beat.map_id),
         map_id=beat.map_id,
@@ -413,8 +463,10 @@ def is_boundary_warp(
     exactly one warp assertion."""
     if beat.template != "warp":
         raise ValueError(f"is_boundary_warp: beat {beat.name!r} is a {beat.template!r}")
+    # Arm rows count too: an arm's warp sits on the arm floor, not the trunk's.
     dests = {a.param("map_id") for row_id in beat.rows
-             for a in _floor(floors, row_id).assertions if a.kind == "warp"}
+             for rid in (row_id, *arm_row_ids(floors, row_id))
+             for a in _floor(floors, rid).assertions if a.kind == "warp"}
     if len(dests) != 1:
         raise ValueError(
             f"is_boundary_warp: beat {beat.name!r} has {len(dests)} warp "

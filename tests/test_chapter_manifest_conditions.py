@@ -134,7 +134,9 @@ def test_staged_corpus_measurement_matches_plan() -> None:
         pytest.skip("output/uranium-build/maps not present in this environment")
 
     map_ids: set[int] = set()
-    for manifest_path in sorted(manifests_dir.glob("CH0*.manifest.json")):
+    # The pinned counts below were measured over CH01-CH05; later chapters'
+    # manifests must not move them.
+    for manifest_path in sorted(manifests_dir.glob("CH0[1-5].manifest.json")):
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
         rows = data["rows"] if isinstance(data, dict) and "rows" in data else data
         for row in rows:

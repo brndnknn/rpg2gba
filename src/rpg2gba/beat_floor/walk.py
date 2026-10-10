@@ -59,7 +59,7 @@ from rpg2gba.playtest.text_source import (
     _default_engine_dir,
     rom_text,
 )
-from rpg2gba.ruby_subset.builtins import ENGINE_ATTRIBUTES
+from rpg2gba.ruby_subset.builtins import BADGE_FLAGS, ENGINE_ATTRIBUTES
 from rpg2gba.story_state.extract import (
     _default_reference_dir,
     _TRIGGER_NAMES,
@@ -80,7 +80,9 @@ logger = logging.getLogger(__name__)
 
 # EngineKey name -> native FLAG_SYS_* for the engine-held unlocks (C8 ruling
 # (b)); read from the one table, never restated here (§4.3).
-_UNLOCK_FLAGS: dict[str, str] = {a.key_name: a.flag for a in ENGINE_ATTRIBUTES.values()}
+_UNLOCK_FLAGS: dict[str, str] = {
+    **{a.key_name: a.flag for a in ENGINE_ATTRIBUTES.values()}, **BADGE_FLAGS,
+}
 
 
 # --- RMXP command codes used by this module (kept local, matching the
@@ -672,7 +674,8 @@ def _state_assertions_for_row(
     re-derived"). An `EngineKey` write for an engine-held unlock
     (`builtins.ENGINE_ATTRIBUTES`: running shoes, Pokédex, PokéGear, storage
     creator) becomes `engine_flag_write` on its native `FLAG_SYS_*` (C8 ruling
-    (b), added 2026-09-24). Every other `EngineKey` (respawn map, surfing,
+    (b), added 2026-09-24); a gym badge (`builtins.BADGE_FLAGS`) likewise on
+    its `FLAG_BADGE0N_GET`. Every other `EngineKey` (respawn map, surfing,
     run toggle) and `TempSwitch` writes are per-visit/engine-only state with
     no `AssertionKind` -- skipped, not mapped.
 

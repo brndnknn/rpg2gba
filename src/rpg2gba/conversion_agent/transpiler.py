@@ -62,6 +62,7 @@ from rpg2gba.conversion_agent.inline_choice import (
 )
 from rpg2gba import ingame_trades as _trades
 from rpg2gba.pbs_converter._naming import to_constant
+from rpg2gba.ruby_subset.builtins import NUM_BADGES, badge_flag
 from rpg2gba.pbs_converter.heal_locations import _CALL_RE as _SET_POKEMON_CENTER_RE
 from rpg2gba.tileset_converter.npc_gfx import is_door_sheet
 
@@ -573,16 +574,15 @@ _POKEDEX_GRANT_RE = re.compile(r"^\s*\$Trainer\.pokedex\s*=\s*true\s*$")
 _POKEGEAR_ON_RE = re.compile(r"^\s*\$Trainer\.pokegear\s*=\s*true\s*$")
 
 # $Trainer.badges[N]=true — gym badge grant. Fork-native: vanilla's own
-# FLAG_BADGE01_GET..FLAG_BADGE08_GET (engine/include/constants/flags.h:1378-1385,
-# consecutive SYSTEM_FLAGS slots), so literal N in 0..7 maps to
-# FLAG_BADGE0{N+1}_GET. Emitted as fork constants (like FLAG_SYS_*), not
+# FLAG_BADGE01_GET..FLAG_BADGE08_GET; the index -> flag mapping is
+# `ruby_subset.builtins.badge_flag` (one definition, shared with story state
+# and the floor). Emitted as fork constants (like FLAG_SYS_*), not
 # registry-minted. Only the exact literal `=true` form with an in-range
 # literal index resolves; `=false`, a variable index, or N outside 0..7
 # fall through to the generic queue (CLAUDE.md §4.5).
 _BADGE_TRUE_RE = re.compile(
     r"^\s*\$Trainer\.badges\[\s*(\d+)\s*\]\s*=\s*true\s*$"
 )
-_NUM_BADGES = 8
 
 # Kernel.pbSetHealingSpot(map, x, y) — Uranium's TELEPORT/region-map anchor,
 # NOT the white-out respawn (pbs_converter/heal_locations.py docstring). The
@@ -4607,8 +4607,8 @@ class _PageEmitter:
 
         # $Trainer.badges[N]=true — FLAG_BADGE0{N+1}_GET (see _BADGE_TRUE_RE).
         m = _BADGE_TRUE_RE.match(text)
-        if m and int(m.group(1)) < _NUM_BADGES:
-            return [f"setflag(FLAG_BADGE0{int(m.group(1)) + 1}_GET)"]
+        if m and int(m.group(1)) < NUM_BADGES:
+            return [f"setflag({badge_flag(int(m.group(1)))})"]
 
         if _DIALOGUE_STRIP_RE.match(text):
             return []

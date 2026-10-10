@@ -41,6 +41,7 @@ from rpg2gba.beat_floor.lookup import floor_for_row
 from rpg2gba.beat_floor.walk import floor_for_chapter
 from rpg2gba.beat_gen.adapt import (
     NoArrivalError,
+    arm_row_ids,
     archetype_kwargs,
     escort_kwargs,
     is_boundary_warp,
@@ -717,8 +718,11 @@ def _split_unreachable(
 
 
 def _warp_dest(beat: PlannedBeat, floors: Mapping[str, RowFloor]) -> int:
-    dests = {a.param("map_id") for r in beat.rows for a in floors[r].assertions
-             if a.kind == "warp"}
+    # Arm rows count too (adapt._warp_assertion): a gated door's transfer
+    # sits on its branch-arm floor, not the page trunk's.
+    dests = {a.param("map_id") for r in beat.rows
+             for rid in (r, *arm_row_ids(floors, r))
+             for a in floors[rid].assertions if a.kind == "warp"}
     if len(dests) != 1:
         raise ValueError(f"warp beat {beat.name!r}: {len(dests)} destinations {sorted(dests)}")
     return dests.pop()

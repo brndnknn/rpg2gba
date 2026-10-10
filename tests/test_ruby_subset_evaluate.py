@@ -134,6 +134,62 @@ def test_decrement_local_postfix_if_reset(var151, expected_x):
     assert res.effects == (Effect("pbStarterSelector", (expected_x, True), res.effects[0].span),)
 
 
+_RIVAL_STARTER_LOCAL = (  # map040/ev079 p0, verbatim
+    "p=1 if $game_switches[61] == true\n"
+    "p=2 if $game_switches[59] == true\n"
+    "p=3 if $game_switches[60] == true\n"
+    "$game_variables[1]=p"
+)
+
+
+@pytest.mark.parametrize("sw,expected", [(61, 1), (59, 2), (60, 3)])
+def test_postfix_if_local_last_wins(sw, expected):
+    reads = {Switch(n): n == sw for n in (59, 60, 61)}
+    res = evaluate_program(parse_program(_RIVAL_STARTER_LOCAL),
+                           oracle=FixedOracle(reads=reads), event=None)
+    assert res.refusal is None
+    assert res.writes == (StateWrite(Variable(1), expected),)
+
+
+def test_local_declared_by_unexecuted_assignment_reads_nil():
+    # Ruby declares `p` at parse time, so the all-false path writes nil rather
+    # than raising NameError.
+    reads = {Switch(n): False for n in (59, 60, 61)}
+    res = evaluate_program(parse_program(_RIVAL_STARTER_LOCAL),
+                           oracle=FixedOracle(reads=reads), event=None)
+    assert res.refusal is None
+    assert res.writes == (StateWrite(Variable(1), None),)
+
+
+def test_set_healing_spot_is_an_effect_not_unknown():
+    res = evaluate_program(parse_program("pbSetHealingSpot"), oracle=FixedOracle(), event=None)
+    assert res.refusal is None
+    assert [e.name for e in res.effects] == ["pbSetHealingSpot"]
+    assert res.writes == ()
+
+
+def test_badge_write_is_an_engine_key():
+    res = evaluate_program(parse_program("$Trainer.badges[0]=true"),
+                           oracle=FixedOracle(), event=None)
+    assert res.refusal is None
+    assert res.writes == (StateWrite(EngineKey(bi.badge_key_name(0)), True),)
+    assert bi.BADGE_FLAGS[bi.badge_key_name(0)] == "FLAG_BADGE01_GET"
+
+
+def test_badge_read_defaults_false():
+    value, res = evaluate_expression(parse_expression("$Trainer.badges[2]"),
+                                     oracle=FixedOracle(), event=None)
+    assert res.refusal is None
+    assert value is False
+
+
+def test_badge_index_out_of_range_refuses():
+    res = evaluate_program(parse_program("$Trainer.badges[8]=true"),
+                           oracle=FixedOracle(), event=None)
+    assert res.refusal is not None
+    assert res.refusal.code.startswith("ruby_type_error:")
+
+
 def test_for_loop_self_switch_range():
     prog = parse_program('for i in 14..18\n   pbSetSelfSwitch(i,"A",true)\nend')
     res = evaluate_program(prog, oracle=FixedOracle(), event=(35, 19))

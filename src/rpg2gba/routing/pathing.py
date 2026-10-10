@@ -29,6 +29,7 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
+from rpg2gba.map_split.ids import is_piece, origin_of
 from rpg2gba.traversal.graph import Cell, MapGraph
 from rpg2gba.traversal.triggers import TriggerOverlay
 from rpg2gba.traversal.world import WorldEdge, WorldGraph
@@ -452,8 +453,21 @@ def _detour_segment(
     on a map with a warp into it (out one door, in through another). An
     unbounded search fans out over the whole world graph on every failed
     segment the solver's pairwise sweep tries, building graphs for maps no
-    chapter route touches."""
+    chapter route touches.
+
+    A split map's pieces (`map_split`) stand for the one map they were cut
+    from: every sibling of a neighbourhood map is in the neighbourhood too,
+    and a hop between two siblings is free (same round). Before the split
+    those doors all sat on one map; without this, an interior reached from
+    a piece two seams away from its door was out of bounds (CH06 Nowtoch:
+    map 46's rooms from piece 14003 via 14000). Identity for unsplit maps."""
     near_goal = {e.src_map for e in world.edges_to(goal_map)} | {goal_map}
+    near_origins = {origin_of(m) for m in near_goal if is_piece(m)}
+    near_goal |= {m for m in world.map_ids if is_piece(m) and origin_of(m) in near_origins}
+
+    def sibling_hop(src: int, dst: int) -> bool:
+        return is_piece(src) and is_piece(dst) and origin_of(src) == origin_of(dst)
+
     def leg_on(map_id: int, a: Cell, b: Cell):  # noqa: ANN202
         return _path_on_map(
             map_id, a, b, graph=graphs[map_id], overlay=overlays[map_id],
@@ -463,20 +477,41 @@ def _detour_segment(
     frontier: list[tuple[int, Cell, tuple[RouteLeg, ...], tuple[TriggerCrossing, ...]]] = [
         (start_map, start_cell, (), ())]
     seen = {(start_map, start_cell)}
+    # Each sibling piece is entered at most once per detour, through its
+    # shortest-leg seam: the pieces are joined by dozens of arrow cells, and
+    # treating every landing as its own state made each failed segment cost
+    # hundreds of on-map BFSes (CH06's solve ran past 30 minutes).
+    entered_pieces = {start_map} if is_piece(start_map) else set()
     for _ in range(_DETOUR_MAX_HOPS):
         found: list[SegmentResult] = []
         nxt = []
-        for map_id, cell, legs, crossings in frontier:
+        queue = deque(frontier)
+        while queue:
+            map_id, cell, legs, crossings = queue.popleft()
             edges = sorted(
                 (e for e in world.edges_from(map_id)
                  if e.kind in ("warp", "seam_warp") and e.src_cell is not None
-                 and e.dst_cell is not None and e.dst_map in near_goal),
+                 and e.dst_cell is not None and e.dst_map in near_goal
+                 and not (sibling_hop(map_id, e.dst_map) and e.dst_map in entered_pieces)),
                 key=lambda e: (e.dst_map, e.src_cell, e.dst_cell))
+            hops = []
             for e in edges:
                 try:
                     path, cross = leg_on(map_id, cell, e.src_cell)
                     land = _hop_landing(graphs, e, path)
                 except (RoutePlanningError, ValueError):
+                    continue
+                hops.append((e, path, cross, land))
+            best_seam: dict[int, tuple] = {}
+            for hop in hops:
+                e, path = hop[0], hop[1]
+                if sibling_hop(map_id, e.dst_map) and (
+                        e.dst_map not in best_seam or len(path) < len(best_seam[e.dst_map][1])):
+                    best_seam[e.dst_map] = hop
+            entered_pieces |= set(best_seam)
+            for e, path, cross, land in hops:
+                free = sibling_hop(map_id, e.dst_map)
+                if free and best_seam[e.dst_map][0] is not e:
                     continue
                 if (e.dst_map, land) in seen:
                     continue
@@ -484,7 +519,10 @@ def _detour_segment(
                 leg = RouteLeg(map_id=map_id, tiles=tuple(path), exit_warp=RouteWarp(
                     event_id=e.event_id, dest_map=e.dst_map, dest_cell=e.dst_cell))
                 state = (e.dst_map, land, legs + (leg,), crossings + tuple(cross))
-                nxt.append(state)
+                if free:
+                    queue.append(state)  # free: still the same (unsplit) map
+                else:
+                    nxt.append(state)
                 if e.dst_map == goal_map:
                     try:
                         tail, tail_cross = leg_on(goal_map, land, goal_cell)

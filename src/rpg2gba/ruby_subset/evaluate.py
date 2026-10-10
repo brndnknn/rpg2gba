@@ -131,6 +131,7 @@ class Oracle(Protocol):
 # what they're compared against in the real corpus.
 _BOOL_ENGINE_KEYS = frozenset(
     {attr.key_name for attr in bi.ENGINE_ATTRIBUTES.values()}
+    | set(bi.BADGE_FLAGS)
     | {"pokemonglobal_surfing"}
 )
 
@@ -312,6 +313,28 @@ class _Interp:
         return tuple(out)
 
 
+def _declared_locals(node: object) -> set[str]:
+    """Every local name an `Assign`/`OpAssign`/`For` anywhere in `node` binds.
+
+    Flat, like the parser's own known-locals tracking (parser.py): a read the
+    parser saw *before* any assignment is already a zero-arg Call, not a
+    `Local`, so seeding these to nil cannot hide a genuine read-before-declare.
+    """
+    names: set[str] = set()
+    if isinstance(node, (ast.Assign, ast.OpAssign)) and isinstance(node.target, ast.Local):
+        names.add(node.target.name)
+    if isinstance(node, ast.For):
+        names.add(node.var)
+    if isinstance(node, ast.Node):
+        for f in node.__dataclass_fields__:
+            if f != "span":
+                names |= _declared_locals(getattr(node, f))
+    elif isinstance(node, tuple):
+        for n in node:
+            names |= _declared_locals(n)
+    return names
+
+
 # --- entry points -------------------------------------------------------
 
 
@@ -323,6 +346,10 @@ def evaluate_program(
     locals_in: dict[str, object] | None = None,
 ) -> EvalResult:
     interp = _Interp(oracle, event, locals_in)
+    # Ruby declares a local at parse time: `p=1 if cond` leaves `p` nil, not
+    # undefined, when cond is false (map040/ev079's starter-keyed rival setup).
+    for name in _declared_locals(program):
+        interp.locals.setdefault(name, None)
     try:
         _exec_body(interp, program.statements)
     except _ReturnSignal:
@@ -651,6 +678,15 @@ def _eval_binop(interp: _Interp, node: ast.BinOp) -> object:
 def _resolve_state_key(
     interp: _Interp, receiver: ast.Node, args: tuple[ast.Node, ...], span: tuple[int, int],
 ) -> Key | None:
+    if (isinstance(receiver, ast.Call) and receiver.name == "badges" and not receiver.args
+            and isinstance(receiver.receiver, ast.GlobalVar)
+            and receiver.receiver.name == "$Trainer"):
+        if len(args) != 1:
+            raise RubyRefusal("ruby_type_error", "$Trainer.badges[] arity", span)
+        n = _eval(interp, args[0])
+        if not (_is_int(n) and 0 <= n < bi.NUM_BADGES):
+            raise RubyRefusal("ruby_type_error", f"$Trainer.badges[] index {n!r}", span)
+        return EngineKey(bi.badge_key_name(n))
     if not isinstance(receiver, ast.GlobalVar):
         return None
     if receiver.name == "$game_switches":

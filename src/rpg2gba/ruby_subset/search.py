@@ -414,7 +414,10 @@ def _exec_text(engine: _RunEngine, commands: list[dict], i: int, idx: int) -> in
     text, next_i = _text_of(commands, i)
     if has_inline_choice(text):
         try:
-            choice = parse_inline_choice(text)
+            # The transpiler emits `ifCancel == -1` as CANCEL_SENTINEL (only after
+            # proving the var is read by equality alone), and `domain()` already
+            # enumerates the sentinel, so the search admits it too.
+            choice = parse_inline_choice(text, allow_cancel_sentinel=True)
         except InlineChoiceError as exc:
             raise _Aborted("search_inline_choice", f"@list[{idx}]: {exc.message}") from None
         label = f"\\ch var {choice.var_id} @list[{idx}]"

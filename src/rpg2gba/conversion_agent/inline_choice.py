@@ -130,8 +130,9 @@ def parse_inline_choice(
     `allow_cancel_sentinel` admits `ifCancel == -1` (cancel allowed, var gets
     a value matching no option); the caller then owns proving the var is only
     read via equality tests (`cancel_sentinel_read_problem`) and storing
-    `CANCEL_SENTINEL` on cancel. Default False keeps every other consumer
-    (beat walker, ruby_subset search) refusing it, as before.
+    `CANCEL_SENTINEL` on cancel. The ruby_subset search admits it too (its
+    `domain()` carries the sentinel); default False keeps the beat walker
+    refusing it, as before.
     """
     if text.count(_MARK) != 1:
         raise InlineChoiceError(

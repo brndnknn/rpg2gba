@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from rpg2gba.beat_floor.assertion import RowFloor
+from rpg2gba.beat_gen.adapt import arm_row_ids
 from rpg2gba.beat_gen.plan import Elsewhere, Selection
 from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
 
@@ -30,13 +31,16 @@ def warp_destinations(rows: Sequence[ManifestRow], floors: Mapping[str, RowFloor
                       ) -> dict[str, frozenset[int]]:
     """{page row id: destination maps} for every page whose floor carries a
     warp. A page can warp to more than one map (a scripted transfer in each
-    branch, CH01's map049/ev021/p0); it is a crossing if any of them is."""
+    branch, CH01's map049/ev021/p0); it is a crossing if any of them is.
+    A transfer the floor attributes to a branch arm (a key-gated door,
+    map14006/ev017/p0) counts for its page too."""
     out: dict[str, frozenset[int]] = {}
     for row in rows:
         if row.kind != "page" or row.row_id not in floors:
             continue
-        dests = frozenset(a.param("map_id") for a in floors[row.row_id].assertions
-                          if a.kind == "warp")
+        dests = frozenset(a.param("map_id")
+                          for rid in (row.row_id, *arm_row_ids(floors, row.row_id))
+                          for a in floors[rid].assertions if a.kind == "warp")
         if dests:
             out[row.row_id] = dests
     return out

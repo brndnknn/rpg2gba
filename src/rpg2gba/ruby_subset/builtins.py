@@ -34,6 +34,10 @@ __all__ = [
     "NAMESPACE_GLOBALS",
     "NAMESPACE_CONSTS",
     "ENGINE_ATTRIBUTES",
+    "NUM_BADGES",
+    "badge_key_name",
+    "badge_flag",
+    "BADGE_FLAGS",
     "PARTY_MODEL_ATTRS",
     "PARTY_MODEL_CALLS",
     "STATIC_PREDICATES",
@@ -103,6 +107,26 @@ ENGINE_ATTRIBUTES: dict[tuple[str, str], EngineAttribute] = {
     ("$Trainer", "pokegear"): EngineAttribute("pokegear", "FLAG_SYS_POKENAV_GET"),
     ("$PokemonGlobal", "seenStorageCreator"): EngineAttribute("seen_storage_creator", "FLAG_SYS_PC_LANETTE"),
 }
+
+# `$Trainer.badges[N]` (0-based) -- the fork's own FLAG_BADGE01_GET..
+# FLAG_BADGE08_GET (engine/include/constants/flags.h, consecutive SYSTEM_FLAGS
+# slots), so badge N is FLAG_BADGE0{N+1}_GET. The one definition: the
+# transpiler's setflag emission, the evaluator's state key and the floor's
+# `engine_flag_write` all read it. First corpus use: CH06's gym (map042/ev003).
+NUM_BADGES = 8
+
+
+def badge_key_name(n: int) -> str:
+    """`state.EngineKey.name` for badge `n` (0-based)."""
+    return f"badge_{n}"
+
+
+def badge_flag(n: int) -> str:
+    """The fork's flag for badge `n` (0-based)."""
+    return f"FLAG_BADGE0{n + 1}_GET"
+
+
+BADGE_FLAGS: dict[str, str] = {badge_key_name(n): badge_flag(n) for n in range(NUM_BADGES)}
 
 
 # --- category 4: party/dex quantities -> party_model --------------------
@@ -311,6 +335,12 @@ EFFECT_CALLS: frozenset[str] = frozenset({
     "pbWildBattle",
     "pbItemBall",
     "pbPickBerry",
+    # CH06 (map042/ev003, the gym): sets $PokemonGlobal.healingSpot, which only
+    # Teleport reads -- not a switch/var/respawn quantity this evaluator models
+    # (white-out respawn is pbSetPokemonCenter's RESPAWN_MAP, dispatched
+    # separately). The transpiler never lets it overwrite the white-out anchor
+    # (`_SET_HEALING_SPOT_RE`; 2026-10-07 operator ruling).
+    "pbSetHealingSpot",
     # INTRO chain (map051, opening cutscene -- never scanned when this table
     # was first built from CH01-CH05 alone). 170__PSystem_Utilities.rb:521-530
     # -- writes $Trainer.trainertype/metaID, $game_player.character_name/hue,

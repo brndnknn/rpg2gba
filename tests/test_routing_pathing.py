@@ -252,6 +252,51 @@ def test_plan_segment_warp_stitch_produces_two_legs_with_exit_warp():
     assert second.exit_warp is None
 
 
+def _split_town(start: int, hub: int, door_piece: int, interior: int):
+    """A town cut into three pieces (start -> hub -> door_piece) whose two doors
+    lead into two rooms of one interior that don't connect inside it (x=2 is a
+    wall). The goal room's door is on `door_piece`, two seams from `start`."""
+    graphs = {m: MapGraph(map_id=m, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
+              for m in (start, hub, door_piece)}
+    graphs[interior] = MapGraph(map_id=interior, width=5, height=3, tileset_id=0,
+                                blocked=_walled_grid(5, 3, {(2, 0), (2, 1), (2, 2)}))
+    world = _world([
+        WorldEdge(src_map=start, dst_map=interior, kind="warp", src_cell=(2, 0),
+                  dst_cell=(0, 1), event_id=1),
+        WorldEdge(src_map=start, dst_map=hub, kind="warp", src_cell=(2, 2),
+                  dst_cell=(0, 0), event_id=2),
+        WorldEdge(src_map=hub, dst_map=door_piece, kind="warp", src_cell=(2, 2),
+                  dst_cell=(0, 0), event_id=3),
+        WorldEdge(src_map=door_piece, dst_map=interior, kind="warp", src_cell=(2, 2),
+                  dst_cell=(4, 1), event_id=4),
+    ])
+    overlays = {m: _empty_overlay(m) for m in graphs}
+    return graphs, overlays, world
+
+
+def test_plan_segment_detour_treats_split_pieces_as_one_map():
+    from rpg2gba.map_split.ids import piece_uid
+
+    start, hub, door = piece_uid(40, 3), piece_uid(40, 0), piece_uid(40, 1)
+    graphs, overlays, world = _split_town(start, hub, door, 46)
+
+    result = plan_segment(start, (0, 0), 46, (4, 2), graphs=graphs, overlays=overlays,
+                          destination_scripts=frozenset(), world=world)
+
+    assert [leg.map_id for leg in result.legs] == [start, hub, door, 46]
+    assert result.legs[-1].tiles[-1] == (4, 2)
+
+
+def test_plan_segment_detour_unchanged_for_unsplit_maps():
+    # Same topology on ordinary maps: the hub has no warp into the goal, so
+    # the bounded detour still never visits it.
+    graphs, overlays, world = _split_town(1, 2, 3, 46)
+
+    with pytest.raises(RoutePlanningError):
+        plan_segment(1, (0, 0), 46, (4, 2), graphs=graphs, overlays=overlays,
+                     destination_scripts=frozenset(), world=world)
+
+
 def test_plan_segment_connection_hop_raises():
     graph1 = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
     graph2 = MapGraph(map_id=2, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
