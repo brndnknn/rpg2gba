@@ -247,6 +247,9 @@ def test_elsewhere_records_the_unrecorded_statuses_only():
         "map050/ev005/p0": "stripped: strip_list.json map_events (Luz)",
         "map050/ev006/p0": "arm_gated: behind No",
         "map050/ev007/p0": "converter_dropped: rule x",
+        # a boundary event's non-crossing row: the far side's chapter owns it
+        # (the crossing page itself is derived `boundary`, never written here)
+        "map050/ev011/p0": "later: CH06",
     }
     # the existing dicts are unchanged by the new record
     assert _dict(src, "NEVER_FIRES") == {"map050/ev008/p0": "no warp"}

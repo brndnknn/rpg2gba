@@ -43,8 +43,10 @@ SLICE_MAP_IDS: list[int] = expand_split_ids([
     35,
 # CH05 Passage Cave: 36 (1F), 37 (2F)
     36, 37,
-# CH06 Nowtoch City: 40 (the city), 41 (Poke Mart), 42 (Gym), 43 (Pokemon Center), 44/45 (Metro station/platform), 46/47 (interior canvases)
-    40, 41, 42, 43, 44, 45, 46, 47
+# CH06 Nowtoch City: 40 (the city), 41 (Poke Mart), 42 (Gym), 43 (Pokemon Center), 46/47 (interior canvases).
+# The Metro station/platform (44/45) are parked in chapters.json's unbound_maps
+# (operator, 2026-10-10) until the Metro is worked back into a chapter.
+    40, 41, 42, 43, 46, 47
 ])
 
 # Converter-level collision unblocks (user-approved fidelity calls, one entry per

@@ -144,6 +144,21 @@ class _LazyOverlays(Mapping):
         self._map_constants_json = build_dir / "porymap" / "map_constants.json"
         self._graphs = graphs
         self._cache: dict[int, TriggerOverlay] = {}
+        self._unemitted: set[int] = set()
+
+    def __contains__(self, map_id: object) -> bool:
+        """Is `map_id` emitted (has an overlay)? `pathing`'s detour asks this
+        before hopping: a detour through a map the ROM doesn't carry is not
+        a route (the parked Metro station, map 44, sits one door off
+        Nowtoch's main piece). Indexing an unemitted map still fails loud."""
+        if not isinstance(map_id, int) or map_id in self._unemitted:
+            return False
+        try:
+            self[map_id]
+        except click.ClickException:
+            self._unemitted.add(map_id)
+            return False
+        return True
 
     def __getitem__(self, map_id: int) -> TriggerOverlay:
         if map_id not in self._cache:

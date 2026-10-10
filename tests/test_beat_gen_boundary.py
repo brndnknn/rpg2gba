@@ -56,8 +56,10 @@ def test_outbound_keeps_the_crossing_page_and_hands_its_event_to_the_successor()
     sel = split_outbound(Selection(owned=ROWS, refusals=(), elsewhere=()), FLOORS,
                          chain_maps=frozenset({1, 2}), successor_id="CHNEXT")
     assert [r.row_id for r in sel.owned] == [WARP, OTHER]
-    assert sel.elsewhere == (Elsewhere(NUDGE, "boundary", "CHNEXT"),
-                             Elsewhere(ARM, "boundary", "CHNEXT"))
+    assert [(e.row_id, e.status, e.owner) for e in sel.elsewhere] == [
+        (NUDGE, "boundary", "CHNEXT"), (ARM, "boundary", "CHNEXT")]
+    # The detail names the hand-off: the emitter writes these as `later`.
+    assert all(e.detail.startswith("CHNEXT: ") and "[9]" in e.detail for e in sel.elsewhere)
 
 
 def test_no_boundary_event_leaves_the_selection_untouched():

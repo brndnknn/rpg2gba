@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -420,9 +421,15 @@ def trainer_beats(
     build_dir: Path | None = None,
     floor_lookup: FloorLookup | None = None,
     reference_dir: Path | None = None,
+    deferred_retalks: Sequence[str] = (),
 ) -> None:
     """Register a `trainer` archetype's whole beat set: the battle beat plus
     one re-talk beat per re-talk page the manifest says exists.
+
+    `deferred_retalks` are retalk pages beat_gen moved out of this group
+    (`beat_gen.group.deferred_retalks`: gated on a switch/variable another
+    beat writes) -- registered elsewhere, after their writer, so not here.
+    They still count toward `retalk_pages`.
 
     `group=` defaults to `beat_prefix` when omitted, so the battle beat and
     every re-talk beat form one indivisible route-solver stop, matching what
@@ -479,11 +486,17 @@ def trainer_beats(
             )
 
     battle_row_id = next(rid for rid, role in match.roles.items() if role == "battle")
-    retalk_row_ids = [rid for rid, role in match.roles.items() if role == "retalk"]
-    if len(retalk_row_ids) != retalk_pages:
+    all_retalks = [rid for rid, role in match.roles.items() if role == "retalk"]
+    unknown = sorted(set(deferred_retalks) - set(all_retalks))
+    if unknown:
+        raise ValueError(
+            f"trainer_beats: {map_constant} event {event_id}: deferred_retalks "
+            f"{unknown} are not retalk pages of this trainer")
+    retalk_row_ids = [rid for rid in all_retalks if rid not in deferred_retalks]
+    if len(all_retalks) != retalk_pages:
         raise ValueError(
             f"trainer_beats: {map_constant} event {event_id}: match has "
-            f"{len(retalk_row_ids)} retalk rows but retalk_pages={retalk_pages} "
+            f"{len(all_retalks)} retalk rows but retalk_pages={retalk_pages} "
             "-- classify_manifest and the stated count disagree (this "
             "should be unreachable given the params check above; if it "
             "fires, the archetype classifier's own invariant broke)"

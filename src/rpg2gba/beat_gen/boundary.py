@@ -62,11 +62,17 @@ def split_outbound(
     dests = warp_destinations(selection.owned, floors)
     crossings = {rid for rid, maps in dests.items() if maps - chain_maps}
     events = {_event_key(rid) for rid in crossings}
+    leaves_to = {_event_key(rid): sorted(dests[rid] - chain_maps) for rid in crossings}
     owned: list[ManifestRow] = []
     handed: list[Elsewhere] = []
     for row in selection.owned:
-        if row.row_id not in crossings and _event_key(row.row_id) in events:
-            handed.append(Elsewhere(row.row_id, "boundary", successor_id))
+        key = _event_key(row.row_id)
+        if row.row_id not in crossings and key in events:
+            handed.append(Elsewhere(
+                row.row_id, "boundary", successor_id,
+                detail=(f"{successor_id}: its event crosses out of the chapter's map "
+                        f"chain (to map(s) {leaves_to[key]}); the rest of the event "
+                        "belongs to the chapter that builds the far side")))
         else:
             owned.append(row)
     if not handed:

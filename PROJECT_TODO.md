@@ -2020,6 +2020,14 @@ Residue of #29. The `--write` block (`scripts/stage_slice_scripts.py`, after the
 `5d4a7622` vs `360e8506`). #29 fixed the false alarm only. Fix: make the write unconditional or the
 failure an exception so a red gate never leaves a half-staged tree.
 
+### 133. `CH02:m033e053p0` fails its first attempt on every replay, then passes the F3 rerun
+
+Seen in both CH05 gen replays on 2026-10-09/10 (ROMs `31b375bc`, `51fc4687`): "map033/ev053/p0:
+stepping into the event (trigger='event_touch') started no script", then green on the rerun, so the
+tally reads 306/306. Twice in a row is not a flake: something about the first approach (state left by
+the beat before, or the step timing) differs from the retry. Find what, and fix the beat or the
+walk -- a rerun that always rescues it hides a real ordering or timing bug.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not

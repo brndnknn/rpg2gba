@@ -115,9 +115,9 @@
     },
     {
       "id": "CH06", "act": "A1", "title": "Nowtoch City", "wiki_page": "Nowtoch City",
-      "visit": 1, "outdoor": 40, "maps": [40, 41, 42, 43, 44, 45, 46, 47],
+      "visit": 1, "outdoor": 40, "maps": [40, 41, 42, 43, 46, 47],
       "predecessor": "CH05", "tier": "medium", "status": "in_progress",
-      "notes": "Gym 1 (map 42). First Gym, first metro/Tandor-Underground station (44, 45), and the Rock Smash grant. Novelty-promoted."
+      "notes": "Gym 1 (map 42). First Gym and the Rock Smash grant. Novelty-promoted. The metro station + platform (44, 45) were moved to unbound_maps 2026-10-10 (operator): the Nowtoch station door is a chapter-boundary warp until the Metro is worked back in."
     },
 
     {
@@ -453,6 +453,8 @@
     "94": "'Mapa intro'",
     "95": "'Intro 2'",
     "124": "'Gym3' -- unreachable orphaned draft of the Bealbeach gym; STRIP-listed 2026-09-17 (strip_list.json)",
-    "183": "'Rochfale Town' -- unreachable orphaned duplicate of map 12; STRIP-listed 2026-09-17 (strip_list.json)"
+    "183": "'Rochfale Town' -- unreachable orphaned duplicate of map 12; STRIP-listed 2026-09-17 (strip_list.json)",
+    "44": "'Nowtoch City Metro Station' -- PARKED 2026-10-10 (operator), moved out of CH06: Tandor Underground station (ticket kiosk, NPC, map signs, door to the platform). Rebind once every stop's location is known or at the first other station the chain reaches -- decide then: fold it into that chapter, or wait and do one Metro chapter once all stations are hit. Not a strip: nothing here is never-port.",
+    "45": "'Nowtoch City Metro Platform' -- PARKED 2026-10-10 with map 44 (same rebind rule). Conductor EV003's destination menu warps to maps 6/168/11, none bound before CH10+; also an item ball and an NPC."
   }
 }

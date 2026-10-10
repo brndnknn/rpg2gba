@@ -492,6 +492,7 @@ def _detour_segment(
                 (e for e in world.edges_from(map_id)
                  if e.kind in ("warp", "seam_warp") and e.src_cell is not None
                  and e.dst_cell is not None and e.dst_map in near_goal
+                 and e.dst_map in overlays  # emitted: a detour can't cross an unbuilt map
                  and not (sibling_hop(map_id, e.dst_map) and e.dst_map in entered_pieces)),
                 key=lambda e: (e.dst_map, e.src_cell, e.dst_cell))
             hops = []

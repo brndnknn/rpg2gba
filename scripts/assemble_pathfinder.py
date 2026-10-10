@@ -69,6 +69,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -1049,6 +1050,34 @@ def _resolve_batch_layout_entries(
     return [by_layout_const[lid] for lid in expected_ids]
 
 
+def prune_stale_map_dirs(fork: Path, built_dirs: frozenset[str], dry_run: bool) -> list[str]:
+    """Remove generated `data/maps/<Dir>/` left by an earlier build whose map
+    has since left the slice. `map_data_rules.mk` discovers every per-map
+    `map.json` by wildcard, so a stale dir breaks `make` ("No rule to make
+    target data/maps/NowtochCityMetroPlatform/connections.inc" after maps
+    44/45 were parked, 2026-10-10) -- re-assembly must not depend on the
+    previous slice (CLAUDE.md §4.2). Only dirs git does not track are
+    candidates: every stock dir is tracked, every generated one is ignored
+    (`engine/data/maps/*/`). Returns the removed dir names, sorted."""
+    maps_dir = fork / "data" / "maps"
+    tracked = subprocess.run(
+        ["git", "-C", str(fork), "ls-files", "data/maps"],
+        check=True, capture_output=True, text=True,
+    ).stdout.split()
+    tracked_dirs = {Path(p).parts[2] for p in tracked if len(Path(p).parts) > 3}
+    stale = sorted(
+        d.name for d in maps_dir.iterdir()
+        if d.is_dir() and d.name not in tracked_dirs and d.name not in built_dirs
+        and (d / "map.json").is_file())
+    for name in stale:
+        if dry_run:
+            logger.info("  [dry] would remove stale generated map dir data/maps/%s", name)
+        else:
+            shutil.rmtree(maps_dir / name)
+            logger.info("  removed stale generated map dir data/maps/%s (not in this slice)", name)
+    return stale
+
+
 def run_fork_pass(
     out: Path,
     fork: Path,
@@ -1233,6 +1262,7 @@ def run_fork_pass(
         logger.info("  wrote %s (+%s: %d maps)", _GEN_MAP_GROUPS, uranium_group, len(uranium_maps))
     else:
         logger.info("  [dry] would write %s (+%s)", _GEN_MAP_GROUPS, uranium_group)
+    prune_stale_map_dirs(fork, frozenset(uranium_maps), dry_run)
 
     # --- Write alias header ---
     alias_src = out / "porymap" / "uranium_map_aliases.h"

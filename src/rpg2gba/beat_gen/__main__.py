@@ -85,7 +85,7 @@ from rpg2gba.beat_gen.facing import (
     split_facing_arms,
 )
 from rpg2gba.beat_gen.gift_ceremony import annotate_gift_ceremonies
-from rpg2gba.beat_gen.group import plan_beats
+from rpg2gba.beat_gen.group import deferred_retalks, plan_beats
 from rpg2gba.beat_gen.locate import locate_beats, order_beats, route_order
 from rpg2gba.beat_gen.plan import (
     LivenessProblem,
@@ -222,8 +222,9 @@ def _match_for(beat: PlannedBeat, matches: Sequence[ArchetypeMatch]) -> Archetyp
     archetype, and every role row claimed by the beat. By event alone is
     not enough -- a page-level archetype can match two pages of one event."""
     event_id = parse_row_id(beat.rows[0]).event_id
+    deferred = set(dict(beat.kwargs).get("deferred_retalks", ()))
     found = [m for m in matches
-             if m.archetype == beat.template and set(m.roles) <= set(beat.rows)]
+             if m.archetype == beat.template and set(m.roles) - deferred <= set(beat.rows)]
     if len(found) != 1:
         raise ValueError(
             f"beat {beat.name!r}: expected one {beat.template} match on "
@@ -1248,6 +1249,10 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     # unclaimed (CH06's TVs, map046/ev006+ev008; CH01's map048/ev011).
     generic_claims = {row: m.archetype for m in all_matches
                       if _generic_reads_it_better(m, floors) for row in m.roles}
+    # A trainer's deferred retalk page (`group.deferred_retalks`) is a generic
+    # beat of its own, still that trainer's retalk.
+    generic_claims |= {row: m.archetype for m in matches
+                       for row in deferred_retalks(m, rows_by_id)}
     fork_rows = tuple(r.row_id for r in selection.owned if r.row_id in fork_owned)
     beats = plan_beats(tuple(r for r in selection.owned if r.row_id not in fork_owned),
                        matches, floors)

@@ -297,6 +297,24 @@ def test_plan_segment_detour_unchanged_for_unsplit_maps():
                      destination_scripts=frozenset(), world=world)
 
 
+def test_plan_segment_detour_skips_an_unemitted_map():
+    # Map 2 has a warp into the goal but no graph/overlay (not in the ROM, like
+    # the parked Metro station): the detour must not hop onto it -- it fails as
+    # a routing failure, not a KeyError/ClickException from the missing map.
+    graphs = {1: MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3)),
+              46: MapGraph(map_id=46, width=5, height=3, tileset_id=0,
+                           blocked=_walled_grid(5, 3, {(2, 0), (2, 1), (2, 2)}))}
+    world = _world([
+        WorldEdge(src_map=1, dst_map=46, kind="warp", src_cell=(2, 0), dst_cell=(0, 1), event_id=1),
+        WorldEdge(src_map=1, dst_map=2, kind="warp", src_cell=(2, 2), dst_cell=(0, 0), event_id=2),
+        WorldEdge(src_map=2, dst_map=46, kind="warp", src_cell=(1, 1), dst_cell=(4, 1), event_id=3),
+    ])
+    with pytest.raises(RoutePlanningError):
+        plan_segment(1, (0, 0), 46, (4, 2), graphs=graphs,
+                     overlays={m: _empty_overlay(m) for m in graphs},
+                     destination_scripts=frozenset(), world=world)
+
+
 def test_plan_segment_connection_hop_raises():
     graph1 = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
     graph2 = MapGraph(map_id=2, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))

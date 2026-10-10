@@ -113,6 +113,39 @@ def test_archetype_claims_its_pages_and_arms_ride_in_an_arms_beat():
     assert arms.kwarg("skip_claimed") is True
 
 
+def test_switch_gated_retalk_leaves_the_trainer_group():
+    # The Nowtoch gym trainers: p1 (self-switch A, their own defeat) stays in
+    # the group; p2 (switch 58, written by the leader) takes its own beat so
+    # the route can put the battle before the leader (operator call 2026-10-10).
+    from dataclasses import replace
+
+    from rpg2gba.chapter_manifest.schema import PageCondition
+
+    p0, p1 = _page(42, 1, 0), _page(42, 1, 1)
+    p1 = replace(p1, condition=PageCondition(self_switch_ch="A"))
+    p2 = replace(_page(42, 1, 2), condition=PageCondition(switch1_id=58))
+    rows = [p0, p1, p2]
+    match = _match("trainer", 42, 1, {0: "battle", 1: "retalk", 2: "retalk"})
+    assert group.deferred_retalks(match, {r.row_id: r for r in rows}) == (p2.row_id,)
+    beats = _by_name(group.plan_beats(rows, [match], _floors(rows)))
+    main = beats["m042e001_trainer"]
+    assert main.rows == (p0.row_id, p1.row_id)
+    assert main.kwarg("deferred_retalks") == (p2.row_id,)
+    assert beats["m042e001p2"].template == "generic"
+    assert beats["m042e001p2"].group != main.group
+
+
+def test_self_switch_retalks_stay_in_the_trainer_group():
+    from dataclasses import replace
+
+    from rpg2gba.chapter_manifest.schema import PageCondition
+
+    p0 = _page(36, 4, 0)
+    p1 = replace(_page(36, 4, 1), condition=PageCondition(self_switch_ch="A"))
+    match = _match("trainer", 36, 4, {0: "battle", 1: "retalk"})
+    assert group.deferred_retalks(match, {r.row_id: r for r in (p0, p1)}) == ()
+
+
 def test_match_with_an_unowned_row_is_dropped_to_generic():
     # p1 was refused upstream, so it is not in `owned`: the trainer template
     # cannot register half a match, and p0 falls to the generic template.

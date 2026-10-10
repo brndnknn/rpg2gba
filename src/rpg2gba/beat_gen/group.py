@@ -97,6 +97,27 @@ def _connected_stair_components(cells: Sequence[ManifestRow]) -> list[list[Manif
     return components
 
 
+def deferred_retalks(match: ArchetypeMatch, rows_by_id: Mapping[str, ManifestRow]
+                     ) -> tuple[str, ...]:
+    """A trainer's retalk pages gated on a switch or variable -- state some
+    OTHER beat writes -- in role order. They leave the trainer's group and
+    take their own beat, ordered after their writer by the story model: in
+    one indivisible group, a page needing a later write (the Nowtoch gym
+    trainers' "trainers off" page, switch 58, set by the leader) forced the
+    battle after that writer, a walk the ROM can't do (operator call
+    2026-10-10). A self-switch-only retalk (the defeat's own write) stays."""
+    if match.archetype != "trainer":
+        return ()
+    out = []
+    for rid, role in match.roles.items():
+        cond = rows_by_id[rid].condition if rid in rows_by_id else None
+        if role == "retalk" and cond is not None and (
+                cond.switch1_id is not None or cond.switch2_id is not None
+                or cond.variable_id is not None):
+            out.append(rid)
+    return tuple(out)
+
+
 def plan_beats(
     owned: Sequence[ManifestRow],
     matches: Sequence[ArchetypeMatch],
@@ -129,7 +150,8 @@ def plan_beats(
     # so the names stay unique (C6 part two, CH01).
     per_event = Counter((m.archetype, m.map_id, m.event_id) for m in matches)
     for match in matches:
-        role_ids = list(match.roles)
+        deferred = deferred_retalks(match, owned_by_id)
+        role_ids = [rid for rid in match.roles if rid not in deferred]
         if not all(rid in remaining for rid in role_ids):
             continue  # a half-owned match cannot register; falls to generic
         role_ids_sorted = sorted(role_ids, key=lambda rid: position[rid])
@@ -159,7 +181,8 @@ def plan_beats(
         _claim(role_ids_sorted)
         staged.append((main_pos, 0, PlannedBeat(
             name=main_name, template=match.archetype, map_id=match.map_id,
-            rows=tuple(role_ids_sorted), group=main_name)))
+            rows=tuple(role_ids_sorted), group=main_name,
+            kwargs=make_kwargs(deferred_retalks=deferred) if deferred else ())))
 
         if arm_rows:
             arm_ids = sorted((r.row_id for r in arm_rows), key=lambda rid: position[rid])

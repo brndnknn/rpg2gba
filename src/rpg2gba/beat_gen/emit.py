@@ -129,9 +129,18 @@ def _never_fires_chunk(plan: ChapterPlan, *, status: str = "never_fires",
 #: `chapter_manifest.derivation.derive_entry` already derives those from the
 #: manifest (`row.requires`) and the boundary model, so recording them again
 #: would let the two disagree silently.
+#:
+#: Except (2026-10-10): the boundary model derives only the CROSSING page,
+#: which `split_outbound` keeps as an owned beat. The `boundary` entries are
+#: the event's OTHER rows, which nothing else dispositions -- they belong to
+#: the chapter that builds the far side, so they are written as `later`
+#: (`_ELSEWHERE_AS`). First case: Nowtoch's station doors (map14000/ev052,
+#: ev057), whose page 1 is the arrival nudge for coming back out of the
+#: parked Metro.
 ELSEWHERE_EMITTED: frozenset[str] = frozenset({
     "later", "unreachable", "unselected_arm", "stripped", "arm_gated",
     "converter_dropped"})
+_ELSEWHERE_AS: dict[str, str] = {"boundary": "later"}
 
 
 def _dict_chunk(name: str, entries: list[tuple[str, str]]) -> str:
@@ -169,9 +178,10 @@ def _elsewhere_chunk(plan: ChapterPlan) -> str:
     listed twice with different values is a generator bug and fails loud."""
     out: dict[str, str] = {}
     for e in plan.elsewhere:
-        if e.status not in ELSEWHERE_EMITTED:
+        status = _ELSEWHERE_AS.get(e.status, e.status)
+        if status not in ELSEWHERE_EMITTED:
             continue
-        value = elsewhere_value(e.status, e.owner, e.detail)
+        value = elsewhere_value(status, e.owner, e.detail)
         if out.setdefault(e.row_id, value) != value:
             raise ValueError(
                 f"{plan.chapter_id}: {e.row_id} is Elsewhere twice "
