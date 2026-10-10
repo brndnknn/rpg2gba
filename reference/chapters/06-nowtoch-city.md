@@ -29,6 +29,12 @@ was consulted only for §5.
 
 Chapter 6 is Act A1's terminal chapter (`reference/chapters.json` CH06,
 `visit: 1`), predecessor **CH05 Passage Cave**. 8 maps, `[40,41,42,43,44,45,46,47]`.
+*(Corrected 2026-10-10: the Metro station + platform (44, 45) were PARKED out of CH06 by the
+operator — now in `chapters.json` `unbound_maps`, so CH06 is 6 maps, `[40,41,42,43,46,47]`, and
+the Nowtoch station door is a chapter-boundary warp. Rebind rule: once every stop's location is
+known, or at the first other station the chain reaches; decide then between folding it into that
+chapter and one Metro chapter after all stations. The Metro analysis below stays as the input to
+that decision.)*
 At 206 events / 2180 commands it is the densest chapter in Act 1 — nearly
 three times CH01 Moki Town's command count on the same map count.
 
@@ -290,7 +296,8 @@ briefing" that no longer exists. Re-measured the same day with
   (40 → 1040; fits at 1020/1024 metatiles, 1013/1024 tiles). `map_set.tileset_groups` now splits
   the pair into separate groups instead of failing loud; `connection_remap.py` builds the
   tables. Not yet assembled with real tables or walked on device.)*
-- **Metro departure (map 45 event 3):** accept it inert for CH06. Any event with an
+- **Metro departure (map 45 event 3):** *(Superseded 2026-10-10: maps 44/45 are parked out of
+  CH06 entirely — see §1.)* accept it inert for CH06. Any event with an
   out-of-slice warp target is skipped whole today (`metadata_wiring.classify_event`, "out-of-slice
   warp"; its .pory block pruned as an orphan), so the departure menu ships non-interactive until
   maps 6/168/11 are in the build. Revisit when those chapters land.

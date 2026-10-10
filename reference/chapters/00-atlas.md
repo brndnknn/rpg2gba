@@ -109,7 +109,7 @@ Tier legend: **F** full, **M** medium, **T** thin. Status is from the binding.
 | CH03 | Kevlar Town | A1 | M | 5 | 5 | 5 | bike; map 19 bound here, see §6 |
 | CH04 | Route 2 | A1 | M | 1 | 4 | 3 | rockslide gate; `04-route-2.md` (spec), `reference/archive/CH04_TODO.md` (retired) |
 | CH05 | Passage Cave | A1 | M | 2 | 3 | 5 | first dungeon |
-| CH06 | Nowtoch City | A1 | M | 8 | 6 | 11 | **Gym 1**, first metro, Rock Smash |
+| CH06 | Nowtoch City | A1 | M | 8 | 6 | 11 | **Gym 1**, Rock Smash (metro maps 44/45 parked to `unbound_maps` 2026-10-10) |
 | CH07 | Route 2 (revisit) | A2 | T | 1 | 4 | 3 | overland seam opens |
 | CH07A | Route 1 (revisit) | A2 | T | 2 | 9 | 7 | inserted 2026-08-29, see §7; maps 33/81, rides Kevlar (31) as entry leg |
 | CH08 | Moki Town (revisit) | A2 | T | 8 | 1 | 7 | first revisit-model test |
