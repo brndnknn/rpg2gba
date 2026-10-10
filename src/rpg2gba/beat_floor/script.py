@@ -633,6 +633,18 @@ SCRIPT_HEAD_EXTRACTORS: dict[str, ScriptHeadExtractor] = {
     # (an `EngineKey`) there -- already covered by the row's story-state
     # writes, same disposition as the other state-writing heads above.
     "pbSetPokemonCenter": _no_assertion,
+    # Kernel.pbSetHealingSpot -- the Teleport anchor ($PokemonGlobal.
+    # healingSpot), not the white-out respawn. No on-screen effect, and no
+    # modelled key (ruby_subset.builtins records it as an EFFECT_CALL); the
+    # transpiler never lets it overwrite the white-out anchor (2026-10-07
+    # ruling). First corpus use: CH06's gym leader, map042/ev003/p0/b0.
+    "pbSetHealingSpot": _no_assertion,
+    # `$Trainer.badges[N]=true` -- the gym badge. The story model writes it as
+    # `EngineKey(badge_N)` (ruby_subset.builtins.BADGE_FLAGS), which the
+    # row's state assertions turn into `engine_flag_write` on
+    # FLAG_BADGE0{N+1}_GET (walk._UNLOCK_FLAGS): covered there, same
+    # disposition as the other state-writing heads above.
+    "$Trainer.badges": _no_assertion,
 
     "pbEraseThisEvent": _extract_erase_this_event,
     "pbReceiveItem": _extract_receive_item,
