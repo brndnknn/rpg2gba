@@ -300,17 +300,28 @@ def _player_facing(emu: "Emulator") -> str:
     return emu.object_event(emu.resolve_constant("LOCALID_PLAYER")).facing
 
 
-def _handle_trigger(emu: "Emulator", beat_name: str, step: Step) -> None:
+def _handle_trigger(emu: "Emulator", beat_name: str, step: Step, *,
+                    talk_if_unseen: bool = False) -> None:
     """Fire the page. The body has already walked to the approach cell and
     faced the event, so `action` presses A and a touch trigger steps into
     it; an autorun/parallel page must already hold the field. Trigger
     names are the floor's own vocabulary (`story_state.extract`:
-    action/player_touch/event_touch/autorun/parallel)."""
+    action/player_touch/event_touch/autorun/parallel).
+
+    `talk_if_unseen`: the event is a ROM sight trainer. Its "touch" is the
+    engine's line-of-sight check, which runs only as the player finishes a
+    step and only along the trainer's current facing; a trainer with a
+    turning movement type (Route 1 ev053, FACE_DOWN_AND_LEFT) may face
+    away when the player arrives, and bumping into it then starts nothing
+    (PROJECT_TODO #133). Pressing A on it runs the same trainerbattle
+    script, so that is the fallback."""
     trigger = dict(step.params).get("trigger")
     if trigger == "action":
         emu.interact()  # raises if no script picks up the field
     elif trigger in ("player_touch", "event_touch"):
         assertions.try_step(emu, _player_facing(emu))
+        if not emu.field_locked() and talk_if_unseen:
+            emu.interact(require_script=False)
         if not emu.field_locked():
             shot = emu.screenshot(f"{beat_name}_no_touch_trigger")
             raise ScenarioError(
@@ -1162,6 +1173,7 @@ def generic_beat(
     faces_target: tuple[int, int] | None = None
     walks_off: int | None = None      # local id of an action NPC that walks on its own
     walker_route = None               # its looping custom route, if it has one
+    touch_trainer = False             # a touch page on a ROM sight trainer
     sight_trainer = False             # walks_off is a sight trainer: no approach walk first
     empty_page = False                # an action page with no commands: A is a no-op
     arrival = trigger in _ARRIVAL_TRIGGERS
@@ -1212,6 +1224,8 @@ def generic_beat(
         faces_target = event_cell(cell.map_constant, page_row.event_id)
         x, y = approach_to(cell.map_constant, page_row.event_id, prefer=approach_prefer)
         page_idx = parse_row_id(page_row_id).page_idx
+        touch_trainer = (trigger in ("player_touch", "event_touch")
+                         and event_is_sight_trainer(cell.map_constant, page_row.event_id))
         if trigger == "action" and page_idx is not None:
             if event_page_empty(cell.map_constant, page_row.event_id, page_idx):
                 empty_page = True
@@ -1403,7 +1417,11 @@ def generic_beat(
                     # compare/release). The field unlocked after is the check.
                     emu.interact(require_script=False)
                 elif trigger_step is not None:
-                    STEP_HANDLERS["trigger"](emu, beat_name, trigger_step)
+                    if touch_trainer:
+                        _handle_trigger(emu, beat_name, trigger_step,
+                                        talk_if_unseen=True)
+                    else:
+                        STEP_HANDLERS["trigger"](emu, beat_name, trigger_step)
         for i, step in enumerate(middle_steps):
             guard = random_guard.get(step.row_id)
             if guard is not None and (step.kind == "heal_party"

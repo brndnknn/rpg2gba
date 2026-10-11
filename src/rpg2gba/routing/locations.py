@@ -285,8 +285,12 @@ def _approach_side_candidates(map_id: int, map_constant: str,
     graph = build_map_graph(map_id)
     cell = event_cell(map_constant, event_id)
     candidates: list[ApproachCandidate] = []
-    # Same sides `approach_to` offers, counter reach-over included.
+    # Same sides `approach_to` offers, counter reach-over included -- less a
+    # warp tile: the walker never stands on one (2026-10-11, CH06: Fufufu at
+    # the gym door was picked from the north, the door itself).
     for direction, cand_cell in graph.interaction_cells(cell):
+        if cand_cell in graph.warp_exits:
+            continue
         candidates.append(ApproachCandidate(
             x=cand_cell[0], y=cand_cell[1], side=direction.value,
             resolver=(f'approach_to({map_constant}, ev{event_id}, '

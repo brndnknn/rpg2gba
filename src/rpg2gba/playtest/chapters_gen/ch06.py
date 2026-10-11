@@ -1509,7 +1509,7 @@ generic_beat(
     beat_name='m14001e018p0',
     group='m14001e018p0',
     rows=('map14001/ev018/p0', 'map14001/ev018/p0/b0'),
-    approach_prefer='north',
+    approach_prefer='south',
 )
 
 flavour_npc_beat(
@@ -1517,7 +1517,7 @@ flavour_npc_beat(
     chapter_id='CH06',
     beat_name='m14001e018_flavour_npc',
     group='m14001e018_flavour_npc',
-    approach_prefer='north',
+    approach_prefer='south',
     event_id=18,
     map_constant='MAP_NOWTOCH_CITY_GYM_PLAZA',
     map_id=14001,
@@ -1896,7 +1896,7 @@ generic_beat(
     beat_name='m14001e018p3',
     group='m14001e018p3',
     rows=('map14001/ev018/p3',),
-    approach_prefer='north',
+    approach_prefer='south',
 )
 
 generic_beat(

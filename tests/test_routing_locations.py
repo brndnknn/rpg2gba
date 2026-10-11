@@ -73,6 +73,18 @@ def test_approach_side_candidates_skip_unwalkable_sides(monkeypatch):
     assert [c.side for c in candidates] == ["south", "east", "west"]
 
 
+def test_approach_side_candidates_skip_a_warp_tile(monkeypatch):
+    """CH06's Fufufu stands below the gym door: the door tile is no side."""
+    graph = MapGraph(map_id=999, width=5, height=5, tileset_id=0,
+                     blocked=_open_grid(5, 5), warp_exits={(2, 1): ()})
+    monkeypatch.setattr(loc_mod, "build_map_graph", lambda map_id: graph)
+    monkeypatch.setattr(loc_mod, "event_cell", lambda mc, ev: (2, 2))
+
+    candidates = loc_mod._approach_side_candidates(999, "MAP_X", 7)
+
+    assert [c.side for c in candidates] == ["south", "east", "west"]
+
+
 def test_stair_side_candidates_both_sides_legal(monkeypatch):
     """A stair beat with both E/W neighbours walkable emits both, west then
     east -- the full set `_stair_approach` itself picks the first (west) of."""
