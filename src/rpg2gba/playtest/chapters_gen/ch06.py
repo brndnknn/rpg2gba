@@ -66,7 +66,7 @@ warp_beat(
     map_id=14002,
     mechanism='threshold',
     page_idx=0,
-    return_direction='DOWN',
+    return_direction='UP',
     start_side='origin',
 )
 
@@ -137,7 +137,7 @@ transit_beat(
     chapter_id='CH06',
     beat_name='m14000e061_flavour_npc_transit',
     group='m14000e061_flavour_npc',
-    hops=(('MAP_NOWTOCH_CITY_PARK', 9, 19, 'UP', 'MAP_NOWTOCH_CITY'),),
+    hops=(('MAP_NOWTOCH_CITY_PARK', 10, 18, 'LEFT', 'MAP_NOWTOCH_CITY'),),
 )
 
 flavour_npc_beat(
@@ -193,7 +193,7 @@ transit_beat(
     chapter_id='CH06',
     beat_name='m14006e064_warp_transit',
     group='m14006e064_warp',
-    hops=(('MAP_NOWTOCH_CITY', 19, 51, 'UP', 'MAP_NOWTOCH_CITY_SOUTHEAST'),),
+    hops=(('MAP_NOWTOCH_CITY', 18, 50, 'RIGHT', 'MAP_NOWTOCH_CITY_SOUTHEAST'),),
 )
 
 warp_beat(
@@ -271,109 +271,12 @@ generic_beat(
     skip_claimed=True,
 )
 
-warp_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14006e017p1_warp',
-    group='m14006e017p1_warp',
-    dest_map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
-    direction='UP',
-    end_side='dest',
-    event_id=17,
-    map_constant='MAP_NOWTOCH_CITY_SOUTHEAST',
-    map_id=14006,
-    mechanism='threshold',
-    page_idx=1,
-    start_side='origin',
-)
-
-generic_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m047e013p1',
-    group='m047e013p1',
-    rows=('map047/ev013/p1',),
-    approach_prefer='north',
-)
-
-flavour_npc_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m047e008_flavour_npc',
-    group='m047e008_flavour_npc',
-    approach_prefer='south',
-    event_id=8,
-    map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
-    map_id=47,
-    variant='plain',
-)
-
-flavour_npc_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m047e007_flavour_npc',
-    group='m047e007_flavour_npc',
-    approach_prefer='south',
-    event_id=7,
-    map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
-    map_id=47,
-    variant='plain',
-)
-
-flavour_npc_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m047e006_flavour_npc',
-    group='m047e006_flavour_npc',
-    approach_prefer='south',
-    event_id=6,
-    map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
-    map_id=47,
-    variant='plain',
-)
-
-warp_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m047e001_warp',
-    group='m047e001_warp',
-    dest_map_constant='MAP_NOWTOCH_CITY_SOUTHEAST',
-    direction='DOWN',
-    end_side='dest',
-    event_id=1,
-    map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
-    map_id=47,
-    mechanism='threshold',
-    start_side='origin',
-)
-
-arrival_nudge_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14006e017_arrival_nudge',
-    group='m14006e017_arrival_nudge',
-    event_id=17,
-    from_event_id=1,
-    from_map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
-    map_constant='MAP_NOWTOCH_CITY_SOUTHEAST',
-    map_id=14006,
-)
-
-generic_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14006e017_arrival_nudge_arms',
-    group='m14006e017_arrival_nudge',
-    rows=('map14006/ev017/p2/b0',),
-    skip_claimed=True,
-)
-
 transit_beat(
     ch06,
     chapter_id='CH06',
     beat_name='m047e005p0_transit',
     group='m047e005p0',
-    hops=(('MAP_NOWTOCH_CITY_SOUTHEAST', 7, 8, 'UP', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 8, 46, 'UP', 'MAP_NOWTOCH_CITY_SOUTHWEST'), ('MAP_NOWTOCH_CITY_SOUTHWEST', 14, 6, 'UP', 'MAP_NOWTOCH_CITY_LEADER_HOUSE')),
+    hops=(('MAP_NOWTOCH_CITY_SOUTHEAST', 8, 7, 'LEFT', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 9, 45, 'LEFT', 'MAP_NOWTOCH_CITY_SOUTHWEST'), ('MAP_NOWTOCH_CITY_SOUTHWEST', 14, 6, 'UP', 'MAP_NOWTOCH_CITY_LEADER_HOUSE')),
 )
 
 generic_beat(
@@ -700,7 +603,7 @@ transit_beat(
     chapter_id='CH06',
     beat_name='m14003e011p0_transit',
     group='m14003e011p0',
-    hops=(('MAP_NOWTOCH_CITY_SOUTHWEST', 21, 8, 'UP', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 7, 32, 'UP', 'MAP_NOWTOCH_CITY_WEST')),
+    hops=(('MAP_NOWTOCH_CITY_SOUTHWEST', 20, 7, 'RIGHT', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 8, 31, 'LEFT', 'MAP_NOWTOCH_CITY_WEST')),
 )
 
 generic_beat(
@@ -1198,7 +1101,7 @@ transit_beat(
     chapter_id='CH06',
     beat_name='m14000e063p0_flavour_npc_transit',
     group='m14000e063p0_flavour_npc',
-    hops=(('MAP_NOWTOCH_CITY_WEST', 19, 16, 'UP', 'MAP_NOWTOCH_CITY'),),
+    hops=(('MAP_NOWTOCH_CITY_WEST', 18, 15, 'RIGHT', 'MAP_NOWTOCH_CITY'),),
 )
 
 flavour_npc_beat(
@@ -1240,84 +1143,12 @@ flavour_npc_beat(
     variant='plain',
 )
 
-flavour_npc_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14000e006_flavour_npc',
-    group='m14000e006_flavour_npc',
-    approach_prefer='south',
-    event_id=6,
-    map_constant='MAP_NOWTOCH_CITY',
-    map_id=14000,
-    variant='plain',
-)
-
-flavour_npc_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14000e007_flavour_npc',
-    group='m14000e007_flavour_npc',
-    approach_prefer='west',
-    event_id=7,
-    map_constant='MAP_NOWTOCH_CITY',
-    map_id=14000,
-    variant='plain',
-)
-
-flavour_npc_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14000e026_flavour_npc',
-    group='m14000e026_flavour_npc',
-    approach_prefer='east',
-    event_id=26,
-    map_constant='MAP_NOWTOCH_CITY',
-    map_id=14000,
-    variant='plain',
-)
-
-flavour_npc_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14000e009_flavour_npc',
-    group='m14000e009_flavour_npc',
-    approach_prefer='west',
-    event_id=9,
-    map_constant='MAP_NOWTOCH_CITY',
-    map_id=14000,
-    variant='plain',
-)
-
 transit_beat(
     ch06,
     chapter_id='CH06',
-    beat_name='m14005e023_flavour_npc_transit',
-    group='m14005e023_flavour_npc',
-    hops=(('MAP_NOWTOCH_CITY', 9, 12, 'UP', 'MAP_NOWTOCH_CITY_GARDEN'),),
-)
-
-flavour_npc_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14005e023_flavour_npc',
-    group='m14005e023_flavour_npc',
-    approach_prefer='north',
-    event_id=23,
-    map_constant='MAP_NOWTOCH_CITY_GARDEN',
-    map_id=14005,
-    variant='plain',
-)
-
-flavour_npc_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14005e050_flavour_npc',
-    group='m14005e050_flavour_npc',
-    approach_prefer='south',
-    event_id=50,
-    map_constant='MAP_NOWTOCH_CITY_GARDEN',
-    map_id=14005,
-    variant='plain',
+    beat_name='m14005e060_item_ball_transit',
+    group='m14005e060_item_ball',
+    hops=(('MAP_NOWTOCH_CITY', 10, 11, 'LEFT', 'MAP_NOWTOCH_CITY_GARDEN'),),
 )
 
 item_ball_beats(
@@ -1343,12 +1174,92 @@ generic_beat(
     skip_claimed=True,
 )
 
+flavour_npc_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14005e050_flavour_npc',
+    group='m14005e050_flavour_npc',
+    approach_prefer='south',
+    event_id=50,
+    map_constant='MAP_NOWTOCH_CITY_GARDEN',
+    map_id=14005,
+    variant='plain',
+)
+
+flavour_npc_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14005e023_flavour_npc',
+    group='m14005e023_flavour_npc',
+    approach_prefer='north',
+    event_id=23,
+    map_constant='MAP_NOWTOCH_CITY_GARDEN',
+    map_id=14005,
+    variant='plain',
+)
+
+transit_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14000e026_flavour_npc_transit',
+    group='m14000e026_flavour_npc',
+    hops=(('MAP_NOWTOCH_CITY_GARDEN', 15, 10, 'RIGHT', 'MAP_NOWTOCH_CITY'),),
+)
+
+flavour_npc_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14000e026_flavour_npc',
+    group='m14000e026_flavour_npc',
+    approach_prefer='south',
+    event_id=26,
+    map_constant='MAP_NOWTOCH_CITY',
+    map_id=14000,
+    variant='plain',
+)
+
+flavour_npc_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14000e006_flavour_npc',
+    group='m14000e006_flavour_npc',
+    approach_prefer='west',
+    event_id=6,
+    map_constant='MAP_NOWTOCH_CITY',
+    map_id=14000,
+    variant='plain',
+)
+
+flavour_npc_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14000e009_flavour_npc',
+    group='m14000e009_flavour_npc',
+    approach_prefer='south',
+    event_id=9,
+    map_constant='MAP_NOWTOCH_CITY',
+    map_id=14000,
+    variant='plain',
+)
+
+flavour_npc_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14000e007_flavour_npc',
+    group='m14000e007_flavour_npc',
+    approach_prefer='east',
+    event_id=7,
+    map_constant='MAP_NOWTOCH_CITY',
+    map_id=14000,
+    variant='plain',
+)
+
 transit_beat(
     ch06,
     chapter_id='CH06',
     beat_name='m046e017p0_transit',
     group='m046e017p0',
-    hops=(('MAP_NOWTOCH_CITY_GARDEN', 16, 11, 'UP', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 21, 12, 'UP', 'MAP_NOWTOCH_CITY_GYM_PLAZA'), ('MAP_NOWTOCH_CITY_GYM_PLAZA', 25, 15, 'UP', 'MAP_NOWTOCH_CITY_INTERIORS_1')),
+    hops=(('MAP_NOWTOCH_CITY', 20, 11, 'RIGHT', 'MAP_NOWTOCH_CITY_GYM_PLAZA'), ('MAP_NOWTOCH_CITY_GYM_PLAZA', 25, 15, 'UP', 'MAP_NOWTOCH_CITY_INTERIORS_1')),
 )
 
 generic_beat(
@@ -1598,7 +1509,7 @@ generic_beat(
     beat_name='m14001e018p0',
     group='m14001e018p0',
     rows=('map14001/ev018/p0', 'map14001/ev018/p0/b0'),
-    approach_prefer='south',
+    approach_prefer='north',
 )
 
 flavour_npc_beat(
@@ -1606,13 +1517,196 @@ flavour_npc_beat(
     chapter_id='CH06',
     beat_name='m14001e018_flavour_npc',
     group='m14001e018_flavour_npc',
-    approach_prefer='south',
+    approach_prefer='north',
     event_id=18,
     map_constant='MAP_NOWTOCH_CITY_GYM_PLAZA',
     map_id=14001,
     moved_by=('map14001/ev141/p0',),
     page_idx=1,
     variant='plain',
+)
+
+generic_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14001e014p0',
+    group='m14001e014p0',
+    rows=('map14001/ev014/p0',),
+)
+
+transit_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14006e017p0_warp_transit',
+    group='m14006e017p0_warp',
+    hops=(('MAP_NOWTOCH_CITY_GYM_PLAZA', 8, 14, 'LEFT', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 18, 50, 'RIGHT', 'MAP_NOWTOCH_CITY_SOUTHEAST')),
+)
+
+warp_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14006e017p0_warp',
+    group='m14006e017p0_warp',
+    dest_map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
+    direction='UP',
+    end_side='origin',
+    event_id=17,
+    map_constant='MAP_NOWTOCH_CITY_SOUTHEAST',
+    map_id=14006,
+    mechanism='threshold',
+    page_idx=0,
+    return_direction='DOWN',
+    start_side='origin',
+)
+
+generic_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14006e017p0_warp_arms',
+    group='m14006e017p0_warp',
+    rows=('map14006/ev017/p0/b0', 'map14006/ev017/p0/b1'),
+    approach_prefer='south',
+    skip_claimed=True,
+)
+
+transit_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m047e013p1_transit',
+    group='m047e013p1',
+    hops=(('MAP_NOWTOCH_CITY_SOUTHEAST', 13, 7, 'UP', 'MAP_NOWTOCH_CITY_LEADER_HOUSE'),),
+)
+
+generic_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m047e013p1',
+    group='m047e013p1',
+    rows=('map047/ev013/p1',),
+    approach_prefer='north',
+)
+
+flavour_npc_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m047e008_flavour_npc',
+    group='m047e008_flavour_npc',
+    approach_prefer='south',
+    event_id=8,
+    map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
+    map_id=47,
+    variant='plain',
+)
+
+flavour_npc_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m047e007_flavour_npc',
+    group='m047e007_flavour_npc',
+    approach_prefer='south',
+    event_id=7,
+    map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
+    map_id=47,
+    variant='plain',
+)
+
+flavour_npc_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m047e006_flavour_npc',
+    group='m047e006_flavour_npc',
+    approach_prefer='south',
+    event_id=6,
+    map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
+    map_id=47,
+    variant='plain',
+)
+
+warp_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m047e001_warp',
+    group='m047e001_warp',
+    dest_map_constant='MAP_NOWTOCH_CITY_SOUTHEAST',
+    direction='DOWN',
+    end_side='dest',
+    event_id=1,
+    map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
+    map_id=47,
+    mechanism='threshold',
+    start_side='origin',
+)
+
+arrival_nudge_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14006e017_arrival_nudge',
+    group='m14006e017_arrival_nudge',
+    event_id=17,
+    from_event_id=1,
+    from_map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
+    map_constant='MAP_NOWTOCH_CITY_SOUTHEAST',
+    map_id=14006,
+)
+
+generic_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14006e017_arrival_nudge_arms',
+    group='m14006e017_arrival_nudge',
+    rows=('map14006/ev017/p2/b0',),
+    skip_claimed=True,
+)
+
+warp_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14006e017p1_warp',
+    group='m14006e017p1_warp',
+    dest_map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
+    direction='UP',
+    end_side='dest',
+    event_id=17,
+    map_constant='MAP_NOWTOCH_CITY_SOUTHEAST',
+    map_id=14006,
+    mechanism='threshold',
+    page_idx=1,
+    start_side='origin',
+)
+
+transit_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14001e141p0_transit',
+    group='m14001e141p0',
+    hops=(('MAP_NOWTOCH_CITY_LEADER_HOUSE', 5, 9, 'DOWN', 'MAP_NOWTOCH_CITY_SOUTHEAST'), ('MAP_NOWTOCH_CITY_SOUTHEAST', 8, 7, 'LEFT', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 20, 11, 'RIGHT', 'MAP_NOWTOCH_CITY_GYM_PLAZA')),
+)
+
+generic_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14001e141p0',
+    group='m14001e141p0',
+    rows=('map14001/ev141/p0', 'map14001/ev141/p0/b0', 'map14001/ev141/p0/b1', 'map14001/ev141/p0/b2'),
+    approach_prefer='east',
+)
+
+generic_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14001e141p1',
+    group='m14001e141p1',
+    rows=('map14001/ev141/p1',),
+    approach_prefer='east',
+)
+
+generic_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14001e018p2',
+    group='m14001e018p2',
+    rows=('map14001/ev018/p2',),
+    approach_prefer='south',
 )
 
 warp_beat(
@@ -1687,7 +1781,7 @@ trainer_beats(
     chapter_id='CH06',
     beat_prefix='m042e001_trainer',
     group='m042e001_trainer',
-    approach_prefer='south',
+    approach_prefer='east',
     defeat_flag='TRAINER_FLAGS_START + TRAINER_MYLA_7',
     deferred_retalks=('map042/ev001/p2',),
     double=False,
@@ -1707,95 +1801,8 @@ generic_beat(
     beat_name='m042e001_trainer_arms',
     group='m042e001_trainer',
     rows=('map042/ev001/p0/b0',),
-    approach_prefer='south',
-    skip_claimed=True,
-)
-
-warp_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m042e005_warp',
-    group='m042e005_warp',
-    dest_map_constant='MAP_NOWTOCH_CITY_GYM_PLAZA',
-    direction='DOWN',
-    end_side='dest',
-    event_id=5,
-    map_constant='MAP_NOWTOCH_CITY_GYM',
-    map_id=42,
-    mechanism='threshold',
-    start_side='origin',
-)
-
-generic_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14001e014p0',
-    group='m14001e014p0',
-    rows=('map14001/ev014/p0',),
-)
-
-transit_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14001e014_arrival_nudge_transit',
-    group='m14001e014_arrival_nudge',
-    hops=(('MAP_NOWTOCH_CITY_GYM_PLAZA', 13, 6, 'UP', 'MAP_NOWTOCH_CITY_GYM'), ('MAP_NOWTOCH_CITY_GYM', 9, 24, 'DOWN', 'MAP_NOWTOCH_CITY_GYM_PLAZA')),
-)
-
-arrival_nudge_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14001e014_arrival_nudge',
-    group='m14001e014_arrival_nudge',
-    event_id=14,
-    from_event_id=5,
-    from_map_constant='MAP_NOWTOCH_CITY_GYM',
-    map_constant='MAP_NOWTOCH_CITY_GYM_PLAZA',
-    map_id=14001,
-)
-
-generic_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14001e014_arrival_nudge_arms',
-    group='m14001e014_arrival_nudge',
-    rows=('map14001/ev014/p2/b0',),
-    skip_claimed=True,
-)
-
-generic_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14001e141p0',
-    group='m14001e141p0',
-    rows=('map14001/ev141/p0', 'map14001/ev141/p0/b0', 'map14001/ev141/p0/b1', 'map14001/ev141/p0/b2'),
     approach_prefer='east',
-)
-
-generic_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14001e141p1',
-    group='m14001e141p1',
-    rows=('map14001/ev141/p1',),
-    approach_prefer='east',
-)
-
-generic_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14001e018p2',
-    group='m14001e018p2',
-    rows=('map14001/ev018/p2',),
-    approach_prefer='north',
-)
-
-transit_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m042e003p0_transit',
-    group='m042e003p0',
-    hops=(('MAP_NOWTOCH_CITY_GYM_PLAZA', 13, 6, 'UP', 'MAP_NOWTOCH_CITY_GYM'),),
+    skip_claimed=True,
 )
 
 generic_beat(
@@ -1847,12 +1854,40 @@ generic_beat(
     archetype=(('map042/ev002/p2', 'trainer'),),
 )
 
-transit_beat(
+warp_beat(
     ch06,
     chapter_id='CH06',
-    beat_name='m14001e018p3_transit',
-    group='m14001e018p3',
-    hops=(('MAP_NOWTOCH_CITY_GYM', 9, 24, 'DOWN', 'MAP_NOWTOCH_CITY_GYM_PLAZA'),),
+    beat_name='m042e005_warp',
+    group='m042e005_warp',
+    dest_map_constant='MAP_NOWTOCH_CITY_GYM_PLAZA',
+    direction='DOWN',
+    end_side='dest',
+    event_id=5,
+    map_constant='MAP_NOWTOCH_CITY_GYM',
+    map_id=42,
+    mechanism='threshold',
+    start_side='origin',
+)
+
+arrival_nudge_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14001e014_arrival_nudge',
+    group='m14001e014_arrival_nudge',
+    event_id=14,
+    from_event_id=5,
+    from_map_constant='MAP_NOWTOCH_CITY_GYM',
+    map_constant='MAP_NOWTOCH_CITY_GYM_PLAZA',
+    map_id=14001,
+)
+
+generic_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14001e014_arrival_nudge_arms',
+    group='m14001e014_arrival_nudge',
+    rows=('map14001/ev014/p2/b0',),
+    skip_claimed=True,
 )
 
 generic_beat(
@@ -1895,7 +1930,7 @@ transit_beat(
     chapter_id='CH06',
     beat_name='m14000e079p0_transit',
     group='m14000e079p0',
-    hops=(('MAP_NOWTOCH_CITY_PARK', 9, 19, 'UP', 'MAP_NOWTOCH_CITY'),),
+    hops=(('MAP_NOWTOCH_CITY_PARK', 10, 18, 'LEFT', 'MAP_NOWTOCH_CITY'),),
 )
 
 generic_beat(
@@ -1930,36 +1965,19 @@ generic_beat(
 transit_beat(
     ch06,
     chapter_id='CH06',
-    beat_name='m14006e017p0_warp_transit',
-    group='m14006e017p0_warp',
-    hops=(('MAP_NOWTOCH_CITY', 19, 51, 'UP', 'MAP_NOWTOCH_CITY_SOUTHEAST'),),
-)
-
-warp_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14006e017p0_warp',
-    group='m14006e017p0_warp',
-    dest_map_constant='MAP_NOWTOCH_CITY_LEADER_HOUSE',
-    direction='UP',
-    end_side='origin',
-    event_id=17,
-    map_constant='MAP_NOWTOCH_CITY_SOUTHEAST',
-    map_id=14006,
-    mechanism='threshold',
-    page_idx=0,
-    return_direction='DOWN',
-    start_side='origin',
+    beat_name='m046e002p0_transit',
+    group='m046e002p0',
+    hops=(('MAP_NOWTOCH_CITY', 8, 31, 'LEFT', 'MAP_NOWTOCH_CITY_WEST'), ('MAP_NOWTOCH_CITY_WEST', 8, 8, 'UP', 'MAP_NOWTOCH_CITY_INTERIORS_1')),
 )
 
 generic_beat(
     ch06,
     chapter_id='CH06',
-    beat_name='m14006e017p0_warp_arms',
-    group='m14006e017p0_warp',
-    rows=('map14006/ev017/p0/b0', 'map14006/ev017/p0/b1'),
+    beat_name='m046e002p0',
+    group='m046e002p0',
+    rows=('map046/ev002/p0', 'map046/ev002/p0/b11'),
     approach_prefer='south',
-    skip_claimed=True,
+    choice_answers=((4, 1),),
 )
 
 transit_beat(
@@ -1967,7 +1985,7 @@ transit_beat(
     chapter_id='CH06',
     beat_name='m14002e019p2_warp_transit',
     group='m14002e019p2_warp',
-    hops=(('MAP_NOWTOCH_CITY_SOUTHEAST', 7, 8, 'UP', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 20, 33, 'UP', 'MAP_NOWTOCH_CITY_PARK')),
+    hops=(('MAP_NOWTOCH_CITY_INTERIORS_1', 6, 7, 'DOWN', 'MAP_NOWTOCH_CITY_WEST'), ('MAP_NOWTOCH_CITY_WEST', 18, 15, 'RIGHT', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 19, 32, 'RIGHT', 'MAP_NOWTOCH_CITY_PARK')),
 )
 
 warp_beat(
@@ -1984,60 +2002,6 @@ warp_beat(
     mechanism='threshold',
     page_idx=2,
     start_side='origin',
-)
-
-transit_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m046e002p0_transit',
-    group='m046e002p0',
-    hops=(('MAP_PASSAGE_CAVE_2F', 16, 6, 'UP', 'MAP_NOWTOCH_CITY_PARK'), ('MAP_NOWTOCH_CITY_PARK', 9, 19, 'UP', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 7, 32, 'UP', 'MAP_NOWTOCH_CITY_WEST'), ('MAP_NOWTOCH_CITY_WEST', 8, 8, 'UP', 'MAP_NOWTOCH_CITY_INTERIORS_1')),
-)
-
-generic_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m046e002p0',
-    group='m046e002p0',
-    rows=('map046/ev002/p0', 'map046/ev002/p0/b11'),
-    approach_prefer='south',
-    choice_answers=((4, 1),),
-)
-
-transit_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14000e052_warp_transit',
-    group='m14000e052_warp',
-    hops=(('MAP_NOWTOCH_CITY_INTERIORS_1', 6, 7, 'DOWN', 'MAP_NOWTOCH_CITY_WEST'), ('MAP_NOWTOCH_CITY_WEST', 19, 16, 'UP', 'MAP_NOWTOCH_CITY')),
-)
-
-warp_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14000e052_warp',
-    group='m14000e052_warp',
-    boundary=True,
-    dest_map_constant='MAP_NOWTOCH_CITY_METRO_STATION',
-    direction='UP',
-    event_id=52,
-    map_constant='MAP_NOWTOCH_CITY',
-    map_id=14000,
-    mechanism='threshold',
-)
-
-warp_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14000e057_warp',
-    group='m14000e052_warp',
-    boundary=True,
-    dest_map_constant='MAP_NOWTOCH_CITY_METRO_STATION',
-    direction='UP',
-    event_id=57,
-    map_constant='MAP_NOWTOCH_CITY',
-    map_id=14000,
-    mechanism='threshold',
 )
 
 NEVER_FIRES: dict[str, str] = {
@@ -2123,9 +2087,11 @@ ELSEWHERE: dict[str, str] = {
     'map14000/ev041/p0': 'stripped: strip_list.json map_events (Luz)',
     'map14000/ev042/p0': 'stripped: strip_list.json map_events (Luz)',
     'map14000/ev043/p0': 'stripped: strip_list.json map_events (Luz)',
+    'map14000/ev052/p0': 'later',
     'map14000/ev052/p1': "later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
     'map14000/ev052/p1/b0': "later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
     'map14000/ev052/p1/b1': "later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
+    'map14000/ev057/p0': 'later',
     'map14000/ev057/p1': "later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
     'map14000/ev057/p1/b0': "later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
     'map14000/ev057/p1/b1': "later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",

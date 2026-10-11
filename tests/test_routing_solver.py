@@ -1227,6 +1227,32 @@ def test_story_precedence_edges_from_single_writer_groups():
     assert any_of == ()
 
 
+def test_story_precedence_passes_through_an_unclaimed_lone_enabler():
+    """CH06's leader house: the open-door page is enabled by the refused
+    key-removal page inside (no group claims it), which the key-use arm
+    enables. The door's group still comes after the key use."""
+    from rpg2gba.routing.solver import _derive_story_precedence
+
+    group_by_row = {"map14006/ev017/p0/b0": "key_door", "map14006/ev017/p1": "open_door"}
+    enabled_by = {
+        "map14006/ev017/p1": (("map047/ev013/p0",),),
+        "map047/ev013/p0": (("map14006/ev017/p0/b0",),),
+    }
+    edges, any_of = _derive_story_precedence(enabled_by, group_by_row)
+    assert [(e.before, e.after, e.reason) for e in edges] == [
+        ("key_door", "open_door", "story:map14006/ev017/p0/b0->map14006/ev017/p1")]
+    assert any_of == ()
+
+
+def test_story_precedence_through_unclaimed_stops_on_a_cycle():
+    from rpg2gba.routing.solver import _derive_story_precedence
+
+    enabled_by = {"map001/ev001/p0": (("map002/ev001/p0",),),
+                  "map002/ev001/p0": (("map003/ev001/p0",),),
+                  "map003/ev001/p0": (("map002/ev001/p0",),)}
+    assert _derive_story_precedence(enabled_by, {"map001/ev001/p0": "g"}) == ((), ())
+
+
 def test_story_precedence_several_writers_is_any_of():
     """CH01's Auntie heal page: var 101 >= 2 is written by any of three rows,
     so it comes after at least one of them. (2026-09-27 demanded all three;

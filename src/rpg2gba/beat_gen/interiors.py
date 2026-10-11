@@ -265,6 +265,48 @@ def gated_entry_edges(
     return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
 
 
+def gated_interior_edges(
+    world: _World,
+    *,
+    chapter_maps: frozenset[Any],
+    entry_map: Any,
+    group_map: Mapping[str, Any],
+    group_warps: Mapping[str, tuple[tuple[int, int], ...]],
+    gated_doors: frozenset[tuple[int, int]],
+    hard_and_story: Sequence[PrecedenceEdge],
+    label: Callable[[Any], str] = _default_label,
+    node_map: Callable[[Any], int] = _default_node_map,
+) -> tuple[PrecedenceEdge, ...]:
+    """`before=<entry group>, after=<interior group>` edges for a dead-end
+    region every entry door of which is gated: nothing inside can be walked
+    to before a beat has opened the way in (the continuity guard's own
+    rule, `continuity.thread_maps(gated_doors=)`). The entry is the region's
+    earliest entry group -- the one no other entry group precedes through
+    `hard_and_story`; none or several such and the region gets no edges.
+    2026-10-11, CH06: the leader house opens with Maria's key (the door's
+    page 0) and stays open after (page 1); its rooms come after the key."""
+    pred: dict[str, set[str]] = {}
+    for e in hard_and_story:
+        pred.setdefault(e.after, set()).add(e.before)
+
+    edges: set[PrecedenceEdge] = set()
+    for parent, region, entries, _exits in _region_doors(
+            world, chapter_maps, group_warps, node_map):
+        if entry_map in region or not entries:
+            continue
+        if not all(door in gated_doors for g in entries for door in group_warps.get(g, ())):
+            continue
+        first = [g for g in sorted(entries) if not (_ancestors(g, pred) & entries)]
+        if len(first) != 1:
+            continue
+        for g in sorted(g for g, m in group_map.items() if m in region):
+            if g != first[0]:
+                edges.add(PrecedenceEdge(
+                    before=first[0], after=g,
+                    reason=f"gated_interior:{label(parent)}->{label(min(region))}"))
+    return tuple(sorted(edges, key=lambda e: (e.before, e.after, e.reason)))
+
+
 def region_order_check(
     world: _World,
     *,

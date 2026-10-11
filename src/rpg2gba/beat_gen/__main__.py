@@ -56,6 +56,7 @@ from rpg2gba.beat_gen.continuity import thread_maps
 from rpg2gba.beat_gen.interiors import (
     arrival_nudge_edges,
     gated_entry_edges,
+    gated_interior_edges,
     gated_region_check,
     interior_exit_edges,
     region_order_check,
@@ -115,7 +116,7 @@ from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch, classify_manifes
 from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
 from rpg2gba.playtest import chapters_gen as playtest_chapters_gen
 from rpg2gba.playtest.archetypes import load_chapter_rows, map_uranium_id
-from rpg2gba.playtest.cells import seam_warp_cells
+from rpg2gba.playtest.cells import seam_press, seam_warp_cells
 from rpg2gba.playtest.chapter import load_chapter
 from rpg2gba.routing.__main__ import (
     DEFAULT_CHAPTERS_PATH,
@@ -374,6 +375,25 @@ def _apply_route_kwargs(beat: PlannedBeat, *, boundary: bool = False,
                          drop=("approach_prefer",))
 
 
+def _with_return_press(beat: PlannedBeat) -> PlannedBeat:
+    """A round-tripping threshold/arrow warp's `return_direction` from the
+    warp geometry (`derive_return_direction`): `route_kwargs` can only
+    reverse the forward press, which is wrong where both sides are entered
+    the same way (CH06's park cave mouth: UP in, UP back out)."""
+    kwargs = dict(beat.kwargs)
+    if (beat.template != "warp" or "return_direction" not in kwargs
+            or kwargs.get("mechanism") not in ("threshold", "arrow")):
+        return beat
+    from rpg2gba.playtest.archetypes.warp import derive_return_direction
+
+    press = derive_return_direction(
+        str(kwargs["map_constant"]), str(kwargs["dest_map_constant"]),
+        int(kwargs["event_id"]), str(kwargs["direction"]))
+    if press == kwargs["return_direction"]:
+        return beat
+    return _merge_kwargs(beat, {"return_direction": press}, drop=("return_direction",))
+
+
 def _chain_maps(binding: ChapterBinding, chapter_id: str) -> frozenset[int]:
     """Every map of `chapter_id` and its predecessors: what its ROM stages."""
     return frozenset(m for c in _chain_to(binding, chapter_id) for m in binding.chapter(c).maps)
@@ -567,6 +587,20 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
             # solver picked (its pathing keeps off warp tiles; `reach` does
             # not): cross it the same way.
             dx, dy = next(d for d, p in _PRESS_INTO if p == press)
+            return (_map_constant_for(edge.src_map), x + dx, y + dy, press,
+                    _map_constant_for(edge.dst_map))
+        if edge.kind == "seam_warp":
+            # An arrow fires on its own direction only; stand on the far
+            # side of it from that press. `reach` floods through arrow
+            # tiles, so the first reachable side can be a twin arrow cell
+            # pressed the wrong way (CH06's park seam, run 2026-10-11).
+            press = seam_press(edge.src_map, edge.dst_map, edge.src_cell)
+            if press is None:
+                raise ValueError(f"seam edge {edge.src_map}->{edge.dst_map} at {edge.src_cell}: "
+                                 "no seam_warps entry names its direction")
+            dx, dy = next(d for d, p in _PRESS_INTO if p == press)
+            if (edge.src_map, (x + dx, y + dy)) not in reach:
+                return None
             return (_map_constant_for(edge.src_map), x + dx, y + dy, press,
                     _map_constant_for(edge.dst_map))
         for (dx, dy), press in _PRESS_INTO:
@@ -802,13 +836,20 @@ def _never_fires_elsewhere(
         for b in planned if b.group in dead_groups for row_id in b.rows)
 
 
-def _page_candidate(verdicts: Mapping[str, RowVerdict], end_state, states: Mapping[str, RowState]
-                    ) -> Callable[[str], bool]:
+def _page_candidate(verdicts: Mapping[str, RowVerdict], end_state, states: Mapping[str, RowState],
+                    *, definite: bool = False) -> Callable[[str], bool]:
     """Can this page be the live page at all, within the chapter? A page the
     story model calls live or undetermined can; one it rules out
     (`unreachable`, `later`) can't; a `refused` page (its BODY isn't modelled,
     its condition is) can when every test of its condition is possible in the
-    chapter's saturated end state. A page with no verdict can."""
+    chapter's saturated end state. A page with no verdict can.
+
+    `definite` asks for positive evidence instead: an undetermined page, or
+    one with no verdict, can't. That is the question an actor's CLEARING
+    page answers (`actor_never_blocks`): an optimistic answer there removes
+    a wall (2026-10-11, CH06: Nowtoch's crowd clears on the Metro switch,
+    which nothing in the chapter sets -- the model only called it
+    undetermined because unmodelled rows elsewhere havoc every global)."""
     ends = dict(end_state)
 
     def possible_at_end(test) -> bool:  # noqa: ANN001
@@ -819,7 +860,9 @@ def _page_candidate(verdicts: Mapping[str, RowVerdict], end_state, states: Mappi
 
     def candidate(rid: str) -> bool:
         verdict = verdicts.get(rid)
-        if verdict is None or verdict.status in ("live", "undetermined"):
+        if verdict is None or verdict.status == "undetermined":
+            return not definite
+        if verdict.status == "live":
             return True
         if verdict.status == "refused":
             return all(possible_at_end(t) for t in states[rid].page_tests)
@@ -835,16 +878,19 @@ def _page_visible(page: Mapping) -> bool:
     return bool(graphic.get("character_name")) and graphic.get("opacity", 255) > 0
 
 
-def actor_never_blocks(pages: Sequence[Mapping], can_live: Callable[[int], bool]) -> bool:
+def actor_never_blocks(pages: Sequence[Mapping], can_live: Callable[[int], bool],
+                       can_clear: Callable[[int], bool] | None = None) -> bool:
     """`_StoryOccupancy`'s rule for one event's pages: no visible page can be
     live in the chapter, or a graphic-less page above every visible one can
-    (the actor clears). An event with no visible page isn't an actor here."""
+    (the actor clears) -- judged by `can_clear`, default `can_live`. An
+    event with no visible page isn't an actor here."""
+    can_clear = can_clear if can_clear is not None else can_live
     visible = [i for i, p in enumerate(pages) if _page_visible(p)]
     if not visible:
         return False
     if not any(can_live(i) for i in visible):
         return True
-    return any(not _page_visible(pages[j]) and can_live(j)
+    return any(not _page_visible(pages[j]) and can_clear(j)
                for j in range(max(visible) + 1, len(pages)))
 
 
@@ -866,10 +912,12 @@ class _StoryOccupancy(Mapping):
     The route still orders the gym after that scene through the door's own
     switch-101 page."""
 
-    def __init__(self, inner: Mapping, *, build_dir: Path, candidate_for) -> None:  # noqa: ANN001
+    def __init__(self, inner: Mapping, *, build_dir: Path, candidate_for,  # noqa: ANN001
+                 clear_for=None) -> None:  # noqa: ANN001
         self._inner = inner
         self._build_dir = build_dir
         self._candidate_for = candidate_for
+        self._clear_for = clear_for if clear_for is not None else candidate_for
         self._cache: dict[int, MapOccupancy] = {}
 
     def _never_visible(self, map_id: int, event_id: int) -> bool:
@@ -878,9 +926,11 @@ class _StoryOccupancy(Mapping):
         if event is None:
             return False
         candidate = self._candidate_for(map_id)
+        clears = self._clear_for(map_id)
         return actor_never_blocks(
             event.get("pages", []),
-            lambda i: candidate(f"map{map_id:03d}/ev{event_id:03d}/p{i}"))
+            lambda i: candidate(f"map{map_id:03d}/ev{event_id:03d}/p{i}"),
+            lambda i: clears(f"map{map_id:03d}/ev{event_id:03d}/p{i}"))
 
     def __getitem__(self, map_id: int) -> MapOccupancy:
         if map_id not in self._cache:
@@ -1323,7 +1373,9 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     entry = _predecessor_end(predecessor) if predecessor is not None else engine_spawn()
     occupancy = _StoryOccupancy(
         _LazyOccupancy(build_dir), build_dir=build_dir,
-        candidate_for=lambda m: _page_candidate(all_verdicts, story.end_state, row_states(m)))
+        candidate_for=lambda m: _page_candidate(all_verdicts, story.end_state, row_states(m)),
+        clear_for=lambda m: _page_candidate(all_verdicts, story.end_state, row_states(m),
+                                            definite=True))
     # 3c. Touch pages the walk can't step on while they are live (guard rows,
     #     arrival displacement): never_fires, not beats.
     facts_for = _map_facts_factory(
@@ -1460,8 +1512,11 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         order_violations=region_order_check(place_world, **regions),
         # 2026-09-30 (operator): a region whose exit is a gated door is held
         # hard, and what its exit waits on outside comes before its entry.
+        # A region behind gated entrances only opens with its first entry.
         derived_precedence=lambda accepted, any_of: gated_entry_edges(
-            place_world, **regions, gated_doors=gated, hard_and_story=accepted, any_of=any_of),
+            place_world, **regions, gated_doors=gated, hard_and_story=accepted, any_of=any_of,
+        ) + gated_interior_edges(
+            place_world, **regions, gated_doors=gated, hard_and_story=accepted),
         hard_order_violations=gated_region_check(place_world, **regions, gated_doors=gated),
     )
 
@@ -1489,6 +1544,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
             b, boundary=b.template == "warp" and is_boundary_warp(b, floors, chain_maps),
             nudge_group=b.group in nudge_groups)
         for b in beats)
+    beats = tuple(_with_return_press(b) for b in beats)
 
     # 7. Map continuity (`beat_gen/continuity.py`): each warp's start and
     #    end side follow from where the player is and where the next beat is.

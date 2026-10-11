@@ -33,6 +33,11 @@ def test_flag_ssa_explicit_letter_and_zero_padding() -> None:
     assert assertions.flag_ssa(31, 14, "D") == "FLAG_MAP031_EVENT014_SSD"
 
 
+def test_flag_ssa_names_a_split_piece_after_its_origin_map() -> None:
+    """Map 14002 is a piece of map 40; the ROM's flag carries 040."""
+    assert assertions.flag_ssa(14002, 25) == "FLAG_MAP040_EVENT025_SSA"
+
+
 # -- small fakes ---------------------------------------------------------------
 
 class _FakeEmu:

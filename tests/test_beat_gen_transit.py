@@ -202,7 +202,7 @@ def test_arrival_nudge_transit_uses_door_steps_when_the_route_picks_another_door
 
 # -- a seam hop must land on a cell the walker can leave -----------------------
 
-def _seam_route(monkeypatch, pairs):
+def _seam_route(monkeypatch, pairs, *, press="UP", reach_extra=()):
     """`_route_between` over a two-map synthetic seam, map 1 -> map 2. Each pair
     is (event id, src cell, dst cell). Map 2's arrow cells are (6,5) -- the
     twin of the pocketed arrival (5,5) -- and the open arrivals' own cells.
@@ -213,6 +213,7 @@ def _seam_route(monkeypatch, pairs):
     from rpg2gba.beat_gen import __main__ as bg
 
     monkeypatch.setattr(bg, "seam_warp_cells", lambda dst, src: {(6, 5), (5, 9)})
+    monkeypatch.setattr(bg, "seam_press", lambda m, other, cell: press)
     monkeypatch.setattr(bg, "_map_constant_for", lambda m: f"MAP_{m}")
     edges = [SimpleNamespace(kind="seam_warp", src_map=1, dst_map=2, event_id=ev,
                              src_cell=src, dst_cell=dst) for ev, src, dst in pairs]
@@ -221,7 +222,7 @@ def _seam_route(monkeypatch, pairs):
     rooms = SimpleNamespace(place_of=lambda m, cell: (m, 0),
                             landing_place=lambda e: (e.dst_map, 0))
     reach = frozenset({(1, (0, 6)), (1, (0, 10)), (2, (5, 5)), (2, (6, 5)),
-                       (2, (5, 9)), (2, (5, 10))})
+                       (2, (5, 9)), (2, (5, 10)), *reach_extra})
     return bg._route_between(world, frozenset({1, 2}), reach, graphs, rooms=rooms)
 
 
@@ -239,6 +240,24 @@ def test_seam_hop_whose_arrival_is_pocketed_by_its_twin_arrow_is_not_used(monkey
 def test_seam_with_only_a_pocketed_arrival_has_no_route(monkeypatch):
     route, door_steps = _seam_route(monkeypatch, [(10, (0, 5), (5, 5))])
 
+    with pytest.raises(ValueError, match="no warp route"):
+        route((1, 0), (2, 0))
+    assert door_steps == {}
+
+
+def test_seam_hop_presses_the_arrows_own_direction(monkeypatch):
+    # 2026-10-11, CH06 park seam: twin arrow cells stacked vertically and
+    # pressed LEFT. `reach` floods through arrows, so the old first-reachable
+    # side was the twin cell below, pressing UP -- which never fires.
+    edge = (12, (0, 9), (5, 9))
+    route, _ = _seam_route(monkeypatch, [edge], press="LEFT",
+                           reach_extra=((1, (1, 9)),))
+    [step] = route((1, 0), (2, 0))
+    assert step[2] == ("MAP_1", 1, 9, "LEFT", "MAP_2")
+
+
+def test_seam_hop_unreachable_from_its_press_side_is_not_used(monkeypatch):
+    route, door_steps = _seam_route(monkeypatch, [(12, (0, 9), (5, 9))], press="LEFT")
     with pytest.raises(ValueError, match="no warp route"):
         route((1, 0), (2, 0))
     assert door_steps == {}

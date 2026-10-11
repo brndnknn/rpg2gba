@@ -279,16 +279,35 @@ def _derive_story_precedence(
     town and in Theo's house -- shut until Theo's house, so the lab could not
     be left once its own starter had opened it.) A writer no route group
     claims is dropped; a group the row's own group satisfies constrains
-    nothing; with none claimed, nothing. `engine:` markers are skipped.
+    nothing. A group with NO claimed writer and exactly one writer stands
+    for that writer's own enablers, recursively: the row can't go live
+    before its unclaimed enabler does (2026-10-11, CH06: the leader house's
+    open door is enabled by the refused key-removal page inside, itself
+    enabled by the key-use page -- dropping the refused link left the door
+    unordered, and the walk reached it locked). Otherwise, with none
+    claimed, nothing. `engine:` markers are skipped.
     Cycles are pruned later (`_acyclic_story_edges`, `_feasible_any_of`).
     """
     edges: set[PrecedenceEdge] = set()
     any_of: set[_AnyOf] = set()
+
+    def through_unclaimed(groups: tuple[tuple[str, ...], ...],
+                          seen: frozenset[str]) -> list[tuple[str, ...]]:
+        out: list[tuple[str, ...]] = []
+        for alternatives in groups:
+            writers = [w for w in alternatives if not w.startswith("engine:")]
+            if (len(writers) == 1 and writers[0] not in group_by_row
+                    and writers[0] not in seen):
+                out += through_unclaimed(enabled_by.get(writers[0], ()), seen | {writers[0]})
+            else:
+                out.append(alternatives)
+        return out
+
     for row_id, groups in enabled_by.items():
         after_group = group_by_row.get(row_id)
         if after_group is None:
             continue
-        for alternatives in groups:
+        for alternatives in through_unclaimed(groups, frozenset({row_id})):
             befores = sorted({group_by_row[w] for w in alternatives
                               if not w.startswith("engine:") and w in group_by_row})
             if not befores or after_group in befores:

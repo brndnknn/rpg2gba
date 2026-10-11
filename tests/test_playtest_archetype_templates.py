@@ -1295,3 +1295,63 @@ def test_event_page_empty_reads_the_source_page() -> None:
     except (FileNotFoundError, ValueError):
         pytest.skip("decoded Moki Town map not available")
     assert event_page_empty("MAP_MOKI_TOWN_PLAYERS_HOUSE_1F", 1, 0) is False
+
+
+def test_derive_return_direction_reverses_an_opposite_pair() -> None:
+    """Cave 1F -> Route 2 is pressed DOWN; the way back is the reverse."""
+    from rpg2gba.playtest.archetypes.warp import derive_return_direction
+
+    assert derive_return_direction(
+        "MAP_PASSAGE_CAVE_1F", "MAP_ROUTE_02", 1, "DOWN") == "UP"
+
+
+def test_derive_return_direction_same_press_both_ways() -> None:
+    """CH06's park cave mouth: entered pressing UP, and Passage Cave 2F's
+    exit back is pressed UP too, from the landing cell below it. Reversing
+    the forward press walked the ROM to a cave wall (2026-10-11)."""
+    from rpg2gba.playtest.archetypes.warp import derive_return_direction
+
+    assert derive_return_direction(
+        "MAP_NOWTOCH_CITY_PARK", "MAP_PASSAGE_CAVE_2F", 19, "UP") == "UP"
+
+
+def test_return_approach_on_an_unwalkable_cell_fails_at_registration() -> None:
+    from rpg2gba.playtest.archetypes.warp import _check_return_approach
+    from rpg2gba.playtest.cells import warp_cell
+
+    back = warp_cell("MAP_PASSAGE_CAVE_2F", to="MAP_NOWTOCH_CITY_PARK")
+    with pytest.raises(ValueError, match="not walkable"):
+        _check_return_approach("W", "MAP_PASSAGE_CAVE_2F", back, "DOWN")
+    _check_return_approach("W", "MAP_PASSAGE_CAVE_2F", back, "UP")
+
+
+def test_same_map_landing_proof() -> None:
+    """Interiors 1 (CH06) holds several houses on one map: a warp between
+    them is proven by a landing out of one step's reach."""
+    from rpg2gba.playtest.archetypes.warp import _same_map_landing_proof
+
+    _same_map_landing_proof("W", (5, 5), (20, 5))
+    with pytest.raises(ValueError, match="cannot be proven"):
+        _same_map_landing_proof("W", (5, 5), (5, 4))
+
+
+def test_wait_for_jump_returns_on_the_jump_and_fails_without_it() -> None:
+    from rpg2gba.playtest.archetypes.warp import _wait_for_jump
+    from rpg2gba.playtest.errors import ScenarioError
+
+    class _Emu:
+        def __init__(self, positions):
+            self.positions = list(positions)
+
+        def player_pos(self):
+            return self.positions[0] if len(self.positions) == 1 else self.positions.pop(0)
+
+        def run(self, frames, keys=()):
+            pass
+
+        def screenshot(self, name):
+            return name
+
+    _wait_for_jump(_Emu([(5, 4), (5, 4), (30, 9)]), "W", (5, 5))
+    with pytest.raises(ScenarioError, match="never fired"):
+        _wait_for_jump(_Emu([(5, 4)]), "W", (5, 5), frame_budget=30)

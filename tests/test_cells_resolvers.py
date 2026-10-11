@@ -216,3 +216,17 @@ def test_is_seam_crossing_true_false_and_no_raise(monkeypatch) -> None:
     assert is_seam_crossing("MAP_B", "MAP_A", (20, 56)) is True
     assert is_seam_crossing("MAP_A", "MAP_B", (33, 0)) is False
     assert is_seam_crossing("MAP_A", "MAP_C", (32, 0)) is False
+
+
+def test_seam_press_reads_each_sides_arrow_direction(monkeypatch) -> None:
+    import rpg2gba.playtest.cells as cells_mod
+    from rpg2gba.playtest.cells import seam_press
+
+    monkeypatch.setattr(cells_mod, "_SEAM_WARPS_CACHE", [
+        {"id": "split", "map_a": 14000, "map_b": 14002,
+         "cells_a": [[20, 32], [20, 33]], "cells_b": [[9, 18], [9, 19]],
+         "direction_a": "right", "direction_b": "left"}])
+    assert seam_press(14002, 14000, (9, 19)) == "LEFT"
+    assert seam_press(14000, 14002, (20, 32)) == "RIGHT"
+    assert seam_press(14002, 14000, (9, 17)) is None
+    assert seam_press(14002, 99, (9, 18)) is None

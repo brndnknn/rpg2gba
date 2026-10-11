@@ -1108,6 +1108,21 @@ def seam_warp_cells(map_id: int, other_map_id: int) -> tuple[Cell, ...]:
     return tuple(out)
 
 
+def seam_press(map_id: int, other_map_id: int, cell: Cell) -> str | None:
+    """The D-pad press that fires `map_id`'s arrow cell `cell` into
+    `other_map_id` (Uranium ids), upper-case; None when `cell` is no seam
+    cell of that pair. An arrow fires only on its own direction, whatever
+    side the player reaches it from (CH06's park seam: a vertical pair
+    pressed LEFT, which an UP press stands on forever)."""
+    for seam in _seam_warps():
+        if {seam["map_a"], seam["map_b"]} != {map_id, other_map_id}:
+            continue
+        side = "a" if seam["map_a"] == map_id else "b"
+        if tuple(cell) in {tuple(c) for c in seam[f"cells_{side}"]}:
+            return str(seam[f"direction_{side}"]).upper()
+    return None
+
+
 def raw_cell(x: int, y: int, *, why: str) -> Cell:
     """The escape hatch: returns `(x, y)` unchanged, no derivation at all.
 

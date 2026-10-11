@@ -8,7 +8,8 @@ test_routing_solver.py`'s style (no `output/`/`engine/` dependency).
 from __future__ import annotations
 
 from rpg2gba.beat_gen.interiors import (
-    arrival_nudge_edges, gated_entry_edges, gated_region_check, interior_exit_edges,
+    arrival_nudge_edges, gated_entry_edges, gated_interior_edges, gated_region_check,
+    interior_exit_edges,
     region_order_check,
 )
 from rpg2gba.routing.plan import PrecedenceEdge
@@ -436,3 +437,44 @@ def test_arrival_nudge_edges_match_the_source_warp_event() -> None:
     result = arrival_nudge_edges(nudge_groups=nudge_groups, warp_groups=warp_groups)
 
     assert [(e.before, e.after) for e in result] == [("w4", "n")]
+
+
+# ---------------------------------------------------------------------------
+# gated entrances (2026-10-11): a house whose door opens only with a key --
+# CH06's leader house, page 0 (use the key) then page 1 (open from then on).
+# ---------------------------------------------------------------------------
+
+
+def _leader_house():
+    city, house, outside = 14006, 47, 99
+    edges = _door(city, house, 17, 1) + [WorldEdge(src_map=city, dst_map=outside, kind="connection")]
+    world = _world(edges, {city, house, outside})
+    regions = dict(
+        chapter_maps=frozenset({city, house}), entry_map=city,
+        group_map={"key_door": city, "open_door": city, "npc": house, "house_out": house},
+        group_warps={"key_door": ((city, 17),), "open_door": ((city, 17),),
+                     "house_out": ((house, 1),)},
+    )
+    return world, regions
+
+
+def test_gated_interior_edges_follow_the_first_entry() -> None:
+    world, regions = _leader_house()
+    accepted = [PrecedenceEdge(before="key_door", after="open_door", reason="story:k")]
+    edges = gated_interior_edges(world, **regions, gated_doors=frozenset({(14006, 17)}),
+                                 hard_and_story=accepted)
+    assert [(e.before, e.after) for e in edges] == [("key_door", "house_out"), ("key_door", "npc")]
+    assert edges[0].reason == "gated_interior:map14006->map047"
+
+
+def test_gated_interior_edges_none_without_one_first_entry() -> None:
+    world, regions = _leader_house()
+    assert gated_interior_edges(world, **regions, gated_doors=frozenset({(14006, 17)}),
+                                hard_and_story=()) == ()
+
+
+def test_gated_interior_edges_none_for_an_ungated_entrance() -> None:
+    world, regions = _leader_house()
+    accepted = [PrecedenceEdge(before="key_door", after="open_door", reason="story:k")]
+    assert gated_interior_edges(world, **regions, gated_doors=frozenset(),
+                                hard_and_story=accepted) == ()

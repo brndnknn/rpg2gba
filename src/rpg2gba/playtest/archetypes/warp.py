@@ -235,6 +235,84 @@ def _reciprocal_event(map_constant: str, dest_map_constant: str,
     return min(ev for ev, _ in nearest)
 
 
+_REVERSE: dict[str, str] = {"UP": "DOWN", "DOWN": "UP", "LEFT": "RIGHT", "RIGHT": "LEFT"}
+
+
+def derive_return_direction(map_constant: str, dest_map_constant: str,
+                            event_id: int, direction: str) -> str:
+    """The press that crosses back from `dest_map_constant` after this warp.
+
+    Where the forward leg lands BESIDE the reciprocal warp, the way back is
+    the step from the landing onto it. That is not always the reverse of
+    `direction`: Nowtoch Park's cave mouth (CH06) is entered pressing UP and
+    Passage Cave 2F's exit back to it is pressed UP too, from the cell below.
+    Everywhere else (the player lands on the reciprocal itself, a door mat,
+    or apart from it) the reverse of `direction` stands, as it always has."""
+    crossing = warp_cell(map_constant, to=dest_map_constant, event_id=event_id)
+    back_event = _reciprocal_event(map_constant, dest_map_constant, crossing)
+    back = warp_cell(dest_map_constant, to=map_constant, event_id=back_event)
+    ax, ay = arrival_cell(dest_map_constant, from_map=map_constant, event_id=event_id)
+    for press, (dx, dy) in _APPROACH_DELTA.items():
+        if (back[0] + dx, back[1] + dy) == (ax, ay):
+            return press
+    return _REVERSE[direction]
+
+
+def _approach_cell(mechanism: str, crossing: tuple[int, int],
+                   direction: str | None) -> tuple[int, int]:
+    """Where the crossing step starts: south of a door (`enter_door`), else
+    one step opposite `direction`."""
+    if mechanism == "door":
+        return (crossing[0], crossing[1] + 1)
+    dx, dy = _APPROACH_DELTA[str(direction)]
+    return (crossing[0] + dx, crossing[1] + dy)
+
+
+def _same_map_landing_proof(beat_name: str, approach: tuple[int, int],
+                            landing: tuple[int, int]) -> None:
+    """A same-map warp is proven by its landing being out of one step's
+    reach of the approach cell; one that lands within it can't be told from
+    a walk, so it fails at registration."""
+    if abs(landing[0] - approach[0]) + abs(landing[1] - approach[1]) < 2:
+        raise ValueError(
+            f"warp_beat({beat_name}): a same-map warp from {approach} landing on "
+            f"{landing} cannot be proven -- one step reaches it without the warp")
+
+
+def _wait_for_jump(emu: "Emulator", beat_name: str, approach: tuple[int, int],
+                   frame_budget: int = 900) -> None:
+    """Wait out a same-map warp: until the player is 2+ tiles from the
+    approach cell (`wait_for_map` passes at once on the same map)."""
+    spent = 0
+    while spent < frame_budget:
+        x, y = emu.player_pos()
+        if abs(x - approach[0]) + abs(y - approach[1]) >= 2:
+            return
+        emu.run(10)
+        spent += 10
+    shot = emu.screenshot(f"{beat_name}_no_same_map_warp")
+    raise ScenarioError(
+        f"{beat_name}: same-map warp never fired -- the player is still at "
+        f"{emu.player_pos()} beside the approach cell {approach} ({shot})")
+
+
+def _check_return_approach(beat_name: str, dest_map_constant: str,
+                           return_crossing: tuple[int, int], return_direction: str) -> None:
+    """Fail at registration when the reciprocal leg would walk to a cell the
+    offline graph can't stand on -- the runtime `walk_to` would only find it
+    out after replaying every chapter before this one."""
+    from ...traversal.graph import build_map_graph
+
+    dx, dy = _APPROACH_DELTA[return_direction]
+    approach = (return_crossing[0] + dx, return_crossing[1] + dy)
+    if not build_map_graph(map_uranium_id(dest_map_constant)).is_walkable(approach):
+        raise ValueError(
+            f"warp_beat({beat_name}): return_direction={return_direction!r} approaches "
+            f"the reciprocal warp {return_crossing} on {dest_map_constant} from "
+            f"{approach}, which is not walkable (derive_return_direction gives the "
+            f"press from the forward landing)")
+
+
 def _legs(
     start_side: Literal["origin", "dest"],
     round_trip: bool,
@@ -615,6 +693,9 @@ def warp_beat(
         return_crossing = warp_cell(dest_map_constant, to=map_constant, event_id=back_event)
         return_arrival = arrival_cell(map_constant, from_map=dest_map_constant,
                                       event_id=back_event)
+        if mechanism in ("threshold", "arrow"):
+            _check_return_approach(beat_name, dest_map_constant, return_crossing,
+                                   str(return_direction))
         # Advisory report only (task brief point 4) -- never changes rows=.
         resolved_rows = manifest_rows if manifest_rows is not None else load_chapter_rows(
             manifest_chapter_id if manifest_chapter_id is not None else chapter_id,
@@ -633,6 +714,12 @@ def warp_beat(
     landing_nudge = _arrival_nudge_delta(dest_map_constant, landing, chapter_rows, lookup)
     return_nudge = (_arrival_nudge_delta(map_constant, return_arrival, chapter_rows, lookup)
                     if return_arrival is not None else None)
+    if map_constant == dest_map_constant:
+        _same_map_landing_proof(beat_name, _approach_cell(mechanism, crossing, direction), landing)
+        if return_crossing is not None and return_arrival is not None:
+            _same_map_landing_proof(
+                beat_name, _approach_cell(mechanism, return_crossing, return_direction),
+                return_arrival)
 
     def _assert_landed(emu: Emulator, cell: tuple[int, int],
                        nudge: tuple[int, int] | None, *,
@@ -677,13 +764,11 @@ def warp_beat(
         # guards waved it through, and only a coordinate assertion caught
         # it. A round trip exists to prove the warp works BOTH ways, so a
         # guard that can pass trivially defeats the point of running it.
-        if from_map == dest_map:
-            raise ValueError(
-                f"warp_beat({beat_name}): a crossing from {from_map} to "
-                f"{dest_map} cannot be proven -- origin and destination are "
-                "the same map, so no map assertion can tell a fired warp "
-                "from a walk that did nothing"
-            )
+        # A same-map warp (2026-10-11: Nowtoch's Interiors 1 holds several
+        # houses on one map) is proven by the position instead: the crossing
+        # is one step, so a landing 2+ tiles from the approach cell is the
+        # warp and nothing else (`_same_map_landing_proof`).
+        same_map = from_map == dest_map
         if mechanism == "door":
             assertions.enter_door(emu, beat_name, crossing_cell, dest_map)
         elif mechanism == "threshold" and texts:
@@ -704,6 +789,9 @@ def warp_beat(
         else:  # "arrow"
             assertions.cross_arrow_warp(
                 emu, beat_name, crossing_cell, crossing_direction, dest_map)
+        if same_map:
+            _wait_for_jump(emu, beat_name,
+                           _approach_cell(mechanism, crossing_cell, crossing_direction))
         # Arriving is not the same as having arrived. `cross_threshold` and
         # friends end at `wait_for_map`, which proves the map CHANGED and
         # nothing more -- the destination's own arrival scripts may not have

@@ -310,8 +310,13 @@ def flag_ssa(map_num: int, event_id: int, letter: str = "A") -> str:
     `ch02.py` carried a near-duplicate hardcoded to Map033
     (`_flag_ssa(event_id, letter="A")`); it is now a thin wrapper over this
     function (`flag_ssa(33, event_id, letter)`), not a second
-    implementation -- same behaviour, one source."""
-    return f"FLAG_MAP{map_num:03d}_EVENT{event_id:03d}_SS{letter}"
+    implementation -- same behaviour, one source.
+
+    Delegates to the registry's own namer, which names a split-map piece's
+    flag after its origin map (CH06: map 14002's event 25 is
+    `FLAG_MAP040_EVENT025_SSA`; the piece id compiled to nothing)."""
+    from ..conversion_agent.flag_registry import self_switch_flag_name
+    return self_switch_flag_name(map_num, event_id, letter)
 
 
 # -- warp-arrival facing (finding H's flagship case) --------------------------

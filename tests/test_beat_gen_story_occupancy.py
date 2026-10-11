@@ -72,3 +72,24 @@ def test_event_with_no_visible_page_is_not_an_actor():
 def test_zero_opacity_counts_as_invisible():
     faded = {"graphic": {"character_name": "HGSS_130", "opacity": 0}}
     assert actor_never_blocks([_SEEN, faded], lambda i: True)
+
+
+def test_clearing_page_is_judged_by_can_clear():
+    # CH06's Nowtoch crowd: page 1 (no graphic) is only undetermined, so the
+    # crowd stays a wall even though its visible page can be live.
+    assert not actor_never_blocks([_SEEN, _GONE], lambda i: True, lambda i: False)
+    assert actor_never_blocks([_SEEN, _GONE], lambda i: True, lambda i: i == 1)
+
+
+def test_page_candidate_definite_needs_positive_evidence():
+    from types import SimpleNamespace
+
+    from rpg2gba.beat_gen.__main__ import _page_candidate
+
+    verdicts = {"live": SimpleNamespace(status="live"),
+                "undet": SimpleNamespace(status="undetermined"),
+                "later": SimpleNamespace(status="later")}
+    loose = _page_candidate(verdicts, (), {})
+    strict = _page_candidate(verdicts, (), {}, definite=True)
+    assert [loose(r) for r in ("live", "undet", "none", "later")] == [True, True, True, False]
+    assert [strict(r) for r in ("live", "undet", "none", "later")] == [True, False, False, False]
