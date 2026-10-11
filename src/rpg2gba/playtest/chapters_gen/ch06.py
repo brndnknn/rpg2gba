@@ -1526,14 +1526,6 @@ flavour_npc_beat(
     variant='plain',
 )
 
-generic_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14001e014p0',
-    group='m14001e014p0',
-    rows=('map14001/ev014/p0',),
-)
-
 transit_beat(
     ch06,
     chapter_id='CH06',
@@ -1564,7 +1556,7 @@ generic_beat(
     chapter_id='CH06',
     beat_name='m14006e017p0_warp_arms',
     group='m14006e017p0_warp',
-    rows=('map14006/ev017/p0/b0', 'map14006/ev017/p0/b1'),
+    rows=('map14006/ev017/p0/b0',),
     approach_prefer='south',
     skip_claimed=True,
 )
@@ -1572,9 +1564,18 @@ generic_beat(
 transit_beat(
     ch06,
     chapter_id='CH06',
-    beat_name='m047e013p1_transit',
-    group='m047e013p1',
+    beat_name='m047e013p0_transit',
+    group='m047e013p0',
     hops=(('MAP_NOWTOCH_CITY_SOUTHEAST', 13, 7, 'UP', 'MAP_NOWTOCH_CITY_LEADER_HOUSE'),),
+)
+
+generic_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m047e013p0',
+    group='m047e013p0',
+    rows=('map047/ev013/p0',),
+    approach_prefer='arrive@(5,9)',
 )
 
 generic_beat(
@@ -2010,6 +2011,7 @@ NEVER_FIRES: dict[str, str] = {
     'map043/ev012/p1/b0': "archetype_kwargs: map043/ev012/p1: no warp lands on this arrival autorun's cell (7,12) on map 43 -- it never fires",
     'map043/ev012/p1/b1': "archetype_kwargs: map043/ev012/p1: no warp lands on this arrival autorun's cell (7,12) on map 43 -- it never fires",
     'map046/ev016/p0': 'map046/ev016/p0: its event on counter cell (30, 17) is no object event, and pokeemerald reaches across the counter to an object first from every side (south (30, 18) -> object at (30, 16)) -- it never fires on the ROM',
+    'map14001/ev014/p0': "map14001/ev014/p0 is worked only from a clearing actor's tile, and the route could not put it after any of its clearing writers ['map042/ev003/p0/b1', 'map14001/ev141/p0'] -- its page is dead by then; it never fires",
     'map14001/ev055/p1': "archetype_kwargs: map14001/ev055/p1: no warp lands on this arrival autorun's cell (26,14) on map 14001 -- it never fires",
     'map14001/ev055/p1/b0': "archetype_kwargs: map14001/ev055/p1: no warp lands on this arrival autorun's cell (26,14) on map 14001 -- it never fires",
     'map14001/ev055/p1/b1': "archetype_kwargs: map14001/ev055/p1: no warp lands on this arrival autorun's cell (26,14) on map 14001 -- it never fires",
@@ -2096,7 +2098,7 @@ ELSEWHERE: dict[str, str] = {
     'map14000/ev057/p1/b0': "later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
     'map14000/ev057/p1/b1': "later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
     'map14000/ev059/p0': 'stripped: strip_list.json map_events (Luz)',
-    'map14000/ev079/p0/b3': 'unselected_arm: not taken on the walk: else of `$game_player.x<=33` from cell (12, 53) (event at (11, 53)) (ruling 19)',
+    'map14000/ev079/p0/b3': 'unselected_arm: not taken on the walk: else of `$game_player.x<=13` from cell (12, 53) (event at (11, 53)) (ruling 19)',
     'map14000/ev079/p0/b5': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
     'map14000/ev079/p0/b7': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',
     'map14000/ev081/p0': 'stripped: strip_list.json map_events (Luz)',
@@ -2120,7 +2122,7 @@ ELSEWHERE: dict[str, str] = {
     'map14001/ev058/p0': 'stripped: strip_list.json map_events (Luz)',
     'map14001/ev125/p0': 'stripped: strip_list.json map_events (Luz)',
     'map14001/ev126/p0': 'stripped: strip_list.json map_events (Luz)',
-    'map14001/ev141/p0/b3': 'unselected_arm: not taken on the walk: else of `$game_player.x<=49` from cell (12, 10) (event at (11, 10)) (ruling 19)',
+    'map14001/ev141/p0/b3': 'unselected_arm: not taken on the walk: else of `$game_player.x<=13` from cell (12, 10) (event at (11, 10)) (ruling 19)',
     'map14002/ev019/p3/b1': 'unselected_arm: not taken on the walk: else of `get_character(0).onEvent?` from cell (35, 17) (event at (35, 17)) (ruling 19)',
     'map14002/ev034/p0': 'stripped: strip_list.json map_events (Luz)',
     'map14002/ev035/p0': 'stripped: strip_list.json map_events (Luz)',
@@ -2162,6 +2164,7 @@ ELSEWHERE: dict[str, str] = {
     'map14005/ev060/p0/b1': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',
     'map14005/ev082/p0': 'stripped: strip_list.json map_events (Luz)',
     'map14005/ev083/p0': 'stripped: strip_list.json map_events (Luz)',
+    'map14006/ev017/p0/b1': "unselected_arm: not taken on the walk: needs BagHas(item='MARIAKEY') == False, and here BagHas(item='MARIAKEY') is [True] (ruling 19)",
     'map14006/ev017/p2/b1': 'unselected_arm: not taken on the walk: else of `get_character(0).onEvent?` from cell (13, 6) (event at (13, 6)) (ruling 19)',
     'map14006/ev064/p1/b1': 'unselected_arm: not taken on the walk: else of `get_character(0).onEvent?` from cell (8, 6) (event at (8, 6)) (ruling 19)',
     'map14006/ev115/p0': 'stripped: strip_list.json map_events (Luz)',
@@ -2265,7 +2268,6 @@ REFUSED: dict[str, str] = {
     'map046/ev014/p0/b3': 'story-state: unclassified_condition',
     'map046/ev014/p0/b4': 'story-state: unclassified_condition',
     'map046/ev014/p1': 'story-state: undetermined -- story model could not determine this row',
-    'map047/ev013/p0': "C8: unknown_script_head -- head '$PokemonBag.pbDeleteItem' has no extractor: '$PokemonBag.pbDeleteItem(:MARIAKEY)'",
     'map14000/ev006/p1': 'story-state: undetermined -- story model could not determine this row',
     'map14000/ev007/p1': 'story-state: undetermined -- story model could not determine this row',
     'map14000/ev008/p1': 'story-state: undetermined -- story model could not determine this row',

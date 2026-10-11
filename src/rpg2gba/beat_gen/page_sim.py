@@ -731,6 +731,10 @@ class _Runner:
             node = nodes[i]
             self._step()
             if isinstance(node, (IfNode, ChoiceNode, LoopNode)):
+                # An opener's own writes are its condition's side effects --
+                # `if Kernel.pbReceiveItem(:MARIAKEY)` grants whichever arm
+                # runs (2026-10-11, CH06: Fufufu's key never reached the bag).
+                self._apply_indexed_writes(writes_by_index, node.index)
                 try:
                     if isinstance(node, IfNode):
                         self._exec_if(node, row_id)

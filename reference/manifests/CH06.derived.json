@@ -888,7 +888,7 @@
     "derived_hash": "5fb21a747500ebdd"
   },
   "map047/ev013/p0": {
-    "disposition": "refused:C8: unknown_script_head -- head '$PokemonBag.pbDeleteItem' has no extractor: '$PokemonBag.pbDeleteItem(:MARIAKEY)'",
+    "disposition": "beat:m047e013p0",
     "derived_hash": "2de3b73d0ee964de"
   },
   "map047/ev013/p1": {
@@ -1085,23 +1085,23 @@
   },
   "map14000/ev079/p0": {
     "disposition": "beat:m14000e079p0",
-    "derived_hash": "d573e27c9ba94f43"
+    "derived_hash": "5ce77ec47fcbfb82"
   },
   "map14000/ev079/p0/b0": {
     "disposition": "beat:m14000e079p0",
-    "derived_hash": "3898b7969fdbed80"
+    "derived_hash": "a5a64931845b8cc2"
   },
   "map14000/ev079/p0/b1": {
     "disposition": "beat:m14000e079p0",
-    "derived_hash": "5adf971c72bc885a"
+    "derived_hash": "257855c504a5627a"
   },
   "map14000/ev079/p0/b2": {
     "disposition": "beat:m14000e079p0",
-    "derived_hash": "157a77ad4f0bedcc"
+    "derived_hash": "31f78bc9bc97a348"
   },
   "map14000/ev079/p0/b3": {
     "disposition": "cosmetic",
-    "derived_hash": "c376c2ce48a4daa9"
+    "derived_hash": "9fcda1916ca34c03"
   },
   "map14000/ev079/p0/b4": {
     "disposition": "beat:m14000e079p0",
@@ -1160,7 +1160,7 @@
     "derived_hash": "f7744f3c382db736"
   },
   "map14001/ev014/p0": {
-    "disposition": "beat:m14001e014p0",
+    "disposition": "elsewhere:never_fires: map14001/ev014/p0 is worked only from a clearing actor's tile, and the route could not put it after any of its clearing writers ['map042/ev003/p0/b1', 'map14001/ev141/p0'] -- its page is dead by then; it never fires",
     "derived_hash": "8490f0ed38ea0f4d"
   },
   "map14001/ev014/p1": {
@@ -1301,23 +1301,23 @@
   },
   "map14001/ev141/p0": {
     "disposition": "beat:m14001e141p0",
-    "derived_hash": "07a6f72b0e0f8c4d"
+    "derived_hash": "6ad1c89559c1e355"
   },
   "map14001/ev141/p0/b0": {
     "disposition": "beat:m14001e141p0",
-    "derived_hash": "e8b895979b850c82"
+    "derived_hash": "a5a64931845b8cc2"
   },
   "map14001/ev141/p0/b1": {
     "disposition": "beat:m14001e141p0",
-    "derived_hash": "96ee372c11c33edd"
+    "derived_hash": "257855c504a5627a"
   },
   "map14001/ev141/p0/b2": {
     "disposition": "beat:m14001e141p0",
-    "derived_hash": "e73065d87c239f81"
+    "derived_hash": "31f78bc9bc97a348"
   },
   "map14001/ev141/p0/b3": {
     "disposition": "cosmetic",
-    "derived_hash": "c686d2e47edffbe2"
+    "derived_hash": "9fcda1916ca34c03"
   },
   "map14001/ev141/p1": {
     "disposition": "beat:m14001e141p1",
@@ -1469,11 +1469,11 @@
   },
   "map14003/ev048/p0": {
     "disposition": "cosmetic",
-    "derived_hash": "cde053ab9ac7cc5f"
+    "derived_hash": "63efd46e48eabc50"
   },
   "map14003/ev049/p0": {
     "disposition": "cosmetic",
-    "derived_hash": "92d44bacbb1c0528"
+    "derived_hash": "9a4b8b1cbfe594f1"
   },
   "map14003/ev065/p0": {
     "disposition": "beat:m14003e065",
@@ -1648,7 +1648,7 @@
     "derived_hash": "e9494cad0b31a664"
   },
   "map14006/ev017/p0/b1": {
-    "disposition": "beat:m14006e017p0",
+    "disposition": "elsewhere:unselected_arm: not taken on the walk: needs BagHas(item='MARIAKEY') == False, and here BagHas(item='MARIAKEY') is [True] (ruling 19)",
     "derived_hash": "f517a40be266fb11"
   },
   "map14006/ev017/p1": {

@@ -311,3 +311,47 @@ def test_stage_after_a_fresh_deserializer_run(tmp_path: Path) -> None:
             (fresh / "maps" / name).read_text(encoding="utf-8"), encoding="utf-8")
     stage.run(build, split_maps=split)
     assert _snapshot(build) == first
+
+
+# --- command coordinates follow the event into its piece (2026-10-11) -------
+
+
+def test_rebase_moves_player_coordinate_tests_and_direct_set_location():
+    from rpg2gba.map_split.derive import Rect, _rebase_event
+
+    event = {"id": 141, "x": 49, "y": 10, "pages": [{"list": [
+        {"code": 111, "parameters": [12, "$game_player.x>=49"]},
+        {"code": 355, "parameters": ["pbWait(2) if $game_player.y < 12"]},
+        {"code": 202, "parameters": [0, 0, 45, 11, 0]},
+        {"code": 202, "parameters": [0, 1, 7, 8, 0]},   # by variables: untouched
+    ]}]}
+    out = _rebase_event(event, Rect(38, 2, 30, 20))
+    cmds = out["pages"][0]["list"]
+    assert (out["x"], out["y"]) == (11, 8)
+    assert cmds[0]["parameters"][1] == "$game_player.x>=11"
+    assert cmds[1]["parameters"][0] == "pbWait(2) if $game_player.y < 10"
+    assert cmds[2]["parameters"][2:4] == [7, 9]
+    assert cmds[3]["parameters"][2:4] == [7, 8]
+    assert event["pages"][0]["list"][0]["parameters"][1] == "$game_player.x>=49"  # input kept
+
+
+def test_rebase_fails_loud_on_a_player_coordinate_it_cannot_follow():
+    import pytest
+
+    from rpg2gba.map_split.derive import Rect, SplitError, _rebase_event
+
+    event = {"id": 1, "x": 40, "y": 5, "pages": [{"list": [
+        {"code": 355, "parameters": ["pbSet(1, $game_player.x)"]}]}]}
+    with pytest.raises(SplitError, match="can't rebase"):
+        _rebase_event(event, Rect(38, 0, 30, 20))
+
+
+def test_rebase_fails_loud_on_a_set_location_outside_the_piece():
+    import pytest
+
+    from rpg2gba.map_split.derive import Rect, SplitError, _rebase_event
+
+    event = {"id": 1, "x": 40, "y": 5, "pages": [{"list": [
+        {"code": 202, "parameters": [0, 0, 10, 5, 0]}]}]}
+    with pytest.raises(SplitError, match="outside its piece"):
+        _rebase_event(event, Rect(38, 0, 30, 20))

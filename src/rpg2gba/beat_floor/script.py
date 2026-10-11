@@ -48,7 +48,7 @@ from rpg2gba.beat_floor.assertion import (
 )
 from rpg2gba.beat_floor.reward_ladder import load_profrewards
 from rpg2gba.conversion_agent.deterministic import _PBPOKEMART_ITEM_RE, _PBPOKEMART_LIST_RE
-from rpg2gba.conversion_agent.transpiler import _ADD_POKEMON_RE, _RECEIVE_ITEM_RE
+from rpg2gba.conversion_agent.transpiler import _ADD_POKEMON_RE, _DELETE_ITEM_RE, _RECEIVE_ITEM_RE
 from rpg2gba.ruby_subset import ast
 from rpg2gba.ruby_subset import builtins as bi
 from rpg2gba.ruby_subset.evaluate import _is_nuzlocke_party_loop
@@ -376,6 +376,23 @@ def _extract_receive_item(text: str, list_index: int, ctx: ExtractContext) -> Ex
     ),), ()
 
 
+# `$PokemonBag.pbDeleteItem(:SYMBOL[, qty])` as a bare complete statement --
+# the consuming counterpart of pbReceiveItem, reusing transpiler._DELETE_ITEM_RE
+# (which emits `removeitem`). Silent: no on-screen box. Non-literal args refuse.
+def _extract_delete_item(text: str, list_index: int, ctx: ExtractContext) -> ExtractResult:
+    m = _DELETE_ITEM_RE.match(text)
+    if not m:
+        return (), (FloorRefusal(
+            row_id=ctx.row_id, reason="non_literal_args", list_index=list_index, code=CODE_SCRIPT,
+            detail=f"pbDeleteItem: not a bare literal call: {text[:120]!r}",
+        ),)
+    symbol, qty = m.group(1), m.group(2)
+    return (FloorAssertion(
+        row_id=ctx.row_id, kind="item_remove", list_index=list_index, code=CODE_SCRIPT,
+        params=make_params(item=symbol, quantity=int(qty) if qty else 1), tag="state",
+    ),), ()
+
+
 # Kernel.pbAddPokemon(::PBSpecies::SYMBOL, level) -- 170__PSystem_Utilities.rb:
 # 1710-1730 -- reuses transpiler._ADD_POKEMON_RE, the same shape the emitter
 # already resolves (CLAUDE.md §4.3). A non-literal species/level (dynamic
@@ -648,6 +665,7 @@ SCRIPT_HEAD_EXTRACTORS: dict[str, ScriptHeadExtractor] = {
 
     "pbEraseThisEvent": _extract_erase_this_event,
     "pbReceiveItem": _extract_receive_item,
+    "$PokemonBag.pbDeleteItem": _extract_delete_item,
     "pbTransferPlayer": _extract_transfer_player,
     "pbAddPokemon": _extract_add_pokemon,
     "pbPokemonMart": _extract_pokemon_mart,

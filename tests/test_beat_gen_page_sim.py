@@ -479,3 +479,28 @@ def test_an_adjust_on_a_definite_value_gives_the_definite_result():
     assert run.state[Variable(101)] == frozenset({1})
     again = run_page("map050/ev019/p0", page, rows, run.state, firing)
     assert again.state[Variable(101)] == frozenset({2})
+
+
+# --- a branch opener's own side effect --------------------------------------
+
+
+def test_a_condition_that_grants_a_key_item_writes_the_bag():
+    """CH06 Fufufu: `if Kernel.pbReceiveItem(:MARIAKEY)` grants the key
+    whichever arm runs; the opener's write used to be skipped, so the key
+    door's has-the-key arm read [False]."""
+    from rpg2gba.story_state.state import BagHas
+
+    page = {
+        "trigger": 0, "condition": dict(_NO_CONDITION),
+        "list": [
+            {"code": 111, "indent": 0,
+             "parameters": [12, "Kernel.pbReceiveItem(::PBItems::MARIAKEY)"]},
+            {"code": 101, "indent": 1, "parameters": ["here"]},
+            _blank(),
+            {"code": 412, "indent": 0, "parameters": []},
+            _blank(indent=0),
+        ],
+    }
+    rows = _rows(14001, 18, page)
+    run = run_page("map14001/ev018/p0", page, rows, {}, Firing(cell=None, event_cell=None))
+    assert run.state[BagHas("MARIAKEY")] == frozenset({True})

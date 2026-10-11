@@ -7,6 +7,7 @@ Every inconsistency fails loud (CLAUDE.md §4.5) with the cells involved."""
 from __future__ import annotations
 
 import copy
+import re
 from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -34,6 +35,15 @@ _SET_MOVE_ROUTE = 209
 _SET_EVENT_LOCATION = 202
 _TRANSFER_PLAYER = 201
 _MOVE_TYPE_CUSTOM = 3
+_CONDITIONAL = 111
+_CONDITION_SCRIPT = 12
+_SCRIPT_CODES = (355, 655)
+
+# A script comparing the player's own coordinate to a literal -- the corpus's
+# scene "walk the player into line" loops (`$game_player.x>=49`). Any other
+# mention of a player coordinate is one the rebase can't follow: fail loud.
+_PLAYER_COORD_CMP = re.compile(r"(\$game_player\.([xy]))(\s*(?:==|!=|<=|>=|<|>)\s*)(\d+)")
+_PLAYER_COORD = re.compile(r"\$game_player\.[xy]\b")
 
 _DIR_NAME = {(1, 0): "right", (-1, 0): "left", (0, 1): "down", (0, -1): "up"}
 
@@ -236,10 +246,41 @@ def _check_events(
         )
 
 
+def _rebase_script(text: str, rect: Rect, where: str) -> str:
+    """`text` with every `$game_player.x/y <op> N` literal moved into the
+    piece's coordinates (2026-10-11, CH06: the plaza scene walked the player
+    until x reached map 40's 49, off its piece)."""
+    def shift(m: re.Match) -> str:
+        delta = rect.x0 if m.group(2) == "x" else rect.y0
+        return f"{m.group(1)}{m.group(3)}{int(m.group(4)) - delta}"
+
+    out = _PLAYER_COORD_CMP.sub(shift, text)
+    if len(_PLAYER_COORD.findall(text)) != len(_PLAYER_COORD_CMP.findall(text)):
+        raise SplitError(f"{where}: a player coordinate the split can't rebase: {text!r}")
+    return out
+
+
 def _rebase_event(event: dict, rect: Rect) -> dict:
+    """The event moved into its piece's coordinates, with the coordinates its
+    own commands carry: player-coordinate script tests and a direct Set
+    Event Location (code 202, designation 0)."""
     e = copy.deepcopy(event)
     e["x"] -= rect.x0
     e["y"] -= rect.y0
+    for pi, page in enumerate(e.get("pages", [])):
+        for cmd in page.get("list", []):
+            code, params = cmd.get("code"), cmd.get("parameters") or []
+            where = f"EV{e['id']:03d} p{pi} code {code}"
+            if code == _CONDITIONAL and len(params) > 1 and params[0] == _CONDITION_SCRIPT:
+                params[1] = _rebase_script(str(params[1]), rect, where)
+            elif code in _SCRIPT_CODES and params:
+                params[0] = _rebase_script(str(params[0]), rect, where)
+            elif code == _SET_EVENT_LOCATION and len(params) >= 4 and params[1] == 0:
+                x, y = params[2] - rect.x0, params[3] - rect.y0
+                if not (0 <= x < rect.w and 0 <= y < rect.h):
+                    raise SplitError(f"{where}: moves an event to ({params[2]}, {params[3]}), "
+                                     "outside its piece")
+                params[2], params[3] = x, y
     return e
 
 

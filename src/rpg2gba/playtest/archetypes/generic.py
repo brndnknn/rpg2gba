@@ -143,7 +143,7 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without mGBA bi
 GENERIC_EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text",
     "switch_write", "var_write", "self_switch_write", "engine_flag_write",
-    "visual", "heal_party", "var_text", "item_grant", "choice", "service",
+    "visual", "heal_party", "var_text", "item_grant", "item_remove", "choice", "service",
     "battle", "pokemon_grant",
 })
 
@@ -244,8 +244,12 @@ _ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
 # when the page shows text; the rest stay undeclared, so they stay honestly
 # uncovered: a heal or a `\\v[N]` line can't be read back afterwards.
 _NOT_AFTER_THE_FACT = frozenset(
-    {"trigger", "text", "var_text", "heal_party", "item_grant", "choice", "service",
-     "battle", "pokemon_grant"})
+    {"trigger", "text", "var_text", "heal_party", "item_grant", "choice",
+     "service", "battle", "pokemon_grant"})
+# `item_remove` is not among them: the bag still shows it afterwards. On an
+# arrival page the pre-page count is gone, so only a KEY item's removal is
+# checked there -- one held at most once ends at 0 (CH06: Maria's key, taken
+# by the leader house's autorun).
 #: Not a floor kind: an unclaimed gift arm's ceremony the body gets through
 #: without checking (`generic_beat(gift_ceremonies=)`).
 _GIFT_CEREMONY = "gift_ceremony"
@@ -868,6 +872,22 @@ def _handle_item_grant(emu: "Emulator", beat_name: str, step: Step) -> None:
             f"expected {params['expected_total']} after the grant ({shot})")
 
 
+def _handle_item_remove(emu: "Emulator", beat_name: str, step: Step) -> None:
+    # `removeitem` is silent (no box), so like item_grant this is checked by
+    # `generic_beat`'s body after the page, with `const` and `expected_total`.
+    params = dict(step.params)
+    if "expected_total" not in params:
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: item_remove is checked by generic_beat "
+            "after the page completes, not as a mid-page step")
+    actual = emu.bag_item_quantity(params["const"])
+    if actual != params["expected_total"]:
+        shot = emu.screenshot(f"{beat_name}_item_{params['const'].lower()}")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: bag holds {actual} {params['const']}, "
+            f"expected {params['expected_total']} after the removal ({shot})")
+
+
 def _gift_ceremony(emu: "Emulator", beat_name: str, row_id: str) -> None:
     """Get through the transpiler's `pbAddPokemon` flow
     (`transpiler._emit_give_pokemon`): the "{PLAYER} obtained {species}!"
@@ -1016,6 +1036,7 @@ STEP_HANDLERS.update({
     "service": _handle_service,
     "heal_party": _handle_heal_party,
     "item_grant": _handle_item_grant,
+    "item_remove": _handle_item_remove,
     "pokemon_grant": _handle_pokemon_grant,
     "var_text": _handle_var_text,
     "trigger": _handle_trigger,
@@ -1310,6 +1331,20 @@ def generic_beat(
     # lines around it: an `_ITEM_BOXES` marker holds that place.
     middle_steps = [Step(s.row_id, _ITEM_BOXES, s.list_index, ()) if s.kind == "item_grant"
                     else s for s in middle_steps]
+    # item_remove: silent (`removeitem` shows no box), so no marker -- it
+    # leaves the in-page steps and is only checked after the page.
+    remove_steps = [
+        s for s in middle_steps if s.kind == "item_remove" and s.row_id not in random_guard]
+    middle_steps = [s for s in middle_steps if s.kind != "item_remove"]
+    if arrival:
+        from rpg2gba.story_state.bag import key_item_symbols
+
+        loose = sorted(str(dict(s.params)["item"]) for s in remove_steps
+                       if str(dict(s.params)["item"]) not in key_item_symbols())
+        if loose:
+            raise ValueError(
+                f"generic_beat: {beat_name}: arrival page removes non-key item(s) {loose}; "
+                "the count before the page is gone by the time the beat looks")
 
     # State writes: checked after `completes` too, once per key at its LAST
     # write. In source order the check could run while the script still had
@@ -1326,12 +1361,12 @@ def generic_beat(
     write_steps = sorted(last_write.values(), key=lambda s: (s.list_index, s.row_id))
     middle_steps = [s for s in middle_steps if s.kind not in _STATE_WRITE_KINDS]
     grant_const: dict[str, str] = {}
-    for step in grant_steps:
+    for step in [*grant_steps, *remove_steps]:
         item = str(dict(step.params)["item"])
         const = _uranium_item_constants().get(item)
         if const is None:
             raise ValueError(
-                f"generic_beat: {beat_name}: {step.row_id} grants {item!r}, which has "
+                f"generic_beat: {beat_name}: {step.row_id} grants or removes {item!r}, which has "
                 "no entry in reference/uranium_id_map.json's 'items' table")
         grant_const[item] = const
 
@@ -1449,18 +1484,29 @@ def generic_beat(
             if arrival_texts:
                 _check_arrival_drain(emu, beat_name, cell.map_constant, arrival_texts,
                                      grant_steps, grant_const, arrival_answers)
+            for step in remove_steps:     # key items only (checked above): now 0
+                const = grant_const[str(dict(step.params)["item"])]
+                STEP_HANDLERS[step.kind](emu, beat_name, Step(
+                    step.row_id, step.kind, step.list_index,
+                    step.params + (("const", const), ("expected_total", 0))))
             return
         # One check per item after the page: the bag only shows the sum of
         # that item's grants, so the last grant step carries the total.
         expected = dict(bag_before)
         last_step: dict[str, Step] = {}
-        for step in grant_steps:
+        # Grants and removals apply in source order; a removal floors at 0.
+        for step in sorted([*grant_steps, *remove_steps],
+                           key=lambda s: (s.list_index, s.row_id)):
             params = dict(step.params)
             const = grant_const[str(params["item"])]
-            expected[const] += int(params["quantity"])
+            qty = int(params["quantity"])
+            if step.kind == "item_remove":
+                expected[const] = max(0, expected[const] - qty)
+            else:
+                expected[const] += qty
             last_step[const] = step
         for const, step in sorted(last_step.items()):
-            STEP_HANDLERS["item_grant"](emu, beat_name, Step(
+            STEP_HANDLERS[step.kind](emu, beat_name, Step(
                 step.row_id, step.kind, step.list_index,
                 step.params + (("const", const), ("expected_total", expected[const]))))
         for step in phone_steps:

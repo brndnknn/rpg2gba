@@ -932,6 +932,33 @@ class _StoryOccupancy(Mapping):
             lambda i: candidate(f"map{map_id:03d}/ev{event_id:03d}/p{i}"),
             lambda i: clears(f"map{map_id:03d}/ev{event_id:03d}/p{i}"))
 
+    def clearing_rows(self, map_id: int) -> dict[tuple[int, int], tuple[str, ...]]:
+        """cell -> the clearing page rows of an actor dropped from `map_id`
+        because it CLEARS in the chapter (not because it is never visible):
+        it still stands there until one of those pages goes live, so a beat
+        that needs its cell waits for them (`_clearing_enablers`)."""
+        out: dict[tuple[int, int], tuple[str, ...]] = {}
+        candidate, clears = self._candidate_for(map_id), self._clear_for(map_id)
+        data = load_map_json(map_id, self._build_dir / "maps")
+        for tile in self._inner[map_id].tiles:
+            m = _DISPATCH_EVENT_RE.match(tile.script)
+            if not m or int(m.group(1)) != map_id:
+                continue
+            event_id = int(m.group(2))
+            event = next((e for e in data.get("events", []) if e and e["id"] == event_id), None)
+            if event is None:
+                continue
+            pages = event.get("pages", [])
+            rid = f"map{map_id:03d}/ev{event_id:03d}/p{{}}".format
+            visible = [i for i, p in enumerate(pages) if _page_visible(p)]
+            if not visible or not any(candidate(rid(i)) for i in visible):
+                continue
+            rows = tuple(rid(j) for j in range(max(visible) + 1, len(pages))
+                         if not _page_visible(pages[j]) and clears(rid(j)))
+            if rows:
+                out[tile.cell] = rows
+        return out
+
     def __getitem__(self, map_id: int) -> MapOccupancy:
         if map_id not in self._cache:
             occ = self._inner[map_id]
@@ -951,6 +978,84 @@ class _StoryOccupancy(Mapping):
 
     def __len__(self) -> int:
         return len(self._inner)
+
+
+def _clearing_enablers(
+    records: Sequence[BeatLocationRecord], clearing_rows: Callable[[int], Mapping],
+    graphs: Mapping[int, MapGraph], enabled_by: Mapping[str, tuple[tuple[str, ...], ...]],
+) -> dict[str, tuple[str, ...]]:
+    """row -> an extra any-of enabler group: the writers that clear the actor
+    standing on every cell its beat could be worked from (operator,
+    2026-10-11: "order after the clear"). `_StoryOccupancy` drops a
+    clearing actor from the walls, but it stands there until it clears --
+    CH06's gym door page 0 is touched only from Fufufu's tile.
+
+    The cells are the record's approach candidates, else the walkable
+    non-warp sides of its own cell (a touch page is located on its event).
+    Every one must be held by a clearing actor; the group is every
+    enabler of every clearing page of those actors. Keyed by the record's
+    first row, which `_derive_story_precedence` maps to its group."""
+    out: dict[str, tuple[str, ...]] = {}
+    for record in records:
+        map_id = map_uranium_id(record.map_constant)
+        held = clearing_rows(map_id)
+        if not held or map_id not in graphs:
+            continue
+        graph = graphs[map_id]
+        cells = [(c.x, c.y) for c in record.approach_candidates] or [
+            n for n in ((record.x, record.y - 1), (record.x, record.y + 1),
+                        (record.x - 1, record.y), (record.x + 1, record.y))
+            if graph.is_walkable(n) and n not in graph.warp_exits]
+        if not cells or (record.x, record.y) in held or not all(c in held for c in cells):
+            continue
+        writers = sorted({w for c in cells for row in held[c]
+                          for group in enabled_by.get(row, ()) for w in group})
+        if writers:
+            out[record.rows[0]] = tuple(writers)
+    return out
+
+
+def _drop_dead_before_clear(
+    beats: Sequence[PlannedBeat], clearing: Mapping[str, tuple[str, ...]],
+    group_order: Sequence[str], group_of_row: Mapping[str, str],
+) -> tuple[tuple[PlannedBeat, ...], tuple[Elsewhere, ...]]:
+    """The other half of "order after the clear" (operator, 2026-10-11): a
+    row the solver still put before every claimed writer that clears its
+    actor could not go after the clear -- a killer of its page comes first
+    (`_feasible_any_of` drops the alternatives), so the page is dead by the
+    time the actor moves. It never fires; its page's rows leave the walk.
+    CH06: the gym door's "closed" page is worked only from Fufufu's tile,
+    and the key removal that ends it precedes the scene that moves her."""
+    pos = {g: i for i, g in enumerate(group_order)}
+    dead: dict[str, str] = {}
+    for rid, writers in clearing.items():
+        group = group_of_row.get(rid)
+        writer_groups = {group_of_row[w] for w in writers if w in group_of_row} - {group}
+        if group not in pos or not writer_groups or not all(g in pos for g in writer_groups):
+            continue
+        if all(pos[g] > pos[group] for g in writer_groups):
+            dead[rid] = (f"{rid} is worked only from a clearing actor's tile, and the "
+                         f"route could not put it after any of its clearing writers "
+                         f"{sorted(writers)} -- its page is dead by then; it never fires")
+    if not dead:
+        return tuple(beats), ()
+
+    def page_of(r: str) -> str:
+        return parse_row_id(r).owning_page_row_id or r
+
+    out: list[PlannedBeat] = []
+    gone: list[Elsewhere] = []
+    for b in beats:
+        drop = [r for r in b.rows if page_of(r) in dead]
+        gone += [Elsewhere(r, "never_fires", detail=dead[page_of(r)]) for r in drop]
+        kept = tuple(r for r in b.rows if r not in drop)
+        if kept == b.rows:
+            out.append(b)
+        elif kept:
+            out.append(dataclasses.replace(b, rows=kept))
+        else:
+            logger.info("clearing actor: %s never fires; beat %s dropped", drop, b.name)
+    return tuple(out), tuple(gone)
 
 
 def _map_facts_factory(
@@ -1473,6 +1578,13 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     wm = WriteModel(state_of, _page_for(build_dir))
     story_enabled_by, threshold_by = split_threshold_enablers(
         enabled_by, wm=wm, seed=seeds[chapter_id], claimed_rows=claimed_rows)
+    # 2026-10-11 (operator): a beat worked only from a clearing actor's tile
+    # comes after the clear (`_clearing_enablers`).
+    story_enabled_by = dict(story_enabled_by)
+    clearing = _clearing_enablers(records, occupancy.clearing_rows, graphs, enabled_by)
+    for rid, writers in clearing.items():
+        logger.info("clearing actor: %s waits on any of %s", rid, list(writers))
+        story_enabled_by[rid] = tuple(story_enabled_by.get(rid, ())) + (writers,)
     killers = killed_before(beats, wm=wm, seed=seeds[chapter_id],
                             claimed_rows=claimed_rows)
     # 2026-09-28 ruling (one-way warps): enter a dead-end interior, do its
@@ -1527,6 +1639,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     group_order, picks = route_order(route.nodes)
     check_guard_order(guard_waits, group_order, group_of_row)
     beats = order_beats(beats, group_order, _picks_with_fallback(records, picks))
+    beats, cleared_too_late = _drop_dead_before_clear(beats, clearing, group_order, group_of_row)
     nudge_groups = {b.group for b in beats if b.template == "arrival_nudge"}
     # 6b. Ruling 19 steps 4-5 (`beat_gen/state_arms.py`): with the order and
     #     the cells known, keep only the arms the walk's state and position
@@ -1614,7 +1727,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         predecessor=predecessor,
         beats=beats,
         refusals=selection.refusals + tuple(cell_refusals),
-        elsewhere=selection.elsewhere + dead_elsewhere + choice_elsewhere + state_elsewhere,
+        elsewhere=(selection.elsewhere + dead_elsewhere + choice_elsewhere + state_elsewhere
+                   + cleared_too_late),
         order_dependent=_live_order_dependent(story.order_dependent, state_elsewhere),
         route=route,
         liveness_problems=tuple(liveness_problems),
