@@ -2022,6 +2022,12 @@ failure an exception so a red gate never leaves a half-staged tree.
 
 ### 133. `CH02:m033e053p0` fails its first attempt on every replay, then passes the F3 rerun
 
+**RESOLVED 2026-10-11.** Route 1 ev053 is a ROM sight trainer with
+`MOVEMENT_TYPE_FACE_DOWN_AND_LEFT`: when the walk arrived while it faced west, the
+touch bump started nothing (sight only checks on a finished step, along the
+trainer's facing). `generic_beat` now presses A on a sight trainer whose touch
+starts nothing (`_handle_trigger(talk_if_unseen=)`); CH06 gen 465/465 with it.
+
 Seen in both CH05 gen replays on 2026-10-09/10 (ROMs `31b375bc`, `51fc4687`): "map033/ev053/p0:
 stepping into the event (trigger='event_touch') started no script", then green on the rerun, so the
 tally reads 306/306. Twice in a row is not a flake: something about the first approach (state left by
