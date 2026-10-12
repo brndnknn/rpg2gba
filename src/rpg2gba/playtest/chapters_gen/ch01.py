@@ -156,6 +156,7 @@ generic_beat(
     group='m048e011p0',
     rows=('map048/ev011/p0', 'map048/ev011/p0/b0', 'map048/ev011/p0/b1', 'map048/ev011/p0/b2', 'map048/ev011/p0/b3', 'map048/ev011/p0/b4', 'map048/ev011/p0/b5'),
     approach_prefer='south',
+    archetype=(('map048/ev011/p0', 'flavour_npc'),),
     random_arms=(('map048/ev011/p0/b0', ((1, '==', 0),)), ('map048/ev011/p0/b1', ((1, '!=', 0),)), ('map048/ev011/p0/b2', ((1, '==', 1),)), ('map048/ev011/p0/b3', ((1, '!=', 1),)), ('map048/ev011/p0/b4', ((1, '==', 2),)), ('map048/ev011/p0/b5', ((1, '!=', 2),))),
 )
 
@@ -625,6 +626,7 @@ generic_beat(
     group='m032e012p0',
     rows=('map032/ev012/p0', 'map032/ev012/p0/b0', 'map032/ev012/p0/b1', 'map032/ev012/p0/b2', 'map032/ev012/p0/b3', 'map032/ev012/p0/b4', 'map032/ev012/p0/b5'),
     approach_prefer='east',
+    archetype=(('map032/ev012/p0', 'flavour_npc'),),
     random_arms=(('map032/ev012/p0/b0', ((102, '==', 0),)), ('map032/ev012/p0/b1', ((102, '!=', 0),)), ('map032/ev012/p0/b2', ((102, '==', 1),)), ('map032/ev012/p0/b3', ((102, '!=', 1),)), ('map032/ev012/p0/b4', ((102, '==', 2),)), ('map032/ev012/p0/b5', ((102, '!=', 2),))),
 )
 
@@ -671,6 +673,7 @@ generic_beat(
     group='m032e013p0',
     rows=('map032/ev013/p0', 'map032/ev013/p0/b0', 'map032/ev013/p0/b1', 'map032/ev013/p0/b2', 'map032/ev013/p0/b3'),
     approach_prefer='north',
+    archetype=(('map032/ev013/p0', 'flavour_npc'),),
     random_arms=(('map032/ev013/p0/b0', ((102, '==', 0),)), ('map032/ev013/p0/b1', ((102, '!=', 0),)), ('map032/ev013/p0/b2', ((102, '==', 1),)), ('map032/ev013/p0/b3', ((102, '!=', 1),))),
 )
 
@@ -730,7 +733,7 @@ flavour_npc_beat(
     chapter_id='CH01',
     beat_name='m172e001p0_flavour_npc',
     group='m172e001p0_flavour_npc',
-    approach_prefer='east',
+    approach_prefer='north',
     event_id=1,
     map_constant='MAP_MOKI_TOWN_THEOS_HOUSE_1F',
     map_id=172,
@@ -1086,7 +1089,7 @@ flavour_npc_beat(
     chapter_id='CH01',
     beat_name='m050e020_flavour_npc',
     group='m050e020_flavour_npc',
-    approach_prefer='south',
+    approach_prefer='north',
     event_id=20,
     map_constant='MAP_MOKI_TOWN_PROFESSOR_LAB',
     map_id=50,
@@ -1110,7 +1113,7 @@ generic_beat(
     chapter_id='CH01',
     beat_name='m050e005p2',
     group='m050e005p2',
-    rows=('map050/ev005/p2', 'map050/ev005/p2/b0', 'map050/ev005/p0/b2'),
+    rows=('map050/ev005/p2', 'map050/ev005/p2/b0', 'map050/ev005/p2/b2', 'map050/ev005/p2/b4', 'map050/ev005/p0/b2'),
     approach_prefer='south',
     choice_answers=((2, 0), (57, 0), (68, 0), (77, 0), (86, 0)),
 )
@@ -1132,34 +1135,10 @@ flavour_npc_beat(
 flavour_npc_beat(
     ch01,
     chapter_id='CH01',
-    beat_name='m050e016_flavour_npc',
-    group='m050e016_flavour_npc',
-    approach_prefer='south',
-    event_id=16,
-    map_constant='MAP_MOKI_TOWN_PROFESSOR_LAB',
-    map_id=50,
-    variant='plain',
-)
-
-flavour_npc_beat(
-    ch01,
-    chapter_id='CH01',
-    beat_name='m050e015_flavour_npc',
-    group='m050e015_flavour_npc',
-    approach_prefer='south',
-    event_id=15,
-    map_constant='MAP_MOKI_TOWN_PROFESSOR_LAB',
-    map_id=50,
-    variant='plain',
-)
-
-flavour_npc_beat(
-    ch01,
-    chapter_id='CH01',
-    beat_name='m050e012_flavour_npc',
-    group='m050e012_flavour_npc',
-    approach_prefer='south',
-    event_id=12,
+    beat_name='m050e011_flavour_npc',
+    group='m050e011_flavour_npc',
+    approach_prefer='north',
+    event_id=11,
     map_constant='MAP_MOKI_TOWN_PROFESSOR_LAB',
     map_id=50,
     variant='plain',
@@ -1180,10 +1159,34 @@ flavour_npc_beat(
 flavour_npc_beat(
     ch01,
     chapter_id='CH01',
-    beat_name='m050e011_flavour_npc',
-    group='m050e011_flavour_npc',
-    approach_prefer='north',
-    event_id=11,
+    beat_name='m050e012_flavour_npc',
+    group='m050e012_flavour_npc',
+    approach_prefer='south',
+    event_id=12,
+    map_constant='MAP_MOKI_TOWN_PROFESSOR_LAB',
+    map_id=50,
+    variant='plain',
+)
+
+flavour_npc_beat(
+    ch01,
+    chapter_id='CH01',
+    beat_name='m050e015_flavour_npc',
+    group='m050e015_flavour_npc',
+    approach_prefer='south',
+    event_id=15,
+    map_constant='MAP_MOKI_TOWN_PROFESSOR_LAB',
+    map_id=50,
+    variant='plain',
+)
+
+flavour_npc_beat(
+    ch01,
+    chapter_id='CH01',
+    beat_name='m050e016_flavour_npc',
+    group='m050e016_flavour_npc',
+    approach_prefer='south',
+    event_id=16,
     map_constant='MAP_MOKI_TOWN_PROFESSOR_LAB',
     map_id=50,
     variant='plain',
@@ -1234,10 +1237,10 @@ flavour_npc_beat(
 flavour_npc_beat(
     ch01,
     chapter_id='CH01',
-    beat_name='m050e009_flavour_npc',
-    group='m050e009_flavour_npc',
-    approach_prefer='south',
-    event_id=9,
+    beat_name='m050e021_flavour_npc',
+    group='m050e021_flavour_npc',
+    approach_prefer='west',
+    event_id=21,
     map_constant='MAP_MOKI_TOWN_PROFESSOR_LAB',
     map_id=50,
     variant='plain',
@@ -1246,10 +1249,10 @@ flavour_npc_beat(
 flavour_npc_beat(
     ch01,
     chapter_id='CH01',
-    beat_name='m050e021_flavour_npc',
-    group='m050e021_flavour_npc',
+    beat_name='m050e009_flavour_npc',
+    group='m050e009_flavour_npc',
     approach_prefer='west',
-    event_id=21,
+    event_id=9,
     map_constant='MAP_MOKI_TOWN_PROFESSOR_LAB',
     map_id=50,
     variant='plain',
@@ -1636,7 +1639,7 @@ warp_beat(
 )
 
 NEVER_FIRES: dict[str, str] = {
-    'map050/ev001/p0': "map050/ev001/p0 fires only on (14, 19); while it is the live page the walk can't step on them: arrival (14, 18) -> start (14, 8) (scene map050/ev005/p0); arrival (14, 7) -> start (14, 4) (scene map050/ev005/p0); arrival (14, 7) -> start (14, 7) (scene map050/ev005/p0); ev002 pushes the player off row y=16 (x=11..20, 8 cells); over 4 story state(s) the reachable region (100 cells) touches none of them and has no way out of the map; map050/ev001/p1 supersedes it once variable 101 >= 1",
+    'map050/ev001/p0': "map050/ev001/p0 fires only on (14, 19); while it is the live page the walk can't step on them: arrival (14, 18) -> start (14, 8) (scene map050/ev005/p0); arrival (14, 7) -> start (14, 4) (scene map050/ev005/p0); arrival (14, 7) -> start (14, 7) (scene map050/ev005/p0); ev002 pushes the player off row y=16 (x=11..20, 8 cells); over 4 story state(s) the reachable region (101 cells) touches none of them and has no way out of the map; map050/ev001/p1 supersedes it once variable 101 >= 1",
     'map050/ev005/p3': "map050/ev005/p3 (needs var 101 >= 1) is not its event's live page at this route position: var 101 >= 1 fails: var 101 is [0] (seed state), never written on the route; the rows that could write it none are not walked before it; live page: map050/ev005/p1 (needs self switch C == True)",
     'map050/ev005/p4': "map050/ev005/p4 (needs var 101 >= 2) is not its event's live page at this route position: var 101 >= 2 fails: var 101 is [0] (seed state), never written on the route; the rows that could write it none are not walked before it; live page: map050/ev005/p1 (needs self switch C == True)",
 }
@@ -1739,6 +1742,9 @@ ELSEWHERE: dict[str, str] = {
     'map032/ev013/p1': 'unreachable',
     'map032/ev017/p1/b1': 'unselected_arm: not taken on the walk: else of `get_character(0).onEvent?` from cell (56, 42) (event at (56, 42)) (ruling 19)',
     'map032/ev021/p0': 'stripped: strip_list.json map_events (Luz)',
+    'map032/ev023/p1': "later: CH02: its event crosses out of the chapter's map chain (to map(s) [33]); the rest of the event belongs to the chapter that builds the far side",
+    'map032/ev023/p1/b0': "later: CH02: its event crosses out of the chapter's map chain (to map(s) [33]); the rest of the event belongs to the chapter that builds the far side",
+    'map032/ev023/p1/b1': "later: CH02: its event crosses out of the chapter's map chain (to map(s) [33]); the rest of the event belongs to the chapter that builds the far side",
     'map032/ev024/p0': 'stripped: strip_list.json map_events (Luz)',
     'map032/ev025/p0': 'stripped: strip_list.json map_events (Luz)',
     'map032/ev027/p0/b1': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',
@@ -1751,6 +1757,12 @@ ELSEWHERE: dict[str, str] = {
     'map032/ev032/p0': 'stripped: strip_list.json map_events (Luz)',
     'map032/ev034/p0': 'stripped: strip_list.json map_events (Luz)',
     'map032/ev035/p0': 'later',
+    'map032/ev036/p1': "later: CH02: its event crosses out of the chapter's map chain (to map(s) [33]); the rest of the event belongs to the chapter that builds the far side",
+    'map032/ev036/p1/b0': "later: CH02: its event crosses out of the chapter's map chain (to map(s) [33]); the rest of the event belongs to the chapter that builds the far side",
+    'map032/ev036/p1/b1': "later: CH02: its event crosses out of the chapter's map chain (to map(s) [33]); the rest of the event belongs to the chapter that builds the far side",
+    'map032/ev037/p1': "later: CH02: its event crosses out of the chapter's map chain (to map(s) [33]); the rest of the event belongs to the chapter that builds the far side",
+    'map032/ev037/p1/b0': "later: CH02: its event crosses out of the chapter's map chain (to map(s) [33]); the rest of the event belongs to the chapter that builds the far side",
+    'map032/ev037/p1/b1': "later: CH02: its event crosses out of the chapter's map chain (to map(s) [33]); the rest of the event belongs to the chapter that builds the far side",
     'map032/ev048/p1': 'unreachable',
     'map032/ev052/p0': 'stripped: strip_list.json map_events (Luz)',
     'map032/ev053/p0': 'stripped: strip_list.json map_events (Luz)',
@@ -1795,10 +1807,8 @@ ELSEWHERE: dict[str, str] = {
     'map049/ev021/p1': 'unreachable',
     'map050/ev004/p2': 'unreachable',
     'map050/ev005/p0/b0': 'unselected_arm: not taken on the walk: needs self switch B == True, and here self switch B is [False] (ruling 19)',
-    'map050/ev005/p2/b1': "unselected_arm: map050/ev005/p2 (needs self switch D == True) is not its event's live page at this route position: self switch D == True fails: self switch D was set to [False] by map050/ev005/p2 (beat m050e005p2, #90); the rows that could write it ['map050/ev005/p0/b3'] are not walked before it; live page: map050/ev005/p1 (needs self switch C == True); the page ended itself at an earlier firing and no claimed row brings it back, so the walk that took its ending arm doesn't return to it",
-    'map050/ev005/p2/b2': "unselected_arm: map050/ev005/p2 (needs self switch D == True) is not its event's live page at this route position: self switch D == True fails: self switch D was set to [False] by map050/ev005/p2 (beat m050e005p2, #90); the rows that could write it ['map050/ev005/p0/b3'] are not walked before it; live page: map050/ev005/p1 (needs self switch C == True); the page ended itself at an earlier firing and no claimed row brings it back, so the walk that took its ending arm doesn't return to it",
-    'map050/ev005/p2/b3': "unselected_arm: map050/ev005/p2 (needs self switch D == True) is not its event's live page at this route position: self switch D == True fails: self switch D was set to [False] by map050/ev005/p2 (beat m050e005p2, #90); the rows that could write it ['map050/ev005/p0/b3'] are not walked before it; live page: map050/ev005/p1 (needs self switch C == True); the page ended itself at an earlier firing and no claimed row brings it back, so the walk that took its ending arm doesn't return to it",
-    'map050/ev005/p2/b4': "unselected_arm: map050/ev005/p2 (needs self switch D == True) is not its event's live page at this route position: self switch D == True fails: self switch D was set to [False] by map050/ev005/p2 (beat m050e005p2, #90); the rows that could write it ['map050/ev005/p0/b3'] are not walked before it; live page: map050/ev005/p1 (needs self switch C == True); the page ended itself at an earlier firing and no claimed row brings it back, so the walk that took its ending arm doesn't return to it",
+    'map050/ev005/p2/b1': 'unselected_arm: facing arm of map050/ev005/p2, which turns self switch D off after one firing (map050/ev005/p2/b0): the walk fires it once, from north, and takes the facing arms legal there (2026-10-12)',
+    'map050/ev005/p2/b3': 'unselected_arm: facing arm of map050/ev005/p2, which turns self switch D off after one firing (map050/ev005/p2/b0): the walk fires it once, from north, and takes the facing arms legal there (2026-10-12)',
     'map050/ev005/p5': 'unreachable',
     'map050/ev005/p5/b33': 'unreachable',
     'map050/ev005/p7': 'unreachable',

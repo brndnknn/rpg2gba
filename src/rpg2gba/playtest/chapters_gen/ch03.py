@@ -337,6 +337,7 @@ generic_beat(
     group='m031e008p0',
     rows=('map031/ev008/p0', 'map031/ev008/p0/b0', 'map031/ev008/p0/b1', 'map031/ev008/p0/b2', 'map031/ev008/p0/b3'),
     approach_prefer='east',
+    archetype=(('map031/ev008/p0', 'flavour_npc'),),
     random_arms=(('map031/ev008/p0/b0', ((102, '==', 0),)), ('map031/ev008/p0/b1', ((102, '!=', 0),)), ('map031/ev008/p0/b2', ((102, '==', 1),)), ('map031/ev008/p0/b3', ((102, '!=', 1),))),
 )
 
@@ -707,6 +708,7 @@ generic_beat(
     group='m068e014p0',
     rows=('map068/ev014/p0/b0', 'map068/ev014/p0/b1'),
     approach_prefer='north',
+    archetype=(('map068/ev014/p0', 'trainer'),),
     choice_answers=((4, 0),),
     walk_rows=('map068/ev014/p0',),
 )
@@ -718,6 +720,7 @@ generic_beat(
     group='m068e014p0',
     rows=('map068/ev014/p0', 'map068/ev014/p0/b3'),
     approach_prefer='north',
+    archetype=(('map068/ev014/p0', 'trainer'),),
     choice_answers=((4, 1),),
 )
 
