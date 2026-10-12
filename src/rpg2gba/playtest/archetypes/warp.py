@@ -247,11 +247,21 @@ def derive_return_direction(map_constant: str, dest_map_constant: str,
     `direction`: Nowtoch Park's cave mouth (CH06) is entered pressing UP and
     Passage Cave 2F's exit back to it is pressed UP too, from the cell below.
     Everywhere else (the player lands on the reciprocal itself, a door mat,
-    or apart from it) the reverse of `direction` stands, as it always has."""
+    or apart from it) the reverse of `direction` stands, as it always has.
+    Landing on ANY warp back counts as landing on the reciprocal: Route 1's
+    events 22-24 all lead to Moki, the lookup picks 22 at (70,12), and the
+    player lands on 23 at (70,11) -- "beside" 22, but already on a way back
+    (2026-10-12)."""
+    from ...traversal.graph import build_map_graph
+
     crossing = warp_cell(map_constant, to=dest_map_constant, event_id=event_id)
     back_event = _reciprocal_event(map_constant, dest_map_constant, crossing)
     back = warp_cell(dest_map_constant, to=map_constant, event_id=back_event)
     ax, ay = arrival_cell(dest_map_constant, from_map=map_constant, event_id=event_id)
+    origin_uid = map_uranium_id(map_constant)
+    graph = build_map_graph(map_uranium_id(dest_map_constant))
+    if any(e.dest_map == origin_uid for e in graph.warp_exits.get((ax, ay), ())):
+        return _REVERSE[direction]
     for press, (dx, dy) in _APPROACH_DELTA.items():
         if (back[0] + dx, back[1] + dy) == (ax, ay):
             return press

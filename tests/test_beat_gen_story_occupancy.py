@@ -39,6 +39,16 @@ def test_a_possibly_visible_object_still_blocks():
     assert occ[50].blocked_cells() == frozenset({(12, 13), (18, 14)})
 
 
+def test_an_obstacle_wall_blocks_whatever_the_story_says():
+    # 2026-10-12: Moki's rocks looked "cleared" (story model explores both
+    # arms of Kernel.pbRockSmash); an obstacle-claimed event never drops out.
+    inner = {50: MapOccupancy(map_id=50, tiles=_TILES)}
+    occ = _StoryOccupancy(inner, build_dir=BUILD, candidate_for=lambda _m: lambda rid: False,
+                          walls=frozenset({(50, 24)}))
+    assert occ[50].blocked_cells() == frozenset({(12, 13)})
+    assert (12, 13) not in occ.clearing_rows(50)
+
+
 # --- `actor_never_blocks`: the page rule, including actors that clear -----
 # First "clears" user: Fufufu (map14001/ev018), visible on p0/p1 and
 # graphic-less on p2 (self-switch B) and p3 (switch 55), standing on the gym

@@ -80,8 +80,11 @@ from rpg2gba.beat_gen.reach import engine_spawn, reachable_sites
 from rpg2gba.beat_gen.rooms import Place, PlaceWorld, RoomIndex
 from rpg2gba.beat_gen.emit import emit_module
 from rpg2gba.beat_gen.facing import (
+    OneShot,
+    check_title_pages,
     event_ids_by_map,
     facing_sides,
+    one_shot_arms,
     pin_records,
     split_facing_arms,
 )
@@ -910,17 +913,27 @@ class _StoryOccupancy(Mapping):
     approach until a switch-101 scene sets her self-switch B; as a permanent
     wall she pushed the whole gym out of CH06 (operator call 2026-10-09).
     The route still orders the gym after that scene through the door's own
-    switch-101 page."""
+    switch-101 page.
+
+    `walls` are (map, event) pairs an obstacle beat claims: they stay
+    blocking whatever the story model says. Moki's rocks clear on a self
+    switch the `Kernel.pbRockSmash` arm writes; the model explores both arms
+    of that Ruby test, calls the smashed page live, and the walk was routed
+    into a cell the rocks still box in (2026-10-12)."""
 
     def __init__(self, inner: Mapping, *, build_dir: Path, candidate_for,  # noqa: ANN001
-                 clear_for=None) -> None:  # noqa: ANN001
+                 clear_for=None,  # noqa: ANN001
+                 walls: frozenset[tuple[int, int]] = frozenset()) -> None:
         self._inner = inner
         self._build_dir = build_dir
         self._candidate_for = candidate_for
         self._clear_for = clear_for if clear_for is not None else candidate_for
+        self._walls = walls
         self._cache: dict[int, MapOccupancy] = {}
 
     def _never_visible(self, map_id: int, event_id: int) -> bool:
+        if (map_id, event_id) in self._walls:
+            return False
         data = load_map_json(map_id, self._build_dir / "maps")
         event = next((e for e in data.get("events", []) if e and e["id"] == event_id), None)
         if event is None:
@@ -945,6 +958,8 @@ class _StoryOccupancy(Mapping):
             if not m or int(m.group(1)) != map_id:
                 continue
             event_id = int(m.group(2))
+            if (map_id, event_id) in self._walls:
+                continue
             event = next((e for e in data.get("events", []) if e and e["id"] == event_id), None)
             if event is None:
                 continue
@@ -1465,10 +1480,14 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     # 3b. A4 (`beat_gen/facing.py`): an arm gated on the player's facing is
     #     its own group, walked from the side that selects it.
     sides_by_row: dict[str, frozenset[str]] = {}
+    one_shot_by_row: dict[str, OneShot] = {}
     for map_id, event_ids in sorted(event_ids_by_map(r for b in beats for r in b.rows).items()):
-        sides_by_row.update(facing_sides(
-            map_id, load_map_json(map_id, build_dir / "maps"), event_ids))
-    beats, facing_pins = split_facing_arms(beats, sides_by_row)
+        map_data = load_map_json(map_id, build_dir / "maps")
+        found = facing_sides(map_id, map_data, event_ids)
+        sides_by_row.update(found)
+        one_shot_by_row.update(one_shot_arms(map_id, map_data, found))
+    beats, facing_pins, facing_elsewhere = split_facing_arms(
+        beats, sides_by_row, one_shot_by_row)
 
     # 4. Locate. Graphs are lazy: a seam or a route may touch maps outside
     #    the chapter's own list (`routing.__main__._LazyGraphs`).
@@ -1480,7 +1499,9 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         _LazyOccupancy(build_dir), build_dir=build_dir,
         candidate_for=lambda m: _page_candidate(all_verdicts, story.end_state, row_states(m)),
         clear_for=lambda m: _page_candidate(all_verdicts, story.end_state, row_states(m),
-                                            definite=True))
+                                            definite=True),
+        walls=frozenset((p.map_id, p.event_id) for b in beats if b.template == "obstacle"
+                        for p in map(parse_row_id, b.rows)))
     # 3c. Touch pages the walk can't step on while they are live (guard rows,
     #     arrival displacement): never_fires, not beats.
     facts_for = _map_facts_factory(
@@ -1652,6 +1673,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         walkable=lambda rid: rid in floors and not floors[rid].refused,
         choice_openers=lambda rid: [a.list_index for a in floors[rid].assertions
                                     if a.kind == "choice"] if rid in floors else [])
+    check_title_pages(
+        beats, lambda page: row_states(parse_row_id(page).map_id)[page].trigger)
     beats = tuple(
         _apply_route_kwargs(
             b, boundary=b.template == "warp" and is_boundary_warp(b, floors, chain_maps),
@@ -1727,9 +1750,10 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         predecessor=predecessor,
         beats=beats,
         refusals=selection.refusals + tuple(cell_refusals),
-        elsewhere=(selection.elsewhere + dead_elsewhere + choice_elsewhere + state_elsewhere
-                   + cleared_too_late),
-        order_dependent=_live_order_dependent(story.order_dependent, state_elsewhere),
+        elsewhere=(selection.elsewhere + dead_elsewhere + choice_elsewhere + facing_elsewhere
+                   + state_elsewhere + cleared_too_late),
+        order_dependent=_live_order_dependent(
+            story.order_dependent, state_elsewhere + facing_elsewhere),
         route=route,
         liveness_problems=tuple(liveness_problems),
     )

@@ -1315,6 +1315,14 @@ def test_derive_return_direction_same_press_both_ways() -> None:
         "MAP_NOWTOCH_CITY_PARK", "MAP_PASSAGE_CAVE_2F", 19, "UP") == "UP"
 
 
+def test_derive_return_direction_landing_on_a_wide_exit() -> None:
+    """Moki -> Route 1 lands on event 23, one of three warps back (22-24);
+    being beside event 22 must not turn the return into DOWN (2026-10-12)."""
+    from rpg2gba.playtest.archetypes.warp import derive_return_direction
+
+    assert derive_return_direction("MAP_MOKI_TOWN", "MAP_ROUTE_01", 37, "LEFT") == "RIGHT"
+
+
 def test_return_approach_on_an_unwalkable_cell_fails_at_registration() -> None:
     from rpg2gba.playtest.archetypes.warp import _check_return_approach
     from rpg2gba.playtest.cells import warp_cell
