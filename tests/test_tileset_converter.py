@@ -2633,6 +2633,68 @@ def test_build_object_events_self_switch_hide_no_self_switch_command_keeps_defau
     assert result.object_events[0].flag == "0"
 
 
+def _set_self_switch_call(eid: int, letter: str) -> dict:
+    return {"code": 355, "indent": 0,
+            "parameters": [f'pbSetSelfSwitch({eid},"{letter}",true)']}
+
+
+def test_build_object_events_npc_blanked_by_another_events_self_switch_gets_flag() -> None:
+    """CH06 walk 2026-10-13, Map040 EV018 "Fufufu": visible at boot, a later
+    blank page gated on self switch B, and B is set by ANOTHER event's
+    `pbSetSelfSwitch(18,"B",true)`. He must carry a visibility flag, an
+    ON_TRANSITION show/hide clause and a refresh entry -- with flag "0" the
+    sprite stayed in the gym doorway forever on a page that does nothing."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(40, "Nowtoch City")
+    fufufu = _event(18, 13, 6, [
+        _page(name="HGSS_000", cmds=[{"code": 123, "indent": 0, "parameters": ["A", 0]}]),
+        _page(cond=_self_cond("A"), name="HGSS_000"),
+        _page(cond=_self_cond("B"), name=""),
+    ], name="Fufufu")
+    scene = _event(141, 11, 10, [
+        _page(trigger=2, name="", cmds=[_set_self_switch_call(18, "B")]),
+    ])
+    result = mw.build_object_events(
+        {"map_id": 40, "events": [fufufu, scene]}, consts, {40},
+        npc_gfx=_npc_gfx_fixture(), flag_registry=FlagRegistry(),
+    )
+    (obj,) = [o for o in result.object_events if o.script.startswith("Map040_EV018")]
+    assert obj.flag.startswith("FLAG_TEMP_")
+    assert f"setflag({obj.flag})" in result.transition_lines
+    assert "FLAG_MAP040_EVENT018_SSB" in "\n".join(result.transition_lines)
+    assert result.refresh_script is not None
+    assert "FLAG_MAP040_EVENT018_SSB" in result.refresh_script
+
+
+def test_build_object_events_npc_blank_page_nothing_can_reach_keeps_default() -> None:
+    """Same shape without the writer: B is never set by anything on the map,
+    so the blank page can never win -- no flag, no pool slot spent."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(40, "Nowtoch City")
+    fufufu = _event(18, 13, 6, [
+        _page(name="HGSS_000"),
+        _page(cond=_self_cond("B"), name=""),
+    ])
+    result = mw.build_object_events(
+        {"map_id": 40, "events": [fufufu]}, consts, {40},
+        npc_gfx=_npc_gfx_fixture(), flag_registry=FlagRegistry(),
+    )
+    assert result.object_events[0].flag == "0"
+    assert result.refresh_script is None
+
+
+def test_build_object_events_npc_blanked_by_story_switch_gets_flag() -> None:
+    """A blank page on a global switch (Map040's crowd on the Metro switch):
+    the NPC vanishes once the switch is on."""
+    consts = mc.MapConstantRegistry(Path("x")).mint(40, "Nowtoch City")
+    reg = FlagRegistry()
+    reg.propose_flag(105, "FLAG_METRO_MASTER")
+    npc = _event(4, 5, 5, [_page(name="HGSS_000"), _page(cond=_sw_cond(105), name="")])
+    result = mw.build_object_events(
+        {"map_id": 40, "events": [npc]}, consts, {40},
+        npc_gfx=_npc_gfx_fixture(), flag_registry=reg,
+    )
+    assert result.object_events[0].flag.startswith("FLAG_TEMP_")
+
+
 def test_build_object_events_self_switch_hide_ambiguous_multiple_letters_fails_loud() -> None:
     """Boot page sets self switches A and B ON; two DIFFERENT blank,
     purely-self-switch-gated pages each qualify (one for A, one for B) —

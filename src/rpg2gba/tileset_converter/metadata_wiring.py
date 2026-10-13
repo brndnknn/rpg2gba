@@ -44,6 +44,7 @@ Output
 """
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 import re
@@ -1794,6 +1795,81 @@ def _visibility_transition_lines(
     return lines, False
 
 
+def _condition_atoms(cond: dict) -> list[tuple[str, object, int]]:
+    """A raw RMXP page condition as `(kind, key, threshold)` atoms, ANDed:
+    switches and self switches are booleans (threshold 1), a variable holds
+    iff its value >= threshold."""
+    atoms: list[tuple[str, object, int]] = []
+    for slot in ("switch1", "switch2"):
+        if cond.get(f"{slot}_valid"):
+            atoms.append(("sw", cond[f"{slot}_id"], 1))
+    if cond.get("variable_valid"):
+        atoms.append(("var", cond["variable_id"], cond["variable_value"]))
+    if cond.get("self_switch_valid"):
+        atoms.append(("ss", cond["self_switch_ch"], 1))
+    return atoms
+
+
+_SET_SELF_SWITCH_CALL_RE = re.compile(r"pbSetSelfSwitch\(\s*(\d+)\s*,\s*[\"']([A-D])[\"']")
+
+
+def writable_self_switches(map_json: dict) -> set[tuple[int, str]]:
+    """`(event_id, letter)` for every self switch some command on the map can
+    turn on: the event's own code-123, or any event's `pbSetSelfSwitch(id, "X",
+    ...)` script call (code 355/655 -- Map040 EV141 sets EV018's B that way)."""
+    writable: set[tuple[int, str]] = set()
+    for event in map_json["events"]:
+        if not event:
+            continue
+        for page in event.get("pages", []):
+            writable |= {(event["id"], letter) for letter in _self_switch_letters_set_on(page)}
+            for cmd in page.get("list", []):
+                if cmd.get("code") in (355, 655):
+                    for eid, letter in _SET_SELF_SWITCH_CALL_RE.findall(str(cmd["parameters"][0])):
+                        writable.add((int(eid), letter))
+    return writable
+
+
+def _can_vanish(event: dict, writable: set[tuple[int, str]]) -> bool:
+    """True when an event that is VISIBLE at boot can later show nothing under
+    RMXP page selection (highest-index page whose condition holds; no page
+    holding hides the event): some blank page can be the winner, or every page
+    can fail at once. Decided by brute force over the conditions' atoms, so
+    a syntactic non-tautology that can never actually fail is not flagged. A
+    self switch nothing on the map writes (`writable_self_switches`) stays OFF.
+    "Visible" is `_visibility_expr`'s reading: a character_name, opacity > 0."""
+    boot = select_boot_page(event)
+    if boot is None or not _page_has_visible_actor_graphic(boot):
+        return False
+    pages = event["pages"]
+    conds = [_condition_atoms(p["condition"]) for p in pages]
+    keys = sorted({(kind, key) for atoms in conds for kind, key, _ in atoms}, key=repr)
+    domains: list[list[int]] = []
+    for kind, key in keys:
+        if kind == "var":
+            thresholds = {t for atoms in conds for k, kk, t in atoms if (k, kk) == (kind, key)}
+            domains.append(sorted({0} | thresholds | {t - 1 for t in thresholds}))
+        elif kind == "ss" and (event["id"], key) not in writable:
+            domains.append([0])
+        else:
+            domains.append([0, 1])
+
+    def visible(page: dict) -> bool:
+        graphic = page.get("graphic", {})
+        return bool(graphic.get("character_name")) and graphic.get("opacity", 255) > 0
+
+    for values in itertools.product(*domains):
+        state = dict(zip(keys, values))
+        winner = None
+        for i in range(len(pages) - 1, -1, -1):
+            if all(state[(kind, key)] >= t for kind, key, t in conds[i]):
+                winner = i
+                break
+        if winner is None or not visible(pages[winner]):
+            return True
+    return False
+
+
 def _page_has_visible_actor_graphic(page: dict) -> bool:
     """True when a page shows a placeable character sprite: non-empty
     `character_name`, opacity > 0, not an animated-door sheet. (Tile
@@ -2583,7 +2659,24 @@ def build_object_events(
             )
     if template_fields is not None:
         _validate_template_fields(template_fields, uid, fork_constants)
-    vis_flags = _assign_visibility_flags(rock_ids, hidden_actor_ids, uid)
+
+    # Vanishing NPCs (CH06 walk 2026-10-13, Map040 EV018 "Fufufu"): visible at
+    # boot, but RMXP page priority can later land on a blank page -- here via
+    # another event's `pbSetSelfSwitch(18,"B",true)`, which no self-hide rule
+    # sees. Without a flag the sprite stays forever, on a dispatcher page that
+    # does nothing. They join the hidden-actor visibility machinery (pool flag,
+    # ON_TRANSITION lines, refresh after guard writes) without its placement.
+    selfswitch_candidates = set(_terminal_self_switch_hide_flags(objects, uid, flag_registry))
+    writable = writable_self_switches(map_json)
+    vanishing_ids = [
+        ev["id"] for ev in objects
+        if ev["id"] not in set(hidden_actor_ids) | set(rock_ids) | set(hide_ids)
+        | selfswitch_candidates | stair_ids
+        and not (stripped_event_ids is not None and ev["id"] in stripped_event_ids)
+        and not (template_fields is not None and ev["id"] in template_fields)
+        and _can_vanish(ev, writable)
+    ]
+    vis_flags = _assign_visibility_flags(rock_ids, hidden_actor_ids + vanishing_ids, uid)
 
     # One flag per template, never two (CLAUDE.md §4.3): a terminal_hide event
     # that's ALSO a rock or a required hidden actor already has a real flag
@@ -3250,8 +3343,27 @@ def build_object_events(
             )
             result.local_id_map[str(eid)] = len(result.object_events)
 
-    # --- hidden cutscene actors (findings §3.3/§5) ---------------------------
     refresh_entries: list[tuple[int, str, str, int, str]] = []
+    for eid in vanishing_ids:
+        local_id = result.local_id_map.get(str(eid))
+        if local_id is None:
+            continue  # its boot page became a bg/coord event, or it dropped
+        ev = event_by_id[eid]
+        lines, always_visible = _visibility_transition_lines(
+            ev["pages"], uid, eid, ev.get("name", ""), vis_flags[eid], flag_registry,
+        )
+        if always_visible:
+            raise ValueError(
+                f"map {uid} EV{eid:03d}: `_can_vanish` found a blank page that can "
+                f"win but `_visibility_expr` says always visible -- the two "
+                f"readings of page priority disagree"
+            )
+        result.transition_lines.extend(lines)
+        expr, _ = _visibility_expr(ev["pages"], uid, eid, flag_registry)
+        if expr is not None:
+            refresh_entries.append((eid, ev.get("name", ""), vis_flags[eid], local_id, expr))
+
+    # --- hidden cutscene actors (findings §3.3/§5) ---------------------------
     for eid in hidden_actor_ids:
         actor_event = event_by_id[eid]
         actor_pages = actor_event["pages"]
