@@ -1810,13 +1810,21 @@ def _condition_atoms(cond: dict) -> list[tuple[str, object, int]]:
     return atoms
 
 
-_SET_SELF_SWITCH_CALL_RE = re.compile(r"pbSetSelfSwitch\(\s*(\d+)\s*,\s*[\"']([A-D])[\"']")
+# `tpbSetSelfSwitch` (Uranium's temp switches, read by `s:tsOn?` conditions)
+# is a different store, hence the lookbehind.
+_SET_SELF_SWITCH_CALL_RE = re.compile(
+    r"(?<![A-Za-z_])pbSetSelfSwitch\(\s*(@?\w+)\s*,\s*[\"']([A-D])[\"']"
+)
+ANY_EVENT = -1  # `writable_self_switches` key: a computed target id (loop var)
 
 
 def writable_self_switches(map_json: dict) -> set[tuple[int, str]]:
     """`(event_id, letter)` for every self switch some command on the map can
-    turn on: the event's own code-123, or any event's `pbSetSelfSwitch(id, "X",
-    ...)` script call (code 355/655 -- Map040 EV141 sets EV018's B that way)."""
+    turn on: the event's own code-123, or a `pbSetSelfSwitch(id, "X", ...)`
+    script call (code 355/655 -- Map040 EV141 sets EV018's B that way). An id
+    of `@event_id` is the calling event; any other non-literal id (a loop
+    variable, `pbSetSelfSwitch(i,"A",true)`) could be any event, recorded as
+    `(ANY_EVENT, letter)`."""
     writable: set[tuple[int, str]] = set()
     for event in map_json["events"]:
         if not event:
@@ -1825,8 +1833,13 @@ def writable_self_switches(map_json: dict) -> set[tuple[int, str]]:
             writable |= {(event["id"], letter) for letter in _self_switch_letters_set_on(page)}
             for cmd in page.get("list", []):
                 if cmd.get("code") in (355, 655):
-                    for eid, letter in _SET_SELF_SWITCH_CALL_RE.findall(str(cmd["parameters"][0])):
-                        writable.add((int(eid), letter))
+                    for target, letter in _SET_SELF_SWITCH_CALL_RE.findall(str(cmd["parameters"][0])):
+                        if target.isdigit():
+                            writable.add((int(target), letter))
+                        elif target == "@event_id":
+                            writable.add((event["id"], letter))
+                        else:
+                            writable.add((ANY_EVENT, letter))
     return writable
 
 
@@ -1849,7 +1862,7 @@ def _can_vanish(event: dict, writable: set[tuple[int, str]]) -> bool:
         if kind == "var":
             thresholds = {t for atoms in conds for k, kk, t in atoms if (k, kk) == (kind, key)}
             domains.append(sorted({0} | thresholds | {t - 1 for t in thresholds}))
-        elif kind == "ss" and (event["id"], key) not in writable:
+        elif kind == "ss" and not {(event["id"], key), (ANY_EVENT, key)} & writable:
             domains.append([0])
         else:
             domains.append([0, 1])

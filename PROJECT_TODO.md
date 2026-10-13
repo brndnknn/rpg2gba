@@ -2072,6 +2072,21 @@ The pass now skips the spawn for an actor with no visible page whose block only 
 Map032 EV080 plays a "!" on invisible EV075, which spawns Theo's sprite visibly there too -- needs
 a spawn-invisible step, not a skip.
 
+### 137. Playtests can't see whether an object is present -- add an "absent" ROM assertion
+
+The suite never grades object presence, so #135 and #136 passed 466/466. A blank-graphic page
+(or no active page) means "not on the map" in RMXP, but the beats covering such rows grade only
+`trigger`/`completes` -- an empty page passes whether the object is gone or standing there as a
+mute sprite (CH06 #144/#160 on Fufufu, the latter right after the reload that put him back in the
+doorway). The converter rules that fixed #135/#136 encode our model of RMXP visibility; this would
+check the ROM instead, catching detection misses, refresh/local-id wiring slips, stray `addobject`s
+and regressions alike. Shape: a floor assertion kind for blank-graphic pages, emitted by beat_gen,
+checked in playtest by confirming no spawned object carries that local id once the beat's state is
+reached (the beat stands beside the cell, so the camera-range limit on `gObjectEvents` doesn't
+bite). Limit: only checked where the route visits after the state flips.
+Context: 2026-10-13 also widened `writable_self_switches` to `@event_id` and loop-variable
+`pbSetSelfSwitch` calls (no slice change; those forms are outside CH01-CH06).
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not

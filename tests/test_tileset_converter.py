@@ -2665,6 +2665,39 @@ def test_build_object_events_npc_blanked_by_another_events_self_switch_gets_flag
     assert "FLAG_MAP040_EVENT018_SSB" in result.refresh_script
 
 
+def _script(text: str) -> dict:
+    return {"code": 355, "indent": 0, "parameters": [text]}
+
+
+def test_writable_self_switches_reads_every_call_form() -> None:
+    """Literal id, `@event_id` (the caller itself) and a loop variable (any
+    event); `tpbSetSelfSwitch` is Uranium's temp-switch store, not a self
+    switch."""
+    caller = _event(7, 0, 0, [_page(cmds=[
+        _script('pbSetSelfSwitch(18,"B",true)'),
+        _script('pbSetSelfSwitch(@event_id,"A",true)'),
+        _script('for i in 1..3; pbSetSelfSwitch(i,"C",true); end'),
+        _script('tpbSetSelfSwitch(19,"D",true)'),
+    ])])
+    assert mw.writable_self_switches({"events": [caller]}) == {
+        (18, "B"), (7, "A"), (mw.ANY_EVENT, "C"),
+    }
+
+
+def test_build_object_events_npc_blanked_by_loop_written_self_switch_gets_flag() -> None:
+    consts = mc.MapConstantRegistry(Path("x")).mint(40, "Nowtoch City")
+    npc = _event(18, 13, 6, [_page(name="HGSS_000"), _page(cond=_self_cond("C"), name="")])
+    loop = _event(7, 0, 0, [_page(trigger=2, cmds=[
+        _script('for i in 17..19; pbSetSelfSwitch(i,"C",true); end'),
+    ])])
+    result = mw.build_object_events(
+        {"map_id": 40, "events": [npc, loop]}, consts, {40},
+        npc_gfx=_npc_gfx_fixture(), flag_registry=FlagRegistry(),
+    )
+    (obj,) = [o for o in result.object_events if o.script.startswith("Map040_EV018")]
+    assert obj.flag.startswith("FLAG_TEMP_")
+
+
 def test_build_object_events_npc_blank_page_nothing_can_reach_keeps_default() -> None:
     """Same shape without the writer: B is never set by anything on the map,
     so the blank page can never win -- no flag, no pool slot spent."""
