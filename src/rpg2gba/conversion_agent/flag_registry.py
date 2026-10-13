@@ -215,6 +215,11 @@ class FlagRegistry:
     def get_var(self, variable_id: int) -> str | None:
         return self._var_names.get(int(variable_id))
 
+    def get_self_switch(self, map_id: int, event_id: int, letter: str) -> str | None:
+        """The minted self-switch flag for (map, event, letter), or None if
+        nothing minted it. Keyed by `origin_of(map_id)`, like the mint."""
+        return self._selfswitch_names.get((origin_of(map_id), int(event_id), letter.upper()))
+
     def is_script_switch(self, switch_id: int) -> bool:
         return int(switch_id) in self._script_switches
 

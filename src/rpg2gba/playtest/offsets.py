@@ -210,6 +210,11 @@ _PROBE_ENTRIES: dict[str, str] = {
     # tileset_converter/local_id_remap.py's remap), not necessarily the RMXP
     # event id.
     "off_objevent_localid": "offsetof(struct ObjectEvent, localId)",
+    # Which map the object belongs to: a crossed connection leaves the old
+    # map's objects in `gObjectEvents` until they scroll out of view, and
+    # their local ids mean nothing on the new map (playtest/visibility.py).
+    "off_objevent_mapnum": "offsetof(struct ObjectEvent, mapNum)",
+    "off_objevent_mapgroup": "offsetof(struct ObjectEvent, mapGroup)",
     "off_objevent_movementtype": "offsetof(struct ObjectEvent, movementType)",
     # A sight trainer's own live sight range -- the exact `range` value
     # `GetTrainerApproachDistance`'s per-direction functions bound the
@@ -265,6 +270,12 @@ OBJEVENT_FACING_MASK = 0x0F
 # Empirically verified (2026-08-07) against a pristine new-game boot.
 OBJEVENT_ACTIVE_BYTE_OFFSET = 0
 OBJEVENT_ACTIVE_BIT_MASK = 0x1
+
+# `invisible` (global.fieldmap.h): the sixth bitfield of byte 0x01 (frozen,
+# facingDirectionLocked, disableAnim, enableAnim, inanimate, invisible), so
+# bit 5 under the same low-bits-first allocation `active` relies on.
+OBJEVENT_INVISIBLE_BYTE_OFFSET = 1
+OBJEVENT_INVISIBLE_BIT_MASK = 0x20
 
 _PROBE_TEMPLATE = """\
 #include <stddef.h>

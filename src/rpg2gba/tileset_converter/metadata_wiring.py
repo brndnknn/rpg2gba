@@ -497,7 +497,11 @@ class ObjectEvent:
 @dataclass
 class BgEvent:
     """A `sign` background event: a blank-graphic, action-trigger boot page (an
-    RMXP event whose visible body is a sign/plaque, not an object sprite)."""
+    RMXP event whose visible body is a sign/plaque, not an object sprite).
+
+    `kind="hidden_item"` is the engine's native hidden item instead (an
+    Essentials `pbItemBall` on a blank page): no script, the item, its
+    pickup flag and quantity (`bg_hidden_item_event`, asm/macros/map.inc)."""
 
     x: int
     y: int
@@ -505,8 +509,21 @@ class BgEvent:
     elevation: int = 0
     player_facing_dir: str = "BG_EVENT_PLAYER_FACING_ANY"
     kind: str = "sign"
+    item: str | None = None
+    flag: str | None = None
+    quantity: int = 1
 
     def to_dict(self) -> dict:
+        if self.kind == "hidden_item":
+            return {
+                "type": self.kind,
+                "x": self.x,
+                "y": self.y,
+                "elevation": self.elevation,
+                "item": self.item,
+                "flag": self.flag,
+                "quantity": self.quantity,
+            }
         return {
             "type": self.kind,
             "x": self.x,
@@ -2772,6 +2789,8 @@ def build_object_events(
     # pages, plus `_emit_action_host`'s sign for its action pages). A hidden
     # actor for the same event must not mint a second `dispatch_label`.
     touch_hosted: set[int] = set()
+    # Item balls emitted as native hidden items (bg events, no local id).
+    hidden_item_ids: set[int] = set()
 
     for event in objects:
         eid = event["id"]
@@ -2881,6 +2900,29 @@ def build_object_events(
                         f"flag write would be a no-op and the ball would "
                         f"respawn forever"
                     )
+                if not name or opacity == 0:
+                    # Essentials' hidden item: `pbItemBall` on a page that
+                    # draws nothing, found by pressing A on the tile (map 68
+                    # EV018). The engine's own hidden item is the same thing
+                    # -- no sprite, its flag set on pickup -- where an item
+                    # ball object would show a Poke Ball RMXP never draws
+                    # (caught by the playtest visibility check, PROJECT_TODO
+                    # #137). Not an object, so it takes no local id. The
+                    # flag must sit at or above FLAG_HIDDEN_ITEMS_START
+                    # (`bg_hidden_item_event` errors at assembly otherwise);
+                    # the minted self-switch flags all do.
+                    if not 1 <= tf_payload["amount"] < 128:
+                        raise ValueError(
+                            f"map {uid} EV{eid:03d}: hidden item quantity "
+                            f"{tf_payload['amount']} does not fit the engine's 7-bit field"
+                        )
+                    result.bg_events.append(BgEvent(
+                        x=event["x"], y=event["y"], script="", kind="hidden_item",
+                        item=tf_payload["item"], flag=flag,
+                        quantity=tf_payload["amount"],
+                    ))
+                    hidden_item_ids.add(eid)
+                    continue
                 result.object_events.append(
                     ObjectEvent(
                         x=event["x"], y=event["y"],
@@ -3518,7 +3560,7 @@ def build_object_events(
         )
 
     if template_fields is not None:
-        emitted_ids = {int(k) for k in result.local_id_map}
+        emitted_ids = {int(k) for k in result.local_id_map} | hidden_item_ids
         for eid in template_fields:
             if eid not in emitted_ids:
                 raise ValueError(

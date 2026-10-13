@@ -2072,7 +2072,21 @@ The pass now skips the spawn for an actor with no visible page whose block only 
 Map032 EV080 plays a "!" on invisible EV075, which spawns Theo's sprite visibly there too -- needs
 a spawn-invisible step, not a skip.
 
-### 137. Playtests can't see whether an object is present -- add an "absent" ROM assertion
+### 137. DONE 2026-10-13 -- Playtests can't see whether an object is present -- add an "absent" ROM assertion
+
+**Done as a runner invariant, not a floor kind (operator choice 2026-10-13).** A floor kind would
+have needed wiring into five templates plus CH01-CH06 review re-approval, and still only checked
+rows the route visits. Instead `playtest/visibility.py` runs after every beat: each spawned object
+is mapped back to its RMXP event (staged local-id table, the object's own mapGroup/mapNum), its page
+conditions are read from ROM flags/vars via the registry, and a blank or absent live page fails the
+beat with a screenshot. Skips: field locked (mid-scene), native berry trees (plant script draws over
+a blank page), events with an unreadable condition (script/unminted switch or var; logged). Proven
+live: flipping Fufufu's SSB in RAM without the refresh is reported. First runs caught Map068 EV018,
+an Essentials hidden item (blank-page `pbItemBall`) emitted as a visible ball -- now the native
+`hidden_item` bg event (9 corpus-wide, 1 in slice). CH06 gen 466/466 with the check on.
+
+Original framing:
+
 
 The suite never grades object presence, so #135 and #136 passed 466/466. A blank-graphic page
 (or no active page) means "not on the map" in RMXP, but the beats covering such rows grade only

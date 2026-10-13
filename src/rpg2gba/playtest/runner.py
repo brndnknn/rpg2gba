@@ -67,6 +67,7 @@ from .divergence import (
 )
 from .frame_rule import check_frame_rule, refusal_error
 from .stamp import ROM_BASE, build_blob, dump_save_blocks
+from .visibility import check_object_visibility
 
 if TYPE_CHECKING:  # runtime import is lazy so this module works without mgba
     from .emulator import Emulator
@@ -855,6 +856,11 @@ def _run_attempt(chapter: Chapter, rom: Path, engine: Path, *, attempt_no: int,
                 _check_beat_continuity(beat, enter, emu)
                 with _beat_timeout(beat_timeout_s, beat.name):
                     beat.run(emu)
+                    # PROJECT_TODO #137: every beat, not a floor kind -- an
+                    # object RMXP has blanked is wrong wherever the walk
+                    # meets it, not only on the row that blanks it.
+                    if hasattr(emu, "object_events"):
+                        check_object_visibility(emu, beat.name)
             except BeatHangError as exc:
                 logger.error("[%s] beat %s HUNG: %s", chapter.name, beat.name, exc)
                 outcome.status = "hang"

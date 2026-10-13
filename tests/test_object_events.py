@@ -168,6 +168,25 @@ def test_facing_decodes_all_four_cardinal_directions() -> None:
     assert facings == {1: "DOWN", 2: "UP", 3: "LEFT", 4: "RIGHT"}
 
 
+def test_map_and_invisible_bit_decode() -> None:
+    # mapNum/mapGroup at 0x09/0x0A (global.fieldmap.h); `invisible` is bit 5
+    # of byte 0x01, next to `inanimate` (bit 4), which must not read as it.
+    emu = _FakeEmu(dict(OFFSETS, off_objevent_mapnum=9, off_objevent_mapgroup=10))
+    base = _write_slot(emu, 0, active=True, local_id=1, x=0, y=0, facing=1,
+                       graphics_id=0, movement_type=0)
+    emu.write_u8(base + 9, 12)
+    emu.write_u8(base + 10, 3)
+    emu.write_u8(base + 1, 0x20)
+    base2 = _write_slot(emu, 1, active=True, local_id=2, x=0, y=0, facing=1,
+                        graphics_id=0, movement_type=0)
+    emu.write_u8(base2 + 1, 0x10)
+
+    first, second = emu.object_events()
+
+    assert (first.map_group, first.map_num, first.invisible) == (3, 12, True)
+    assert second.invisible is False
+
+
 def test_unknown_facing_value_raises_scenario_error() -> None:
     emu = _FakeEmu(dict(OFFSETS))
     _write_slot(emu, 0, active=True, local_id=1, x=0, y=0, facing=0,  # DIR_NONE

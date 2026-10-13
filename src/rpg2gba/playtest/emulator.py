@@ -34,6 +34,8 @@ from .offsets import (
     OBJEVENT_ACTIVE_BYTE_OFFSET,
     OBJEVENT_FACING_BYTE_OFFSET,
     OBJEVENT_FACING_MASK,
+    OBJEVENT_INVISIBLE_BIT_MASK,
+    OBJEVENT_INVISIBLE_BYTE_OFFSET,
     probe_constants,
     probe_offsets,
 )
@@ -288,6 +290,12 @@ class ObjectEventState:
     #: that care (ch02.py's `_sight_lane_tiles`) only read it for objects
     #: they already know are trainers.
     trainer_range: int = 0
+    #: The map the object belongs to (`mapGroup`/`mapNum`); None on an
+    #: offsets table that predates them, like `trainer_range`.
+    map_group: int | None = None
+    map_num: int | None = None
+    #: `ObjectEvent.invisible`: spawned but not drawn (it still collides).
+    invisible: bool = False
 
 
 #: Maps each cardinal `DIR_*` probe key (offsets.py) to the facing string
@@ -513,6 +521,11 @@ def _read_object_event_slot(emu, base: int) -> ObjectEventState | None:
         # (test_object_events.py's fake) -- same fail-soft shape this
         # module already uses for fakes missing a newer primitive.
         trainer_range = 0
+    try:
+        map_group: int | None = emu.u8(base + o["off_objevent_mapgroup"])
+        map_num: int | None = emu.u8(base + o["off_objevent_mapnum"])
+    except KeyError:
+        map_group = map_num = None
     return ObjectEventState(
         local_id=emu.u8(base + o["off_objevent_localid"]),
         active=True,
@@ -522,6 +535,10 @@ def _read_object_event_slot(emu, base: int) -> ObjectEventState | None:
         graphics_id=emu.u16(base + o["off_objevent_graphicsid"]),
         movement_type=emu.u8(base + o["off_objevent_movementtype"]),
         trainer_range=trainer_range,
+        map_group=map_group,
+        map_num=map_num,
+        invisible=bool(emu.u8(base + OBJEVENT_INVISIBLE_BYTE_OFFSET)
+                       & OBJEVENT_INVISIBLE_BIT_MASK),
     )
 
 
@@ -1093,6 +1110,11 @@ class Emulator:
     def map_location(self) -> tuple[int, int]:
         base = self.sb1 + self.offsets["off_sb1_location"]
         return self.u8(base), self.u8(base + 1)
+
+    def uranium_map_id(self, group: int, num: int) -> int:
+        """The Uranium map id built as MAP (group, num); `ScenarioError` if
+        the build has no such minted map (`_MapIdBridge`)."""
+        return self._map_id_bridge.resolve(group, num)
 
     def object_events(self) -> list[ObjectEventState]:
         """Every ACTIVE slot in `gObjectEvents` (`OBJECT_EVENTS_COUNT`

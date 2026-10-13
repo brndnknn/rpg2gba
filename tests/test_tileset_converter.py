@@ -3946,6 +3946,32 @@ def test_build_object_events_item_ball_fields() -> None:
     assert obj.flag != "0"
 
 
+def test_build_object_events_blank_item_ball_is_a_native_hidden_item() -> None:
+    """Map068 EV018's shape: `pbItemBall` on a blank page that sets self
+    switch A. RMXP draws nothing (an Essentials hidden item), so it becomes
+    the engine's `hidden_item` bg event on that self switch's flag -- no
+    object, no local id, no Poke Ball sprite."""
+    reg = FlagRegistry()
+    consts = mc.MapConstantRegistry(Path("x")).mint(68, "Passage Cave")
+    map_json = {
+        "map_id": 68,
+        "events": [_event(18, 17, 7, [_page(
+            name="", cmds=[{"code": 123, "indent": 1, "parameters": ["A", 0]}])])],
+    }
+    result = mw.build_object_events(
+        map_json, consts, {68}, npc_gfx=_npc_gfx_fixture(), flag_registry=reg,
+        template_fields={18: _item_ball_tf("ITEM_ANTIDOTE", 2)},
+    )
+    assert result.object_events == []
+    assert "18" not in result.local_id_map
+    (bg,) = result.bg_events
+    assert bg.to_dict() == {
+        "type": "hidden_item", "x": 17, "y": 7, "elevation": 0,
+        "item": "ITEM_ANTIDOTE", "flag": mw.self_switch_flag_name(68, 18, "A"),
+        "quantity": 2,
+    }
+
+
 def test_build_object_events_item_ball_null_flag_fails_loud() -> None:
     """An item_ball event that resolves to the "0" null flag is a fail-loud
     error — STD_FIND_ITEM's last-talked-object flag write would be a no-op
