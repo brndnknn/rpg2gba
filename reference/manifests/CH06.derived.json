@@ -1408,19 +1408,19 @@
     "derived_hash": "50631292062e4dc9"
   },
   "map14002/terrain/stairs/24,17": {
-    "disposition": "refused:cell: cell_error -- map14002/terrain/stairs/24,17: stair cell (24,17) on MAP_NOWTOCH_CITY_PARK has no E/W neighbour owning a stair_diagonal edge -- either the terrain row is stale or this is not a sideways staircase, and a routing point must be supplied by hand",
+    "disposition": "beat:m14002stair24x17",
     "derived_hash": "a2a70edc1f3fb71f"
   },
   "map14002/terrain/stairs/24,18": {
-    "disposition": "refused:cell: group_refused -- group 'm14002stair24x17' refused: row 'map14002/terrain/stairs/24,17' could not be located (map14002/terrain/stairs/24,17: stair cell (24,17) on MAP_NOWTOCH_CITY_PARK has no E/W neighbour owning a stair_diagonal edge -- either the terrain row is stale or this is not a sideways staircase, and a routing point must be supplied by hand)",
+    "disposition": "beat:m14002stair24x17",
     "derived_hash": "a2e3ea49112b9087"
   },
   "map14002/terrain/stairs/25,19": {
-    "disposition": "refused:cell: group_refused -- group 'm14002stair24x17' refused: row 'map14002/terrain/stairs/24,17' could not be located (map14002/terrain/stairs/24,17: stair cell (24,17) on MAP_NOWTOCH_CITY_PARK has no E/W neighbour owning a stair_diagonal edge -- either the terrain row is stale or this is not a sideways staircase, and a routing point must be supplied by hand)",
+    "disposition": "beat:m14002stair24x17",
     "derived_hash": "e1cba7824ed81f46"
   },
   "map14002/terrain/stairs/25,20": {
-    "disposition": "refused:cell: group_refused -- group 'm14002stair24x17' refused: row 'map14002/terrain/stairs/24,17' could not be located (map14002/terrain/stairs/24,17: stair cell (24,17) on MAP_NOWTOCH_CITY_PARK has no E/W neighbour owning a stair_diagonal edge -- either the terrain row is stale or this is not a sideways staircase, and a routing point must be supplied by hand)",
+    "disposition": "beat:m14002stair24x17",
     "derived_hash": "0c80846da3c888c0"
   },
   "map14003/ev011/p0": {

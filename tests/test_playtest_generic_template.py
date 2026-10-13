@@ -1100,3 +1100,11 @@ def test_a_stuck_approach_walk_still_fails_for_a_non_moving_target(monkeypatch):
     with pytest.raises(ScenarioError, match="stuck after 8"):
         beat.run(_StuckWalkEmu(ScenarioError(STUCK)))
     assert talks == []
+
+
+def test_stair_crossing_presses_one_per_column() -> None:
+    # Single-step stair: bump + step off. Two-step (Map14002): the engine
+    # moves one diagonal per press, so three presses span the four columns.
+    assert _crossing("r", "LEFT", (58, 10), (56, 9), (57, 10)).presses == 2
+    assert _crossing("r", "LEFT", (26, 20), (23, 18), (25, 20)).presses == 3
+    assert _crossing("r", "RIGHT", (23, 17), (26, 19), (24, 17)).presses == 3

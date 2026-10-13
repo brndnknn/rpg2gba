@@ -650,6 +650,10 @@ ELSEWHERE: dict[str, str] = {
     'map033/ev147/p0': 'converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles',
     'map033/ev147/p0/b0': 'converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles',
     'map033/ev147/p0/b1': 'converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles',
+    'map033/terrain/stairs/52,41': 'later',
+    'map033/terrain/stairs/52,42': 'later',
+    'map033/terrain/stairs/53,43': 'later',
+    'map033/terrain/stairs/53,44': 'later',
     'map081/ev001/p0/b0': 'unreachable',
     'map081/ev001/p1': 'unreachable',
 }
@@ -668,10 +672,6 @@ REFUSED: dict[str, str] = {
     'map033/ev053/p1/b3': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
     'map033/ev053/p2/b0': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
     'map033/ev053/p2/b1': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
-    'map033/terrain/stairs/52,41': "cell: cell_error -- map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.",
-    'map033/terrain/stairs/52,42': "cell: group_refused -- group 'm033stair52x41' refused: row 'map033/terrain/stairs/52,41' could not be located (map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.)",
-    'map033/terrain/stairs/53,43': "cell: group_refused -- group 'm033stair52x41' refused: row 'map033/terrain/stairs/52,41' could not be located (map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.)",
-    'map033/terrain/stairs/53,44': "cell: group_refused -- group 'm033stair52x41' refused: row 'map033/terrain/stairs/52,41' could not be located (map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.)",
     'map081/ev001/p0/b1': 'story-state: unmodelled_outcome:bag_contents',
     'map081/ev001/p0/b2': 'story-state: unmodelled_outcome:bag_contents',
 }

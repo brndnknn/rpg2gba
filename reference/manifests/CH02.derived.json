@@ -636,19 +636,19 @@
     "derived_hash": "769ab8fd33ebedc8"
   },
   "map033/terrain/stairs/52,41": {
-    "disposition": "refused:cell: cell_error -- map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.",
+    "disposition": "elsewhere:later",
     "derived_hash": "46947329f720a5c1"
   },
   "map033/terrain/stairs/52,42": {
-    "disposition": "refused:cell: group_refused -- group 'm033stair52x41' refused: row 'map033/terrain/stairs/52,41' could not be located (map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.)",
+    "disposition": "elsewhere:later",
     "derived_hash": "a0e3e63bfbbc12c6"
   },
   "map033/terrain/stairs/53,43": {
-    "disposition": "refused:cell: group_refused -- group 'm033stair52x41' refused: row 'map033/terrain/stairs/52,41' could not be located (map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.)",
+    "disposition": "elsewhere:later",
     "derived_hash": "aeffa36189f99e06"
   },
   "map033/terrain/stairs/53,44": {
-    "disposition": "refused:cell: group_refused -- group 'm033stair52x41' refused: row 'map033/terrain/stairs/52,41' could not be located (map033/terrain/stairs/52,41: stair cell (52,41) on MAP_ROUTE_01 has E/W neighbour(s) [(53, 41)] owning a stair_diagonal edge, but none of them is walkable -- the player cannot stand there to use the staircase. This is usually a cell partway along a DIAGONAL run: route to one of the run's ends instead, and see `playtest.cells.stair_approach` for the side-aware resolver a chapter author should use.)",
+    "disposition": "elsewhere:later",
     "derived_hash": "9ca7f6d5f80331e3"
   },
   "map033/terrain/stairs/57,10": {

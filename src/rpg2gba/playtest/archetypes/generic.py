@@ -1716,10 +1716,12 @@ def stair_beat(
             # asks for any other kind.
             if emu.player_pos() != step.approach:
                 emu.walk_to(*step.approach, absorb_wild=True)
-            # Two presses: the bump that pushes diagonally, then the plain
-            # step off (`terrain.stair_crossings`). Only the exit is asserted
-            # -- the native metatiles can pass a different middle cell.
-            for press in (1, 2):
+            # RMXP: the bump that pushes k diagonals, then the plain step off
+            # (`terrain.stair_crossings`). Natively each press moves one
+            # column, so the crossing takes k + 1 presses -- the horizontal
+            # span. Only the exit is asserted: the native metatiles can pass
+            # different middle cells.
+            for press in range(1, step.presses + 1):
                 before = emu.player_pos()
                 if not assertions.try_step(emu, step.direction):
                     shot = emu.screenshot(f"{beat_name}_{step.row_id}_press{press}")
@@ -1743,14 +1745,20 @@ def stair_beat(
 @dataclass(frozen=True)
 class StairCrossing:
     """One RMXP stair crossing (`terrain.stair_crossings`): from `approach`,
-    two presses of `direction` end on `exit`. `cell` is the stair cell the
-    first press bumps; it fixes which side of the staircase a point is on."""
+    `presses` presses of `direction` end on `exit`. `cell` is the stair cell
+    the first press bumps; it fixes which side of the staircase a point is on."""
 
     row_id: str
     direction: str
     approach: tuple[int, int]
     exit: tuple[int, int]
     cell: tuple[int, int]
+
+    @property
+    def presses(self) -> int:
+        """One per column crossed: 2 for a single-step stair event, k + 1
+        for a k-step one."""
+        return abs(self.exit[0] - self.approach[0])
 
     def side_of(self, point: tuple[int, int]) -> int:
         """-1/+1: which side of this crossing's cell `point` lies on, along

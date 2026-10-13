@@ -36,6 +36,24 @@ touch the layout converter or any output. Consumers (the layout converter)
 use it to know which cells get which behavior, and which events to skip
 entirely since the script itself is no longer emitted.
 
+Multi-step staircases (`lane_cells`): the engine moves one diagonal per
+press, but a Uranium stair event moves the player k diagonals per touch
+(k = 2 for 156 of the corpus's 228 events, 4 for Map216's four). A 2x2
+staircase therefore has four events but needs six stair cells natively --
+the two cells a crossing passes between event cells were never stamped, and
+a crossing up the lower lane stopped halfway (CH06 walk, Map14002). Each
+k-step route contributes, from its event cell S:
+
+    up   (codes 7/8, entered pressing W/E): the cell pressed into at every
+         step, S + i*(dx, -1), and every intermediate landing, the cell
+         above each -- the last landing is left alone, the press off it is a
+         plain step.
+    down (codes 5/6, entered by a plain step onto S): every cell stood on
+         before the next diagonal, S + i*(dx, +1).
+
+For k = 1 this adds nothing beyond S, so single-step staircases are
+unchanged (census 2026-10-13: zero extra cells on any k = 1 staircase).
+
 Note: RPG Maker's editor stores code 509 entries as display duplicates of
 move-route move commands, for showing the route in the event list UI. They
 are not real commands and carry no independent payload; this module ignores
@@ -105,13 +123,14 @@ def _page_qualifies(page: dict) -> bool:
     return False
 
 
-def _page_move_codes(page: dict) -> set[int]:
-    """Diagonal move codes from player-targeted move routes on `page`.
+def _page_routes(page: dict) -> list[list[int]]:
+    """The diagonal move codes of each player-targeted move route on `page`,
+    in order, one list per route that has any.
 
     Ignores code 509 (editor-display duplicates) and any move route not
     targeting the player (parameters[0] != -1).
     """
-    codes: set[int] = set()
+    routes: list[list[int]] = []
     for command in page.get("list", []):
         if command.get("code") not in _MOVE_ROUTE_CODES:
             continue
@@ -119,11 +138,51 @@ def _page_move_codes(page: dict) -> set[int]:
         if len(params) < 2 or params[0] != _MOVE_ROUTE_TARGET_PLAYER:
             continue
         move_route = params[1]
-        for move_command in move_route.get("list", []):
-            code = move_command.get("code")
-            if code in (_MOVE_CODE_SW, _MOVE_CODE_SE, _MOVE_CODE_NW, _MOVE_CODE_NE):
-                codes.add(code)
-    return codes
+        diagonals = [
+            move_command.get("code")
+            for move_command in move_route.get("list", [])
+            if move_command.get("code") in (_MOVE_CODE_SW, _MOVE_CODE_SE, _MOVE_CODE_NW, _MOVE_CODE_NE)
+        ]
+        if diagonals:
+            routes.append(diagonals)
+    return routes
+
+
+def _page_move_codes(page: dict) -> set[int]:
+    """Diagonal move codes from player-targeted move routes on `page`."""
+    return {code for route in _page_routes(page) for code in route}
+
+
+# (dx, rising) per diagonal code: rising routes are entered by the press that
+# triggers the redirect; falling ones by a plain step onto the event cell.
+_ROUTE_SHAPE: dict[int, tuple[int, bool]] = {
+    _MOVE_CODE_NW: (-1, True),
+    _MOVE_CODE_NE: (1, True),
+    _MOVE_CODE_SW: (-1, False),
+    _MOVE_CODE_SE: (1, False),
+}
+
+
+def lane_cells(x: int, y: int, route: list[int], *, map_id: object, event_id: int) -> set[tuple[int, int]]:
+    """Every cell the native one-diagonal-per-press crossing of a k-step
+    `route` from event cell (x, y) needs stair behavior on (module docstring).
+    Fails loud on a route that changes diagonal direction mid-way."""
+    if len(set(route)) != 1:
+        raise ValueError(
+            f"map {map_id!r} event {event_id}: stair move route changes diagonal "
+            f"direction mid-way ({route}); only a straight k-step run is understood"
+        )
+    dx, rising = _ROUTE_SHAPE[route[0]]
+    k = len(route)
+    cells: set[tuple[int, int]] = set()
+    for i in range(k):
+        if rising:
+            cells.add((x + i * dx, y - i))
+            if i < k - 1:
+                cells.add((x + i * dx, y - i - 1))
+        else:
+            cells.add((x + i * dx, y + i))
+    return cells
 
 
 def _classify(codes: set[int], *, map_id: object, event_id: int) -> StairSide | None:
@@ -166,18 +225,29 @@ def stair_event_ids(map_json: dict) -> set[int]:
 
 
 def stair_cell_sides(map_json: dict) -> dict[tuple[int, int], StairSide]:
-    """{(x, y): side} for every diagonal-stair cell -- the layout converter's input.
+    """{(x, y): side} for every cell that needs a sideways-stairs behavior --
+    the layout converter's and traversal graph's input. That is every stair
+    event's own cell plus, for multi-step routes, the `lane_cells` between
+    them (which carry no event).
 
-    Fails loud if two stair events occupy the same cell with different sides.
+    Fails loud if two stair events claim the same cell with different sides.
     """
+    map_id = map_json.get("map_id")
     sides: dict[tuple[int, int], StairSide] = {}
+    events = {event["id"]: event for event in map_json.get("events", []) if event}
     for cell in detect_stair_cells(map_json):
-        key = (cell.x, cell.y)
-        existing = sides.get(key)
-        if existing is not None and existing != cell.side:
-            raise ValueError(
-                f"map {map_json.get('map_id')!r} cell {key}: conflicting stair "
-                f"sides ({existing} vs {cell.side}) from multiple events"
-            )
-        sides[key] = cell.side
+        claimed = {(cell.x, cell.y)}
+        for page in events[cell.event_id].get("pages", []):
+            if not _page_qualifies(page):
+                continue
+            for route in _page_routes(page):
+                claimed |= lane_cells(cell.x, cell.y, route, map_id=map_id, event_id=cell.event_id)
+        for key in sorted(claimed):
+            existing = sides.get(key)
+            if existing is not None and existing != cell.side:
+                raise ValueError(
+                    f"map {map_id!r} cell {key}: conflicting stair "
+                    f"sides ({existing} vs {cell.side}) from multiple events"
+                )
+            sides[key] = cell.side
     return sides

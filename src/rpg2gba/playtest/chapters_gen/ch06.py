@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from rpg2gba.playtest.archetypes.arrival_nudge import arrival_nudge_beat
 from rpg2gba.playtest.archetypes.flavour_npc import flavour_npc_beat
-from rpg2gba.playtest.archetypes.generic import generic_beat, seam_beat, transit_beat
+from rpg2gba.playtest.archetypes.generic import generic_beat, seam_beat, stair_beat, transit_beat
 from rpg2gba.playtest.archetypes.item_ball import item_ball_beats
 from rpg2gba.playtest.archetypes.trainer import trainer_beats
 from rpg2gba.playtest.archetypes.warp import warp_beat
@@ -68,6 +68,15 @@ warp_beat(
     page_idx=0,
     return_direction='UP',
     start_side='origin',
+)
+
+stair_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14002stair24x17',
+    group='m14002stair24x17',
+    rows=('map14002/terrain/stairs/24,17', 'map14002/terrain/stairs/24,18', 'map14002/terrain/stairs/25,19', 'map14002/terrain/stairs/25,20'),
+    approach_prefer='east',
 )
 
 flavour_npc_beat(
@@ -2273,10 +2282,6 @@ REFUSED: dict[str, str] = {
     'map14000/ev008/p1': 'story-state: undetermined -- story model could not determine this row',
     'map14000/ev009/p1': 'story-state: undetermined -- story model could not determine this row',
     'map14000/ev026/p1': 'story-state: undetermined -- story model could not determine this row',
-    'map14002/terrain/stairs/24,17': 'cell: cell_error -- map14002/terrain/stairs/24,17: stair cell (24,17) on MAP_NOWTOCH_CITY_PARK has no E/W neighbour owning a stair_diagonal edge -- either the terrain row is stale or this is not a sideways staircase, and a routing point must be supplied by hand',
-    'map14002/terrain/stairs/24,18': "cell: group_refused -- group 'm14002stair24x17' refused: row 'map14002/terrain/stairs/24,17' could not be located (map14002/terrain/stairs/24,17: stair cell (24,17) on MAP_NOWTOCH_CITY_PARK has no E/W neighbour owning a stair_diagonal edge -- either the terrain row is stale or this is not a sideways staircase, and a routing point must be supplied by hand)",
-    'map14002/terrain/stairs/25,19': "cell: group_refused -- group 'm14002stair24x17' refused: row 'map14002/terrain/stairs/24,17' could not be located (map14002/terrain/stairs/24,17: stair cell (24,17) on MAP_NOWTOCH_CITY_PARK has no E/W neighbour owning a stair_diagonal edge -- either the terrain row is stale or this is not a sideways staircase, and a routing point must be supplied by hand)",
-    'map14002/terrain/stairs/25,20': "cell: group_refused -- group 'm14002stair24x17' refused: row 'map14002/terrain/stairs/24,17' could not be located (map14002/terrain/stairs/24,17: stair cell (24,17) on MAP_NOWTOCH_CITY_PARK has no E/W neighbour owning a stair_diagonal edge -- either the terrain row is stale or this is not a sideways staircase, and a routing point must be supplied by hand)",
 }
 
 CHAPTER = ch06.build()

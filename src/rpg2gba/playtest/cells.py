@@ -740,12 +740,17 @@ def stair_approach(map_constant: str, *, stair_event: int, side: str) -> Cell:
             f"(cell {(sx, sy)}) has no {side} neighbour -- {cell} is out of "
             "bounds"
         )
-    if not graph.is_walkable(cell):
+    # A stair neighbour is the same run (`stairs.lane_cells`), never a place
+    # to stand -- the graph calls it walkable only so crossings connect.
+    def standable(c: Cell) -> bool:
+        return graph.in_bounds(c) and graph.is_walkable(c) and not graph.is_stair(c)
+
+    if not standable(cell):
         other = (sx + 1, sy) if side == "west" else (sx - 1, sy)
         hint = (
             f" (the {'east' if side == 'west' else 'west'} side, {other}, is "
             "walkable -- if the beat really enters from there, say so)"
-            if graph.in_bounds(other) and graph.is_walkable(other)
+            if standable(other)
             else " (neither side is walkable; this cell is probably partway "
             "along a diagonal run rather than at one of its ends)"
         )

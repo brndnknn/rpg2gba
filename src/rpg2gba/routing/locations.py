@@ -247,7 +247,9 @@ def _stair_approach(map_id: int, map_constant: str, x: int, y: int,
     graph = build_map_graph(map_id)
     unwalkable: list[tuple[int, int]] = []
     for nx, ny in ((x - 1, y), (x + 1, y)):
-        if not graph.in_bounds((nx, ny)):
+        # A neighbouring stair cell is part of the same run (multi-step
+        # staircases fill in `stairs.lane_cells`), never a place to stand.
+        if not graph.in_bounds((nx, ny)) or graph.is_stair((nx, ny)):
             continue
         if not any(edge.kind == "stair_diagonal"
                    for edge in graph.neighbors((nx, ny))):

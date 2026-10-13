@@ -123,9 +123,14 @@ def test_move_route_targeting_event_not_player_does_not_qualify() -> None:
     assert cells == []
 
 
+def _two_way(down: int, up: int) -> list[dict]:
+    """A one-step stair page: one route per facing arm, as Uranium writes it."""
+    return [_branch_command(), _move_route_command([down]), _move_route_command([up])]
+
+
 def test_stair_event_ids_and_stair_cell_sides() -> None:
-    ev1 = _event(1, 5, 5, [[_branch_command(), _move_route_command([6, 7])]])
-    ev2 = _event(2, 3, 4, [[_branch_command(), _move_route_command([5, 8])]])
+    ev1 = _event(1, 5, 5, [_two_way(6, 7)])
+    ev2 = _event(2, 3, 4, [_two_way(5, 8)])
     m = _map([ev1, ev2])
 
     assert stair_event_ids(m) == {1, 2}
@@ -136,8 +141,8 @@ def test_stair_event_ids_and_stair_cell_sides() -> None:
 
 
 def test_stair_cell_sides_conflicting_side_same_cell_raises() -> None:
-    ev1 = _event(1, 5, 5, [[_branch_command(), _move_route_command([6, 7])]])  # RIGHT
-    ev2 = _event(2, 5, 5, [[_branch_command(), _move_route_command([5, 8])]])  # LEFT, same cell
+    ev1 = _event(1, 5, 5, [_two_way(6, 7)])  # RIGHT
+    ev2 = _event(2, 5, 5, [_two_way(5, 8)])  # LEFT, same cell
     with pytest.raises(ValueError, match="conflicting stair"):
         stair_cell_sides(_map([ev1, ev2]))
 
@@ -168,3 +173,118 @@ def test_map033_real_data_x57_run_and_full_event_set() -> None:
 
     ids = stair_event_ids(map_json)
     assert ids == {26, 31, 33, 47, 48, 66, 69}
+
+
+# -- multi-step staircases (CH06 walk, 2026-10-13) ---------------------------
+#
+# The engine redirects ONE diagonal per E/W press; a Uranium stair event pushes
+# k. The invariant pinned here: every RMXP crossing (approach -> exit) is
+# playable under the engine's own rule over the cells `stair_cell_sides` emits.
+# Before `lane_cells`, a 2x2 staircase's lower lane stopped halfway.
+
+_W, _E = (-1, 0), (1, 0)
+
+
+def _engine_press(cur, press, sides, passable):
+    """One E/W press under `GetCollisionAtCoords` + `GetSidewaysStairsCollision`
+    (engine/src/event_object_movement.c), RIGHT/LEFT_SIDE behaviors only --
+    the converter never emits the TOP/BOTTOM variants. Returns the new cell,
+    or `cur` when the step is blocked."""
+    nxt = (cur[0] + press[0], cur[1] + press[1])
+    cb, nb = sides.get(cur), sides.get(nxt)
+    west = press == _W
+    diag = None
+    if nb is StairSide.LEFT:
+        if not (west and cb != nb):
+            diag = (-1, 1) if west else (1, -1)
+    elif nb is StairSide.RIGHT:
+        if not (not west and cb != nb):
+            diag = (-1, -1) if west else (1, 1)
+    elif cb is StairSide.LEFT:
+        if west:
+            diag = (-1, 1)
+    elif cb is StairSide.RIGHT:
+        if not west:
+            diag = (1, 1)
+    if diag is not None:
+        return (cur[0] + diag[0], cur[1] + diag[1])
+    return nxt if (nxt in sides or nxt in passable) else cur
+
+
+def _assert_crossings_playable(map_json, crossings):
+    sides = stair_cell_sides(map_json)
+    passable = {c for _, ax, ay, ex, ey in crossings for c in ((ax, ay), (ex, ey))}
+    for direction, ax, ay, ex, ey in crossings:
+        press = _W if direction == "LEFT" else _E
+        pos = (ax, ay)
+        for _ in range(abs(ex - ax)):
+            pos = _engine_press(pos, press, sides, passable)
+        assert pos == (ex, ey), f"{direction} from {(ax, ay)} ended at {pos}, RMXP exits at {(ex, ey)}"
+
+
+def _staircase_2x2(right: bool) -> dict:
+    """Map14002's shape: two lanes, each event pushing two diagonals. RIGHT
+    rises to the west (NW/SE), LEFT is its mirror (NE/SW)."""
+    if right:
+        lower, upper, up, down = [(25, 19), (25, 20)], [(24, 17), (24, 18)], 7, 6
+    else:
+        lower, upper, up, down = [(24, 19), (24, 20)], [(25, 17), (25, 18)], 8, 5
+    events = [
+        _event(i, x, y, [[_branch_command(), _move_route_command([up, up])]])
+        for i, (x, y) in enumerate(lower, start=1)
+    ] + [
+        _event(i, x, y, [[_branch_command(), _move_route_command([down, down])]])
+        for i, (x, y) in enumerate(upper, start=3)
+    ]
+    return _map(events)
+
+
+def test_two_step_staircase_fills_in_the_cells_between_lanes() -> None:
+    assert set(stair_cell_sides(_staircase_2x2(right=True))) == {
+        (25, 20), (25, 19), (24, 18), (24, 17),  # the four events
+        (24, 19), (25, 18),                      # the lanes' middle cells
+    }
+
+
+@pytest.mark.parametrize("right", [True, False])
+def test_two_step_staircase_every_lane_crosses_fully(right: bool) -> None:
+    if right:
+        crossings = [("LEFT", 26, 20, 23, 18), ("LEFT", 26, 19, 23, 17),
+                     ("RIGHT", 23, 17, 26, 19), ("RIGHT", 23, 18, 26, 20)]
+    else:
+        crossings = [("RIGHT", 23, 20, 26, 18), ("RIGHT", 23, 19, 26, 17),
+                     ("LEFT", 26, 17, 23, 19), ("LEFT", 26, 18, 23, 20)]
+    _assert_crossings_playable(_staircase_2x2(right), crossings)
+
+
+def test_single_step_staircase_gains_no_cells() -> None:
+    column = _map([
+        _event(1, 57, 9, [_two_way(6, 7)]),
+        _event(2, 57, 10, [_two_way(6, 7)]),
+        _event(3, 57, 11, [_two_way(6, 7)]),
+    ])
+    assert set(stair_cell_sides(column)) == {(57, 9), (57, 10), (57, 11)}
+
+
+def test_route_changing_diagonal_direction_raises() -> None:
+    ev = _event(1, 5, 5, [[_branch_command(), _move_route_command([7, 6])]])
+    with pytest.raises(ValueError, match="changes diagonal direction"):
+        stair_cell_sides(_map([ev]))
+
+
+@pytest.mark.parametrize("map_id", [33, 37, 14002])
+def test_real_staircases_every_rmxp_crossing_is_playable(map_id: int) -> None:
+    from rpg2gba.beat_floor.terrain import stair_floors_for_map
+
+    path = _REAL_MAP033.parent / f"Map{map_id:03d}.json"
+    if not path.exists():
+        pytest.skip(f"{path} not found")
+    map_json = json.loads(path.read_text(encoding="utf-8"))
+    crossings = [
+        tuple(c)
+        for floor in stair_floors_for_map(map_id, map_json).values()
+        for a in floor.assertions if a.kind == "stair_crossing"
+        for c in a.param("crossings")
+    ]
+    assert crossings
+    _assert_crossings_playable(map_json, crossings)

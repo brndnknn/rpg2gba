@@ -84,10 +84,11 @@ def _move_route_command(codes: list[int], *, target: int = -1, code: int = 209) 
 def _stair_page(codes: list[int]) -> dict:
     """A minimal RMXP diagonal-stair "player touch" page: solid
     (through=False), blank graphic, with the branch+move-route shape
-    `stairs.detect_stair_cells` recognizes."""
+    `stairs.detect_stair_cells` recognizes. One single-step route per code,
+    one per facing arm, as Uranium writes them."""
     return _page(
         trigger=1, through=False,
-        cmds=[_branch_command(), _move_route_command(codes)],
+        cmds=[_branch_command(), *(_move_route_command([code]) for code in codes)],
     )
 
 
