@@ -30,6 +30,16 @@ are still raw RMXP ids, pre local-id-remap):
   spawned (``ON_TRANSITION`` re-hides it on the next map entry). Skipped
   outright if the block already has a ``removeobject(N)``.
 
+One exception skips the spawn entirely: an actor with NO visible page in
+Uranium (``never_visible_ids`` — every page blank or opacity 0) whose block
+only turns it in place (every movement applied to it is ``face_*``/``delay_*``)
+and never `set_visible`s it. In RMXP those turns draw nothing; spawning it here
+put its sprite on the map with no script (Map040 EV141, the Maria scene's
+opacity-0 tripwire, CH06 walk 2026-10-13). An unspawned object's
+applymovement/waitmovement complete at once (`engine/src/script_movement.c`
+`ScriptMovement_IsObjectMovementFinished`). Fading-in actors (`set_visible`,
+RMXP route code 42) and anything walked or emoted still spawn.
+
 Only ``script`` blocks are considered; ``movement``/``text``/``mapscripts``
 blocks are never rewritten (only read, to resolve a movement label's last
 command). String/comment contents are masked before scanning so a reference
@@ -153,8 +163,39 @@ def _movement_last_command(lines: list[str], start: int, end: int) -> str | None
     return body[-1] if body else None
 
 
+_TURN_ONLY_RE = re.compile(r"^(face_\w+|delay_\d+)$")
+
+
+def never_visible_event_ids(map_json: dict) -> set[int]:
+    """RMXP ids of events with no visible page: every page's graphic is blank
+    or opacity 0 (`metadata_wiring._visibility_expr`'s reading of visible)."""
+    ids: set[int] = set()
+    for event in map_json.get("events", []):
+        if not event:
+            continue
+        if not any(
+            (p.get("graphic", {}).get("character_name") or "")
+            and p.get("graphic", {}).get("opacity", 255) > 0
+            for p in event.get("pages", [])
+        ):
+            ids.add(event["id"])
+    return ids
+
+
+def _movement_body(lines: list[str], start: int, end: int) -> list[str]:
+    return [
+        stripped
+        for ln in lines[start + 1 : end]
+        if (stripped := ln.strip()) and not stripped.startswith("#")
+    ]
+
+
 def bracket_hidden_actor_scripts(
-    pory_text: str, hidden_ids: set[int], *, source_name: str = "?"
+    pory_text: str,
+    hidden_ids: set[int],
+    *,
+    source_name: str = "?",
+    never_visible_ids: set[int] | None = None,
 ) -> str:
     """Insert addobject/removeobject brackets for flag-hidden actor ids.
 
@@ -195,6 +236,10 @@ def bracket_hidden_actor_scripts(
         label: _movement_last_command(lines, s, e)
         for label, (s, e) in movement_blocks.items()
     }
+    movement_body = {
+        label: _movement_body(lines, s, e) for label, (s, e) in movement_blocks.items()
+    }
+    never_visible = never_visible_ids or set()
 
     # (line_idx, "before"/"after", text), collected across every block/id.
     insertions: list[tuple[int, str, str]] = []
@@ -214,6 +259,25 @@ def bracket_hidden_actor_scripts(
 
             has_addobject = any(cmd == "addobject" for _, cmd in matches)
             has_removeobject = any(cmd == "removeobject" for _, cmd in matches)
+
+            if eid in never_visible and not has_addobject:
+                labels = [
+                    am.group(2)
+                    for i, cmd in matches if cmd == "applymovement"
+                    for am in _APPLYMOVEMENT_RE.finditer(masked_lines[i])
+                    if int(am.group(1)) == eid
+                ]
+                turn_only = (
+                    all(cmd == "applymovement" for _, cmd in matches)
+                    and len(labels) == len(matches)
+                    and all(
+                        label in movement_body
+                        and all(_TURN_ONLY_RE.match(c) for c in movement_body[label])
+                        for label in labels
+                    )
+                )
+                if turn_only:
+                    continue
 
             first_line = matches[0][0]
             last_line = matches[-1][0]

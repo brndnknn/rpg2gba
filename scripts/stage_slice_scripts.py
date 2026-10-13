@@ -45,7 +45,10 @@ from rpg2gba.tileset_converter import connections as conn
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
 from rpg2gba.tileset_converter import sprite_pass
-from rpg2gba.tileset_converter.hidden_actor_bracket import bracket_hidden_actor_scripts
+from rpg2gba.tileset_converter.hidden_actor_bracket import (
+    bracket_hidden_actor_scripts,
+    never_visible_event_ids,
+)
 from rpg2gba.tileset_converter.local_id_remap import (
     _mask_strings_and_comments,
     iter_object_id_refs,
@@ -534,8 +537,11 @@ def main() -> int:
         # commands still target raw RMXP ids (bracket_hidden_actor_scripts
         # matches against the same ids `table` is keyed by).
         hidden_ids = hidden_actor_ids_from_map_json(map_json, table)
+        uranium_map_json = json.loads(
+            (out / "maps" / f"Map{map_id:03d}.json").read_text(encoding="utf-8"))
         bracketed_text = bracket_hidden_actor_scripts(
-            result.text, hidden_ids, source_name=f"Map{map_id:03d}.pory"
+            result.text, hidden_ids, source_name=f"Map{map_id:03d}.pory",
+            never_visible_ids=never_visible_event_ids(uranium_map_json),
         )
 
         # Resolve the transpiler's terminal-hide setflag placeholder to the

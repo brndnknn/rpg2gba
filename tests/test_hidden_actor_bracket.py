@@ -252,3 +252,62 @@ def test_already_bracketed_ev074_shape_no_ops() -> None:
     )
     out = bracket_hidden_actor_scripts(text, {75}, source_name="Map032_EV074.pory")
     assert out == text
+
+
+# -- never-visible actors (CH06 walk 2026-10-13, Map040 EV141) --------------
+
+_TURN_SCENE = """script Map040_EV141_Page1 {
+    applymovement(141, Map040_EV141_Page1_Move7)
+    waitmovement(0)
+    end
+}
+
+movement Map040_EV141_Page1_Move7 {
+    delay_2
+    face_right
+    delay_2
+    face_up
+}
+"""
+
+
+def test_never_visible_actor_only_turned_is_not_spawned() -> None:
+    """EV141 is an opacity-0 tripwire whose scene only turns it in place:
+    in RMXP that draws nothing, so no addobject (it spawned a mute sprite)."""
+    out = bracket_hidden_actor_scripts(_TURN_SCENE, {141}, never_visible_ids={141})
+    assert out == _TURN_SCENE
+
+
+def test_same_turn_only_actor_with_a_visible_page_still_spawns() -> None:
+    out = bracket_hidden_actor_scripts(_TURN_SCENE, {141}, never_visible_ids=set())
+    assert "addobject(141)" in out
+
+
+def test_never_visible_actor_that_fades_in_still_spawns() -> None:
+    """Map032 EV077 / Map035 EV020 shape: opacity 0 in Uranium, made visible
+    by the scene (RMXP route code 42 -> set_visible). Must spawn."""
+    text = """script S {
+    applymovement(77, S_Move1)
+    waitmovement(0)
+    end
+}
+
+movement S_Move1 {
+    face_left
+    set_visible
+}
+"""
+    out = bracket_hidden_actor_scripts(text, {77}, never_visible_ids={77})
+    assert "addobject(77)" in out
+
+
+def test_never_visible_actor_with_an_emote_still_spawns() -> None:
+    """Map032 EV080 -> EV075: a "!" over an invisible actor needs the object."""
+    text = """script S {
+    applymovement(75, Common_Movement_ExclamationMark)
+    waitmovement(0)
+    end
+}
+"""
+    out = bracket_hidden_actor_scripts(text, {75}, never_visible_ids={75})
+    assert "addobject(75)" in out
