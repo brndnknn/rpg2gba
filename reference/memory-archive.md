@@ -1124,3 +1124,23 @@ on first contact with the ROM.
 ### Archived 2026-10-12 — Last Session Summary 2026-10-10 (Metro parked; CH06 manifest check 0 errors)
 
 **2026-10-10 (Metro parked; CH06 manifest check 0 errors):** Operator parked the Metro: maps 44/45 moved from CH06 to `chapters.json` `unbound_maps` (rebind once every stop is known or at the first other station; decide then fold-in vs one Metro chapter) — not a strip. `SLICE_MAP_IDS` drops them; the Nowtoch station door is a boundary warp (no warp emitted, tile blocked). Fallout fixed (`d7bae259`): assembler prunes stale generated `data/maps/<Dir>/` (untracked + not built; the Metro dirs broke `make`); routing detour skips unemitted maps (`_LazyOverlays.__contains__`); boundary events' non-crossing rows emit as `ELSEWHERE` `later` (station door step-off pages). **Gym route bug found + fixed (operator call):** trainers' switch-gated retalk pages (`group.deferred_retalks`, gym "trainers off" sw58) leave the trainer group as their own beats — the indivisible group had forced the leader before the trainers. Route now trainers → leader → trainers-off chats. ROM `51fc4687`; CH05 gen 306/306; CH06 manifest **0 errors**, 72 tracked warnings, 431 rows; full suite 5228. `ch06.py` + CH06 manifests still uncommitted pending the §9 review. New PROJECT_TODO #133 (`CH02:m033e053p0` fails attempt 1 on every replay). Workflow note: after a map leaves a chapter, run `chapter_manifest generate` → `beat_gen generate` → `chapter_manifest generate` (generate's sidecar step loads the stale module and fails, but the row file is written first).
+
+### Archived 2026-10-13 — Last Session Summary 2026-10-11 (CH06 ROM-proven: gen suite 465/465)
+
+**2026-10-11 (CH06 ROM-proven: gen suite 465/465 PASS):** Operator said go. Twelve runs; every failure fixed at its root, unit-tested, committed:
+- warp return press derived from the landing beside the reciprocal (`warp.derive_return_direction`)
+- `assertions.flag_ssa` → registry namer (split pieces are named after origin 040)
+- seam hops press the arrow's own direction (`cells.seam_press`)
+- story precedence passes through a lone unclaimed enabler
+- `interiors.gated_interior_edges`: a gated-entrance region opens with its first entry
+- same-map warps proven by a ≥2-tile jump
+- clearing actors need definite clearing evidence (`_page_candidate(definite=)`; Nowtoch crowd waits on the Metro switch)
+- touch pages on sight trainers fall back to A (#133 root cause: turning trainer faced away)
+- NPC approach sides skip warp tiles
+- operator ruling "order after the clear": `_clearing_enablers` + `_drop_dead_before_clear` (gym door "closed" page → never_fires)
+- `pbDeleteItem` → `item_remove` floor kind
+- `page_sim` applies branch-opener writes (Fufufu's `if pbReceiveItem` key grant)
+- `map_split._rebase_event` rebases `$game_player.x/y` literals + direct 202s
+- **engine:** white-out respawn tables sized `NUM_HEAL_LOCATIONS - 1` (added heal locations read past the end; Nowtoch respawned on Route 105)
+
+Manifest check 0 errors / 71 warnings; full suite 5260. Two Sonnet agents (#133 diagnosis, item_remove). CH01–CH05 modules were NOT regenerated under these generator changes — regenerating them may change their output. CH06 not yet operator-walked (§9).

@@ -2034,6 +2034,44 @@ tally reads 306/306. Twice in a row is not a flake: something about the first ap
 the beat before, or the step timing) differs from the retry. Find what, and fix the beat or the
 walk -- a rerun that always rescues it hides a real ordering or timing bug.
 
+### 134. Multi-step sideways staircases only half-crossed on ROM
+
+**FIX IN TEST 2026-10-13** (awaiting operator retest). CH06 walk: on Nowtoch Park's 2-wide
+staircase (Map14002 (24..25, 17..20)) only the north lane climbed; the south lane stopped halfway.
+The engine moves one diagonal per press, but Uranium stair events push k diagonals per touch (k = 2
+for 156 of 228 corpus events, 4 for Map216's four), so a 2x2 staircase lacked the two cells
+between its event cells (92 cells across 19 maps). `stairs.lane_cells` now fills them in via
+`stair_cell_sides`; `stair_beat` presses k + 1 times; both stair-approach resolvers skip stair
+neighbours. Why nothing caught it: beat_gen *refused* the staircase (cell_error, in `REFUSED`) in
+CH06 and in CH02 (Route 1 (52..53, 41..44)), so no beat ever crossed it, and both reviews were
+approved with that row listed. Pinned: `tests/test_stairs.py` simulates the engine's press rule
+over every RMXP crossing; `tests/test_chapters_gen_stairs.py` forbids refused stair rows.
+
+### 135. NPCs that RMXP blanks later stayed visible forever (Fufufu blocks the gym door)
+
+**FIX IN TEST 2026-10-13** (awaiting operator retest). CH06 walk: after the Maria key scene,
+Fufufu (Map040 EV018, Gym Plaza piece 14001) stood beside the path, then reappeared mute in the
+gym doorway on every reload. The scene ends `pbSetSelfSwitch(18,"B",true)`; EV018's selfB page is
+blank, so in RMXP he vanishes. Ours emitted him with flag `0`: no hide rule covered "visible at
+boot, blanked later by another event's write". `metadata_wiring._can_vanish` (brute force over
+page-condition atoms; self switches only vary if a code-123 or `pbSetSelfSwitch` on the map writes
+them) now routes such NPCs into the hidden-actor visibility machinery (pool flag, ON_TRANSITION
+clause, refresh after guard writes). Slice census: 11 NPCs, incl. Map14000's seven Metro-gated
+crowd NPCs, Map019 EV004/005, Map073 EV006. Not caught by the gen suite because it entered the gym
+in the same visit, before any reload; a reload-and-check beat would pin it on ROM (not built).
+
+### 136. Opacity-0 scene host spawned as a mute trainer sprite (Maria scene)
+
+**FIX IN TEST 2026-10-13** (awaiting operator retest). Map040 EV141 (Gym Plaza, the opacity-0
+"Trainer(4)" tripwire that hosts the Maria scene) appeared at (11,10) after the scene, scriptless,
+until reload. Uranium's scene runs the door-animation turn routes on "this event" (an authoring
+slip, invisible in RMXP); our `hidden_actor_bracket` pass `addobject`ed it with its HGSS_014 sheet.
+The pass now skips the spawn for an actor with no visible page whose block only turns it
+(`face_*`/`delay_*`, no `set_visible`). Census: only EV141 changes; the seven fade-in actors
+(Map032 EV075/076/077, Map035 EV020/021/022, Map14000 EV078) still spawn. **Open, not fixed:**
+Map032 EV080 plays a "!" on invisible EV075, which spawns Theo's sprite visibly there too -- needs
+a spawn-invisible step, not a skip.
+
 ## Accepted deferrals (not currently planned — listed so they aren't re-litigated)
 
 - **Reflection narrow-scan** — tried and reverted 2026-07-07 (user: "not
