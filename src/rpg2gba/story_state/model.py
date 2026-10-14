@@ -1704,6 +1704,7 @@ def build_chapter_stories(
     winner_for: Callable[[str, tuple[str, ...]], str | None] | None = None,
     resolved_out: dict[str, RowState] | None = None,
     seed_out: dict[str, State] | None = None,
+    deferred_for: Callable[[str], frozenset[str]] | None = None,
 ) -> dict[str, ChapterStory]:
     """Models `chapter_ids` (in chain order, e.g. CH01..CH05) cumulatively.
 
@@ -1725,6 +1726,16 @@ def build_chapter_stories(
     state, so every successor is seeded (and its liveness checked) from
     the route rather than from the join. Omitted, the model is C2's pure
     over-approximation, as before.
+
+    `deferred_for(chapter_id)` is the "re-offer deferred rows" ruling
+    (2026-10-14): the row ids that chapter's generated suite did NOT walk
+    (geographic `later`, or capability-blocked). Such a row is hidden from
+    that chapter's saturation -- never owned by it, its writes never in its
+    end state -- and stays hidden from every later chapter whose own maps
+    lack its map, until the first chapter that has the map (and can make it
+    live) owns it. Never consulted for the last chapter (the one being
+    generated has no module). Omitted, ownership is first-live-chapter as
+    before.
     """
     binding = load_binding(path=chapters_path)
     common_events = _load_common_events(build_dir)
@@ -1771,6 +1782,9 @@ def build_chapter_stories(
 
     stripped = _stripped_map_events()
 
+    # Rows an earlier chapter's suite deferred and no chapter has yet picked up.
+    pending_deferred: set[str] = set()
+
     # Pass 1: walk the chain once, growing cumulative scope and ownership.
     seed = intro_end_state
     seed_from = "INTRO"
@@ -1790,12 +1804,23 @@ def build_chapter_stories(
                 cumulative_rows.setdefault(rid, rs)
 
         order = sorted(cumulative_rows, key=row_id_sort_key)
+        deferred_here: frozenset[str] = frozenset()
+        hidden: set[str] = set()
+        if deferred_for is not None:
+            if chapter_id != chapter_ids[-1]:
+                deferred_here = frozenset(deferred_for(chapter_id))
+            own_maps = own_map_ids_by_chapter[chapter_id]
+            hidden = set(deferred_here) | {
+                rid for rid in pending_deferred
+                if rid in cumulative_rows and not _is_pseudo_row_id(rid)
+                and parse_row_id(rid).map_id not in own_maps}
         for rid in order:
             if rid not in structural_refusal:
                 structural_refusal[rid] = _structural_refusal(rid, cumulative_rows, refusal_cache)
 
+        sat_order = [rid for rid in order if rid not in hidden] if hidden else order
         cumulative_rows.update(resolve_computed_rows(
-            seed, cumulative_rows, order,
+            seed, cumulative_rows, sat_order,
             already_owned=already_owned, structural_refusal=structural_refusal))
         if resolved_out is not None:
             resolved_out.update({
@@ -1808,8 +1833,10 @@ def build_chapter_stories(
         for rid in order:
             structural_refusal[rid] = _structural_refusal(rid, cumulative_rows, refusal_cache)
         result = saturate(
-            seed, cumulative_rows, order,
+            seed, cumulative_rows, sat_order,
             already_owned=already_owned, structural_refusal=structural_refusal)
+        if deferred_for is not None:
+            pending_deferred = (pending_deferred | deferred_here) - set(result.newly_owned)
 
         _check_refused_pseudo_rows(pseudo_rows, structural_refusal, chapter_id, result.end_state)
 

@@ -105,7 +105,7 @@ from rpg2gba.beat_gen.review import RowLocation, render_review
 from rpg2gba.beat_gen.seam import (
     SeamCrossing, connection_crossings, connection_for, seam_crossings,
 )
-from rpg2gba.beat_gen.seed import route_winner
+from rpg2gba.beat_gen.seed import deferred_loader, route_winner
 from rpg2gba.beat_gen.page_sim import Firing
 from rpg2gba.beat_gen.select import dropped_events, empty_events, select_rows
 from rpg2gba.beat_gen.round_trip import find_round_trip
@@ -1398,6 +1398,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     stories = build_chapter_stories(_chain_to(binding, chapter_id), build_dir=build_dir,
                                     chapters_path=DEFAULT_CHAPTERS_PATH,
                                     winner_for=route_winner(chapter_id, module_dir),
+                                    deferred_for=deferred_loader(chapter_id, module_dir),
                                     resolved_out=resolved, seed_out=seeds)
     story = stories[chapter_id]
     verdicts = {v.row_id: v for v in story.rows}
