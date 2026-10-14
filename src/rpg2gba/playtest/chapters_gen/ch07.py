@@ -5,7 +5,7 @@ Chapter CH07. Regenerate with `python -m rpg2gba.beat_gen generate --chapter CH0
 
 from __future__ import annotations
 
-from rpg2gba.playtest.archetypes.generic import generic_beat, obstacle_beat, seam_beat, transit_beat
+from rpg2gba.playtest.archetypes.generic import generic_beat, seam_beat, transit_beat
 from rpg2gba.playtest.archetypes.item_ball import item_ball_beats
 from rpg2gba.playtest.archetypes.trainer import trainer_beats
 from rpg2gba.playtest.chapter import ChapterBuilder
@@ -121,31 +121,12 @@ generic_beat(
     skip_claimed=True,
 )
 
-obstacle_beat(
-    ch07,
-    chapter_id='CH07',
-    beat_name='m035obstacle_rock_smash',
-    group='m035obstacle_rock_smash',
-    rows=('map035/ev015/p0', 'map035/ev016/p0', 'map035/ev018/p0'),
-    approach_prefer='east',
-    capability='rock_smash',
-)
-
 generic_beat(
     ch07,
     chapter_id='CH07',
     beat_name='m035e019p0',
     group='m035e019p0',
-    rows=('map035/ev019/p0', 'map035/ev019/p0/b2', 'map035/ev019/p0/b3', 'map035/ev019/p0/b4'),
-    approach_prefer='south',
-)
-
-generic_beat(
-    ch07,
-    chapter_id='CH07',
-    beat_name='m035e019p0_face_north_south_east',
-    group='m035e019p0_face_north_south_east',
-    rows=('map035/ev019/p0/b1',),
+    rows=('map035/ev019/p0', 'map035/ev019/p0/b1', 'map035/ev019/p0/b2', 'map035/ev019/p0/b3', 'map035/ev019/p0/b4'),
     approach_prefer='south',
 )
 
@@ -203,6 +184,7 @@ ELSEWHERE: dict[str, str] = {
     'map035/ev013/p0': 'later: CH04',
     'map035/ev014/p0': 'later: CH04',
     'map035/ev017/p0': 'later: CH04',
+    'map035/ev019/p0/b0': 'unselected_arm: facing arm of map035/ev019/p0, which turns self switch A on, lifting a higher page, after one firing (map035/ev019/p0/b0): the walk fires it once, from north, and takes the facing arms legal there (2026-10-12)',
     'map035/ev019/p0/b5': 'unselected_arm: not taken on the walk: else of `$game_player.y<=28` from cell (25, 27) (event at (25, 26)) (ruling 19)',
     'map035/ev023/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
     'map035/ev024/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
@@ -218,7 +200,9 @@ REFUSED: dict[str, str] = {
     'map035/ev003/p1/b3': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
     'map035/ev003/p2/b0': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
     'map035/ev003/p2/b1': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
-    'map035/ev019/p0/b0': "cell: no_facing_side -- group 'm035e019p0_face_west' runs only from ['west']; the event offers ['south']",
+    'map035/ev015/p0': "cell: clearer_tripwire -- every approach crosses the sight tripwire of ['map035/ev019'], which clears this obstacle -- it is gone before it can be refused",
+    'map035/ev016/p0': "cell: clearer_tripwire -- every approach crosses the sight tripwire of ['map035/ev019'], which clears this obstacle -- it is gone before it can be refused",
+    'map035/ev018/p0': "cell: clearer_tripwire -- every approach crosses the sight tripwire of ['map035/ev019'], which clears this obstacle -- it is gone before it can be refused",
     'map035/ev023/p1': 'story-state: undetermined -- story model could not determine this row',
     'map035/ev023/p1/b0': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
     'map035/ev023/p1/b1': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',

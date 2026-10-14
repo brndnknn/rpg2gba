@@ -126,8 +126,9 @@
     "proposed": true
   },
   "map035/ev015/p0": {
-    "disposition": "beat:m035obstacle",
-    "derived_hash": "a930201f885e155b"
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "a930201f885e155b",
+    "proposed": true
   },
   "map035/ev015/p0/b0": {
     "disposition": "blocked:rock_smash",
@@ -145,8 +146,9 @@
     "proposed": true
   },
   "map035/ev016/p0": {
-    "disposition": "beat:m035obstacle",
-    "derived_hash": "a930201f885e155b"
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "a930201f885e155b",
+    "proposed": true
   },
   "map035/ev016/p0/b0": {
     "disposition": "blocked:rock_smash",
@@ -182,8 +184,9 @@
     "proposed": true
   },
   "map035/ev018/p0": {
-    "disposition": "beat:m035obstacle",
-    "derived_hash": "a930201f885e155b"
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "a930201f885e155b",
+    "proposed": true
   },
   "map035/ev018/p0/b0": {
     "disposition": "blocked:rock_smash",
@@ -205,7 +208,7 @@
     "derived_hash": "f830a526f296ec08"
   },
   "map035/ev019/p0/b0": {
-    "disposition": "refused:cell: no_facing_side -- group 'm035e019p0_face_west' runs only from ['west']; the event offers ['south']",
+    "disposition": "elsewhere:unselected_arm: facing arm of map035/ev019/p0, which turns self switch A on, lifting a higher page, after one firing (map035/ev019/p0/b0): the walk fires it once, from north, and takes the facing arms legal there (2026-10-12)",
     "derived_hash": "4532d230b26564e2"
   },
   "map035/ev019/p0/b1": {
