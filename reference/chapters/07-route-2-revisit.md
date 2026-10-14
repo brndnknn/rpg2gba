@@ -169,15 +169,43 @@ chapter does not convert cleanly until it is handled.
 
 ## 7. Open items for the lead
 
-1. **Is Rock Smash needed at all?** ev19 clears rocks 14-18 with no capability check,
-   and `reference/chapters.json` says Rock Smash clears them. Evidence to settle:
-   BFS over `tilesets.json["22"].passages` (as CH04 did) from the N seam landing, with
-   and without rocks solid, to see whether ev19's tile (25,26) is reachable first.
-2. **Reachability of ids 20-26 and the 16 ledge cells from the N seam** — same BFS.
-3. **Chapter start state:** which side the walk enters from (N seam from 14000 vs cave
-   exit) and whether ev19's 111-type-6 direction condition (`[6,-1,6]`) blocks the scene
-   from some approach.
-4. **`rock_smash_mons` for map 35:** absent; decide whether smashing is asserted.
+1. **Is Rock Smash needed at all? — ANSWERED 2026-10-14: not from the north.**
+   `rpg2gba.traversal` (`reachable_with`, held capabilities `{}`) from the N-seam stretch
+   x35 16..20 (14000 x 11..15) reaches the whole rows-26–29 pocket, including all three
+   open neighbours of ev19 (25,26): (24,26), (25,27), (26,26); (25,25) is a wall. No rock
+   cell is crossed. From the S seam (map 31) the pocket is reachable only with
+   `rock_smash`, so CH04's `blocked:rock_smash` held only for the south approach.
+   Scratch: `output/scratch/r2.py`..`r6.py`.
+2. **Reachability of ids 20-26 from the N seam — ANSWERED:** every one of ev19–26 has a
+   cell or neighbour in the no-capability set from x35 16..20. The 16 ledge cells were not
+   re-checked.
+3. **ev19's facing guard — DECODED:** `[6,-1,6]` is code 111 subtype 6, "player faces
+   east". Page 0 is event-touch, no conditions; its tile is blocked, so it fires on a bump.
+   Facing east (bumping from (24,26)) runs the *skip* arm: SSA on 19–22, exit, rocks
+   untouched. Bumping from (25,27) facing north or (26,26) facing west runs the full scene.
+   The transpiler already emits this correctly (`GetPlayerFacingDirection == DIR_EAST`).
+   The route solver has to choose a non-east approach. The open part: does it model this?
+4. **`rock_smash_mons` for map 35 — ANSWERED: none needed.** Uranium has no RockSmash
+   table for map 35 (`intermediate/encounters_raw.json` key "35": density 0, slot 3
+   empty), so `pbRockSmashRandomEncounter` (`scripts_dump/103__PField_HiddenMoves.rb:379`,
+   flat 25% then `pbEncounter`) finds nothing. Native `special RockSmashWildEncounter`
+   (`engine/src/wild_encounter.c:807`) returns FALSE on a NULL table; no battle, no crash.
+   Corpus: 6 maps call it; only map 118 has a table (native uses its `encounter_rate`,
+   Uranium a flat 25%).
+4a. **Rock persistence — RULED 2026-10-14 (operator): keep respawning rocks everywhere.**
+   Uranium is mixed. Rocks on maps 32, 35 and 66 write self-switch A to a blank page, so
+   they stay gone. Map 33's six rocks only `pbEraseThisEvent`, so they return; coral on
+   maps 107 and 118 also returns. The build keeps every rock on its `FLAG_TEMP_11..15` template
+   flag. Native smash `removeobject` sets that flag and the next map load clears it, so
+   rocks return (`metadata_wiring.py:2754-2777` yield). **Consequence for ev19:** its
+   `for i in 14..18 pbSetSelfSwitch(i,"A",true)` loop is still UNHANDLED (2 queue rows).
+   Transpiling it as `setflag(FLAG_MAP035_EVENT014..018_SSA)` would be WRONG under this
+   ruling. Dispatch would select the rocks' page 2 (`end`) while each object stays visible
+   on its TEMP flag, leaving five solid, inert rocks. The scene should hide the rocks for
+   the visit instead (`removeobject` each, which sets their TEMP flags). They then return
+   on re-entry and need Rock Smash, which the player holds by CH07. Still owed:
+   Moki's rocks carry an `isRockSmashSoftlocked?` arm that self-smashes. The transpiler's
+   rock idiom drops both arms, so that arm is lost.
 5. **Wiki:** CH07-specific check not run; Ranger/rockslide ordering vs ev19 unresolved.
 6. **Census agreement:** doc totals equal the census; no disagreement found.
 7. Engine dir / porymap constant for map 35 still unassigned (carried from CH04 §7).
