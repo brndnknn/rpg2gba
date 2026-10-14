@@ -132,7 +132,7 @@ wild encounters. Verdicts are owned by `reference/guides/command_pokeemerald_map
 
 | Mechanic | First appears here? | Disposition | Ledger row / notes |
 |---|---|---|---|
-| rock smash | No (CH02, Route 1; grant in CH06) | native | ledger `00-atlas.md` §5 row 8; **first chapter to need a rock smashed** (PROJECT_TODO #92) |
+| rock smash | No (CH02, Route 1; grant in CH06) | native | ledger `00-atlas.md` §5 row 8; not exercised here: ev19 clears the rocks; smashing deferred to CH07A (§7 4c) |
 | rock smash encounter | No | native (`EventScript_RockSmash` + `special RockSmashWildEncounter`, ledger line 136 ✓VERIFIED) | no map-35 table, §4.3 |
 | self-switch write (remote, `pbSetSelfSwitch`) | No | per ledger | ev19 mass-clear loop; `for i in 14..18` is the 2 unhandled script rows |
 | event erase (persistent) | No | per ledger | each rock's `pbEraseThisEvent` |
@@ -215,7 +215,10 @@ chapter does not convert cleanly until it is handled.
    **15 (21,29) and 16 (22,28) can be faced from the north pocket** at (22,29)/(23,28),
    so smashing one before bumping ev19 needs no leave-and-return
    (`output/scratch/r7_rock_faces.py`). 14 and 17 face only the south side; 18 is boxed in.
-   Where to model it (CH07 or CH07A): **open, operator**.
+   **RULED 2026-10-14 (operator): defer to CH07A.** CH07 clears the rockslide via ev19
+   only; the rock rows go to the later chapter (ELSEWHERE). #92/#128 and the
+   "HM06 taught" slice of #127 move to CH07A (Route 1's six rocks, which have no
+   alternative).
 5. **Wiki:** CH07-specific check not run; Ranger/rockslide ordering vs ev19 unresolved.
 6. **Census agreement:** doc totals equal the census; no disagreement found.
 7. Engine dir / porymap constant for map 35 still unassigned (carried from CH04 §7).

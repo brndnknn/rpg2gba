@@ -1917,6 +1917,8 @@ picked up.
 
 ### 92. The capability model cannot see field capabilities, because their grants are not switch/var writes
 
+*(2026-10-14: **retargeted to CH07A** (operator) — CH07's rockslide is cleared by the ev19
+cutscene with no capability; Route 1's six rocks are the first unavoidable smash.)*
 *(2026-10-14, CH07: **premise corrected — Uranium does have HMs.** Rock Smash's is internal `HM06`
 (wiki "HM01"), `pbReceiveItem` at the CH06 Theo rematch (Map040 ev20/21/79), and each HM move has a
 Tinkerer key-item counterpart (Rock Smash → Boxing Gloves, Legen Town, Map167). Point 1's "grant
@@ -2010,7 +2012,9 @@ The generator refuses rows that read party or Pokedex state with a `party_model`
 green". Graphics-only vars 43 and 131 are already exempt via `story_state/graphics_vars.py`; the rest
 still refuse. Source: `reference/archive/REDERIVATION_PLAN.md` §16.3 "C8 shape".
 
-### 128. `blocked:` is held back from clerical derivation; revisit at CH07 (was CH06)
+### 128. `blocked:` is held back from clerical derivation; revisit at CH07A (was CH06, then CH07)
+
+*(2026-10-14: moved to CH07A with #92 — CH07 smashes no rock.)*
 
 `blocked:<spec>` is a proposal only and never dispositions a row until a human copies it into the
 dispositions file (the one negative claim, with a false-positive history on obstacle rows, #95). The
