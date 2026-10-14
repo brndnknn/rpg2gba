@@ -116,8 +116,8 @@
     {
       "id": "CH06", "act": "A1", "title": "Nowtoch City", "wiki_page": "Nowtoch City",
       "visit": 1, "outdoor": 40, "maps": [40, 41, 42, 43, 46, 47],
-      "predecessor": "CH05", "tier": "medium", "status": "in_progress",
-      "notes": "Gym 1 (map 42). First Gym and the Rock Smash grant. Novelty-promoted. The metro station + platform (44, 45) were moved to unbound_maps 2026-10-10 (operator): the Nowtoch station door is a chapter-boundary warp until the Metro is worked back in."
+      "predecessor": "CH05", "tier": "medium", "status": "built",
+      "notes": "Passed its \u00a79 boot-walk gate 2026-10-13 (CH06 gen suite GREEN 467/467 from boot -- CH01-CH05 replay + CH06's own, ROM 66c4d7ef; operator walked the chapter-complete save, findings #134-#136 fixed). First chapter born generated, and the first split map (40 -> pieces 14000-14006). The route ends on the 35 seam at Nowtoch's south edge, where CH07 begins (solve_route terminal_group). Gym 1 (map 42). First Gym and the Rock Smash grant. Novelty-promoted. The metro station + platform (44, 45) were moved to unbound_maps 2026-10-10 (operator): the Nowtoch station door is a chapter-boundary warp until the Metro is worked back in."
     },
 
     {

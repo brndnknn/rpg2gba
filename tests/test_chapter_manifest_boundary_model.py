@@ -155,12 +155,12 @@ def test_successor_claims_are_pooled_across_every_registered_beat() -> None:
 
 
 def test_returns_none_for_a_chapter_with_no_gated_slice() -> None:
-    """CH06 is `status: "planned"` in the real `reference/chapters.json` (as
+    """CH07 is `status: "planned"` in the real `reference/chapters.json` (as
     of this writing) -- no gated slice exists for it yet, so the crossing
-    detectors have nothing to scan. If this test breaks because CH06 has
+    detectors have nothing to scan. If this test breaks because CH07 has
     since been built, that's good news; pick another not-yet-built chapter
-    id or update the assertion."""
-    assert build_boundary_model("CH06") is None
+    id or update the assertion. (Was CH06 until its gate pass, 2026-10-13.)"""
+    assert build_boundary_model("CH07") is None
 
 
 def test_real_ch04_forward_crossing_and_claim_state() -> None:

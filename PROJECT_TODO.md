@@ -17,6 +17,14 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 138. Map032 EV080's "!" spawns Theo's sprite visibly on invisible EV075
+
+Split out of #136 at the CH06 close-out (2026-10-13). In Moki Town, EV080 plays an exclamation
+on EV075, an actor with no visible page; our `hidden_actor_bracket` pass `addobject`s EV075 for the
+emote with its sheet, so Theo's sprite shows there briefly. #136's skip doesn't apply (the block does
+more than turn the actor). Needs a spawn-invisible step (add the object hidden, emote, remove), not
+a skip. Visible in built CH01.
+
 ### 123. `resolved_trigger_scripts` treats "the beat passed" as "the script ran"
 
 Moved from `reference/archive/REDERIVATION_PLAN.md` §4 at P10 (2026-10-03) so it survives the plan's
@@ -39,7 +47,8 @@ variant × map × emission shape, resampled on revisit). Deferral is safe for
 CH01–CH05 because every generated beat there is walked on the ROM from boot,
 which is stronger than C10's offline check plus sample. **To close:** build
 before CH06's flavour-NPC count makes walking every row on hardware the
-bottleneck.
+bottleneck. *(2026-10-13, CH06 close-out: not yet -- the whole CH06 run, CH01-CH06 replayed
+from boot, takes about 6 minutes. Stays open; build it before a run gets long.)*
 
 ### 121. ~~HM field-move gates are still Emerald's per-badge flags, not Uranium's badge counts~~ DONE 2026-10-13
 
@@ -1908,7 +1917,9 @@ picked up.
 
 ### 92. The capability model cannot see field capabilities, because Uranium has no HMs
 
-*(2026-10-04: still open (point 1 and the CH06 remainder). Moved back from the Done section, where it sat by position only. #128 cross-links the `blocked:` revisit that waits on its requirement groups.)*
+*(2026-10-13, CH06 close-out: the CH06 remainder moves to CH07 -- CH06 grants Rock Smash but
+no CH06 row needs it; CH07 (Route 2 rockslide) and CH07A (CH02's rock-gated rows) are the first
+consumers.)* *(2026-10-04: still open (point 1 and the CH06 remainder). Moved back from the Done section, where it sat by position only. #128 cross-links the `blocked:` revisit that waits on its requirement groups.)*
 
 *Filed 2026-09-10, out of building `src/rpg2gba/capability_sites.py` (`714d8832`).*
 
@@ -1991,13 +2002,14 @@ The generator refuses rows that read party or Pokedex state with a `party_model`
 green". Graphics-only vars 43 and 131 are already exempt via `story_state/graphics_vars.py`; the rest
 still refuse. Source: `reference/archive/REDERIVATION_PLAN.md` §16.3 "C8 shape".
 
-### 128. `blocked:` is held back from clerical derivation; revisit at CH06
+### 128. `blocked:` is held back from clerical derivation; revisit at CH07 (was CH06)
 
 `blocked:<spec>` is a proposal only and never dispositions a row until a human copies it into the
 dispositions file (the one negative claim, with a false-positive history on obstacle rows, #95). The
 operator ruling says to revisit when requirement groups make the capability model real, at CH06.
 That work is #92's remaining half (move alternative, Map167 gadget items, requirement groups proper),
-so this item closes or moves with it. Source: `reference/archive/REDERIVATION_PLAN.md` §15.7.
+so this item closes or moves with it. *(Retargeted to CH07 at the CH06 close-out, 2026-10-13, with #92:
+CH06 grants Rock Smash but uses it nowhere; CH07 is the first chapter that needs a rock smashed.)* Source: `reference/archive/REDERIVATION_PLAN.md` §15.7.
 
 ### 129. `map033/ev024/p0` `pbCaveExit` leaves three `# UNHANDLED` lines
 
@@ -2040,9 +2052,9 @@ tally reads 306/306. Twice in a row is not a flake: something about the first ap
 the beat before, or the step timing) differs from the retry. Find what, and fix the beat or the
 walk -- a rerun that always rescues it hides a real ordering or timing bug.
 
-### 134. Multi-step sideways staircases only half-crossed on ROM
+### 134. DONE 2026-10-13 -- Multi-step sideways staircases only half-crossed on ROM
 
-**FIX IN TEST 2026-10-13** (awaiting operator retest). CH06 walk: on Nowtoch Park's 2-wide
+**DONE 2026-10-13** (operator retest on the CH06 walk: good). CH06 walk: on Nowtoch Park's 2-wide
 staircase (Map14002 (24..25, 17..20)) only the north lane climbed; the south lane stopped halfway.
 The engine moves one diagonal per press, but Uranium stair events push k diagonals per touch (k = 2
 for 156 of 228 corpus events, 4 for Map216's four), so a 2x2 staircase lacked the two cells
@@ -2053,9 +2065,9 @@ CH06 and in CH02 (Route 1 (52..53, 41..44)), so no beat ever crossed it, and bot
 approved with that row listed. Pinned: `tests/test_stairs.py` simulates the engine's press rule
 over every RMXP crossing; `tests/test_chapters_gen_stairs.py` forbids refused stair rows.
 
-### 135. NPCs that RMXP blanks later stayed visible forever (Fufufu blocks the gym door)
+### 135. DONE 2026-10-13 -- NPCs that RMXP blanks later stayed visible forever (Fufufu blocks the gym door)
 
-**FIX IN TEST 2026-10-13** (awaiting operator retest). CH06 walk: after the Maria key scene,
+**DONE 2026-10-13** (operator retest on the CH06 walk: good). CH06 walk: after the Maria key scene,
 Fufufu (Map040 EV018, Gym Plaza piece 14001) stood beside the path, then reappeared mute in the
 gym doorway on every reload. The scene ends `pbSetSelfSwitch(18,"B",true)`; EV018's selfB page is
 blank, so in RMXP he vanishes. Ours emitted him with flag `0`: no hide rule covered "visible at
@@ -2066,15 +2078,15 @@ clause, refresh after guard writes). Slice census: 11 NPCs, incl. Map14000's sev
 crowd NPCs, Map019 EV004/005, Map073 EV006. Not caught by the gen suite because it entered the gym
 in the same visit, before any reload; a reload-and-check beat would pin it on ROM (not built).
 
-### 136. Opacity-0 scene host spawned as a mute trainer sprite (Maria scene)
+### 136. DONE 2026-10-13 -- Opacity-0 scene host spawned as a mute trainer sprite (Maria scene)
 
-**FIX IN TEST 2026-10-13** (awaiting operator retest). Map040 EV141 (Gym Plaza, the opacity-0
+**DONE 2026-10-13** (operator retest on the CH06 walk: good). Map040 EV141 (Gym Plaza, the opacity-0
 "Trainer(4)" tripwire that hosts the Maria scene) appeared at (11,10) after the scene, scriptless,
 until reload. Uranium's scene runs the door-animation turn routes on "this event" (an authoring
 slip, invisible in RMXP); our `hidden_actor_bracket` pass `addobject`ed it with its HGSS_014 sheet.
 The pass now skips the spawn for an actor with no visible page whose block only turns it
 (`face_*`/`delay_*`, no `set_visible`). Census: only EV141 changes; the seven fade-in actors
-(Map032 EV075/076/077, Map035 EV020/021/022, Map14000 EV078) still spawn. **Open, not fixed:**
+(Map032 EV075/076/077, Map035 EV020/021/022, Map14000 EV078) still spawn. **Remainder moved to #138:**
 Map032 EV080 plays a "!" on invisible EV075, which spawns Theo's sprite visibly there too -- needs
 a spawn-invisible step, not a skip.
 

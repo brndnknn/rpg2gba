@@ -139,7 +139,8 @@ def test_milestone_check_is_scoped_to_the_real_tracked_file(tmp_path: Path) -> N
 )
 def test_real_chapters_json_reconciles_with_documented_milestones() -> None:
     """The actual claim in REDERIVATION_PLAN.md / map_set.py's comments:
-    cumulative maps after CH01..CH05 are 8, 10, 15, 16, 18. This is the
+    cumulative maps after CH01..CH05 are 8, 10, 15, 16, 18; CH06 adds maps
+    41-43, 46, 47 and map 40's seven split pieces (14000-14006) -> 30. This is the
     fail-loud check `gated_chapter_slices` runs by default; here it is
     asserted directly so a drift is attributed to the milestone check, not
     buried inside some other test's failure."""
@@ -147,7 +148,7 @@ def test_real_chapters_json_reconciles_with_documented_milestones() -> None:
 
     slices = gated_chapter_slices(current_slice_ids=SLICE_MAP_IDS)
     sizes = {s.chapter_id: len(s.authoring_slice) for s in slices}
-    assert sizes == {"CH01": 8, "CH02": 10, "CH03": 15, "CH04": 16, "CH05": 18}
+    assert sizes == {"CH01": 8, "CH02": 10, "CH03": 15, "CH04": 16, "CH05": 18, "CH06": 30}
 
 
 def test_no_built_chapters_fails_loud(tmp_path: Path) -> None:
@@ -306,8 +307,8 @@ def test_report_format_lists_findings() -> None:
 )
 def test_real_gated_chapters_reconcile_and_run() -> None:
     """The detector must at least run cleanly end-to-end over the real,
-    currently-gated chapters (CH01-CH05) without raising -- the substantive
+    currently-gated chapters (CH01-CH06) without raising -- the substantive
     findings are reported by hand, not asserted here, since they are exactly
     what this task exists to discover."""
     reports = slice_growth.detect_slice_growth(maps_dir=BUILD_MAPS)
-    assert [r.chapter_id for r in reports] == ["CH01", "CH02", "CH03", "CH04", "CH05"]
+    assert [r.chapter_id for r in reports] == ["CH01", "CH02", "CH03", "CH04", "CH05", "CH06"]

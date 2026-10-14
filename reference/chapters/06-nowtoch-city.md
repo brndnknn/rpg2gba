@@ -310,11 +310,13 @@ briefing" that no longer exists. Re-measured the same day with
 ### Before the branch opens / carried into CH06
 
 - ~~`PROJECT_TODO.md` #124 — re-key the manifest layer~~ — DONE 2026-10-04; `chapter_manifest check` is 0 errors on CH01–CH05.
-- `PROJECT_TODO.md` #122 — C10 (offline verdict head / flavour-NPC checker / ROM sample) deferred to CH06.
-- `PROJECT_TODO.md` #92 remainder — capability model (moves/items/requirement groups); CH06 has the Rock Smash grant.
-- `PROJECT_TODO.md` #121 — HM badge-count gates.
-- `PROJECT_TODO.md` #128 — `blocked:` as a clerical verdict, ruled "revisit at CH06".
-- `PROJECT_TODO.md` #111 — full-suite stall; uncapped-search hazard at CH06's map count.
+*(Dispositions at the CH06 close-out, 2026-10-13:)*
+
+- `PROJECT_TODO.md` #122 — C10 (offline verdict head / flavour-NPC checker / ROM sample) deferred to CH06. **Still open:** CH06's full run is ~6 minutes, not yet the bottleneck.
+- `PROJECT_TODO.md` #92 remainder — capability model (moves/items/requirement groups); CH06 has the Rock Smash grant. **Moved to CH07:** no CH06 row needs Rock Smash.
+- ~~`PROJECT_TODO.md` #121 — HM badge-count gates.~~ DONE 2026-10-13 (`field_move.c` `HasAtLeastBadges`).
+- `PROJECT_TODO.md` #128 — `blocked:` as a clerical verdict, ruled "revisit at CH06". **Moved to CH07** with #92.
+- `PROJECT_TODO.md` #111 — full-suite stall; uncapped-search hazard at CH06's map count. **Still open:** did not occur at CH06's size.
 - Unmapped heads still open (§7 census): `pbChoosePokemon`/`pbGetPokemon` (trade + tutor), `pbMoveTutorChoose`, `pbStartTrade`, `pbPlayCry`; plus the Metro mechanic's ledger row.
 - Map 46 building-split question (§6.3) — a real Phase-5 risk.
 
