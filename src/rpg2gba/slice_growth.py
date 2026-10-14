@@ -133,6 +133,10 @@ def _chapter_maps_in_build_order(
     instead (and overrides `only_built`). `reference/chapters.json` is the
     §4.3 source of truth for chapter/map binding; this reads it, it does not
     hardcode a list.
+
+    A revisit chapter (`visit` > 1) is skipped: it introduces no map, so it
+    has no place in the cumulative union (2026-10-14, CH07 -- the first
+    revisit to go in_progress -- tripped the overlap check on map 35).
     """
     wanted = status if status is not None else ("built" if only_built else None)
     data = json.loads(chapters_json.read_text(encoding="utf-8"))
@@ -144,6 +148,8 @@ def _chapter_maps_in_build_order(
             continue
         seen.add(chapter_id)
         if wanted is not None and chapter.get("status") != wanted:
+            continue
+        if chapter.get("visit", 1) > 1:
             continue
         out.append((chapter_id, tuple(expand_split_ids(chapter["maps"]))))
     return out

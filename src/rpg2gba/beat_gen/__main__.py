@@ -135,6 +135,7 @@ from rpg2gba.routing.locations import (
     BeatLocationRecord,
     RowCell,
     _map_constant_for,  # the one MAP_* lookup; `cell_for_row` uses it too
+    _rom_touch_cells,
     cell_for_row,
     chapter_from_locations,
 )
@@ -702,6 +703,27 @@ class _ChainOccupancy:
         return self._occupancy[map_id] if map_id in self._chain_maps else _NoOccupancy()
 
 
+class _FixedBlocked:
+    def __init__(self, cells: frozenset[tuple[int, int]]) -> None:
+        self._cells = cells
+
+    def blocked_cells(self) -> frozenset[tuple[int, int]]:
+        return self._cells
+
+
+class _ExtraWalls:
+    """`occupancy` with `extra` cells held solid per map (`_tripwire_refusals`)."""
+
+    def __init__(self, occupancy: Mapping,
+                 extra: Mapping[int, frozenset[tuple[int, int]]]) -> None:
+        self._occupancy = occupancy
+        self._extra = extra
+
+    def __getitem__(self, map_id: int) -> _FixedBlocked:
+        return _FixedBlocked(self._occupancy[map_id].blocked_cells()
+                             | self._extra.get(map_id, frozenset()))
+
+
 def _staged(chapter_id: str, maps: Sequence[int], graphs: Mapping[int, MapGraph],
             build_dir: Path) -> bool:
     """Every map of a successor has decoded data AND a graph this build can
@@ -1243,6 +1265,51 @@ def _released_killers(
             clearers = released.get((parsed.map_id, parsed.event_id))
             if clearers:
                 out[rid] = clearers
+    return out
+
+
+def _tripwire_refusals(
+    beats: Sequence[PlannedBeat], records: Sequence[BeatLocationRecord],
+    released: Mapping[tuple[int, int], tuple[str, ...]], *,
+    tripwire_cells: Callable[[int, int], frozenset[tuple[int, int]]],
+    reach_avoiding: Callable[[Mapping[int, frozenset[tuple[int, int]]]], frozenset],
+) -> list[Refusal]:
+    """Obstacle rows whose refusal can't be walked before their own clearer.
+    `_released_killers` puts an obstacle beat before the beat that clears
+    its wall, but when that clearer is a Trainer(N) sight tripwire (coord
+    triggers on its sight ray, `_rom_touch_cells`) and every approach to the
+    obstacle crosses the ray, walking up fires the clearer first: the wall
+    is gone before it can be refused (2026-10-14, CH07: Route 2's rockslide
+    faces lie past event 19's ray). `reach_avoiding(cells)` floods from the
+    entry with the released walls standing and `cells` held solid."""
+    record_of = {r.beat_id: r for r in records}
+    out: list[Refusal] = []
+    for b in beats:
+        if b.template != "obstacle" or b.group not in record_of:
+            continue
+        record = record_of[b.group]
+        map_id = map_uranium_id(record.map_constant)
+        sites = [(map_id, (c.x, c.y)) for c in record.approach_candidates] or [
+            (map_id, (record.x, record.y))]
+        for rid in b.rows:
+            parsed = parse_row_id(rid)
+            wires: dict[int, set[tuple[int, int]]] = {}
+            owners: set[str] = set()
+            for clearer in released.get((parsed.map_id, parsed.event_id), ()):
+                cp = parse_row_id(clearer)
+                cells = tripwire_cells(cp.map_id, cp.event_id)
+                if cells:
+                    wires.setdefault(cp.map_id, set()).update(cells)
+                    owners.add(f"map{cp.map_id:03d}/ev{cp.event_id:03d}")
+            if not wires:
+                continue
+            reach = reach_avoiding({m: frozenset(c) for m, c in wires.items()})
+            if any(s in reach for s in sites):
+                continue
+            out.append(Refusal(
+                row_id=rid, blocker="cell", reason="clearer_tripwire",
+                detail=(f"every approach crosses the sight tripwire of {sorted(owners)}, "
+                        "which clears this obstacle -- it is gone before it can be refused")))
     return out
 
 
@@ -1813,6 +1880,28 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                           elsewhere=selection.elsewhere + tuple(
                               Elsewhere(row_id, "later", owner)
                               for row_id, owner in later.items()))
+
+    # 4b2. An obstacle walked up to only across its clearer's sight tripwire
+    #      is cleared before it can be refused (`_tripwire_refusals`).
+    if released:
+        tripwire_maps = frozenset(binding.chapter(chapter_id).maps) | {entry[0]}
+        walled = occupancy.with_walls(released)
+        tripwire_refused = _tripwire_refusals(
+            beats, records, released,
+            tripwire_cells=lambda m, e: _rom_touch_cells(m, e) if m in tripwire_maps
+            else frozenset(),
+            reach_avoiding=lambda extra: reachable_sites(
+                entry, graphs, world, tripwire_maps,
+                _ChainOccupancy(_ExtraWalls(walled, extra), tripwire_maps)))
+        if tripwire_refused:
+            gone = {r.row_id for r in tripwire_refused}
+            for r in tripwire_refused:
+                logger.info("clearer tripwire: %s refused -- %s", r.row_id, r.detail)
+            cell_refusals = [*cell_refusals, *tripwire_refused]
+            beats = tuple(dataclasses.replace(b, rows=tuple(r for r in b.rows if r not in gone))
+                          for b in beats if set(b.rows) - gone)
+            records = [dataclasses.replace(r, rows=tuple(x for x in r.rows if x not in gone))
+                       for r in records if set(r.rows) - gone]
 
     # 4c. Guard walls (`beat_gen/guard_reach.py`): approach cells the player
     #     can't reach while a coord guard is live are dropped, or the beat waits

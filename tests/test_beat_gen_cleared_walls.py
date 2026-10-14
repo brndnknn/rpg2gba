@@ -182,6 +182,39 @@ def test_passage_gated_when_two_of_three_wall_cells_are_unowned():
     assert out == {"map035/ev030/p0": ("map035/ev019/p0",)}
 
 
+_OBSTACLE = PlannedBeat(name="rock", template="obstacle", map_id=35,
+                        rows=("map035/ev015/p0",), group="map035/ev015/p0")
+_WIRE = frozenset({(25, 27), (25, 28)})
+
+
+def _tripwire(reach, wires=lambda m, e: _WIRE if e == 19 else frozenset()):  # noqa: ANN001
+    seen: list = []
+
+    def reach_avoiding(extra):  # noqa: ANN001, ANN202
+        seen.append(extra)
+        return reach
+    out = bg._tripwire_refusals([_OBSTACLE], [_record(("map035/ev015/p0",), 22, 29)], _REL,
+                                tripwire_cells=wires, reach_avoiding=reach_avoiding)
+    return out, seen
+
+
+def test_obstacle_behind_its_clearers_tripwire_is_refused():
+    # CH07: the rock faces lie past event 19's sight ray
+    out, seen = _tripwire(frozenset({_NORTH}))
+    assert [(r.row_id, r.reason) for r in out] == [("map035/ev015/p0", "clearer_tripwire")]
+    assert seen == [{35: _WIRE}]
+
+
+def test_obstacle_reachable_around_the_tripwire_is_kept():
+    out, _ = _tripwire(frozenset({_NORTH, (35, (22, 29))}))
+    assert out == []
+
+
+def test_clearer_without_a_tripwire_refuses_nothing():
+    out, seen = _tripwire(frozenset(), wires=lambda m, e: frozenset())
+    assert out == [] and seen == []
+
+
 def _unreachable_record(x, y, candidates):
     cands = tuple(ApproachCandidate(x=cx, y=cy, side="north", resolver="t")
                   for cx, cy in candidates)

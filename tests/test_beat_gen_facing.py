@@ -174,6 +174,33 @@ def test_one_shot_needs_matching_off_write_and_self_switch_page():
     assert one_shot_arms(9, _arms(plain), sides) == {}
 
 
+def _lifting_event(inner: list[dict]) -> dict:
+    """Page 0 (no condition) with the facing branch, `inner` after it at its
+    choice-arm level; page 1 blank, gated on self switch A (Route 2 ev19)."""
+    page = _choice_page(inner, self_switch=None)
+    higher = _page()
+    higher["condition"] = {"self_switch_valid": True, "self_switch_ch": "A"}
+    return {"events": [{"id": 1, "pages": [page, higher]}]}
+
+
+def _script_on(indent: int, target: str) -> dict:
+    return {"code": 355, "indent": indent, "parameters": [f'pbSetSelfSwitch({target},"A",true)']}
+
+
+@pytest.mark.parametrize("write", [_on(1, "A"), _script_on(1, "1"), _script_on(1, "@event_id")])
+def test_one_shot_by_lifting_a_higher_page(write):
+    data = _lifting_event([write])
+    sides = facing_sides(9, data)
+    got = one_shot_arms(9, data, sides)
+    assert got["map009/ev001/p0/b1"] == OneShot(
+        "map009/ev001/p0", "A", "map009/ev001/p0/b0", lifts=True)
+
+
+def test_lifting_another_events_switch_is_not_one_shot():
+    data = _lifting_event([_script_on(1, "7")])
+    assert one_shot_arms(9, data, facing_sides(9, data)) == {}
+
+
 def _shot(page: str = "map050/ev005/p2") -> OneShot:
     return OneShot(page, "D", f"{page}/b0")
 

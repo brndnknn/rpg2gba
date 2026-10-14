@@ -116,6 +116,38 @@ def test_loop_in_common_event_queues(ctx: T.TranspileContext) -> None:
     assert "removeobject" not in out.text
 
 
+def actor_event(ev_id: int, *, extra_gate: bool = False, blank: bool = True) -> dict:
+    cond = {"self_switch_valid": True, "self_switch_ch": "A", "switch1_valid": extra_gate}
+    graphic = {"character_name": "" if blank else "npc", "tile_id": 0}
+    return {"id": ev_id, "name": "actor", "pages": [
+        {"condition": {}, "graphic": {"character_name": "npc", "opacity": 0}, "list": []},
+        {"condition": cond, "graphic": graphic, "list": []}]}
+
+
+def test_prescan_finds_blanking_self_switches() -> None:
+    never_drawn = actor_event(23)
+    never_drawn["pages"][0]["graphic"] = {"character_name": ""}
+    events = [actor_event(20), actor_event(21, extra_gate=True), actor_event(22, blank=False),
+              never_drawn, rock_event(14)]
+    assert T.blanking_self_switches(events) == frozenset({(20, "A")})
+
+
+def test_write_that_blanks_an_actor_also_removes_it(ctx: T.TranspileContext) -> None:
+    ctx.register_map_vanishers(MAP_ID, [actor_event(20)])
+    out = run(ctx, [ss('pbSetSelfSwitch(20,"A",true)'), ss('pbSetSelfSwitch(20,"B",true)')])
+    lines = [ln.strip() for ln in out.text.splitlines() if not ln.strip().startswith("#")]
+    assert lines[lines.index(f"setflag({self_switch_flag_name(MAP_ID, 20, 'A')})") + 1] == \
+        "removeobject(20)"
+    assert out.text.count("removeobject(20)") == 1  # switch B blanks nothing
+
+
+def test_write_to_the_calling_event_does_not_remove_it(ctx: T.TranspileContext) -> None:
+    # Route 2 EV019 sets its own A via the 19..22 loop; it is a tripwire, not an object
+    ctx.register_map_vanishers(MAP_ID, [actor_event(19)])
+    out = run(ctx, [ss('pbSetSelfSwitch(19,"A",true)')], event_id=19)
+    assert "removeobject" not in out.text
+
+
 def test_animation_32_emits_heart_movement(ctx: T.TranspileContext) -> None:
     out = run(ctx, [cmd(207, [21, 32])])
     assert not out.unhandled

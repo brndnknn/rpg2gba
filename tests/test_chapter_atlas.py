@@ -285,7 +285,8 @@ def test_built_chapters_match_the_slice_map_set() -> None:
     # Derived from status rather than a hand-listed chapter pair (which went
     # stale the moment CH03 entered the build set): a chapter's maps belong in
     # SLICE_MAP_IDS once it is `in_progress` — it has to build before it can
-    # pass its §9 gate and become `built`.
+    # pass its §9 gate and become `built`. A revisit introduces no map (CH07
+    # re-enters 35), so only first visits count.
     from rpg2gba.map_split.spec import expand_split_ids
     from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
 
@@ -293,7 +294,7 @@ def test_built_chapters_match_the_slice_map_set() -> None:
     built = [
         map_id
         for chapter in binding.chapters
-        if chapter.status in ("built", "in_progress")
+        if chapter.status in ("built", "in_progress") and not chapter.is_revisit
         for map_id in chapter.maps
     ]
     # chapters.json names Uranium maps; a split map builds as its pieces

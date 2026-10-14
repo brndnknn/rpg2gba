@@ -151,6 +151,8 @@ def transpile_map(
     # (rocks respawn — operator ruling 2026-10-14; see transpiler
     # `_emit_remote_self_switch`).
     ctx.register_map_rocks(map_id, map_json.get("events", []))
+    # Self switches that blank their event: a remote write despawns it too.
+    ctx.register_map_vanishers(map_id, map_json.get("events", []))
 
     for event in map_json.get("events", []):
         event_id = event.get("id")

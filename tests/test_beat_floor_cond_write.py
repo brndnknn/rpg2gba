@@ -87,6 +87,25 @@ def test_a_write_an_arm_repeats_later_is_not_the_final_value():
     assert dict(sw.params)["switch_id"] == 104
 
 
+def test_a_rock_another_event_clears_is_not_asserted():
+    # CH07: the cutscene sets rocks' self-switch A; the ROM removes them
+    # instead (rocks respawn, operator 2026-10-14), so no _SSA flag is set.
+    from rpg2gba.story_state.state import SelfSwitch
+    rock = Assign(SelfSwitch(35, 14, "A"), frozenset({True}), False, "t", 3)
+    other = Assign(SelfSwitch(35, 20, "A"), frozenset({True}), False, "t", 4)
+    out, _ = walk._state_assertions_for_row(
+        "map035/ev019/p0", _row_state(rock, other), {}, removed_rocks=frozenset({(35, 14)}))
+    assert [dict(a.params)["event_id"] for a in out] == [20]
+
+
+def test_the_real_cutscene_asserts_no_rock_self_switch():
+    from rpg2gba.beat_floor.lookup import floor_for_row
+    floor = floor_for_row("map035/ev019/p0")
+    events = {dict(a.params)["event_id"] for a in floor.assertions
+              if a.kind == "self_switch_write"}
+    assert not events & {14, 15, 16, 17, 18}
+
+
 def test_the_real_auntie_trunk_does_not_assert_185():
     from rpg2gba.beat_floor.lookup import floor_for_row
     floor = floor_for_row("map049/ev001/p2")

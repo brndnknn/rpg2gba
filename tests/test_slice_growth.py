@@ -97,6 +97,18 @@ def test_in_progress_overlapping_a_built_chapter_fails_loud(tmp_path: Path) -> N
         gated_chapter_slices(path, current_slice_ids=[1, 2, 3])
 
 
+def test_revisit_chapter_introduces_no_maps(tmp_path: Path) -> None:
+    """A revisit (`visit` > 1) re-enters a map an earlier chapter introduced;
+    it is not part of the cumulative union, built or in_progress (CH07)."""
+    revisit = {**_chapter("CH02", [1], status="in_progress"), "visit": 2}
+    path = _write_chapters_json(tmp_path, [_chapter("CH01", [1]), revisit])
+    slices = gated_chapter_slices(path, current_slice_ids=[1])
+    assert [s.chapter_id for s in slices] == ["CH01"]
+    built = {**revisit, "status": "built"}
+    path = _write_chapters_json(tmp_path, [_chapter("CH01", [1]), built])
+    assert [s.chapter_id for s in gated_chapter_slices(path, current_slice_ids=[1])] == ["CH01"]
+
+
 def test_duplicate_chapter_id_uses_only_first_occurrence(tmp_path: Path) -> None:
     """CH07/CH07A-style reruns of an earlier map roster later in the corpus
     must not be double-counted into the cumulative union."""

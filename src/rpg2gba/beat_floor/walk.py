@@ -49,6 +49,7 @@ from rpg2gba.chapter_manifest.generator import PageScope, detect_stair_cells, it
 from rpg2gba.chapter_manifest.schema import parse_row_id, row_id_sort_key
 from rpg2gba.conversion_agent.deterministic import join_text_lines, translate_text_codes
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
+from rpg2gba.conversion_agent.transpiler import smashable_rock_event_ids
 from rpg2gba.conversion_agent.inline_choice import (
     InlineChoiceError,
     has_inline_choice,
@@ -666,6 +667,7 @@ def _later_arm_writes(row_id: str, row_states: Mapping[str, RowState]) -> dict[A
 def _state_assertions_for_row(
     row_id: str, row_state: RowState, scripts_by_index: Mapping[int, str],
     later_arm_writes: Mapping[Any, int] | None = None,
+    removed_rocks: frozenset[tuple[int, int]] = frozenset(),
 ) -> tuple[
     tuple[FloorAssertion, ...], tuple[FloorRefusal, ...],
 ]:
@@ -691,7 +693,13 @@ def _state_assertions_for_row(
     reads it after the page completes: it is not asserted here. The arm rows
     assert their own writes. ROM run 46: Auntie's page (map049/ev001/p2)
     turns switch 185 ON, then each starter arm turns it OFF again; the
-    trunk asserted ON and the ROM read OFF."""
+    trunk asserted ON and the ROM read OFF.
+
+    A self-switch set TRUE on another event in `removed_rocks` (the map's
+    smashable rocks, less the row's own event) is not asserted: the
+    transpiler emits `removeobject` for it, not the `_SSA` flag (operator
+    ruling 2026-10-14, rocks respawn; `Transpiler` remote self-switch
+    writes). CH07: event 19's cutscene clears the rockslide."""
     assertions: list[FloorAssertion] = []
     refusals: list[FloorRefusal] = []
     later = later_arm_writes or {}
@@ -731,6 +739,8 @@ def _state_assertions_for_row(
         elif isinstance(key, SelfSwitch):
             if not isinstance(write, Assign):
                 continue
+            if (key.map_id, key.event_id) in removed_rocks and write.values == frozenset({True}):
+                continue  # removeobject on the ROM, not a self-switch
             cond = cond_params(write)
             if cond is None:
                 continue
@@ -806,6 +816,7 @@ def _build_row_floor(
     row_states: dict[str, RowState],
     door_cells: Mapping[int, frozenset[tuple[int, int]]],
     stripped_ce_ids: frozenset[int],
+    rock_ids: frozenset[int] = frozenset(),
 ) -> RowFloor:
     ctx = ExtractContext(
         map_id=map_id, event_id=event_id, page_idx=page_idx, row_id=scope.row_id,
@@ -838,7 +849,8 @@ def _build_row_floor(
         }
         sa, sr = _state_assertions_for_row(
             scope.row_id, row_state, scripts_by_index,
-            _later_arm_writes(scope.row_id, row_states))
+            _later_arm_writes(scope.row_id, row_states),
+            removed_rocks=frozenset((map_id, e) for e in rock_ids if e != event_id))
         assertions.extend(sa)
         refusals.extend(sr)
 
@@ -915,6 +927,7 @@ def floor_for_map(
     # page rows (`chapter_manifest.generator._generate_page_rows`); they get
     # no floor, so the floor's row set matches the manifest's event rows.
     absorbed_event_ids = {cell.event_id for cell in detect_stair_cells(map_data)}
+    rock_ids = smashable_rock_event_ids([e for e in map_data.get("events", []) or [] if e])
 
     result: dict[str, RowFloor] = {}
     for event in map_data.get("events", []) or []:
@@ -931,7 +944,7 @@ def floor_for_map(
             for scope in scopes:
                 result[scope.row_id] = _build_row_floor(
                     scope, trigger, map_id, event_id, page_idx, event, map_data,
-                    common_events_by_id, index_of, row_states, door_cells, sce,
+                    common_events_by_id, index_of, row_states, door_cells, sce, rock_ids,
                 )
 
             # `blocked_obstacle` is per PAGE: the capability head appears on

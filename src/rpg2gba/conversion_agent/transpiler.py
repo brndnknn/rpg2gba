@@ -1317,6 +1317,18 @@ class TranspileContext:
         self.rock_event_ids[map_id] = ids
         return ids
 
+    # map_id -> (event id, letter) pairs whose self switch, once ON, selects a
+    # blank page of that event (``blanking_self_switches``), filled by
+    # ``register_map_vanishers`` like ``rock_event_ids``.
+    vanishing_switches: dict[int, frozenset[tuple[int, str]]] = field(default_factory=dict)
+
+    def register_map_vanishers(self, map_id: int, events: list[dict]) -> frozenset[tuple[int, str]]:
+        """Pre-scan ``events`` for self switches that blank their event and
+        record them under ``map_id``. Call once per map before transpiling."""
+        pairs = blanking_self_switches(events)
+        self.vanishing_switches[map_id] = pairs
+        return pairs
+
     # Uranium internal item/berry symbol -> ITEM_* constant, from
     # reference/uranium_id_map.json's "items" table (CLAUDE.md §4.3). Used
     # ONLY by resolve_native_object_template (item ball / berry tree) — the
@@ -1850,6 +1862,30 @@ def _script_row_leaves_expression_open(text: str) -> bool:
     if depth > 0:
         return True
     return bool(_SCRIPT_ROW_TRAILING_ASSIGN_RE.search(text))
+
+
+def blanking_self_switches(events: list[dict]) -> frozenset[tuple[int, str]]:
+    """``(event id, letter)`` for each event whose LAST page is gated purely
+    on that self switch and shows nothing (no character, no tile), while an
+    earlier page does draw a character: RMXP picks the highest live page, so
+    turning the switch ON blanks the event on the spot. CH07: the rockslide
+    cutscene's actors (Route 2 events 20-22). An event never drawn has no
+    object to remove (Map049 EV018 failed staging as a sprite-less actor)."""
+    out: set[tuple[int, str]] = set()
+    for ev in events:
+        ev_id = ev.get("id") if ev else None
+        pages = ev.get("pages", []) if ev else []
+        if not isinstance(ev_id, int) or not pages:
+            continue
+        last = pages[-1]
+        cond = last.get("condition", {})
+        graphic = last.get("graphic", {})
+        drawn = any(p.get("graphic", {}).get("character_name") for p in pages[:-1])
+        if (drawn and cond.get("self_switch_valid") and not cond.get("switch1_valid")
+                and not cond.get("switch2_valid") and not cond.get("variable_valid")
+                and not graphic.get("character_name") and not graphic.get("tile_id")):
+            out.add((ev_id, cond["self_switch_ch"]))
+    return frozenset(out)
 
 
 def smashable_rock_event_ids(events: list[dict]) -> frozenset[int]:
@@ -4657,7 +4693,13 @@ class _PageEmitter:
         only sets the flag while the object is spawned (near the camera) —
         holds for the cutscene callers, not engineered around. The local id is
         the RMXP event id, rewritten later by local_id_remap. A ``false`` write
-        to a rock and every non-rock target keep the setflag/clearflag form."""
+        to a rock and every non-rock target keep the setflag/clearflag form.
+
+        A TRUE write that selects the target's blank last page
+        (``ctx.vanishing_switches``) also gets ``removeobject``: RMXP blanks
+        the event at once, but setting the flag doesn't despawn an object
+        already drawn (2026-10-14, CH07: the rockslide cutscene's actors,
+        `addobject`ed from opacity 0, stayed on screen after the scene)."""
         if value and target in self.ctx.rock_event_ids.get(self.ctx.map_id, frozenset()):
             return [
                 f"# event {target} is a smashable rock: rocks respawn, so remove "
@@ -4665,6 +4707,11 @@ class _PageEmitter:
                 f"removeobject({target})",
             ]
         name = self.ctx.registry.mint_self_switch(self.ctx.map_id, target, switch)
+        if value and target != self.ctx.event_id and (target, switch) in \
+                self.ctx.vanishing_switches.get(self.ctx.map_id, frozenset()):
+            return [f"setflag({name})",
+                    f"# self switch {switch} blanks event {target}: despawn it now",
+                    f"removeobject({target})"]
         return [f"setflag({name})" if value else f"clearflag({name})"]
 
     def _emit_script_call(self, node: Node) -> list[str]:

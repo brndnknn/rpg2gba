@@ -91,11 +91,30 @@ class OneShot:
     page: str
     switch: str
     ender: str
+    lifts: bool = False   # ended by turning `switch` ON for a higher page, not OFF
 
 
 _SELF_SWITCH = 123
+_SELF_SWITCH_ON = 0
 _SELF_SWITCH_OFF = 1
 _SIDE_ORDER = ("north", "south", "east", "west")
+_SET_SELF_SWITCH_ON_RE = re.compile(
+    r"(?<![A-Za-z_])pbSetSelfSwitch\(\s*(@event_id|\d+)\s*,\s*[\"']([A-D])[\"']\s*,\s*true\s*\)")
+
+
+def _turns_on(commands: Sequence[Mapping[str, Any]], event_id: int, switch: str) -> bool:
+    """Some command of `commands` turns the event's own self switch `switch`
+    ON: a code-123 write, or a `pbSetSelfSwitch(<own id>|@event_id, ...,
+    true)` script line (code 355/655)."""
+    for c in commands:
+        params = c.get("parameters") or [None, None]
+        if c.get("code") == _SELF_SWITCH and params[:2] == [switch, _SELF_SWITCH_ON]:
+            return True
+        if c.get("code") in (355, 655):
+            for target, letter in _SET_SELF_SWITCH_ON_RE.findall(str(params[0])):
+                if letter == switch and target in ("@event_id", str(event_id)):
+                    return True
+    return False
 
 
 def one_shot_arms(map_id: int, map_data: Mapping[str, Any],
@@ -103,7 +122,12 @@ def one_shot_arms(map_id: int, map_data: Mapping[str, Any],
     """{row id: OneShot} for each row of `gated` (facing-gated branch rows)
     that is one-shot. The off-write must sit at the level of the arm itself,
     an enclosing arm, or the page trunk -- not inside a sibling arm, which
-    this arm's firing never runs."""
+    this arm's firing never runs.
+
+    A page also ends itself by turning ON a self switch a HIGHER page of its
+    event is conditioned on -- that page outranks it from then on (2026-10-14,
+    CH07: Route 2 event 19's facing arms both write its own A, lifting its
+    blank page 1; the second arm group was walked and fired nothing)."""
     wanted = set(gated)
     events = {e["id"]: e for e in map_data.get("events", []) or []}
     pages: set[tuple[int, int]] = set()
@@ -119,9 +143,20 @@ def one_shot_arms(map_id: int, map_data: Mapping[str, Any],
             raise ValueError(f"map{map_id:03d}/ev{event_id:03d}: event not in map data")
         page = event["pages"][page_idx]
         cond = page.get("condition") or {}
-        if not cond.get("self_switch_valid"):
+        enders: list[tuple[str, bool, Callable[[Sequence[Mapping[str, Any]]], bool]]] = []
+        if cond.get("self_switch_valid"):
+            off = cond["self_switch_ch"]
+            enders.append((off, False, lambda cmds, s=off: any(
+                c.get("code") == _SELF_SWITCH
+                and (c.get("parameters") or [None, None])[:2] == [s, _SELF_SWITCH_OFF]
+                for c in cmds)))
+        for higher in event["pages"][page_idx + 1:]:
+            hc = higher.get("condition") or {}
+            if hc.get("self_switch_valid"):
+                on = hc["self_switch_ch"]
+                enders.append((on, True, lambda cmds, s=on: _turns_on(cmds, event_id, s)))
+        if not enders:
             continue
-        switch = cond["self_switch_ch"]
         scopes = {s.row_id: s for s in iter_page_scopes(map_id, event, page_idx, page)}
         for row_id in sorted(wanted & scopes.keys()):
             chain: list[str] = []
@@ -129,12 +164,12 @@ def one_shot_arms(map_id: int, map_data: Mapping[str, Any],
             while cur is not None:
                 chain.append(cur)
                 cur = scopes[cur].parent_row_id
-            for scope_id in chain:   # arm first, then outward to the trunk
-                if any(c.get("code") == _SELF_SWITCH
-                       and (c.get("parameters") or [None, None])[:2] == [switch, _SELF_SWITCH_OFF]
-                       for c in scopes[scope_id].commands):
-                    out[row_id] = OneShot(page=chain[-1], switch=switch, ender=scope_id)
-                    break
+            found = next(((switch, lifts, scope_id) for scope_id in chain   # arm first, outward
+                          for switch, lifts, ends in enders if ends(scopes[scope_id].commands)),
+                         None)
+            if found is not None:
+                out[row_id] = OneShot(page=chain[-1], switch=found[0], ender=found[2],
+                                      lifts=found[1])
     return out
 
 
@@ -187,10 +222,11 @@ def split_facing_arms(
             for r in shots:
                 if r not in chosen:
                     info = one_shot[r]
+                    turn = ("on, lifting a higher page," if info.lifts else "off")
                     elsewhere.append(Elsewhere(
                         r, "unselected_arm",
                         detail=(f"facing arm of {info.page}, which turns self switch "
-                                f"{info.switch} off after one firing ({info.ender}): the "
+                                f"{info.switch} {turn} after one firing ({info.ender}): the "
                                 f"walk fires it once, from {side}, and takes the facing "
                                 f"arms legal there (2026-10-12)")))
         split = [r for r in gated if r not in one_shot]
