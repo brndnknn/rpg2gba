@@ -146,6 +146,11 @@ def transpile_map(
     # map from the shape of the event, never re-implemented here.
     stair_ids = stairs.stair_event_ids(map_json)
     stairs_skipped = 0
+    # Smashable rocks, scanned before any event is emitted: a remote
+    # self-switch write to a rock emits `removeobject`, never its SSA flag
+    # (rocks respawn — operator ruling 2026-10-14; see transpiler
+    # `_emit_remote_self_switch`).
+    ctx.register_map_rocks(map_id, map_json.get("events", []))
 
     for event in map_json.get("events", []):
         event_id = event.get("id")

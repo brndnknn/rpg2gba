@@ -130,6 +130,18 @@ _SET_TEMP_SWITCH_RE = re.compile(r'^\s*setTempSwitchOn\(\s*"([A-Za-z0-9]+)"\s*\)
 _SET_SELF_SWITCH_RE = re.compile(
     r'^\s*pbSetSelfSwitch\(\s*(\d+)\s*,\s*"([A-Z])"\s*,\s*(true|false)\s*\)\s*$'
 )
+# `for i in A..B` loop header / exact-shape body / closing `end`. The three RMXP
+# rows are fused (joined with "\n") by ``_collapse_self_switch_loops`` into one
+# synthetic script leaf matched whole by ``_SET_SELF_SWITCH_LOOP_RE``.
+_SS_LOOP_HEADER_RE = re.compile(r"^\s*for\s+([a-z_]\w*)\s+in\s+(\d+)\.\.(\d+)\s*$")
+_SS_LOOP_BODY_RE = re.compile(
+    r'^\s*pbSetSelfSwitch\(\s*([a-z_]\w*)\s*,\s*"([A-Z])"\s*,\s*(true|false)\s*\)\s*$'
+)
+_SS_LOOP_END_RE = re.compile(r"^\s*end\s*$")
+_SET_SELF_SWITCH_LOOP_RE = re.compile(
+    r'^for (?P<var>[a-z_]\w*) in (?P<lo>\d+)\.\.(?P<hi>\d+)\n'
+    r'pbSetSelfSwitch\((?P=var),"(?P<sw>[A-Z])",(?P<val>true|false)\)\nend$'
+)
 
 # pbPhoneRegisterNPC(...) — Essentials phone-directory registration; the
 # system has no slice-relevant analog on the GBA. User-approved strip
@@ -263,6 +275,17 @@ _EMOTE_MOVEMENT_LABELS = {
 # _EMOTE_MOVEMENT_LABELS misses, which still queue — this id has been looked
 # at and dropped on purpose, so it gets a breadcrumb instead of a queue entry.
 _EMOTE_DROP_IDS = frozenset({18})
+
+# 207 animation ids that map to a native movement ACTION with no shared
+# ``Common_Movement_*`` label in the fork. Emitted as a per-page named movement
+# block holding the token (same mechanism as a 209 route's ``_Move<N>``).
+# Id 32 "Ranger - Capture" -> the heart emote (operator ruling 2026-10-14).
+# Fork evidence: ``emote_heart`` is a movement action
+# (engine/asm/macros/movement.inc:95, MOVEMENT_ACTION_EMOTE_HEART);
+# engine/data/scripts/movement.inc defines no Common_Movement_Heart label.
+_EMOTE_MOVEMENT_TOKENS = {
+    32: "emote_heart",
+}
 
 # -- native bucket idioms (queue-clearing pass, 2026-07-05 slice review) ------
 # Whole-shape matches proven against the real slice corpus (Map032/048/049) —
@@ -1279,6 +1302,21 @@ class TranspileContext:
     # stage_slice_scripts.py, owned by a different agent); don't rename.
     traits: dict[tuple[int, int], set[str]] = field(default_factory=dict)
 
+    # map_id -> RMXP ids of that map's smashable-rock events, filled by
+    # ``register_map_rocks`` (a deterministic pre-scan of the whole map's
+    # events; must run BEFORE any of the map's events is transpiled). Empty /
+    # missing map means "not scanned" and remote self-switch writes keep their
+    # plain SSA setflag form.
+    rock_event_ids: dict[int, frozenset[int]] = field(default_factory=dict)
+
+    def register_map_rocks(self, map_id: int, events: list[dict]) -> frozenset[int]:
+        """Pre-scan ``events`` (one map's full event list) for smashable
+        rocks and record them under ``map_id``. Call once per map before
+        transpiling any of its events."""
+        ids = smashable_rock_event_ids(events)
+        self.rock_event_ids[map_id] = ids
+        return ids
+
     # Uranium internal item/berry symbol -> ITEM_* constant, from
     # reference/uranium_id_map.json's "items" table (CLAUDE.md §4.3). Used
     # ONLY by resolve_native_object_template (item ball / berry tree) — the
@@ -1814,6 +1852,71 @@ def _script_row_leaves_expression_open(text: str) -> bool:
     return bool(_SCRIPT_ROW_TRAILING_ASSIGN_RE.search(text))
 
 
+def smashable_rock_event_ids(events: list[dict]) -> frozenset[int]:
+    """RMXP ids of the events with any page holding a code-111, condition-type
+    12 (script) condition that matches ``_ROCK_SMASH_RE`` — the same test
+    ``_emit_rock_smash_idiom`` collapses on, applied map-wide up front."""
+    ids: set[int] = set()
+    for ev in events:
+        ev_id = ev.get("id")
+        if not isinstance(ev_id, int):
+            continue
+        for page in ev.get("pages", []):
+            for c in page.get("list", []):
+                p = c.get("parameters", [])
+                if (
+                    c.get("code") == 111
+                    and len(p) >= 2
+                    and p[0] == 12
+                    and isinstance(p[1], str)
+                    and _ROCK_SMASH_RE.match(p[1])
+                ):
+                    ids.add(ev_id)
+    return frozenset(ids)
+
+
+def _collapse_self_switch_loops(nodes: list[Node]) -> list[Node]:
+    """Fuse the exact three-row shape ``for i in A..B`` / ``pbSetSelfSwitch(i,
+    "X", true|false)`` / ``end`` (a 355 header plus two 655 rows) into one
+    synthetic script leaf carrying canonical joined text, which
+    ``_emit_script_call`` matches via ``_SET_SELF_SWITCH_LOOP_RE``. Any other
+    shape (extra statement, different body, missing ``end``) is left as the
+    original rows, which queue individually (CLAUDE.md §4.5)."""
+    def text_of(n: Node, codes: tuple[int, ...]) -> str | None:
+        if type(n) is not Leaf or n.cmd.get("code") not in codes:
+            return None
+        p = n.cmd.get("parameters", [])
+        return p[0] if p and isinstance(p[0], str) else None
+
+    out: list[Node] = []
+    i = 0
+    while i < len(nodes):
+        head = text_of(nodes[i], (SCRIPT,))
+        hm = _SS_LOOP_HEADER_RE.match(head) if head is not None else None
+        if hm and i + 2 < len(nodes):
+            body = text_of(nodes[i + 1], (SCRIPT_CONT,))
+            end = text_of(nodes[i + 2], (SCRIPT_CONT,))
+            bm = _SS_LOOP_BODY_RE.match(body) if body is not None else None
+            if (
+                bm and bm.group(1) == hm.group(1)
+                and end is not None and _SS_LOOP_END_RE.match(end)
+            ):
+                var, lo, hi = hm.groups()
+                _, sw, val = bm.groups()
+                joined = (f'for {var} in {lo}..{hi}\n'
+                          f'pbSetSelfSwitch({var},"{sw}",{val})\nend')
+                first = nodes[i]
+                assert type(first) is Leaf
+                out.append(Leaf(
+                    cmd={**first.cmd, "parameters": [joined]}, index=first.index,
+                ))
+                i += 3
+                continue
+        out.append(nodes[i])
+        i += 1
+    return out
+
+
 def _merge_script_call_rows(nodes: list[Node]) -> list[Node]:
     """Fuse a run of one code-355 Script leaf plus immediately-following
     code-655 continuation leaves into a single logical node, when the
@@ -2305,6 +2408,7 @@ class _PageEmitter:
                 return self._emit_loop(nodes, split)
         nodes = _merge_consecutive_routes(nodes)
         nodes = _merge_script_call_rows(nodes)
+        nodes = _collapse_self_switch_loops(nodes)
         nodes = self._collapse_starter_rival_battles(nodes)
         nodes = self._collapse_pick_groups(nodes)
         warp_pos = next(
@@ -4258,7 +4362,8 @@ class _PageEmitter:
             return [f"# show animation id {animation_id} on target {target_id} "
                     f"— no OW analog, dropped (approved, v1)"]
         label = _EMOTE_MOVEMENT_LABELS.get(animation_id)
-        if label is None:
+        token = _EMOTE_MOVEMENT_TOKENS.get(animation_id) if label is None else None
+        if label is None and token is None:
             return [self.ctx.queue(
                 node.index, SHOW_ANIMATION,
                 f"show animation id {animation_id} on target {target_id} — "
@@ -4280,6 +4385,12 @@ class _PageEmitter:
             # makes for a 209 target — pokeemerald localids map 1:1 in our
             # porymap export).
             who = str(target_id)
+        if label is None and token is not None:
+            # Per-page named movement block (inline `[token]` lists don't work
+            # in the installed poryscript); no shared Common_Movement_* label
+            # exists for this action (fork: movement.inc:95 emote_heart).
+            label = f"{self.page_label}_Move{len(self.movements) + 1}"
+            self.movements.append((label, [token]))
         return [f"applymovement({who}, {label})", "waitmovement(0)"]
 
     def _emit_player_transparency(self, node: Node) -> list[str]:
@@ -4534,6 +4645,28 @@ class _PageEmitter:
             "command 204 outside the v1 deterministic tier",
         )]
 
+    def _emit_remote_self_switch(self, target: int, switch: str, value: bool) -> list[str]:
+        """Write another event's self-switch on this map. A smashable rock
+        (``ctx.rock_event_ids``) being set TRUE gets ``removeobject`` instead:
+        operator ruling 2026-10-14 — rocks respawn everywhere (stock Emerald),
+        so a script that clears one removes it for the visit and must NEVER set
+        its ``_SSA`` flag (the map dispatch would then pick the rock's blank
+        page 2 while the object stays visible on its FLAG_TEMP_*: a solid,
+        uninteractable rock). Known limit: the fork's
+        RemoveObjectEventByLocalIdAndMap (event_object_movement.c:1707-1715)
+        only sets the flag while the object is spawned (near the camera) —
+        holds for the cutscene callers, not engineered around. The local id is
+        the RMXP event id, rewritten later by local_id_remap. A ``false`` write
+        to a rock and every non-rock target keep the setflag/clearflag form."""
+        if value and target in self.ctx.rock_event_ids.get(self.ctx.map_id, frozenset()):
+            return [
+                f"# event {target} is a smashable rock: rocks respawn, so remove "
+                f"for this visit, never set its SSA flag (operator ruling 2026-10-14)",
+                f"removeobject({target})",
+            ]
+        name = self.ctx.registry.mint_self_switch(self.ctx.map_id, target, switch)
+        return [f"setflag({name})" if value else f"clearflag({name})"]
+
     def _emit_script_call(self, node: Node) -> list[str]:
         # v1: the STRIP set from the validated ledger produces nothing; two
         # slice-proven idioms emit deterministically; everything else queues
@@ -4676,10 +4809,22 @@ class _PageEmitter:
         # this map (336× corpus). Meaningless without a map (common events).
         m = _SET_SELF_SWITCH_RE.match(text)
         if m and self.ctx.common_event_id is None:
-            name = self.ctx.registry.mint_self_switch(
-                self.ctx.map_id, int(m.group(1)), m.group(2)
+            return self._emit_remote_self_switch(
+                int(m.group(1)), m.group(2), m.group(3) == "true"
             )
-            return [f"setflag({name})" if m.group(3) == "true" else f"clearflag({name})"]
+
+        # `for i in A..B` / pbSetSelfSwitch(i,"X",v) / `end` — fused by
+        # _collapse_self_switch_loops; expands per id, same rule as above.
+        m = _SET_SELF_SWITCH_LOOP_RE.match(text)
+        if m and self.ctx.common_event_id is None:
+            lo, hi = int(m.group("lo")), int(m.group("hi"))
+            if lo <= hi:
+                loop_lines: list[str] = []
+                for target in range(lo, hi + 1):
+                    loop_lines.extend(self._emit_remote_self_switch(
+                        target, m.group("sw"), m.group("val") == "true"
+                    ))
+                return loop_lines
 
         # Nuzlocke-mode heal loop — subsumed by the paired code-314 Recover All
         # (see _NUZLOCKE_HEAL_STRIP_RE). Breadcrumb, no queue.

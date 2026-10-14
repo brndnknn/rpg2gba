@@ -2066,7 +2066,7 @@
     "requires": [
       "rock_smash"
     ],
-    "unhandled": 4,
+    "unhandled": 0,
     "script_typed_conditions": 2,
     "condition_families": [
       "game_player_axis"
@@ -2109,7 +2109,7 @@
     "requires": [
       "rock_smash"
     ],
-    "unhandled": 4,
+    "unhandled": 0,
     "script_typed_conditions": 0,
     "condition_families": [],
     "condition_unclassified": [],
@@ -2155,7 +2155,7 @@
     "requires": [
       "rock_smash"
     ],
-    "unhandled": 4,
+    "unhandled": 0,
     "script_typed_conditions": 0,
     "condition_families": [],
     "condition_unclassified": [],
@@ -2203,7 +2203,7 @@
     "requires": [
       "rock_smash"
     ],
-    "unhandled": 4,
+    "unhandled": 0,
     "script_typed_conditions": 0,
     "condition_families": [],
     "condition_unclassified": [],
@@ -2249,7 +2249,7 @@
     "requires": [
       "rock_smash"
     ],
-    "unhandled": 4,
+    "unhandled": 0,
     "script_typed_conditions": 0,
     "condition_families": [],
     "condition_unclassified": [],
@@ -2297,7 +2297,7 @@
     "requires": [
       "rock_smash"
     ],
-    "unhandled": 4,
+    "unhandled": 0,
     "script_typed_conditions": 0,
     "condition_families": [],
     "condition_unclassified": [],
@@ -2343,7 +2343,7 @@
     "requires": [
       "rock_smash"
     ],
-    "unhandled": 4,
+    "unhandled": 0,
     "script_typed_conditions": 0,
     "condition_families": [],
     "condition_unclassified": [],

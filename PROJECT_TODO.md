@@ -17,6 +17,16 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 139. `transpile-events run --maps full` dies in `heal_locations.py` (map 8, event 37)
+
+Found 2026-10-14 (CH07 transpiler work): the full-corpus run aborts with `ValueError: staged
+call site (map 8, event 37) could not be resolved: trigger 4 is not Action Button (0)` before any
+map is emitted; `--maps slice` is unaffected. Consequence: the new `for i in A..B
+pbSetSelfSwitch` loop idiom has not been seen on its two other corpus sites, Map066
+(`48..53`) and Map193 (`15..32`). They emit the idiom only if their loop closes with an `end`
+row; otherwise they stay queued, which is the safe failure. Check both when those chapters
+open, or once this is fixed.
+
 ### 138. Map032 EV080's "!" spawns Theo's sprite visibly on invisible EV075
 
 Split out of #136 at the CH06 close-out (2026-10-13). In Moki Town, EV080 plays an exclamation
