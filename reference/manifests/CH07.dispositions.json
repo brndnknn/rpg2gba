@@ -1,0 +1,90 @@
+{
+  "map035/ev003/p1": {
+    "disposition": "cosmetic",
+    "affirmed_hash": "c50bda502d0b5fb3",
+    "archetype_exempt": "phone-rematch trainer: the generator refuses its rematch count (story-state unmodelled_outcome:phone_battle_count), so the page is walked by a generic beat, not the trainer template; same coverage CH04 shipped with (operator, 2026-10-14)"
+  },
+  "map035/ev014/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "a930201f885e155b"
+  },
+  "map035/ev014/p0/b0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "c4620541050f877a"
+  },
+  "map035/ev014/p0/b1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "9689b7cffeb3327b"
+  },
+  "map035/ev014/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  },
+  "map035/ev015/p0/b0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "c4620541050f877a"
+  },
+  "map035/ev015/p0/b1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "9689b7cffeb3327b"
+  },
+  "map035/ev015/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  },
+  "map035/ev016/p0/b0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "c4620541050f877a"
+  },
+  "map035/ev016/p0/b1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "9689b7cffeb3327b"
+  },
+  "map035/ev016/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  },
+  "map035/ev017/p0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "a930201f885e155b"
+  },
+  "map035/ev017/p0/b0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "c4620541050f877a"
+  },
+  "map035/ev017/p0/b1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "9689b7cffeb3327b"
+  },
+  "map035/ev017/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  },
+  "map035/ev018/p0/b0": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "c4620541050f877a"
+  },
+  "map035/ev018/p0/b1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "9689b7cffeb3327b"
+  },
+  "map035/ev018/p1": {
+    "disposition": "blocked:rock_smash",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  },
+  "map035/ev023/p0": {
+    "disposition": "beat:m035e023p0",
+    "affirmed_hash": "e765084fa7238363",
+    "archetype_exempt": "phone-rematch trainer: the generator refuses its rematch count (story-state unmodelled_outcome:phone_battle_count), so the page is walked by a generic beat, not the trainer template; same coverage CH04 shipped with (operator, 2026-10-14)"
+  },
+  "map035/ev023/p1": {
+    "disposition": "cosmetic",
+    "affirmed_hash": "613306aca88416e2",
+    "archetype_exempt": "phone-rematch trainer: the generator refuses its rematch count (story-state unmodelled_outcome:phone_battle_count), so the page is walked by a generic beat, not the trainer template; same coverage CH04 shipped with (operator, 2026-10-14)"
+  },
+  "map035/ev023/p2": {
+    "disposition": "beat:m035e023p2",
+    "affirmed_hash": "55dd33390faea053",
+    "archetype_exempt": "phone-rematch trainer: the generator refuses its rematch count (story-state unmodelled_outcome:phone_battle_count), so the page is walked by a generic beat, not the trainer template; same coverage CH04 shipped with (operator, 2026-10-14)"
+  }
+}

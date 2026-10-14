@@ -1,0 +1,359 @@
+{
+  "map035/ev001/p0": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "8ae8dc6fc7187d42"
+  },
+  "map035/ev001/p1": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "5539cd09d8efee80"
+  },
+  "map035/ev001/p1/b0": {
+    "disposition": "cosmetic",
+    "derived_hash": "744e1fb92a7097bb"
+  },
+  "map035/ev001/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map035/ev002/p0": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "f7f92d12826eb774"
+  },
+  "map035/ev003/p0": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "34d653cbf094b94e"
+  },
+  "map035/ev003/p0/b0": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "862f04af66319bda"
+  },
+  "map035/ev003/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "bddb35303eead3f2"
+  },
+  "map035/ev003/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "c50bda502d0b5fb3"
+  },
+  "map035/ev003/p1/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "c59d37208ddf75d8"
+  },
+  "map035/ev003/p1/b1": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "d09bf400fc8a03a2"
+  },
+  "map035/ev003/p1/b2": {
+    "disposition": "cosmetic",
+    "derived_hash": "e91d917d8267f06c"
+  },
+  "map035/ev003/p1/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "292e26781c19b2dd"
+  },
+  "map035/ev003/p2": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "fa930f176c79241a"
+  },
+  "map035/ev003/p2/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "afcd6863f03b4406"
+  },
+  "map035/ev003/p2/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "889c5a96a47d37e1"
+  },
+  "map035/ev008/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "a2fab855b4a49405"
+  },
+  "map035/ev009/p0": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "255c5f02ae1512de"
+  },
+  "map035/ev009/p0/b0": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "a8d4aef19b39ad89"
+  },
+  "map035/ev009/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "982c2df0810a97de"
+  },
+  "map035/ev009/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map035/ev011/p0": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "b3fa3c7dbc0bd7e3"
+  },
+  "map035/ev012/p0": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "a034ade4fa795003"
+  },
+  "map035/ev012/p0/b0": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "1286dbece3985597"
+  },
+  "map035/ev012/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "5d41135ee7a0981b"
+  },
+  "map035/ev012/p1": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "8f8b22ab37d3dfa7"
+  },
+  "map035/ev013/p0": {
+    "disposition": "elsewhere:later: CH04",
+    "derived_hash": "32790d1077074743"
+  },
+  "map035/ev014/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "a930201f885e155b",
+    "proposed": true
+  },
+  "map035/ev014/p0/b0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "c4620541050f877a"
+  },
+  "map035/ev014/p0/b1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "9689b7cffeb3327b"
+  },
+  "map035/ev014/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "6c2d90d22489cb2a",
+    "proposed": true
+  },
+  "map035/ev015/p0": {
+    "disposition": "beat:m035obstacle",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map035/ev015/p0/b0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "c4620541050f877a",
+    "proposed": true
+  },
+  "map035/ev015/p0/b1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "9689b7cffeb3327b",
+    "proposed": true
+  },
+  "map035/ev015/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "6c2d90d22489cb2a",
+    "proposed": true
+  },
+  "map035/ev016/p0": {
+    "disposition": "beat:m035obstacle",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map035/ev016/p0/b0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "c4620541050f877a",
+    "proposed": true
+  },
+  "map035/ev016/p0/b1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "9689b7cffeb3327b",
+    "proposed": true
+  },
+  "map035/ev016/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "6c2d90d22489cb2a",
+    "proposed": true
+  },
+  "map035/ev017/p0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "a930201f885e155b",
+    "proposed": true
+  },
+  "map035/ev017/p0/b0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "c4620541050f877a"
+  },
+  "map035/ev017/p0/b1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "9689b7cffeb3327b"
+  },
+  "map035/ev017/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "6c2d90d22489cb2a",
+    "proposed": true
+  },
+  "map035/ev018/p0": {
+    "disposition": "beat:m035obstacle",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map035/ev018/p0/b0": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "c4620541050f877a",
+    "proposed": true
+  },
+  "map035/ev018/p0/b1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "9689b7cffeb3327b",
+    "proposed": true
+  },
+  "map035/ev018/p1": {
+    "disposition": "blocked:rock_smash",
+    "derived_hash": "6c2d90d22489cb2a",
+    "proposed": true
+  },
+  "map035/ev019/p0": {
+    "disposition": "beat:m035e019p0",
+    "derived_hash": "f830a526f296ec08"
+  },
+  "map035/ev019/p0/b0": {
+    "disposition": "refused:cell: no_facing_side -- group 'm035e019p0_face_west' runs only from ['west']; the event offers ['south']",
+    "derived_hash": "4532d230b26564e2"
+  },
+  "map035/ev019/p0/b1": {
+    "disposition": "beat:m035e019p0",
+    "derived_hash": "8cc5d065a226330f"
+  },
+  "map035/ev019/p0/b2": {
+    "disposition": "beat:m035e019p0",
+    "derived_hash": "ac7b0ac260ec0dde"
+  },
+  "map035/ev019/p0/b3": {
+    "disposition": "beat:m035e019p0",
+    "derived_hash": "eab90722c97b6f61"
+  },
+  "map035/ev019/p0/b4": {
+    "disposition": "beat:m035e019p0",
+    "derived_hash": "e6059be4531c2be7"
+  },
+  "map035/ev019/p0/b5": {
+    "disposition": "cosmetic",
+    "derived_hash": "9098dfd5a3ee8024"
+  },
+  "map035/ev019/p1": {
+    "disposition": "beat:m035e019p1",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map035/ev020/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "b839a92a9862d52e"
+  },
+  "map035/ev020/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map035/ev021/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "3d66615cac286230"
+  },
+  "map035/ev021/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map035/ev022/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "eb9e2504323668de"
+  },
+  "map035/ev022/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map035/ev023/p0": {
+    "disposition": "beat:m035e023p0",
+    "derived_hash": "e765084fa7238363"
+  },
+  "map035/ev023/p0/b0": {
+    "disposition": "beat:m035e023p0",
+    "derived_hash": "ba56f52b1f6d7856"
+  },
+  "map035/ev023/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "c4fc58d8f60268bb"
+  },
+  "map035/ev023/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "613306aca88416e2"
+  },
+  "map035/ev023/p1/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "eb84c3b6d81c6fee"
+  },
+  "map035/ev023/p1/b1": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "bc69787fe0c9095d"
+  },
+  "map035/ev023/p1/b2": {
+    "disposition": "cosmetic",
+    "derived_hash": "e91d917d8267f06c"
+  },
+  "map035/ev023/p1/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "d026fc46b878144f"
+  },
+  "map035/ev023/p2": {
+    "disposition": "beat:m035e023p2",
+    "derived_hash": "55dd33390faea053"
+  },
+  "map035/ev023/p2/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "6278ffcacc780ab5"
+  },
+  "map035/ev023/p2/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "1bb496eda0d14745"
+  },
+  "map035/ev024/p0": {
+    "disposition": "beat:m035e024",
+    "derived_hash": "6cabf01e5b498710"
+  },
+  "map035/ev024/p0/b0": {
+    "disposition": "beat:m035e024",
+    "derived_hash": "54a938fa7047132d"
+  },
+  "map035/ev024/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "3063780b6eb2a932"
+  },
+  "map035/ev024/p1": {
+    "disposition": "beat:m035e024",
+    "derived_hash": "a994955ac0934178"
+  },
+  "map035/ev025/p0": {
+    "disposition": "beat:m035e025",
+    "derived_hash": "75af4f4020b20bec"
+  },
+  "map035/ev025/p0/b0": {
+    "disposition": "beat:m035e025",
+    "derived_hash": "df9e59b053bc9b1f"
+  },
+  "map035/ev025/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "a94ef1de37c7df45"
+  },
+  "map035/ev025/p1": {
+    "disposition": "beat:m035e025",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map035/ev026/p0": {
+    "disposition": "beat:m035e026",
+    "derived_hash": "ec60d1b310a55963"
+  },
+  "map035/ev026/p0/b0": {
+    "disposition": "beat:m035e026",
+    "derived_hash": "2475c26a02655a51"
+  },
+  "map035/ev026/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "ba04b0bee7374bb2"
+  },
+  "map035/ev026/p1": {
+    "disposition": "beat:m035e026",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map035/seam/N/map14000": {
+    "disposition": "beat:m035seamN14000",
+    "derived_hash": "01673bb2d9ae187c"
+  },
+  "map035/seam/S/map031": {
+    "disposition": "beat:m035seamS031",
+    "derived_hash": "125372b734127799"
+  }
+}
