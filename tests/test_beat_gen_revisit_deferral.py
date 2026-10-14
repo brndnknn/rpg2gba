@@ -55,6 +55,7 @@ def _write_loader_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         "    'map901/ev001/p0': 'later',\n"
         "    'map901/ev002/p0': 'later: CH05: its event crosses out',\n"
         "    'map901/ev008/p0': 'unreachable',\n"
+        "    'map901/ev009/p0': 'later: CH06',\n"
         "}\n"
         "REFUSED = {'map901/ev005/p0': 'x'}\n",
         encoding="utf-8")
@@ -66,6 +67,7 @@ def test_loader_rules_a_and_b_and_exclusions(tmp_path: Path) -> None:
     got = deferred_rows("CHA", module_dir, chapters_path=chapters, manifest_dir=manifest_dir)
     assert got == frozenset({
         "map901/ev001/p0", "map901/ev001/p0/b1",   # (a) + branch closure
+        "map901/ev009/p0",                         # (a) owner-only `later: CHnn`
         "map901/ev003/p0", "map901/ev003/p0/b0",   # (b) + branch closure
     })
     assert "map901/ev002/p0" not in got  # boundary crossing: inbound mechanism's

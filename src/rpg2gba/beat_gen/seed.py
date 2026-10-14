@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import functools
 import importlib.util
+import re
 import logging
 from collections.abc import Callable
 from pathlib import Path
@@ -77,6 +78,9 @@ def _page_of(row_id: str) -> str | None:
     return page_row_id(parsed.map_id, parsed.event_id, parsed.page_idx)
 
 
+_OWNER_ONLY_LATER = re.compile(r"^later: CH\w+$")
+
+
 def deferred_rows(
     cid: str,
     module_dir: Path,
@@ -90,8 +94,9 @@ def deferred_rows(
     whose own maps include the row's map picks it up
     (`build_chapter_stories(deferred_for=...)`).
 
-    Deferred = (a) `ELSEWHERE[row] == "later"` exactly (a `"later: CHnn..."`
-    value is a boundary crossing, the inbound mechanism's), or (b) a manifest
+    Deferred = (a) `ELSEWHERE[row] == "later"`, or `"later: CHnn"` naming only
+    the owner `_split_unreachable` found (a value with a further `: detail`
+    after the chapter id is a boundary crossing, the inbound mechanism's), or (b) a manifest
     row with non-empty `requires` that no beat claims and no module dict
     (`ELSEWHERE`/`REFUSED`/`NEVER_FIRES`/`EMPTY_PAGES`/`WALK_CHECKED`) lists --
     the capability-blocked rows `emit.py` leaves out of `ELSEWHERE`. Closure:
@@ -117,7 +122,8 @@ def deferred_rows(
     def on_own_map(row_id: str) -> bool:
         return parse_row_id(row_id).map_id in own_maps
 
-    deferred = {r for r, v in elsewhere.items() if v == "later" and on_own_map(r)}
+    deferred = {r for r, v in elsewhere.items()
+                if (v == "later" or _OWNER_ONLY_LATER.match(str(v))) and on_own_map(r)}
     rows = load_chapter_rows(cid, manifest_dir=manifest_dir)
     for row in rows:
         if (row.requires and row.row_id not in claimed and row.row_id not in listed

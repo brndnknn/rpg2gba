@@ -111,6 +111,7 @@ from rpg2gba.beat_gen.select import dropped_events, empty_events, select_rows
 from rpg2gba.beat_gen.round_trip import find_round_trip
 from rpg2gba.beat_gen.state_arms import FIRING_TEMPLATES, Taint, fired_pages, select_state_arms
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
+from rpg2gba.conversion_agent.transpiler import smashable_rock_event_ids
 from rpg2gba.conversion_agent.orchestrator import load_map_event_strips
 from rpg2gba.story_state.extract import RowState, extract_map
 from rpg2gba.beat_gen.whiteout import place_whiteout_beats
@@ -152,6 +153,7 @@ from rpg2gba.story_state.model import (
     _cmp,
     _default_value,
     _state_key_repr,
+    _write_satisfies,
     build_chapter_stories,
 )
 from rpg2gba.tileset_converter.map_constants import load_display_names
@@ -761,6 +763,25 @@ def _split_unreachable(
             continue
         rows = tuple(r for r in record.rows if r not in dropped)
         if routing_ok or not ok:
+            # The routing cell itself may sit in an unreachable pocket while
+            # another approach candidate is reachable (CH07's south seam: its
+            # first cell (0,56) is cut off, (20..25,56) are not). The solver
+            # routes to that cell, so point it at the first reachable
+            # candidate, in candidate order.
+            record_map = map_uranium_id(record.map_constant)
+            first_ok = next((a for a in record.approach_candidates
+                             if (record_map, (a.x, a.y)) in reach), None)
+            # Only when the routing cell IS one of the candidates: an event
+            # cell with candidates on its sides is where the player stands ON
+            # the event (an `onEvent?` arm reads that), not an alternative.
+            if (routing_ok and first_ok is not None
+                    and (record_map, (record.x, record.y)) not in reach
+                    and any((a.x, a.y) == (record.x, record.y)
+                            for a in record.approach_candidates)):
+                logger.info("%s: %s routing cell (%d,%d) is unreachable -- re-pointed at "
+                            "reachable candidate (%d,%d)", chapter_id, record.beat_id,
+                            record.x, record.y, first_ok.x, first_ok.y)
+                record = dataclasses.replace(record, x=first_ok.x, y=first_ok.y)
             kept.append(dataclasses.replace(record, rows=rows, candidates=tuple(ok)))
             continue
         first = ok[0]
@@ -932,6 +953,61 @@ def actor_never_blocks(pages: Sequence[Mapping], can_live: Callable[[int], bool]
                for j in range(max(visible) + 1, len(pages)))
 
 
+_TRANSITION_BLOCK_RE = re.compile(r"MAP_SCRIPT_ON_TRANSITION\s*\{")
+_CLEARFLAG_RE = re.compile(r"^\s*clearflag\(\s*(FLAG_\w+)\s*\)\s*$")
+_SETFLAG_RE = re.compile(r"^\s*setflag\(\s*(FLAG_\w+)\s*\)\s*$")
+
+
+def transition_hidden_scripts(map_id: int, build_dir: Path) -> frozenset[str]:
+    """Scripts of the map's object events the ROM hides on every load: the
+    event's template `flag` (staged `map.json`) is set unconditionally -- a
+    top-level `setflag` of the map's `MAP_SCRIPT_ON_TRANSITION` block, not one
+    nested in an `if` -- in the map's dispatch `.pory`, and no `clearflag` of it appears anywhere
+    in the block (map050's EV024 is hidden until FINAL_EVENT: it can block). Such an object is
+    spawned only inside a script (CH07's Route 2 cutscene actors,
+    FLAG_TEMP_16..18) and never stands on its tile outside one. Read from the
+    ROM's own staging, not RMXP opacity. Fails loud when a map with flagged
+    objects (its own `Map<id>_EV...` scripts; an item ball's
+    pickup flag is not one) has no dispatch file."""
+    constants = json.loads((build_dir / "porymap" / "map_constants.json")
+                           .read_text(encoding="utf-8"))
+    entry = constants.get(str(map_id))
+    if entry is None:
+        return frozenset()
+    map_path = build_dir / "porymap" / "maps" / entry["dir_name"] / "map.json"
+    if not map_path.exists():
+        return frozenset()
+    flagged = {oe["script"]: oe["flag"]
+               for oe in json.loads(map_path.read_text(encoding="utf-8")).get("object_events", [])
+               if oe.get("flag") and oe["flag"] != "0"
+               and str(oe.get("script", "")).startswith(f"Map{map_id:03d}_EV")}
+    if not flagged:
+        return frozenset()
+    pory = build_dir / "porymap" / "dispatch" / f"Map{map_id:03d}_dispatch.pory"
+    if not pory.exists():
+        raise FileNotFoundError(
+            f"map {map_id} stages flag-hidden objects {sorted(flagged)} but has no dispatch "
+            f"file {pory}; cannot tell which its ON_TRANSITION hides")
+    text = pory.read_text(encoding="utf-8")
+    set_flags: set[str] = set()
+    cleared: set[str] = set()      # at any depth: a conditional clear can show it
+    for m in _TRANSITION_BLOCK_RE.finditer(text):
+        depth = 0                  # nesting inside the block; 0 = its top level
+        for raw in text[m.end():].splitlines():
+            line = raw.split("#", 1)[0]
+            unset = _CLEARFLAG_RE.match(line)
+            if unset:
+                cleared.add(unset.group(1))
+            if depth == 0:
+                flag = _SETFLAG_RE.match(line)
+                if flag:
+                    set_flags.add(flag.group(1))
+            depth += line.count("{") - line.count("}")
+            if depth < 0:
+                break
+    return frozenset(script for script, flag in flagged.items() if flag in set_flags - cleared)
+
+
 class _StoryOccupancy(Mapping):
     """`_LazyOccupancy` without the objects that can never be visible in the
     chapter: a flag-hidden actor (2026-10-02, late NPCs placed by the
@@ -954,7 +1030,10 @@ class _StoryOccupancy(Mapping):
     blocking whatever the story model says. Moki's rocks clear on a self
     switch the `Kernel.pbRockSmash` arm writes; the model explores both arms
     of that Ruby test, calls the smashed page live, and the walk was routed
-    into a cell the rocks still box in (2026-10-12)."""
+    into a cell the rocks still box in (2026-10-12). `build_plan` releases a
+    wall whose clearing page is lifted by ANOTHER claimed beat's write
+    (`_released_walls`): that clear is a real route step, not the rock's own
+    Ruby test."""
 
     def __init__(self, inner: Mapping, *, build_dir: Path, candidate_for,  # noqa: ANN001
                  clear_for=None,  # noqa: ANN001
@@ -965,10 +1044,26 @@ class _StoryOccupancy(Mapping):
         self._clear_for = clear_for if clear_for is not None else candidate_for
         self._walls = walls
         self._cache: dict[int, MapOccupancy] = {}
+        self._hidden_cache: dict[int, frozenset[str]] = {}
+
+    def with_walls(self, extra: Collection[tuple[int, int]]) -> "_StoryOccupancy":
+        """The same view with `extra` (map, event) pairs held as walls."""
+        return _StoryOccupancy(self._inner, build_dir=self._build_dir,
+                               candidate_for=self._candidate_for, clear_for=self._clear_for,
+                               walls=self._walls | frozenset(extra))
+
+    def _rom_hidden(self, map_id: int) -> frozenset[str]:
+        if map_id not in self._hidden_cache:
+            self._hidden_cache[map_id] = transition_hidden_scripts(map_id, self._build_dir)
+        return self._hidden_cache[map_id]
 
     def _never_visible(self, map_id: int, event_id: int) -> bool:
         if (map_id, event_id) in self._walls:
             return False
+        if f"Map{map_id:03d}_EV{event_id:03d}_Dispatch" in self._rom_hidden(map_id):
+            logger.info("occupancy: map %d ev %d is hidden by the map's ON_TRANSITION "
+                        "(spawned only inside a script) -- not blocking", map_id, event_id)
+            return True
         data = load_map_json(map_id, self._build_dir / "maps")
         event = next((e for e in data.get("events", []) if e and e["id"] == event_id), None)
         if event is None:
@@ -1062,6 +1157,123 @@ def _clearing_enablers(
                           for group in enabled_by.get(row, ()) for w in group})
         if writers:
             out[record.rows[0]] = tuple(writers)
+    return out
+
+
+def _smashable_rock_walls(
+    maps: Collection[int], events_of: Callable[[int], list[dict]],
+) -> frozenset[tuple[int, int]]:
+    """(map, event) of every smashable rock on `maps`, whether or not an
+    obstacle beat claims it (CH07's rocks 14 and 17 belong to CH04)."""
+    return frozenset((m, e) for m in sorted(maps) for e in smashable_rock_event_ids(events_of(m)))
+
+
+def _released_walls(
+    walls: Collection[tuple[int, int]], claimed_rows: Collection[str], *,
+    row_states: Callable[[int], Mapping[str, RowState]],
+    pages_of: Callable[[int, int], Sequence[Mapping]],
+) -> dict[tuple[int, int], tuple[str, ...]]:
+    """(map, event) wall -> the claimed rows that clear it, for each wall some
+    OTHER claimed beat clears (CH07: a cutscene sets the self-switch that
+    blanks the rockslide). A wall stays one when its only clearer is its own
+    event (Moki's rocks: the rock's own `Kernel.pbRockSmash` arm -- the story
+    model reads both arms of that test as live, which is wrong). A clearer is a
+    row on another event whose write satisfies a test of a graphic-less page
+    above every visible page of the wall's event (the clearing page
+    `actor_never_blocks` and `clearing_rows` use)."""
+    out: dict[tuple[int, int], tuple[str, ...]] = {}
+    for map_id, event_id in sorted(walls):
+        pages = pages_of(map_id, event_id)
+        visible = [i for i, p in enumerate(pages) if _page_visible(p)]
+        if not visible:
+            continue
+        states = row_states(map_id)
+        tests = []
+        for j in range(max(visible) + 1, len(pages)):
+            state = states.get(f"map{map_id:03d}/ev{event_id:03d}/p{j}")
+            if not _page_visible(pages[j]) and state is not None:
+                tests.extend(state.page_tests)
+        if not tests:
+            continue
+        clearers = []
+        for rid in sorted(claimed_rows):
+            if not rid.startswith("map"):
+                continue
+            parsed = parse_row_id(rid)
+            if (parsed.map_id, parsed.event_id) == (map_id, event_id):
+                continue
+            rs = row_states(parsed.map_id).get(rid)
+            if rs is not None and any(_write_satisfies(w, t) for w in rs.writes for t in tests):
+                clearers.append(rid)
+        if clearers:
+            out[(map_id, event_id)] = tuple(clearers)
+    return out
+
+
+def _expand_to_pages(
+    released: Mapping[tuple[int, int], tuple[str, ...]], claimed_rows: Collection[str],
+) -> dict[tuple[int, int], tuple[str, ...]]:
+    """Each clearer widened to every claimed row under its owning page. A
+    one-shot page can be split into several groups (facing arms, CH07's event
+    19); they are one physical bump, and any may be the walk's actual trigger,
+    so ordering against the write's row alone would miss the others."""
+    out: dict[tuple[int, int], tuple[str, ...]] = {}
+    for pair, clearers in released.items():
+        pages = {parse_row_id(c).owning_page_row_id or c for c in clearers}
+        out[pair] = tuple(sorted(set(clearers) | {
+            r for r in claimed_rows
+            if r.startswith("map") and (parse_row_id(r).owning_page_row_id or r) in pages}))
+    return out
+
+
+def _released_killers(
+    beats: Sequence[PlannedBeat], released: Mapping[tuple[int, int], tuple[str, ...]],
+) -> dict[str, tuple[str, ...]]:
+    """obstacle row -> the clearers of its released wall, which must come
+    after it. `killed_before` only covers `FIRING_TEMPLATES`, and an obstacle
+    beat doesn't fire its page, so the "the rock is gone afterwards" edge is
+    not derived there; the clearer's write lifts a higher page of the rock's
+    event, exactly what a killer edge says."""
+    out: dict[str, tuple[str, ...]] = {}
+    for b in beats:
+        if b.template != "obstacle":
+            continue
+        for rid in b.rows:
+            parsed = parse_row_id(rid)
+            clearers = released.get((parsed.map_id, parsed.event_id))
+            if clearers:
+                out[rid] = clearers
+    return out
+
+
+def _passage_enablers(
+    records: Sequence[BeatLocationRecord], released: Mapping[tuple[int, int], tuple[str, ...]],
+    *, reach_blocked: Collection[tuple[int, tuple[int, int]]],
+    reach_open: Collection[tuple[int, tuple[int, int]]], exclude_rows: Collection[str],
+) -> dict[str, tuple[str, ...]]:
+    """row -> an any-of enabler group, for a record the player can reach from
+    the chapter entry only THROUGH a released clearing actor: none of its sites
+    is reachable while the released actors block (`reach_blocked`) but some is
+    once they are dropped (`reach_open`). The group is every released actor's
+    clearing writers, same shape as `_clearing_enablers`'. The caller floods
+    twice (only when something was released), so this costs nothing on a
+    chapter without a released wall. Records of `exclude_rows` (the walls
+    themselves and their clearers) are skipped: their own edge is the reverse
+    one (`_released_killers`) and an enabler would be a cycle."""
+    writers = tuple(sorted({w for ws in released.values() for w in ws}))
+    out: dict[str, tuple[str, ...]] = {}
+    if not writers:
+        return out
+    skip = set(exclude_rows)
+    for record in records:
+        if skip & set(record.rows):
+            continue
+        map_id = map_uranium_id(record.map_constant)
+        sites = [(map_id, (c.x, c.y)) for c in record.approach_candidates] or [
+            (map_id, (record.x, record.y))]
+        if (not any(s in reach_blocked for s in sites)
+                and any(s in reach_open for s in sites)):
+            out[record.rows[0]] = writers
     return out
 
 
@@ -1531,13 +1743,31 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                                                   build_dir)
     world = _build_world(build_dir)
     entry = _predecessor_end(predecessor) if predecessor is not None else engine_spawn()
+    obstacle_walls = frozenset((p.map_id, p.event_id) for b in beats if b.template == "obstacle"
+                               for p in map(parse_row_id, b.rows))
+    # A wall another claimed beat clears is a clearing actor, not a wall
+    # (`_released_walls`; CH07's rockslide, cleared by a cutscene).
+    # Every smashable rock on the chain is a wall too, claimed by an obstacle
+    # beat or not: the story model reads both arms of `Kernel.pbRockSmash`
+    # and calls the smashed page live (Moki, 2026-10-12), but on the ROM the
+    # rocks stand until something removes them.
+    rock_walls = _smashable_rock_walls(
+        chain_maps, lambda m: [ev for ev in load_map_json(m, build_dir / "maps").get("events", [])
+                               if ev])
+    obstacle_walls = obstacle_walls | rock_walls
+    released = _released_walls(
+        obstacle_walls, {r for b in beats for r in b.rows}, row_states=row_states,
+        pages_of=lambda m, e: next((ev.get("pages", []) for ev in load_map_json(
+            m, build_dir / "maps").get("events", []) if ev and ev["id"] == e), []))
+    for pair, clearers in released.items():
+        logger.info("obstacle wall map %d ev %d is cleared by %s -- released", *pair,
+                    list(clearers))
     occupancy = _StoryOccupancy(
         _LazyOccupancy(build_dir), build_dir=build_dir,
         candidate_for=lambda m: _page_candidate(all_verdicts, story.end_state, row_states(m)),
         clear_for=lambda m: _page_candidate(all_verdicts, story.end_state, row_states(m),
                                             definite=True),
-        walls=frozenset((p.map_id, p.event_id) for b in beats if b.template == "obstacle"
-                        for p in map(parse_row_id, b.rows)))
+        walls=obstacle_walls - frozenset(released))
     # 3c. Touch pages the walk can't step on while they are live (guard rows,
     #     arrival displacement): never_fires, not beats.
     facts_for = _map_facts_factory(
@@ -1644,6 +1874,33 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         story_enabled_by[rid] = tuple(story_enabled_by.get(rid, ())) + (writers,)
     killers = killed_before(beats, wm=wm, seed=seeds[chapter_id],
                             claimed_rows=claimed_rows)
+    if released:
+        released = _expand_to_pages(released, claimed_rows)
+        # Passage through a released actor waits on its clearers; the wall's
+        # own obstacle beat comes before them.
+        killers = dict(killers)
+        for rid, after in _released_killers(beats, released).items():
+            killers[rid] = tuple(sorted({*killers.get(rid, ()), *after}))
+        # Flooded over the chapter's own maps plus the entry's, NOT the whole
+        # chain: a detour through earlier chapters' maps (CH07: Nowtoch ->
+        # Passage Cave -> Route 2's south door) reaches the south half without
+        # the rockslide, but it is not this chapter's walk -- the beats here
+        # are placed on the way the player came in. Rocks that no beat claims
+        # are in `released` too (every smashable rock is a wall).
+        flood_maps = frozenset(binding.chapter(chapter_id).maps) | {entry[0]}
+        reach_open = reachable_sites(entry, graphs, world, flood_maps,
+                                     _ChainOccupancy(occupancy, flood_maps))
+        reach_blocked = reachable_sites(entry, graphs, world, flood_maps,
+                                        _ChainOccupancy(occupancy.with_walls(released),
+                                                        flood_maps))
+        excluded = {r for b in beats if b.template == "obstacle" for r in b.rows}
+        excluded |= {w for ws in released.values() for w in ws}
+        for rid, writers in _passage_enablers(
+                records, released, reach_blocked=reach_blocked, reach_open=reach_open,
+                exclude_rows=excluded).items():
+            logger.info("passage through released actor: %s waits on any of %s",
+                        rid, list(writers))
+            story_enabled_by[rid] = tuple(story_enabled_by.get(rid, ())) + (writers,)
     # 2026-09-28 ruling (one-way warps): enter a dead-end interior, do its
     # first-visit beats, leave; an arrival nudge after the warp landing on it.
     warp_beats = [b for b in beats if b.template == "warp"]
