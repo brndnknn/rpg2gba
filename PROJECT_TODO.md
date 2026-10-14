@@ -41,7 +41,7 @@ which is stronger than C10's offline check plus sample. **To close:** build
 before CH06's flavour-NPC count makes walking every row on hardware the
 bottleneck.
 
-### 121. HM field-move gates are still Emerald's per-badge flags, not Uranium's badge counts
+### 121. ~~HM field-move gates are still Emerald's per-badge flags, not Uranium's badge counts~~ DONE 2026-10-13
 
 CH04 boot walk (2026-10-03): Flash outside battle was refused with Emerald's
 "needs a badge" message. Uranium counts badges (`HIDDENMOVESCOUNTBADGES = true`,
@@ -53,6 +53,12 @@ Flash-only for now. **To close:** once the badge→flag mapping is decided
 (`essentials_to_emerald_map.md` "Deferred — badges"), gate the rest on a badge
 count. Rock Smash currently works only because the boot harness sets
 `FLAG_BADGE03_GET` (`new_game.c`); Uranium needs just one badge.
+
+**Done 2026-10-13 (operator: "match the HM gates to Uranium for all HMs"):**
+every `IsFieldMoveUnlocked_*` now returns `HasAtLeastBadges(N)` with Uranium's
+thresholds (fenced helper in `field_move.c`), and the badge-3 boot rig is gone
+from `new_game.c` (the CH06 complete save showed badges 1 and 3). Pinned per
+move by `tests/test_field_move_gates.py`.
 
 ### 120. Generated suites have no route plan, so their walks go uncompared
 
@@ -2108,7 +2114,8 @@ Context: 2026-10-13 also widened `writable_self_switches` to `@event_id` and loo
   needs a different approach than narrowing the engine scan box.
 - **new_game.c test harness** — `SLICE1_TODO.md` #5 decision landed (`4b8ca7ce`):
   **keep `FlagSet(FLAG_BADGE03_GET)` indefinitely** (user decision, standing rig,
-  not a to-remove obligation). Its Rock-Smash-Geodude companion lines were
+  not a to-remove obligation). *(Superseded 2026-10-13: the badge-3 set was removed when
+  the HM gates took Uranium's badge counts, #121.)* Its Rock-Smash-Geodude companion lines were
   separately disabled 2026-07-21 (rock smash not walkable on current builds) and
   are dead code alongside 3 other DISABLED harness blocks in the same function —
   see Group C cleanup, `reference/guides/engine_gotchas.md` is not the home for

@@ -363,7 +363,8 @@ def test_real_engine_fenced_writes_found() -> None:
         (str(w.path).replace("\\", "/"), w.call, w.constant, w.function) for w in writes
     }
     assert ("engine/src/overworld.c", "FlagSet", "FLAG_STARTING_OVER", "DoWhiteOut") in found
-    assert ("engine/src/new_game.c", "FlagSet", "FLAG_BADGE03_GET", "CB2_StartUraniumSlice") in found
+    # The FLAG_BADGE03_GET Rock Smash rig was removed 2026-10-13.
+    assert not [w for w in found if w[2] == "FLAG_BADGE03_GET"]
     # Ruling 14 (2026-09-25) removed C3's FLAG_MUM seed: a fresh game takes
     # the full intro, where only Auntie sets switch 52.
     assert not [w for w in found if w[2] == "FLAG_MUM"]

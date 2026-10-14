@@ -613,6 +613,7 @@ def solve_route(
                                   Sequence[tuple[str, tuple[str, ...]]]],
                                  Sequence[PrecedenceEdge]] | None = None,
     hard_order_violations: Callable[[Sequence[str]], int] | None = None,
+    terminal_group: str | None = None,
 ) -> RoutePlan:
     """Solve a walk order over `chapter`'s OWN beat groups and return a `RoutePlan`.
 
@@ -758,6 +759,18 @@ def solve_route(
     and raises when none does; 2-opt keeps it at 0 (`beat_gen.interiors.
     gated_region_check` -- no leaving a region through a shut door).
 
+    `terminal_group` (default None) names the group that must come last --
+    the crossing into the next chapter's maps (`beat_gen` derives it from
+    `reference/chapters.json`). A chapter whose way on is an overland seam
+    has no outbound warp for rule 2 to find, so without it the route ends
+    wherever the cheapest order does: CH06 ended back through the cave it
+    arrived from, its re-opened page 2 opening late (2026-10-13). Every
+    other group comes before it (reason `successor_exit:<group>`); the exit
+    point is left to `exit_=`/the default (a seam stop ends on the far side
+    and cannot path back onto its own edge cell). When rule 2 also finds a
+    terminal group they must agree, else `RouteSolverError` (and rule 2's
+    own edges stand).
+
     `solver_method` on the returned plan is always `"greedy+2opt"`.
     """
     effective_map_ids = map_ids if map_ids is not None else _default_map_ids()
@@ -829,6 +842,28 @@ def solve_route(
         entry_group_id=entry_group_id, chapter_id=chapter_id,
         exit_provided=exit_ is not None,
     )
+
+    if terminal_group is not None:
+        named = next((gp for gp in group_points if gp.group_id == terminal_group), None)
+        if named is None:
+            raise RouteSolverError(
+                f"chapter {chapter_id}: terminal_group {terminal_group!r} is not one of "
+                "its own groups")
+        if terminal_point is not None and terminal_point != (named.map_id, named.cell):
+            raise RouteSolverError(
+                f"chapter {chapter_id}: terminal_group {terminal_group!r} disagrees with "
+                f"the outbound-warp terminal at {terminal_point}")
+    if terminal_group is not None and terminal_point is None:
+        # Rule 2 found no outbound warp; the named group's edges do its job.
+        warp_precedence = tuple(sorted(
+            {*warp_precedence, *(
+                PrecedenceEdge(before=gp.group_id, after=terminal_group,
+                               reason=f"successor_exit:{terminal_group}")
+                for gp in group_points if gp.group_id != terminal_group)},
+            key=lambda e: (e.before, e.after, e.reason)))
+        # The exit point stays the default: a seam stop leaves the player on
+        # the far side, with no path back onto its own edge cell, and with
+        # the group pinned last the exit segment cannot change the order.
 
     if exit_ is not None:
         exit_map, exit_cell = exit_

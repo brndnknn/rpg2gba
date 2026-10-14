@@ -31,6 +31,7 @@ of authoring and behaviour cannot.
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 from dataclasses import dataclass
@@ -276,8 +277,31 @@ def _stair_approach(map_id: int, map_constant: str, x: int, y: int,
     )
 
 
+@functools.lru_cache(maxsize=None)
+def _rom_touch_cells(map_id: int, event_id: int) -> frozenset[tuple[int, int]]:
+    """The cells of `event_id`'s own coord triggers on the emitted map, when
+    the converter realized its touch pages as coord events and nothing
+    else (no object event to bump); empty otherwise. A Trainer(N) sight
+    tripwire is the case: the coord events lie along its sight ray, not
+    around its cell (`metadata_wiring._trainer_sight_ray`)."""
+    from ..traversal.triggers import (
+        DEFAULT_ENGINE_MAPS_DIR, DEFAULT_MAP_CONSTANTS_JSON, _load_emitted_map,
+        _load_map_constants,
+    )
+
+    entry = _load_map_constants(map_id, DEFAULT_MAP_CONSTANTS_JSON)
+    map_json = _load_emitted_map(map_id, entry["dir_name"], DEFAULT_ENGINE_MAPS_DIR)
+    prefix = f"Map{map_id:03d}_EV{event_id:03d}_"
+    if any(str(oe.get("script", "")).startswith(prefix)
+           for oe in map_json.get("object_events", [])):
+        return frozenset()
+    return frozenset((ce["x"], ce["y"]) for ce in map_json.get("coord_events", [])
+                     if str(ce.get("script", "")).startswith(prefix))
+
+
 def _approach_side_candidates(map_id: int, map_constant: str,
-                             event_id: int) -> tuple[ApproachCandidate, ...]:
+                             event_id: int, *, touch: bool = False,
+                             ) -> tuple[ApproachCandidate, ...]:
     """Every walkable side of `event_id`'s own cell, in the same N/S/E/W
     order `approach_to`/`MapGraph.interaction_cells` use -- the full candidate
     set `approach_to(map_constant, event_id)` (no `prefer=`) itself picks
@@ -286,6 +310,10 @@ def _approach_side_candidates(map_id: int, map_constant: str,
     """
     graph = build_map_graph(map_id)
     cell = event_cell(map_constant, event_id)
+    # A touch page realized as coord events fires only by standing on one
+    # (2026-10-13, CH06: Map14000 EV079's sight ray runs east, and a north
+    # approach stepped into its cell and fired nothing on the ROM).
+    rom_cells = _rom_touch_cells(map_id, event_id) if touch else frozenset()
     candidates: list[ApproachCandidate] = []
     # Same sides `approach_to` offers, counter reach-over included -- less a
     # warp tile: the walker never stands on one (2026-10-11, CH06: Fufufu at
@@ -293,11 +321,17 @@ def _approach_side_candidates(map_id: int, map_constant: str,
     for direction, cand_cell in graph.interaction_cells(cell):
         if cand_cell in graph.warp_exits:
             continue
+        if rom_cells and cand_cell not in rom_cells:
+            continue
         candidates.append(ApproachCandidate(
             x=cand_cell[0], y=cand_cell[1], side=direction.value,
             resolver=(f'approach_to({map_constant}, ev{event_id}, '
                       f'prefer="{direction.value}")'),
         ))
+    if rom_cells and not candidates:
+        raise ValueError(
+            f"{map_constant} ev{event_id}: its touch triggers on the ROM sit on "
+            f"{sorted(rom_cells)}, and no side of its cell {cell} is one of them")
     return tuple(candidates)
 
 
@@ -355,11 +389,17 @@ def cell_for_row(row: ManifestRow) -> RowCell:
                        *event_cell(map_constant, row.event_id),
                        resolver=f"event_cell({map_constant}, ev{row.event_id})")
     if row.trigger in _ADJACENT_TRIGGERS:
+        touch = row.trigger == "event_touch"
+        sides = _approach_side_candidates(row.map_id, map_constant, row.event_id,
+                                          touch=touch)
+        if touch and _rom_touch_cells(row.map_id, row.event_id):
+            # Filtered to the trigger cells: the default side must be one.
+            return RowCell(row.row_id, map_constant, sides[0].x, sides[0].y,
+                           resolver=sides[0].resolver, approach_candidates=sides)
         return RowCell(row.row_id, map_constant,
                        *approach_to(map_constant, row.event_id),
                        resolver=f"approach_to({map_constant}, ev{row.event_id})",
-                       approach_candidates=_approach_side_candidates(
-                           row.map_id, map_constant, row.event_id))
+                       approach_candidates=sides)
     raise ValueError(
         f"{row.row_id}: trigger {row.trigger!r} has no cell rule -- add it "
         f"to _ON_EVENT_TRIGGERS or _ADJACENT_TRIGGERS once you know which "

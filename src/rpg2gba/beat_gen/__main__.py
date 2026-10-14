@@ -796,6 +796,41 @@ def _warp_dest(beat: PlannedBeat, floors: Mapping[str, RowFloor]) -> int:
     return dests.pop()
 
 
+def _successor_exit_group(beats: Sequence[PlannedBeat], floors: Mapping[str, RowFloor],
+                          own_maps: Collection[int], successor_maps: Collection[int] | None,
+                          ) -> str | None:
+    """The one group whose crossing (a warp or a seam) lands on a map the
+    successor chapter adds, or None. The chapter's route ends there: its
+    walk hands the player to the next chapter where that chapter begins
+    (operator 2026-10-13 -- CH06 ended back in the cave it arrived through,
+    when the way on is Nowtoch's overland seam to Route 2). Maps compare by
+    Uranium origin, so a split piece counts as its map. Several candidates
+    are logged and none is named (the solver's own rules stand)."""
+    if not successor_maps:
+        return None
+    from rpg2gba.map_split.ids import origin_of
+
+    targets = {origin_of(m) for m in successor_maps} - {origin_of(m) for m in own_maps}
+    groups: set[str] = set()
+    for b in beats:
+        if b.template == "warp":
+            dest = _warp_dest(b, floors)
+        elif b.template == "seam":
+            seams = [a for a in floors[b.rows[0]].assertions if a.kind == "seam_crossing"]
+            if len(seams) != 1:
+                continue
+            dest = seams[0].param("other_map_id")
+        else:
+            continue
+        if origin_of(int(dest)) in targets:
+            groups.add(b.group)
+    if len(groups) > 1:
+        logger.info("successor exit: %d groups cross into the next chapter (%s); "
+                    "naming none", len(groups), sorted(groups))
+        return None
+    return next(iter(groups), None)
+
+
 def _group_boundary_exits(beats: Sequence[PlannedBeat], floors: Mapping[str, RowFloor],
                           chain_maps: frozenset[int]) -> tuple[PlannedBeat, ...]:
     """One group per chapter EXIT, not per warp tile. A wide exit is a
@@ -1633,6 +1668,9 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         label=rooms.label, node_map=lambda place: place[0])
     place_world = PlaceWorld(world, rooms)
     gated = _gated_doors(chain_maps, build_dir)
+    terminal = _successor_exit_group(
+        beats, floors, binding.chapter(chapter_id).maps,
+        successor.maps if successor is not None else None)
     route = solve_route(
         chapter_from_locations(chapter_id, records), chapter_id,
         manifest_rows=all_rows, graphs=graphs, overlays=overlays,
@@ -1651,6 +1689,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         ) + gated_interior_edges(
             place_world, **regions, gated_doors=gated, hard_and_story=accepted),
         hard_order_violations=gated_region_check(place_world, **regions, gated_doors=gated),
+        terminal_group=terminal,
     )
 
     # 6. Order, then adapt's route half. A warp whose destination is on no

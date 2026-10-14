@@ -1953,49 +1953,12 @@ generic_beat(
     archetype=(('map14000/ev079/p0', 'trainer'),),
 )
 
-seam_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14000seamS035',
-    group='m14000seamS035',
-    rows=('map14000/seam/S/map035',),
-    approach_prefer='DOWN@(12,61)',
-)
-
-generic_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m14000e079p1',
-    group='m14000e079p1',
-    rows=('map14000/ev079/p1',),
-    approach_prefer='east',
-    archetype=(('map14000/ev079/p1', 'trainer'),),
-)
-
-transit_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m046e002p0_transit',
-    group='m046e002p0',
-    hops=(('MAP_NOWTOCH_CITY', 8, 31, 'LEFT', 'MAP_NOWTOCH_CITY_WEST'), ('MAP_NOWTOCH_CITY_WEST', 8, 8, 'UP', 'MAP_NOWTOCH_CITY_INTERIORS_1')),
-)
-
-generic_beat(
-    ch06,
-    chapter_id='CH06',
-    beat_name='m046e002p0',
-    group='m046e002p0',
-    rows=('map046/ev002/p0', 'map046/ev002/p0/b11'),
-    approach_prefer='south',
-    choice_answers=((4, 1),),
-)
-
 transit_beat(
     ch06,
     chapter_id='CH06',
     beat_name='m14002e019p2_warp_transit',
     group='m14002e019p2_warp',
-    hops=(('MAP_NOWTOCH_CITY_INTERIORS_1', 6, 7, 'DOWN', 'MAP_NOWTOCH_CITY_WEST'), ('MAP_NOWTOCH_CITY_WEST', 18, 15, 'RIGHT', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 19, 32, 'RIGHT', 'MAP_NOWTOCH_CITY_PARK')),
+    hops=(('MAP_NOWTOCH_CITY', 19, 32, 'RIGHT', 'MAP_NOWTOCH_CITY_PARK'),),
 )
 
 warp_beat(
@@ -2012,6 +1975,51 @@ warp_beat(
     mechanism='threshold',
     page_idx=2,
     start_side='origin',
+)
+
+transit_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m046e002p0_transit',
+    group='m046e002p0',
+    hops=(('MAP_PASSAGE_CAVE_2F', 16, 6, 'UP', 'MAP_NOWTOCH_CITY_PARK'), ('MAP_NOWTOCH_CITY_PARK', 10, 18, 'LEFT', 'MAP_NOWTOCH_CITY'), ('MAP_NOWTOCH_CITY', 8, 31, 'LEFT', 'MAP_NOWTOCH_CITY_WEST'), ('MAP_NOWTOCH_CITY_WEST', 8, 8, 'UP', 'MAP_NOWTOCH_CITY_INTERIORS_1')),
+)
+
+generic_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m046e002p0',
+    group='m046e002p0',
+    rows=('map046/ev002/p0', 'map046/ev002/p0/b11'),
+    approach_prefer='south',
+    choice_answers=((4, 1),),
+)
+
+transit_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14000e079p1_transit',
+    group='m14000e079p1',
+    hops=(('MAP_NOWTOCH_CITY_INTERIORS_1', 6, 7, 'DOWN', 'MAP_NOWTOCH_CITY_WEST'), ('MAP_NOWTOCH_CITY_WEST', 18, 15, 'RIGHT', 'MAP_NOWTOCH_CITY')),
+)
+
+generic_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14000e079p1',
+    group='m14000e079p1',
+    rows=('map14000/ev079/p1',),
+    approach_prefer='east',
+    archetype=(('map14000/ev079/p1', 'trainer'),),
+)
+
+seam_beat(
+    ch06,
+    chapter_id='CH06',
+    beat_name='m14000seamS035',
+    group='m14000seamS035',
+    rows=('map14000/seam/S/map035',),
+    approach_prefer='DOWN@(12,61)',
 )
 
 NEVER_FIRES: dict[str, str] = {

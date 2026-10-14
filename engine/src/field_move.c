@@ -8,8 +8,28 @@
 #include "constants/moves.h"
 #include "constants/party_menu.h"
 
+// BEGIN URANIUM PATHFINDER SLICE — Uranium's hidden-move gates (002__Settings.rb).
+// HIDDENMOVESCOUNTBADGES = true: each HM needs at least N badges of any kind,
+// not one specific badge. BADGEFOR*: Cut 3, Flash 0, Rock Smash 1, Strength 4,
+// Surf 5, Dive 7, Fly 8, Waterfall 8.
+static bool32 HasAtLeastBadges(u32 count)
+{
+    u32 flag, owned = 0;
+
+    for (flag = FLAG_BADGE01_GET; flag < FLAG_BADGE01_GET + NUM_BADGES; flag++)
+    {
+        if (FlagGet(flag))
+            owned++;
+    }
+    return owned >= count;
+}
+// END URANIUM PATHFINDER SLICE
+
 static bool32 IsFieldMoveUnlocked_Cut(void)
 {
+    // BEGIN URANIUM PATHFINDER SLICE
+    return HasAtLeastBadges(3);
+    // END URANIUM PATHFINDER SLICE
     if (IS_FRLG)
         return FlagGet(FLAG_BADGE02_GET);
 
@@ -18,9 +38,7 @@ static bool32 IsFieldMoveUnlocked_Cut(void)
 
 static bool32 IsFieldMoveUnlocked_Flash(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE — Uranium sets BADGEFORFLASH = 0 with
-    // HIDDENMOVESCOUNTBADGES = true (002__Settings.rb): Flash needs no badge.
-    // The other HMs keep Emerald's gates until the badge mapping is decided.
+    // BEGIN URANIUM PATHFINDER SLICE — BADGEFORFLASH = 0: Flash needs no badge.
     return TRUE;
     // END URANIUM PATHFINDER SLICE
     if (IS_FRLG)
@@ -31,6 +49,9 @@ static bool32 IsFieldMoveUnlocked_Flash(void)
 
 static bool32 IsFieldMoveUnlocked_RockSmash(void)
 {
+    // BEGIN URANIUM PATHFINDER SLICE
+    return HasAtLeastBadges(1);
+    // END URANIUM PATHFINDER SLICE
     if (IS_FRLG)
         return FlagGet(FLAG_BADGE06_GET);
 
@@ -39,16 +60,25 @@ static bool32 IsFieldMoveUnlocked_RockSmash(void)
 
 static bool32 IsFieldMoveUnlocked_Strength(void)
 {
+    // BEGIN URANIUM PATHFINDER SLICE
+    return HasAtLeastBadges(4);
+    // END URANIUM PATHFINDER SLICE
     return FlagGet(FLAG_BADGE04_GET);
 }
 
 static bool32 IsFieldMoveUnlocked_Surf(void)
 {
+    // BEGIN URANIUM PATHFINDER SLICE
+    return HasAtLeastBadges(5);
+    // END URANIUM PATHFINDER SLICE
     return FlagGet(FLAG_BADGE05_GET);
 }
 
 static bool32 IsFieldMoveUnlocked_Fly(void)
 {
+    // BEGIN URANIUM PATHFINDER SLICE
+    return HasAtLeastBadges(8);
+    // END URANIUM PATHFINDER SLICE
     if (IS_FRLG)
         return FlagGet(FLAG_BADGE03_GET);
 
@@ -57,11 +87,17 @@ static bool32 IsFieldMoveUnlocked_Fly(void)
 
 static bool32 IsFieldMoveUnlocked_Dive(void)
 {
+    // BEGIN URANIUM PATHFINDER SLICE
+    return HasAtLeastBadges(7);
+    // END URANIUM PATHFINDER SLICE
     return FlagGet(FLAG_BADGE07_GET);
 }
 
 static bool32 IsFieldMoveUnlocked_Waterfall(void)
 {
+    // BEGIN URANIUM PATHFINDER SLICE
+    return HasAtLeastBadges(8);
+    // END URANIUM PATHFINDER SLICE
     if (IS_FRLG)
         return FlagGet(FLAG_BADGE07_GET);
 

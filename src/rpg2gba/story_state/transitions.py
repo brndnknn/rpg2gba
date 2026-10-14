@@ -98,9 +98,6 @@ DAY_NIGHT = EngineObligation(
 
 OBLIGATIONS: tuple[EngineObligation, ...] = (DAY_NIGHT,)
 
-HARNESS_ONLY: tuple[HarnessOnlyWrite, ...] = (
-    HarnessOnlyWrite(
-        EngineWrite("FlagSet", "FLAG_BADGE03_GET", "CB2_StartUraniumSlice"),
-        reason="standing boot harness: enables Rock Smash from a fresh boot",
-    ),
-)
+# Empty since 2026-10-13: the FLAG_BADGE03_GET Rock Smash rig was removed when
+# field_move.c took Uranium's badge-count HM gates.
+HARNESS_ONLY: tuple[HarnessOnlyWrite, ...] = ()

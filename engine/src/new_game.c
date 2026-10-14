@@ -399,15 +399,10 @@ void CB2_StartUraniumSlice(void)
 #endif
     // END URANIUM MAP WALKER
     CB2_NewGame();
-    // TEST HARNESS (KEPT indefinitely — user decision 2026-07-13: standing HM/
-    // field-move test rig while slices expand, expected to grow per-HM; strip only
-    // for a release ROM): make rock smash usable from a fresh boot —
-    // EventScript_RockSmash gates on FLAG_BADGE03_GET + a non-egg party mon knowing
-    // MOVE_ROCK_SMASH (checkfieldmove, scrcmd.c). Must run AFTER CB2_NewGame():
-    // NewGameInitData() zeroes the party inside it. ScriptSetMonMoveSlot also syncs
-    // PP; SetBoxMonData handles checksum/encrypt.
-    FlagSet(FLAG_BADGE03_GET);
-    // The disabled harness blocks that used to follow (rock-smash companion
+    // The badge-3 Rock Smash rig (a set of FLAG_BADGE03_GET) that stood here was removed
+    // 2026-10-13 (operator): field_move.c now gates every HM on Uranium's badge
+    // counts, so Rock Smash unlocks at the first badge in story order. The
+    // disabled harness blocks that used to follow (rock-smash companion
     // mon, NEXT TEST HARNESS, POST-QUIZ HARNESS, CAPTURE-TUTORIAL HARNESS)
     // were deleted 2026-08-04 once slice 1 passed its §9 gate — the re-arm
     // recipe (VAR_QUEST_LOG ladder, which flags/vars each rung needs, the

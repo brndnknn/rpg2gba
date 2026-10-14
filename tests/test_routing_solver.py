@@ -463,6 +463,86 @@ def test_two_outbound_boundary_candidates_raise_unless_exit_given() -> None:
     assert not any(e.reason.startswith("warp_boundary") for e in route.precedence)
 
 
+def _three_group_chapter():  # noqa: ANN202
+    """Entry 100; groups A (101), S (102), W (103). The cheapest order puts S
+    first and A last -- S stands for CH06's Route 2 seam, which has no
+    outbound warp for rule 2 to find."""
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+    for name in ("A", "S", "W"):
+        @builder.beat(name, name, map_constant=f"MAP_{name}", at=(0, 0), group=name)
+        def body(emu) -> None:  # noqa: ANN001
+            pass
+    chapter = builder.build()
+    w = _World()
+    w.home(100)
+    w.home(101)
+    w.home(102)
+    w.home(103)
+    w.add(100, 102, 201, 1)  # entry <-> S: cheap (tempts S first)
+    w.add(102, 103, 202, 1)  # S <-> W
+    w.add(103, 101, 203, 1)  # W <-> A
+    w.add(100, 101, 204, 9)  # entry <-> A: expensive
+    w.add(101, 102, 205, 9)  # A <-> S: expensive
+    return chapter, w, {"MAP_A": 101, "MAP_S": 102, "MAP_W": 103}
+
+
+def test_terminal_group_ordered_last_and_becomes_exit() -> None:
+    chapter, w, map_ids = _three_group_chapter()
+    route = solve_route(
+        chapter, "TESTCH", manifest_rows=[], graphs=w.graphs, overlays=w.overlays,
+        world=_world(w.edges, w.map_ids), entry=(100, (0, 0)), map_ids=map_ids,
+        terminal_group="S",
+    )
+    assert [n.group for n in route.nodes if n.kind == "group"][-1] == "S"
+    # The exit stays the default (the last own beat, W on 103).
+    assert (route.nodes[-1].map_id, route.nodes[-1].cell) == (103, (0, 0))
+    assert {e.before for e in route.precedence
+            if e.reason == "successor_exit:S"} == {"A", "W"}
+
+
+def test_terminal_group_unknown_raises() -> None:
+    chapter, w, map_ids = _three_group_chapter()
+    with pytest.raises(RouteSolverError, match="not one of its own groups"):
+        solve_route(
+            chapter, "TESTCH", manifest_rows=[], graphs=w.graphs, overlays=w.overlays,
+            world=_world(w.edges, w.map_ids), entry=(100, (0, 0)), map_ids=map_ids,
+            terminal_group="Nope",
+        )
+
+
+def test_terminal_group_must_agree_with_outbound_warp() -> None:
+    boundary_row = _warp_row("map103/ev009/p0", map_id=103, event_id=9)
+    builder = ChapterBuilder("test", doc="reference/chapters/00-test.md")
+
+    @builder.beat("A", "A", map_constant="MAP_A", at=(0, 0), group="A")
+    def a(emu) -> None:  # noqa: ANN001
+        pass
+
+    @builder.beat("W", "W", map_constant="MAP_W", at=(0, 0), group="W",
+                  rows=(boundary_row.row_id,))
+    def w_(emu) -> None:  # noqa: ANN001
+        pass
+
+    chapter = builder.build()
+    w = _World()
+    w.home(100)
+    w.home(101)
+    w.home(103)
+    w.add(100, 101, 201, 1)
+    w.add(101, 103, 202, 1)
+    edges = w.edges + [WorldEdge(src_map=103, dst_map=999, kind="warp",
+                                 src_cell=(0, 0), dst_cell=(0, 0), event_id=9)]
+    world = _world(edges, w.map_ids | {999})
+    kwargs = dict(manifest_rows=[boundary_row], graphs=w.graphs, overlays=w.overlays,
+                  world=world, entry=(100, (0, 0)), map_ids={"MAP_A": 101, "MAP_W": 103})
+    with pytest.raises(RouteSolverError, match="disagrees"):
+        solve_route(chapter, "TESTCH", terminal_group="A", **kwargs)
+    # Agreeing adds nothing: rule 2's own edge is the only one.
+    route = solve_route(chapter, "TESTCH", terminal_group="W", **kwargs)
+    assert not any(e.reason.startswith("successor_exit") for e in route.precedence)
+    assert [n.group for n in route.nodes if n.kind == "group"] == ["A", "W"]
+
+
 def test_world_none_derives_no_warp_precedence() -> None:
     """With `world=None`, no warp precedence is derivable at all -- the
     manifest carries a warp row that WOULD trigger rule 2 if a world graph

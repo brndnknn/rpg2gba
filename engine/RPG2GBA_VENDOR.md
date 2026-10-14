@@ -130,8 +130,8 @@ check the diff. Verified against `git diff 80cdfce2 HEAD -- engine/` on
 - **New-game boot redirect** — `src/new_game.c` (spawn redirect + harness code,
   extensively commented in place), `src/intro.c` (`SetUpCopyrightScreen`
   short-circuit, sole boot hook), `include/new_game.h` (prototype). This is the
-  one area with real "test-harness" character (e.g. the standing rock-smash
-  `FlagSet(FLAG_BADGE03_GET)`), but even here most of the file's diff is
+  one area with real "test-harness" character (the badge-3 rock-smash rig
+  lived here until 2026-10-13), but even here most of the file's diff is
   permanent slice-boot plumbing, not scaffolding to strip.
 - **Corpus-sized capacity increases** — `constants/opponents.h`
   (`TRAINERS_COUNT_EMERALD`/`MAX_TRAINERS_COUNT_EMERALD` raised to cover the

@@ -85,6 +85,27 @@ def test_approach_side_candidates_skip_a_warp_tile(monkeypatch):
     assert [c.side for c in candidates] == ["south", "east", "west"]
 
 
+def test_touch_sides_limited_to_the_rom_trigger_cells(monkeypatch):
+    """CH06 Map14000 EV079: a Trainer(N) tripwire's coord events run along
+    its sight ray (east), so a north approach fires nothing on the ROM."""
+    graph = MapGraph(map_id=999, width=5, height=5, tileset_id=0,
+                     blocked=_open_grid(5, 5))
+    monkeypatch.setattr(loc_mod, "build_map_graph", lambda map_id: graph)
+    monkeypatch.setattr(loc_mod, "event_cell", lambda mc, ev: (2, 2))
+    monkeypatch.setattr(loc_mod, "_rom_touch_cells",
+                        lambda map_id, ev: frozenset({(3, 2), (4, 2)}))
+
+    touch = loc_mod._approach_side_candidates(999, "MAP_X", 7, touch=True)
+    assert [c.side for c in touch] == ["east"]
+    # An action page keeps every side; the ROM sign sits on the event cell.
+    assert len(loc_mod._approach_side_candidates(999, "MAP_X", 7)) == 4
+
+    monkeypatch.setattr(loc_mod, "_rom_touch_cells",
+                        lambda map_id, ev: frozenset({(0, 0)}))
+    with pytest.raises(ValueError, match="no side of its cell"):
+        loc_mod._approach_side_candidates(999, "MAP_X", 7, touch=True)
+
+
 def test_stair_side_candidates_both_sides_legal(monkeypatch):
     """A stair beat with both E/W neighbours walkable emits both, west then
     east -- the full set `_stair_approach` itself picks the first (west) of."""
