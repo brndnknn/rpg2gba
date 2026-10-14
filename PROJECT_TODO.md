@@ -1915,7 +1915,15 @@ deserialized event data, not a row-by-row human verification. Re-confirm each
 row against `output/uranium-build/maps/Map0{64,65,73,89}.json` when the work is
 picked up.
 
-### 92. The capability model cannot see field capabilities, because Uranium has no HMs
+### 92. The capability model cannot see field capabilities, because their grants are not switch/var writes
+
+*(2026-10-14, CH07: **premise corrected — Uranium does have HMs.** Rock Smash's is internal `HM06`
+(wiki "HM01"), `pbReceiveItem` at the CH06 Theo rematch (Map040 ev20/21/79), and each HM move has a
+Tinkerer key-item counterpart (Rock Smash → Boxing Gloves, Legen Town, Map167). Point 1's "grant
+source" is therefore identified: badge count ≥ N AND (party member knows the move — taught from the HM
+or learned by level-up — OR the key item in the bag); `103__PField_HiddenMoves.rb:385-389`. The
+"knows the move" half needs a party model, so it now depends on #127. See MEMORY.md →
+Uranium-Specific Discoveries.)*
 
 *(2026-10-13, CH06 close-out: the CH06 remainder moves to CH07 -- CH06 grants Rock Smash but
 no CH06 row needs it; CH07 (Route 2 rockslide) and CH07A (CH02's rock-gated rows) are the first

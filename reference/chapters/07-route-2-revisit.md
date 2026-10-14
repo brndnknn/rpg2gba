@@ -206,6 +206,16 @@ chapter does not convert cleanly until it is handled.
    on re-entry and need Rock Smash, which the player holds by CH07. Still owed:
    Moki's rocks carry an `isRockSmashSoftlocked?` arm that self-smashes. The transpiler's
    rock idiom drops both arms, so that arm is lost.
+4b. **ev19 animation 32 ("Ranger - Capture", `reference/animation_names.json`) — RULED
+   2026-10-14: `emote_heart`** (`engine/asm/macros/movement.inc:95`) over targets 21/22.
+   Closes the two `207` queue rows once built.
+4c. **Rock-smash capability (#92):** the gate is badge count ≥1 AND (party member knows
+   ROCKSMASH OR `BOXINGGLOVES`) (`scripts_dump/103__PField_HiddenMoves.rb:385-389`). Before
+   Legen Town, the only source is teaching `HM06` (from CH06 B7) to a party member. Rocks
+   **15 (21,29) and 16 (22,28) can be faced from the north pocket** at (22,29)/(23,28),
+   so smashing one before bumping ev19 needs no leave-and-return
+   (`output/scratch/r7_rock_faces.py`). 14 and 17 face only the south side; 18 is boxed in.
+   Where to model it (CH07 or CH07A): **open, operator**.
 5. **Wiki:** CH07-specific check not run; Ranger/rockslide ordering vs ev19 unresolved.
 6. **Census agreement:** doc totals equal the census; no disagreement found.
 7. Engine dir / porymap constant for map 35 still unassigned (carried from CH04 §7).
