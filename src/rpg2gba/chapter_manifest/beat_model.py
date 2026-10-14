@@ -64,8 +64,14 @@ class ChapterBeatModel:
     def __init__(self, chapter: Chapter, module: ModuleType) -> None:
         self._registered: tuple[str, ...] = tuple(
             beat.name for beat in chapter.beats)
+        # Only the chapter's OWN beats claim rows. A replayed predecessor beat
+        # is named `CHnn:<beat>` and can claim a row on this chapter's maps
+        # once a chapter revisits a map (CH07: CH05's `m035e001` cave warp on
+        # Route 2); that claim is the predecessor's verdict, not this one's.
         claims: dict[str, set[str]] = {}
         for beat in chapter.beats:
+            if ":" in beat.name:
+                continue
             for row_id in beat.rows:
                 claims.setdefault(row_id, set()).add(beat.name)
         self._claims = {row_id: tuple(sorted(names)) for row_id, names in claims.items()}
