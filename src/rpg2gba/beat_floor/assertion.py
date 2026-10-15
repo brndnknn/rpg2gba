@@ -44,6 +44,11 @@ AssertionKind = Literal[
     "seam_crossing",      # params: map_id, direction, offset, other_map_id, other_direction, other_offset
     "stair_crossing",     # params: x, y, side ("left"|"right"), crossings (((step_dir, approach_x, approach_y, exit_x, exit_y), ...); see terrain.stair_crossings)
     "blocked_obstacle",   # params: x, y, capability ("rock_smash"|"strength")
+    # The positive twin, declared by `smash_beat` only, never on a floor
+    # (CH08 §9, operator-approved 2026-10-15): WITH the capability held,
+    # interacting removes the obstacle and its cell becomes passable. It
+    # covers the row's `blocked_obstacle` (`coverage.graded_gaps`).
+    "smashed_obstacle",   # params: x, y, capability
 ]
 
 AssertionTag = Literal["state", "text", "position", "flow", "audio", "visual", "service"]
@@ -53,7 +58,7 @@ OFFLINE_KINDS: frozenset[str] = frozenset({
     "engine_flag_write", "warp", "heal_party", "erase_event", "item_grant", "item_remove", "pokemon_grant", "audio", "visual",
 })
 """Kinds checkable without the emulator. `var_write`, `displacement`,
-`event_position`, `battle`, `service`, `seam_crossing`, `stair_crossing` and `blocked_obstacle` (impassability needs the emulator) are ROM-only (R11: a `var_write` pulls a
+`event_position`, `battle`, `service`, `seam_crossing`, `stair_crossing`, `blocked_obstacle` and `smashed_obstacle` (impassability needs the emulator) are ROM-only (R11: a `var_write` pulls a
 flavour NPC into the ROM sample; a menu the player drives is not proven by its
 call existing in the compiled script). `audio`/`visual` assert nothing a ROM walk
 could fail beyond `completes`, so they do not block offline eligibility."""

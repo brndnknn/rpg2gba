@@ -379,3 +379,246 @@ def run_scenario(name: str, rom: Path, engine: Path,
     emu = Emulator(rom, engine, screenshot_dir=screenshot_dir)
     SCENARIOS[name](emu)
     return emu
+
+
+# -- teaching an HM/TM from the bag ---------------------------------------------
+#
+# Drives the real UI: START -> BAG -> pocket -> item -> USE -> "Booted up an
+# HM" -> "contained X. Teach?" (YES) -> party menu -> slot -> learn (or the
+# forget-a-move flow when the mon already knows four). Positions are never
+# counted blind: the pocket and slot index come from the bag contents in RAM,
+# and every cursor move is verified against `gBagPosition` / `gPartyMenu`.
+
+_BAG_NAV_BUDGET = 240        # frames to wait for a bag/party/summary UI to settle
+_TEACH_MAX_TAPS = 80         # taps allowed for the whole message/forget flow
+
+#: `Emulator._BAG_POCKETS` keys -> the POCKET_* probe value for gBagPosition.
+_POCKET_PROBE_KEYS = {
+    "off_bag_items": "val_pocket_items",
+    "off_bag_keyitems": "val_pocket_keyitems",
+    "off_bag_pokeballs": "val_pocket_pokeballs",
+    "off_bag_tmshms": "val_pocket_tmhm",
+    "off_bag_berries": "val_pocket_berries",
+}
+
+
+def _menu_action_index(engine: Path, name: str) -> int:
+    """Index of `name` in start_menu.c's "Menu actions" enum (see
+    `_menu_action_save_index`, which is this for MENU_ACTION_SAVE)."""
+    src = engine / "src" / "start_menu.c"
+    for match in _MENU_ACTION_ENUM_RE.finditer(src.read_text(encoding="utf-8")):
+        names = [re.split(r"//|/\*", e, maxsplit=1)[0].strip()
+                 for e in match.group(1).split(",")]
+        names = [n for n in names if n]
+        if "MENU_ACTION_POKEDEX" not in names:
+            continue
+        if name not in names:
+            raise ScenarioError(f"{src}: menu-action enum has no {name} (parsed: {names})")
+        return names.index(name)
+    raise ScenarioError(f"{src}: could not locate the start menu action enum")
+
+
+def _active_task_funcs(emu: Emulator) -> set[int]:
+    o = emu.offsets
+    base = emu.symbols["gTasks"]
+    funcs: set[int] = set()
+    for i in range(o["val_num_tasks"]):
+        task = base + i * o["sizeof_task"]
+        if emu.u8(task + o["off_task_is_active"]):
+            funcs.add(emu.u32(task + o["off_task_func"]))
+    return funcs
+
+
+def _wait_task(emu: Emulator, fn_addr: int, what: str,
+               budget: int = _BAG_NAV_BUDGET) -> None:
+    """Poll until a task running `fn_addr` (thumb-bit address) is active."""
+    spent = 0
+    while spent < budget:
+        if fn_addr in _active_task_funcs(emu):
+            return
+        emu.run(_START_MENU_SETTLE_STEP)
+        spent += _START_MENU_SETTLE_STEP
+    shot = emu.screenshot("teach_hm_ui_timeout")
+    raise ScenarioError(
+        f"teach_hm_from_bag: {what} never appeared within {budget} frames "
+        f"(active task funcs: {sorted(hex(f) for f in _active_task_funcs(emu))}) ({shot})")
+
+
+def _locate_bag_item(emu: Emulator, item_id: int) -> tuple[int, int]:
+    """(POCKET_* id, slot index within the pocket) of `item_id`, read from
+    the bag in RAM. Fails loud when the bag does not hold it."""
+    o = emu.offsets
+    bag_base = emu.sb1 + o["off_sb1_bag"]
+    for off_key, count_key in emu._BAG_POCKETS:
+        pocket_base = bag_base + o[off_key]
+        for i in range(o[count_key]):
+            slot = pocket_base + i * o["sizeof_itemslot"]
+            if emu.u16(slot + o["off_itemslot_itemid"]) == item_id:
+                return o[_POCKET_PROBE_KEYS[off_key]], i
+    raise ScenarioError(f"teach_hm_from_bag: item id {item_id} is not in the bag")
+
+
+def _bag_position(emu: Emulator) -> tuple[int, int]:
+    """(current pocket, selected index within it) from `gBagPosition`."""
+    o = emu.offsets
+    base = emu.symbols["gBagPosition"]
+    pocket = emu.u8(base + o["off_bagpos_pocket"])
+    cursor = emu.u16(base + o["off_bagpos_cursor"] + 2 * pocket)
+    scroll = emu.u16(base + o["off_bagpos_scroll"] + 2 * pocket)
+    return pocket, scroll + cursor
+
+
+def teach_hm_from_bag(emu: Emulator, item: str, move: str,
+                      party_slot: int = 0, forget_slot: int | None = None) -> None:
+    """Teach TM/HM `item` (an `ITEM_*` name) to party slot `party_slot`
+    through the real START -> BAG -> USE -> party-menu UI, then return to the
+    free-roaming overworld and assert a party mon knows `move`.
+
+    `forget_slot` (0-3) names the move to overwrite when the chosen mon
+    already knows four; omitting it in that case raises before any input.
+    """
+    from .assertions import party_knows_move, read_party_moves
+
+    item_id = emu.resolve_constant(item)
+    move_id = emu.resolve_constant(move)
+    if not item.startswith("ITEM_") or not move.startswith("MOVE_"):
+        raise ScenarioError(f"teach_hm_from_bag: bad names item={item!r} move={move!r}")
+    pocket_want, index_want = _locate_bag_item(emu, item_id)
+
+    party = read_party_moves(emu)
+    if not 0 <= party_slot < len(party):
+        raise ScenarioError(
+            f"teach_hm_from_bag: party_slot {party_slot} but the party has {len(party)} mons")
+    known = [m for m in party[party_slot] if m]
+    if move_id in known:
+        raise ScenarioError(f"teach_hm_from_bag: slot {party_slot} already knows {move}")
+    needs_forget = len(known) >= 4
+    if needs_forget and (forget_slot is None or not 0 <= forget_slot < 4):
+        raise ScenarioError(
+            f"teach_hm_from_bag: slot {party_slot} already knows 4 moves "
+            f"{party[party_slot]}; forget_slot (0-3) is required")
+
+    elf = emu.engine / "pokeemerald.elf"
+    bag_input_fn = _nm_static_addr(elf, "Task_BagMenu_HandleInput") | 1  # thumb bit
+    choose_mon_fn = emu.symbols["Task_HandleChooseMonInput"] | 1  # thumb bit
+
+    # -- START -> BAG -------------------------------------------------------
+    actions_addr, count_addr, cursor_addr = _start_menu_state_addrs(emu)
+    _wait_for_overworld_input_ready(emu)
+    actions: list[int] | None = None
+    cursor = 0
+    for attempt in range(1, _START_TAP_ATTEMPTS + 1):
+        emu.tap("START")
+        try:
+            actions, cursor = _wait_for_start_menu(emu, actions_addr, count_addr, cursor_addr)
+            break
+        except ScenarioError:
+            if attempt == _START_TAP_ATTEMPTS:
+                raise
+    assert actions is not None
+    _select_start_menu_row(emu, actions, cursor, cursor_addr,
+                           _menu_action_index(emu.engine, "MENU_ACTION_BAG"))
+    emu.tap("A")
+    _wait_task(emu, bag_input_fn, "the bag menu")
+    emu.run(30)  # let the open fade finish; input is ignored while it runs
+
+    # -- pocket, then item ----------------------------------------------------
+    pockets = emu.offsets["val_pocket_keyitems"] + 1
+    for _ in range(pockets):
+        pocket, _idx = _bag_position(emu)
+        if pocket == pocket_want:
+            break
+        emu.tap("RIGHT")
+        _wait_task(emu, bag_input_fn, "the bag menu after a pocket switch")
+        emu.run(20)
+    pocket, index = _bag_position(emu)
+    if pocket != pocket_want:
+        shot = emu.screenshot("teach_hm_pocket")
+        raise ScenarioError(
+            f"teach_hm_from_bag: could not reach pocket {pocket_want} (at {pocket}) ({shot})")
+    for _ in range(64):
+        pocket, index = _bag_position(emu)
+        if index == index_want:
+            break
+        emu.tap("DOWN" if index < index_want else "UP", hold=4, release=8)
+    pocket, index = _bag_position(emu)
+    if (pocket, index) != (pocket_want, index_want):
+        shot = emu.screenshot("teach_hm_item_cursor")
+        raise ScenarioError(
+            f"teach_hm_from_bag: bag cursor at pocket {pocket} index {index}, "
+            f"wanted pocket {pocket_want} index {index_want} for {item} ({shot})")
+
+    # -- A: item -> USE -> HM messages -> YES -> party menu ---------------------
+    taps = 0
+    while choose_mon_fn not in _active_task_funcs(emu):
+        if taps >= _TEACH_MAX_TAPS:
+            shot = emu.screenshot("teach_hm_no_party_menu")
+            raise ScenarioError(
+                f"teach_hm_from_bag: party menu never opened after {taps} taps ({shot})")
+        emu.tap("A")
+        taps += 1
+    emu.run(30)
+
+    slot_addr = emu.symbols["gPartyMenu"] + emu.offsets["off_partymenu_slotid"]
+    for _ in range(12):
+        slot = emu.u8(slot_addr)
+        if slot == party_slot:
+            break
+        emu.tap("DOWN" if slot < party_slot else "UP", hold=4, release=8)
+    if emu.u8(slot_addr) != party_slot:
+        shot = emu.screenshot("teach_hm_party_cursor")
+        raise ScenarioError(
+            f"teach_hm_from_bag: party cursor at {emu.u8(slot_addr)}, wanted {party_slot} ({shot})")
+    emu.tap("A")
+
+    # -- learn flow (messages, and the forget flow when the mon is full) --------
+    # The summary screen's replace-move input task is active exactly while the
+    # "which move to forget" screen takes input (`sMonSummaryScreen` itself is
+    # never cleared on close, so the pointer is no signal).
+    replace_fn = _nm_static_addr(elf, "Task_HandleReplaceMoveInput") | 1  # thumb bit
+    forgot = False
+    taps = 0
+    while not party_knows_move(emu, move):
+        if taps >= _TEACH_MAX_TAPS:
+            shot = emu.screenshot("teach_hm_learn_stuck")
+            raise ScenarioError(
+                f"teach_hm_from_bag: {move} not learned after {taps} taps ({shot})")
+        if replace_fn in _active_task_funcs(emu):
+            if not needs_forget or forgot:
+                shot = emu.screenshot("teach_hm_unexpected_summary")
+                raise ScenarioError(
+                    "teach_hm_from_bag: summary screen opened unexpectedly "
+                    f"(needs_forget={needs_forget}, already chose={forgot}) ({shot})")
+            emu.run(10)
+            for _ in range(forget_slot or 0):
+                emu.tap("DOWN", hold=4, release=12)
+            emu.screenshot("teach_hm_forget_cursor")
+            emu.tap("A")
+            forgot = True
+            emu.run(60)
+            taps += 1
+            continue
+        emu.tap("A")
+        taps += 1
+    if needs_forget:
+        after = read_party_moves(emu)[party_slot]
+        gone = [m for m in party[party_slot] if m not in after]
+        if gone != [party[party_slot][forget_slot or 0]]:
+            shot = emu.screenshot("teach_hm_wrong_forget")
+            raise ScenarioError(
+                f"teach_hm_from_bag: forgot {gone}, expected move "
+                f"{party[party_slot][forget_slot or 0]} (slot {forget_slot}); "
+                f"before {party[party_slot]}, after {after} ({shot})")
+
+    # -- back out to the overworld ------------------------------------------------
+    for _ in range(40):
+        if emu.overworld_input_ready() and not emu.field_locked():
+            break
+        emu.tap("B")
+    else:
+        shot = emu.screenshot("teach_hm_no_overworld")
+        raise ScenarioError(f"teach_hm_from_bag: never returned to the overworld ({shot})")
+    emu.run(20)
+    if not party_knows_move(emu, move):
+        shot = emu.screenshot("teach_hm_not_known")
+        raise ScenarioError(f"teach_hm_from_bag: {move} not known after teaching ({shot})")

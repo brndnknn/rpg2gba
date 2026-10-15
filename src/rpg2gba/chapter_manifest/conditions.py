@@ -490,23 +490,39 @@ _VANILLA_FAMILIES: tuple[ConditionFamily, ...] = (
 # (REDERIVATION_PLAN.md §14.6's "14.1's ten work items" list). Do not expect
 # these to appear in the next fan game.
 _URANIUM_FAMILIES: tuple[ConditionFamily, ...] = (
+    # 2026-10-15 (CH08 §9 ruling: the ladder is converted natively; rung 0 is
+    # walked, higher rungs wait on a dex-seeded harness start). Was one
+    # `uranium_jv_reward` family, unmodelled both arms.
     ConditionFamily(
-        name="uranium_jv_reward",
-        # 5 staged instances: "jvGiveReward" (4), "jvNextReward" (1).
-        pattern=_rx(r"jv(?:GiveReward|NextReward)"),
+        name="uranium_jv_next_reward",
+        # 1 staged instance, "jvNextReward".
+        pattern=_rx(r"jvNextReward"),
         description=(
-            "jvGiveReward / jvNextReward -- Uranium's quest-reward-ladder "
-            "guard; jvNextReward/jvGiveReward (213_Bambo_Reward.rb:16-43+) "
-            "compare $Trainer.pokedexOwned (not a modelled key) against a "
-            "PROFREWARDS table indexed by $game_variables[22] -- variable 22 "
-            "IS modelled, but the guard is on pokedexOwned, and jvGiveReward "
-            "further branches on [4,6,8].include?($game_variables[22]), an "
-            "enumeration this Test grammar cannot express as a single "
-            "comparison -- unmodelled both arms"
+            "jvNextReward -- Uranium's dex-reward-ladder guard "
+            "(213_Bambo_Reward.rb:16-23): true iff $Trainer.pokedexOwned >= "
+            "PROFREWARDS[var22+1][0] (the next tier: 10 owned first). The "
+            "natural walk owns far fewer, so else is the ordinary path "
+            "(always); then needs a dex-seeded start, the harness primitive "
+            "'dex_owned_tier'"
         ),
         judgment_free=False,
-        then_outcome=ArmOutcome(kind="unmodelled", detail="pokedex_owned_vs_profreward_tier"),
-        else_outcome=ArmOutcome(kind="unmodelled", detail="pokedex_owned_vs_profreward_tier"),
+        then_outcome=ArmOutcome(kind="harness", detail="dex_owned_tier"),
+        else_outcome=ArmOutcome(kind="always"),
+    ),
+    ConditionFamily(
+        name="uranium_jv_give_reward",
+        # 4 staged instances, "jvGiveReward".
+        pattern=_rx(r"jvGiveReward"),
+        description=(
+            "jvGiveReward -- pays the current tier (213_Bambo_Reward.rb:33-50): "
+            "an Egg on tiers 4/6/8 (false on a full party), else an item via "
+            "pbReceiveItem (returns true only if nothing was stored). Reached "
+            "only past jvNextReward's then-arm, so both arms are harness "
+            "'dex_owned_tier' like that one"
+        ),
+        judgment_free=False,
+        then_outcome=ArmOutcome(kind="harness", detail="dex_owned_tier"),
+        else_outcome=ArmOutcome(kind="harness", detail="dex_owned_tier"),
     ),
     ConditionFamily(
         name="uranium_is_custom_game",

@@ -102,6 +102,14 @@ claim is still correct (badge not yet met) but must never use it alone to
 raise `blocked_already_granted`. Do not make these fully green by modelling
 the other conjunct here; that is CH06's job. See `PROJECT_TODO.md` #92 and
 `MEMORY.md` -> Uranium-Specific Discoveries.
+
+*(2026-10-15, CH08 §9: the ITEM half is now derived for the capabilities in
+`FIELD_CAPABILITY_ITEMS` -- literal grants of the HM or the alternative item
+(`item_grants`). The MOVE half stays a walk fact, not a game-data fact: the
+move is taught by a generated setup beat (`teach_beat_name`), and
+`ChapterCapabilityModel` confirms a field capability held only from the first
+chapter whose suite teaches it. Still "Uranium has no HMs" above is wrong --
+corrected 2026-10-14: HM01-HM08 exist.)*
 """
 from __future__ import annotations
 
@@ -128,6 +136,8 @@ SWITCH_WRITE_CODE = 121
 VARIABLE_WRITE_CODE = 122
 SCRIPT_CODE = 355
 SCRIPT_CONTINUATION_CODE = 655
+CONDITIONAL_CODE = 111
+_CONDITION_SCRIPT = 12  # code 111 parameters[0]: a Ruby script condition
 
 # Badge-count requirement for each Uranium field capability
 # (`reference/scripts_dump/002__Settings.rb:144-151`, `HIDDENMOVESCOUNTBADGES
@@ -145,6 +155,32 @@ FIELD_CAPABILITY_BADGE_COUNT: dict[str, int] = {
     "fly": 8,          # BADGEFORFLY
     "waterfall": 8,    # BADGEFORWATERFALL
 }
+
+# The `move OR item` conjunct's ITEM half, per field capability: the bag
+# items whose literal grant makes the capability obtainable (CH08 §9, operator
+# ruling 2026-10-15 -- "held" is derived). The HM is the move's carrier (it is
+# taught from the bag); the alternative item stands in for knowing the move
+# (`traversal.capabilities.PREDICATES`). Only capabilities whose HM is verified
+# against the corpus are listed (HM06 is Rock Smash: granted at Map040/14000-
+# 14002, taught by CH08's suite). A token absent here keeps the badge-only
+# model: undetermined once the badge count is met, never confirmed held.
+FIELD_CAPABILITY_ITEMS: dict[str, frozenset[str]] = {
+    "rock_smash": frozenset({"HM06", "BOXINGGLOVES"}),
+}
+
+# A literal item grant: `pbReceiveItem`/`pbItemBall` (optionally `Kernel.`-
+# qualified) or `$PokemonBag.pbStoreItem`, first argument a PBItems symbol.
+_ITEM_GRANT_RE = re.compile(
+    r"(?:pbItemBall|pbReceiveItem|pbStoreItem)\s*\(?\s*(?:::)?(?:PBItems::|:)([A-Z][A-Z0-9_]*)"
+)
+
+
+def teach_beat_name(token: str) -> str:
+    """The beat id a generated chapter suite gives the setup beat that teaches
+    field capability `token` through the bag UI (CH08 §9). The capability is
+    only modelled as HELD from the first chapter whose suite contains it: the
+    walk, not the game data, decides when the move is actually taught."""
+    return f"teach_{token}"
 
 # RMXP Control Variables `operation` codes (parameters[2]). Only 0 (Set) can
 # ever be resolved to a known constant by this module; the rest are relative
@@ -291,6 +327,19 @@ class BadgeWriteSite:
 
 
 @dataclass(frozen=True)
+class ItemGrantSite:
+    """One literal grant of a `FIELD_CAPABILITY_ITEMS` item (an HM, or an
+    alternative item such as BOXINGGLOVES) in a `code 355`/`655` script."""
+
+    row_id: str
+    map_id: int
+    event_id: int
+    page_idx: int
+    item: str
+    chapter_id: str | None
+
+
+@dataclass(frozen=True)
 class CapabilitySite:
     """One site that grants a capability token -- the row-level fact
     `chapter_manifest.checker.CapabilityGrant` is built from."""
@@ -326,6 +375,7 @@ class CapabilityDerivation:
     switch_writes: tuple[SwitchWriteSite, ...] = field(default_factory=tuple)
     variable_writes: tuple[VariableWriteSite, ...] = field(default_factory=tuple)
     badge_writes: tuple[BadgeWriteSite, ...] = field(default_factory=tuple)
+    item_grants: tuple[ItemGrantSite, ...] = field(default_factory=tuple)
     _grants: dict[str, tuple[CapabilitySite, ...]] = field(default_factory=dict)
     # token -> True if at least one source contributing to it had an
     # unresolved (computed) write that COULD have satisfied it but couldn't
@@ -417,6 +467,27 @@ class CapabilityDerivation:
         """The required badge COUNT for a field-capability token, or `None`
         if `token` is not one of `FIELD_CAPABILITY_BADGE_COUNT`'s keys."""
         return FIELD_CAPABILITY_BADGE_COUNT.get(token)
+
+    def field_item_requirement(self, token: str) -> frozenset[str] | None:
+        """The items (any one suffices) that satisfy a field capability's
+        item conjunct, or `None` when that conjunct is unmodelled for `token`
+        (`FIELD_CAPABILITY_ITEMS`)."""
+        return FIELD_CAPABILITY_ITEMS.get(token)
+
+    def item_grant_sites(self, token: str) -> tuple[CapabilitySite, ...]:
+        """Every literal grant of one of `token`'s items, as capability sites."""
+        items = FIELD_CAPABILITY_ITEMS.get(token, frozenset())
+        return tuple(
+            CapabilitySite(
+                token=token,
+                row_id=g.row_id,
+                map_id=g.map_id,
+                chapter_id=g.chapter_id,
+                detail=f"item {g.item} granted (field capability {token!r})",
+            )
+            for g in self.item_grants
+            if g.item in items
+        )
 
     def _resolve_threshold(self, token: str) -> tuple[CapabilitySite, ...] | None:
         """Answer an un-minted `<variable>_<threshold>` token from the raw
@@ -515,10 +586,14 @@ def _scan_writes(
     var_labels: dict[int, str],
     script_switches: frozenset[int],
     map_owner: dict[int, str | None],
-) -> tuple[list[SwitchWriteSite], list[VariableWriteSite], list[BadgeWriteSite]]:
+) -> tuple[
+    list[SwitchWriteSite], list[VariableWriteSite], list[BadgeWriteSite], list[ItemGrantSite]
+]:
     switch_writes: list[SwitchWriteSite] = []
     variable_writes: list[VariableWriteSite] = []
     badge_writes: list[BadgeWriteSite] = []
+    item_grants: list[ItemGrantSite] = []
+    field_items = frozenset().union(*FIELD_CAPABILITY_ITEMS.values())
 
     for path in _iter_map_files(maps_dir):
         data = _load_json(path)
@@ -573,6 +648,26 @@ def _scan_writes(
                                 value=operand if determined else None,
                                 chapter_id=map_owner.get(data["map_id"]),
                             ))
+                    elif code == CONDITIONAL_CODE:
+                        # `if Kernel.pbReceiveItem(...)` -- the usual shape of
+                        # an item grant (the call returns false on a full bag).
+                        # Only item grants are read from conditions; badge
+                        # writes are statements.
+                        if len(params) < 2 or params[0] != _CONDITION_SCRIPT:
+                            continue
+                        if not isinstance(params[1], str):
+                            continue
+                        for m in _ITEM_GRANT_RE.finditer(params[1]):
+                            if m.group(1) not in field_items:
+                                continue
+                            item_grants.append(ItemGrantSite(
+                                row_id=page_row_id(data["map_id"], event_id, page_idx),
+                                map_id=data["map_id"],
+                                event_id=event_id,
+                                page_idx=page_idx,
+                                item=m.group(1),
+                                chapter_id=map_owner.get(data["map_id"]),
+                            ))
                     elif code in (SCRIPT_CODE, SCRIPT_CONTINUATION_CODE):
                         text = params[0] if params else None
                         if not isinstance(text, str):
@@ -599,7 +694,18 @@ def _scan_writes(
                                 badge_index=int(m.group(1)),
                                 chapter_id=map_owner.get(data["map_id"]),
                             ))
-    return switch_writes, variable_writes, badge_writes
+                        for m in _ITEM_GRANT_RE.finditer(text):
+                            if m.group(1) not in field_items:
+                                continue
+                            item_grants.append(ItemGrantSite(
+                                row_id=page_row_id(data["map_id"], event_id, page_idx),
+                                map_id=data["map_id"],
+                                event_id=event_id,
+                                page_idx=page_idx,
+                                item=m.group(1),
+                                chapter_id=map_owner.get(data["map_id"]),
+                            ))
+    return switch_writes, variable_writes, badge_writes, item_grants
 
 
 def _register_token(
@@ -638,7 +744,7 @@ def derive_capability_sites(
     )
     map_owner = _map_id_to_chapter(chapters_json)
 
-    switch_writes, variable_writes, badge_writes = _scan_writes(
+    switch_writes, variable_writes, badge_writes, item_grants = _scan_writes(
         maps_dir, switch_labels, var_labels, script_switches, map_owner
     )
 
@@ -725,6 +831,7 @@ def derive_capability_sites(
         switch_writes=tuple(switch_writes),
         variable_writes=tuple(variable_writes),
         badge_writes=tuple(badge_writes),
+        item_grants=tuple(item_grants),
         _grants={t: tuple(sites) for t, sites in grants.items()},
         _undetermined=undetermined,
         token_sources={t: tuple(s) for t, s in token_sources.items()},
@@ -740,9 +847,12 @@ __all__ = [
     "CapabilitySite",
     "CapabilitySitesError",
     "FIELD_CAPABILITY_BADGE_COUNT",
+    "FIELD_CAPABILITY_ITEMS",
+    "ItemGrantSite",
     "SwitchWriteSite",
     "VariableWriteSite",
     "derive_capability_sites",
+    "teach_beat_name",
     "token_for_label",
 ]
 

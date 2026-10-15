@@ -522,6 +522,60 @@ def party_has_species(emu: Emulator, species_id: int) -> bool:
     return species_id in read_party_species(emu)
 
 
+# Substruct type holding the four move ids (`struct PokemonSubstruct1`,
+# include/pokemon.h: move1:11 + evolutionTracker1:5, move2:11 +
+# evolutionTracker2:5 in the first u32; move3/move4 likewise in the second).
+SUBSTRUCT_TYPE_ATTACKS = 1
+
+
+def decode_box_moves(personality: int, ot_id: int, secure: bytes,
+                     num_substruct_bytes: int) -> tuple[int, int, int, int]:
+    """Decode the four move ids from a `BoxPokemon`'s raw encrypted `secure`
+    block. Pure (no emulator): every u32 of `secure` is XORed with
+    `personality ^ otId` (DecryptBoxMon), the Attacks substruct sits at
+    `_SUBSTRUCT_OFFSETS[1][personality % 24]`, and its first two u32 words
+    pack the moves as 11-bit fields at bit 0 and bit 16."""
+    from .battle import _SUBSTRUCT_OFFSETS
+
+    key = personality ^ ot_id
+    base = _SUBSTRUCT_OFFSETS[SUBSTRUCT_TYPE_ATTACKS][personality % 24] * num_substruct_bytes
+    if base + 8 > len(secure):
+        raise ScenarioError(
+            f"decode_box_moves: secure block of {len(secure)} bytes is too "
+            f"short for the Attacks substruct at offset {base}")
+    w0 = int.from_bytes(secure[base:base + 4], "little") ^ key
+    w1 = int.from_bytes(secure[base + 4:base + 8], "little") ^ key
+    return (w0 & 0x7FF, (w0 >> 16) & 0x7FF, w1 & 0x7FF, (w1 >> 16) & 0x7FF)
+
+
+def read_party_moves(emu: Emulator) -> list[tuple[int, int, int, int]]:
+    """The four move ids of each non-empty party slot, in slot order
+    (stopping at the first `SPECIES_NONE`, like `read_party_species`)."""
+    species_none = emu.resolve_constant("SPECIES_NONE")
+    o = emu.offsets
+    party_size = emu.resolve_constant("PARTY_SIZE")
+    nsub = o["val_num_substruct_bytes"]
+    out: list[tuple[int, int, int, int]] = []
+    for slot in range(party_size):
+        addr = emu.symbols["gPlayerParty"] + slot * o["sizeof_pkmn"] + o["off_pkmn_box"]
+        if decrypt_species(emu, addr) == species_none:
+            break
+        personality = emu.u32(addr + o["off_boxpkmn_personality"])
+        ot_id = emu.u32(addr + o["off_boxpkmn_otid"])
+        secure = emu.read_bytes(addr + o["off_boxpkmn_secure"], nsub * 4)
+        out.append(decode_box_moves(personality, ot_id, secure, nsub))
+    return out
+
+
+def party_knows_move(emu: Emulator, move: str) -> bool:
+    """Whether any party mon knows `move` (a `MOVE_*` constant name).
+    Fails loud on an unknown name (the gcc probe raises) or a non-MOVE_ name."""
+    if not isinstance(move, str) or not move.startswith("MOVE_"):
+        raise ScenarioError(f"party_knows_move: {move!r} is not a MOVE_* constant name")
+    move_id = emu.resolve_constant(move)
+    return any(move_id in moves for moves in read_party_moves(emu))
+
+
 # The four cells a player can stand on to talk to an NPC, and the facing
 # each one requires. Keyed by the offset FROM the NPC TO the player, so a
 # live NPC position turns straight into candidate approaches.

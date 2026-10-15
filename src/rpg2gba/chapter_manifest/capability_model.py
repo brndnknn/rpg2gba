@@ -30,7 +30,12 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from rpg2gba.capability_sites import CapabilityDerivation, derive_capability_sites
+from rpg2gba.capability_sites import (
+    FIELD_CAPABILITY_ITEMS,
+    CapabilityDerivation,
+    derive_capability_sites,
+    teach_beat_name,
+)
 from rpg2gba.chapter_atlas.binding import ChapterBinding, load_binding
 
 from .checker import CapabilityGrant
@@ -41,6 +46,32 @@ DEFAULT_MAPS_DIR = Path("output/uranium-build/maps")
 DEFAULT_SWITCHES_JSON = Path("reference/uranium_switches.json")
 DEFAULT_VARIABLES_JSON = Path("reference/uranium_variables.json")
 DEFAULT_CHAPTERS_JSON = Path("reference/chapters.json")
+DEFAULT_MODULES_DIR = Path(__file__).resolve().parents[1] / "playtest" / "chapters_gen"
+
+
+def taught_in_chain(
+    chain_ids: frozenset[str], modules_dir: Path = DEFAULT_MODULES_DIR
+) -> frozenset[str]:
+    """Field-capability tokens whose teach setup beat (`teach_beat_name`)
+    appears in the committed generated module of any chapter in `chain_ids`.
+
+    The move half of a field capability is a fact about the WALK, not the
+    game data (CH08 §9): the player could have taught HM06 the moment it was
+    received, but the generated suites teach it on first need, so a chapter
+    only holds the capability once its own suite or a predecessor's has
+    actually taught it. Reading the committed modules is the same pattern
+    `beat_gen.seed.deferred_rows` uses for cross-chapter facts. A chapter with
+    no module yet contributes nothing."""
+    taught: set[str] = set()
+    for cid in chain_ids:
+        path = modules_dir / f"{cid.lower()}.py"
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        for token in FIELD_CAPABILITY_ITEMS:
+            if f'"{teach_beat_name(token)}"' in text:
+                taught.add(token)
+    return frozenset(taught)
 
 
 def _chain_ids(binding: ChapterBinding, chapter_id: str) -> frozenset[str]:
@@ -75,10 +106,43 @@ class ChapterCapabilityModel:
         chapter_id: str,
         derivation: CapabilityDerivation,
         chain_ids: frozenset[str],
+        taught: frozenset[str] = frozenset(),
     ) -> None:
         self._chapter_id = chapter_id
         self._derivation = derivation
         self._chain_ids = chain_ids
+        self._taught = taught
+
+    def _badge_met(self, name: str) -> bool:
+        required = self._derivation.field_badge_requirement(name)
+        if required is None:
+            return False
+        distinct_in_chain = {
+            w.badge_index
+            for w in self._derivation.badge_writes
+            if w.chapter_id in self._chain_ids
+        }
+        return len(distinct_in_chain) >= required
+
+    def _item_sites_in_chain(self, name: str) -> tuple[CapabilityGrant, ...]:
+        return tuple(
+            CapabilityGrant(row_id=s.row_id, map_id=s.map_id, chapter_id=s.chapter_id)
+            for s in self._derivation.item_grant_sites(name)
+            if s.chapter_id in self._chain_ids
+        )
+
+    def obtainable(self, name: str) -> bool:
+        """The game-data half of a field capability is met in this chain:
+        enough badges AND one of its items granted (`FIELD_CAPABILITY_ITEMS`).
+        False for a token whose item half is unmodelled. Whether the walk has
+        TAUGHT the move is `held`."""
+        if self._derivation.field_item_requirement(name) is None:
+            return False
+        return self._badge_met(name) and bool(self._item_sites_in_chain(name))
+
+    def held(self, name: str) -> bool:
+        """Obtainable AND taught by this chain's suites (`taught_in_chain`)."""
+        return self.obtainable(name) and name in self._taught
 
     def grant_sites(self, name: str) -> tuple[CapabilityGrant, ...] | None:
         """`checker.CapabilityModel.grant_sites`.
@@ -96,16 +160,27 @@ class ChapterCapabilityModel:
         sites while the chain's badge count still falls short (an honest
         "not yet, as far as this model can tell" that keeps a correct
         `blocked:` claim from getting a false error).
+
+        *(2026-10-15, CH08 §9: where the item half is modelled
+        (`FIELD_CAPABILITY_ITEMS`), badge met but no item in the chain is
+        still an honest "not yet" -- the item grant sites are returned; a
+        capability `held` in this chain returns its badge + item sites in
+        the chain, so `granted_within` can confirm it. Obtainable but not yet
+        taught stays `None`, exactly as before.)*
         """
-        required = self._derivation.field_badge_requirement(name)
-        if required is not None:
-            distinct_in_chain = {
-                w.badge_index
-                for w in self._derivation.badge_writes
-                if w.chapter_id in self._chain_ids
-            }
-            if len(distinct_in_chain) >= required:
-                return None
+        if self._derivation.field_badge_requirement(name) is not None and self._badge_met(name):
+            if self.held(name):
+                return self._held_sites(name)
+            items = self._derivation.item_grant_sites(name)
+            if items and not self._item_sites_in_chain(name):
+                # An item scan that found nothing anywhere is not evidence of
+                # impossibility (e.g. a derivation built without the scan),
+                # so only a real later grant site answers "not yet".
+                return tuple(
+                    CapabilityGrant(row_id=s.row_id, map_id=s.map_id, chapter_id=s.chapter_id)
+                    for s in items
+                )
+            return None
         sites = self._derivation.grant_sites(name)
         if sites is None:
             return None
@@ -126,13 +201,25 @@ class ChapterCapabilityModel:
         conjunct is unmodelled. Reporting anything non-empty here would let
         `checker.py` treat a field capability as confirmed-held from the
         badge alone.
+
+        *(2026-10-15: a field capability `held` in this chain -- badge + item
+        + taught by a chain suite -- is the one affirmative case; it returns
+        its in-chain badge and item sites.)*
         """
         if self._derivation.field_badge_requirement(name) is not None:
-            return ()
+            return self._held_sites(name) if self.held(name) else ()
         sites = self.grant_sites(name)
         if not sites:
             return ()
         return tuple(g for g in sites if g.chapter_id in self._chain_ids)
+
+    def _held_sites(self, name: str) -> tuple[CapabilityGrant, ...]:
+        badge_sites = tuple(
+            CapabilityGrant(row_id=w.row_id, map_id=w.map_id, chapter_id=w.chapter_id)
+            for w in self._derivation.badge_writes
+            if w.chapter_id in self._chain_ids
+        )
+        return badge_sites + self._item_sites_in_chain(name)
 
 
 def build_capability_model(
@@ -176,7 +263,9 @@ def build_capability_model(
         chapters_json=chapters_json,
     )
     chain_ids = _chain_ids(binding, chapter_id)
-    return ChapterCapabilityModel(chapter_id, derivation, chain_ids)
+    return ChapterCapabilityModel(
+        chapter_id, derivation, chain_ids, taught=taught_in_chain(chain_ids)
+    )
 
 
-__all__ = ["ChapterCapabilityModel", "build_capability_model"]
+__all__ = ["ChapterCapabilityModel", "build_capability_model", "taught_in_chain"]

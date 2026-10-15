@@ -60,8 +60,8 @@ _VANILLA_EXEMPLARS: list[tuple[str, str]] = [
 ]
 
 _URANIUM_EXEMPLARS: list[tuple[str, str]] = [
-    ("uranium_jv_reward", "jvGiveReward"),
-    ("uranium_jv_reward", "jvNextReward"),
+    ("uranium_jv_give_reward", "jvGiveReward"),
+    ("uranium_jv_next_reward", "jvNextReward"),
     ("uranium_is_custom_game", "isCustomGame?"),
     ("uranium_show_ruleset_settings", "showRulesetSettings(1)"),
     ("uranium_is_rock_smash_softlocked", "isRockSmashSoftlocked?"),

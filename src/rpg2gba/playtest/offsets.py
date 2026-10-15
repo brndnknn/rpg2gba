@@ -39,6 +39,21 @@ _PROBE_ENTRIES: dict[str, str] = {
     # this reads gSaveBlock1Ptr->bag directly instead, one fewer pointer
     # hop and no dependency on SetBagItemsPointers having run).
     "off_sb1_money": "offsetof(struct SaveBlock1, money)",
+    # Pokedex flag arrays (SaveBlock1.dexSeen/dexCaught, global.h): bit
+    # (nationalDexNo-1) of each, as GetSetPokedexFlag (pokedex.c) reads them.
+    "off_sb1_dexseen": "offsetof(struct SaveBlock1, dexSeen)",
+    "off_sb1_dexcaught": "offsetof(struct SaveBlock1, dexCaught)",
+    "val_national_dex_count": "NATIONAL_DEX_COUNT",
+    # struct BagPosition (item_menu.h): the bag UI's pocket / cursor / scroll.
+    "off_bagpos_pocket": "offsetof(struct BagPosition, pocket)",
+    "off_bagpos_cursor": "offsetof(struct BagPosition, cursorPosition)",
+    "off_bagpos_scroll": "offsetof(struct BagPosition, scrollPosition)",
+    "off_partymenu_slotid": "offsetof(struct PartyMenu, slotId)",
+    "val_pocket_items": "POCKET_ITEMS",
+    "val_pocket_pokeballs": "POCKET_POKE_BALLS",
+    "val_pocket_tmhm": "POCKET_TM_HM",
+    "val_pocket_berries": "POCKET_BERRIES",
+    "val_pocket_keyitems": "POCKET_KEY_ITEMS",
     "off_sb1_bag": "offsetof(struct SaveBlock1, bag)",
     "off_sb2_encryptionkey": "offsetof(struct SaveBlock2, encryptionKey)",
     "off_bag_items": "offsetof(struct Bag, items)",
@@ -80,6 +95,7 @@ _PROBE_ENTRIES: dict[str, str] = {
     # struct BoxPokemon (include/pokemon.h): encrypted substruct block.
     "off_boxpkmn_personality": "offsetof(struct BoxPokemon, personality)",
     "off_boxpkmn_otid": "offsetof(struct BoxPokemon, otId)",
+    "off_boxpkmn_checksum": "offsetof(struct BoxPokemon, checksum)",
     "off_boxpkmn_secure": "offsetof(struct BoxPokemon, secure)",
     "val_num_substruct_bytes": "NUM_SUBSTRUCT_BYTES",
     # struct BattlePokemon (include/pokemon.h): in-battle mon copy — hp here
@@ -289,6 +305,9 @@ _PROBE_TEMPLATE = """\
 #include "task.h"
 #include "item.h"
 #include "battle_setup.h"
+#include "item_menu.h"
+#include "party_menu.h"
+#include "constants/item.h"
 {entries}
 """
 

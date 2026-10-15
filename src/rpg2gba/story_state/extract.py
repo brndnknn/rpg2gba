@@ -48,6 +48,7 @@ from rpg2gba.conversion_agent.transpiler import (
 from rpg2gba.story_state.scope_search import (
     ComputedScope,
     named_write_targets,
+    writes_exhaustively_named,
     scope_needs_interpreter,
     stripped_ce_ids_for,
     witness_citations,
@@ -55,6 +56,7 @@ from rpg2gba.story_state.scope_search import (
 )
 from rpg2gba.ruby_subset.builtins import STATIC_PREDICATES
 from rpg2gba.ruby_subset.search import search_scope
+from rpg2gba.story_state.display_vars import display_var_policy
 from rpg2gba.story_state.graphics_vars import graphics_only_variables
 from rpg2gba.story_state.bag import key_item_symbols, scan_bag_text
 from rpg2gba.story_state.state import (
@@ -723,6 +725,7 @@ def _extract_scope_writes_core(
             read_domain=lambda key: None,
             index_of=index_of if forced_list_index is None else None,
             graphics_only_vars=graphics_only_variables(),
+            display_write_ok=display_var_policy().write_ok,
         )
         label = row_id if row_id is not None else f"ce-scope @list[{forced_list_index}]"
         if result.refusal is None:
@@ -769,12 +772,14 @@ def _extract_scope_writes_core(
         # (model.py FIX 2b); fall back to global havoc only when nothing
         # could be named, exactly as the regex reader this replaced did.
         named = named_write_targets(commands, map_id=map_id, event_id=event_id)
+        exhaustive = not named and writes_exhaustively_named(
+            commands, map_id=map_id, event_id=event_id)
         return ScopeExtraction(
             refusals=(Refusal(
                 result.refusal.code, f"interpreter {label}: {result.refusal.detail}",
             ),),
             havoc_keys=frozenset(named),
-            havoc_global=not named,
+            havoc_global=not named and not exhaustive,
         )
 
     writes: list[Write] = []

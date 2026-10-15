@@ -188,7 +188,7 @@ def _extract_pb_rock_smash(text: str, list_index: int, ctx: ExtractContext) -> E
 
 # --- jvGiveReward / jvNextReward ----------------------------------------
 
-# uranium_jv_reward matches both jvGiveReward (213_Bambo_Reward.rb:33-45)
+# uranium_jv_give_reward (and, before 2026-10-15, jvNextReward too) matches jvGiveReward (213_Bambo_Reward.rb:33-45)
 # and jvNextReward/jvNextRewardPhone (pure reads, no side effect).
 # Dispatched by which head the condition text names.
 #
@@ -249,5 +249,6 @@ CONDITION_FAMILY_EXTRACTORS: dict[str, ConditionFamilyExtractor] = {
     "pb_receive_item": _extract_pb_receive_item,
     "pb_rock_smash": _extract_pb_rock_smash,
     "pb_pick_berry": _extract_pb_pick_berry,
-    "uranium_jv_reward": _extract_uranium_jv_reward,
+    "uranium_jv_next_reward": _no_assertion,
+    "uranium_jv_give_reward": _extract_uranium_jv_reward,
 }

@@ -53,6 +53,7 @@ __all__ = [
     "STATIC_ZERO_CALLS",
     "EFFECT_CALLS",
     "INPUT_CALLS",
+    "DEX_COUNT_VAR_BUMP",
     "RANDOM_SPECIES_CALL",
     "STATE_READ_CALLS",
     "VALUE_METHODS",
@@ -155,7 +156,6 @@ PARTY_MODEL_CALLS: frozenset[str] = frozenset({
     "pbHasSpecies?",
     "pbPhoneBattleCount",
     "isRockSmashSoftlocked?",
-    "jvNextReward",
 })
 
 
@@ -424,6 +424,14 @@ INPUT_CALLS: dict[str, InputSpec] = {
     # for this specific head -- see report to lead.
     "pbRockSmash": InputSpec(kind="capability", domain=(True, False)),
     "pbCoralBreak": InputSpec(kind="capability", domain=(True, False)),
+    # 213_Bambo_Reward.rb:16-23 -- true iff `$Trainer.pokedexOwned >=
+    # PROFREWARDS[var22+1][0]`; the Pokedex caught count is not modelled
+    # (operator ruling 2026-10-15, 08-route-1-moki-revisit.md s9: no party/
+    # dex model), so it is an unknown boolean input. On the True arm the
+    # method also does `$game_variables[22] += 1` -- evaluate.py applies
+    # that write (`DEX_COUNT_VAR_BUMP`). Domain order: True (threshold met)
+    # first, "yes/success first" as with the capability inputs.
+    "jvNextReward": InputSpec(kind="dex_count", domain=(True, False)),
     # 109_PField_BerryPlants.rb:616+ -- confirms "Want to pick it?" before
     # a bag-capacity check; both arms player input (pb_pick_berry family).
     "pbPickBerry": InputSpec(kind="confirm", domain=(True, False)),
@@ -439,6 +447,10 @@ INPUT_CALLS: dict[str, InputSpec] = {
     # need a new table entry. RNG-decided, not modelled -- input.
     "pbPokerus?": InputSpec(kind="random_state", domain=(True, False)),
 }
+
+# Input heads whose True arm also increments a story variable, as the Ruby
+# body does: head -> variable id (jvNextReward: `$game_variables[22]+=1`).
+DEX_COUNT_VAR_BUMP: dict[str, int] = {"jvNextReward": 22}
 
 # 220_Custom_Mode.rb:361 "Used for starter" -- a random species picker (the
 # randomizer-mode starter path). Never actually reachable in this port

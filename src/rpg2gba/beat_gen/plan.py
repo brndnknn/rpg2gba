@@ -37,6 +37,7 @@ TemplateName = Literal[
     "generic",
     # row-level kinds, each with its own beat shape
     "obstacle",   # blocked_obstacle rows grouped by (map, capability)
+    "smash",      # the same rows once the capability is held: cleared, walked through (CH08 §9)
     "stair",      # one staircase's terrain rows, crossed both ways (A3)
     "seam",       # one connections.json seam row (A1)
     # travel between beats (C6 part two, `continuity.py`): crosses warps to

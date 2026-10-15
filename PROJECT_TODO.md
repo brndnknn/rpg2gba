@@ -17,6 +17,34 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 146. `_emit_give_item_idiom` branches on `VAR_RESULT` after `giveitem`, which is the pocket id
+
+Found 2026-10-15 by the CH08 transpiler work: `giveitem` (`engine/asm/macros/event.inc:2122`)
+runs `Std_ObtainItem` (`engine/data/scripts/obtain_item.inc:4-9`), which leaves the success flag in
+`VAR_0x8007` and the pocket in `VAR_RESULT`. The existing item-grant idiom tests
+`VAR_RESULT != 0`, which is true for any pocket, so a full-bag arm can never be taken on the ROM.
+Harmless while full-bag arms are `harness:full_bag` (never walked); wrong once one is. Fix the
+idiom to read `VAR_0x8007`, as the reward-ladder code does.
+
+### 145. Two Pokédex-reward rungs still queue: MINICORN unstaged, ITEM_OVAL_CHARM missing from `fork_index`
+
+Found 2026-10-15 (CH08 §9). Map050 EV005's reward ladder emits natively except rung 4 (an Egg of
+MINICORN: the species isn't staged, so there's no `SPECIES_*`) and rung 9 (`ITEM_OVAL_CHARM`:
+defined at `engine/include/constants/items.h:848`, but the enum-segment split in
+`conversion_agent/fork_index.py` swallows it because the `RECURSIVELY(...)` line before it has no
+comma). Both rungs need ≥50/≥175 species owned, which no walk reaches before a dex-seeded harness
+exists, so neither blocks CH08.
+
+### 144. `var_text` can't predict dex-count dialogue (`\r\v[2]\c[0]`, two `\v` per line)
+
+Found 2026-10-15 (CH08). The transpiler now emits the lab's "seen \v[2] / caught \v[3]" lines with
+`ScriptGetPokedexInfo` + `buffernumberstring`, but the floor's `beat_floor/var_text.py` only
+handles ONE `\v[N]` per line written by a script that reads game variables. These lines have
+two, read `$Trainer.pokedexSeen/Owned`, and wrap the count in the `\r…\c[0]` tint. So
+Map050 EV027 p0 and EV005 p5 b0/b2/b30 are refused `#109: text_unnormalizable`; the scene still
+runs on the ROM through its claimed arm. The fix is a dex-count pseudo-input (read via
+`Emulator.pokedex_counts`), multi-`\v` lines, and the transpiler's `\r` stripping mirrored.
+
 ### 143. Boxing Gloves don't stand in for Rock Smash on the ROM
 
 Uranium's Rock Smash gate is badge count ≥ 1 AND (a party member knows ROCKSMASH OR

@@ -97,6 +97,15 @@ def _is_obstacle_row(floor: RowFloor) -> bool:
     return any(a.kind == "blocked_obstacle" for a in floor.assertions)
 
 
+def _held_obstacle(row: ManifestRow, floor: RowFloor,
+                   held_obstacles: Collection[tuple[int, int]]) -> bool:
+    """The row is an obstacle (`_is_obstacle_row`) the walk can clear itself:
+    its (map, event) is in `held_obstacles` (capability held, and no other
+    event clears it -- `beat_gen.__main__._smashable_by_walk`)."""
+    return (_is_obstacle_row(floor) and row.event_id is not None
+            and (row.map_id, row.event_id) in held_obstacles)
+
+
 def empty_events(map_id: int, map_json: Mapping) -> set[tuple[int, int]]:
     """The (map, event) pairs on one decoded map whose EVERY page is empty
     (only the terminating code 0). Such an event can show nothing on the
@@ -149,8 +158,20 @@ def select_rows(
     stripped: Mapping[tuple[int, int], str | None] | None = None,
     empty: Collection[tuple[int, int]] = frozenset(),
     dropped: Mapping[tuple[int, int], str] | None = None,
+    held: Collection[str] = frozenset(),
+    held_obstacles: Collection[tuple[int, int]] = frozenset(),
+    foreign_cleared: Collection[tuple[int, int]] = frozenset(),
 ) -> Selection:
     """Sort every manifest row into owned / refused / elsewhere.
+
+    `held` names the field capabilities the walk holds (CH08 §9): a row
+    behind an obstacle whose every required capability is held is not
+    `blocked` (Rule 6) -- it is walked once its obstacle's smash beat
+    clears the way. `held_obstacles` are the (map, event) obstacles the walk
+    clears itself; one an earlier chapter owns (as a negative beat) is
+    claimed here instead of `later` (Rule 5). `foreign_cleared` obstacles are
+    cleared by some other event, so their own rows keep Rule 6 even when the
+    capability is held.
 
     `rows` in manifest order; `verdicts` and `floors` keyed by row id.
     Raises `ValueError` if a row has no floor at all (every manifest row
@@ -219,8 +240,12 @@ def select_rows(
                 refusals.append(Refusal(row.row_id, "story-state", "undetermined",
                                          "story model could not determine this row"))
                 continue
-            # Rule 5: later / unreachable -> elsewhere.
-            if verdict.status == "later":
+            # Rule 5: later / unreachable -> elsewhere. Except (CH08 §9) an
+            # obstacle whose capability the walk now holds: an earlier chapter
+            # only proved it BLOCKED; clearing it is this chapter's beat.
+            if verdict.status == "later" and _held_obstacle(row, floor, held_obstacles):
+                pass
+            elif verdict.status == "later":
                 elsewhere.append(Elsewhere(row.row_id, "later", verdict.owner))
                 continue
             if verdict.status == "unreachable":
@@ -228,7 +253,9 @@ def select_rows(
                 continue
 
         # Rule 6: requires a capability and isn't the obstacle itself.
-        if row.requires and not _is_obstacle_row(floor):
+        held_here = set(row.requires) <= set(held) and (
+            row.event_id is None or (row.map_id, row.event_id) not in foreign_cleared)
+        if row.requires and not _is_obstacle_row(floor) and not held_here:
             elsewhere.append(Elsewhere(row.row_id, "blocked", None, row.requires))
             continue
 

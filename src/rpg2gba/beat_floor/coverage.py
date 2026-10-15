@@ -90,12 +90,19 @@ def graded_gaps(floor: RowFloor, declared: Iterable[FloorAssertion]) -> GradedGa
     grader and the manifest checker. Every contradiction counts; a
     merely-missing assertion counts unless it is walk-checked (C9 ruling 7)
     or the floor is a capability block, which owes only its
-    `blocked_obstacle` (C9 ruling 10)."""
+    `blocked_obstacle` (C9 ruling 10) -- or, once the capability is held,
+    that obstacle's positive twin: a declared `smashed_obstacle` for the same
+    row and cell covers it (CH08 §9)."""
     declared = tuple(declared)
     missing = uncovered(floor, declared)
     contradicted = [f for f in missing if any(contradicts(d, f) for d in declared)]
     if any(a.kind == "blocked_obstacle" for a in floor.assertions):
-        owed = [f for f in missing if f.kind == "blocked_obstacle"]
+        def cell(a: FloorAssertion) -> tuple:
+            p = dict(a.params)
+            return (a.row_id, p.get("x"), p.get("y"), p.get("capability"))
+
+        smashed = {cell(d) for d in declared if d.kind == "smashed_obstacle"}
+        owed = [f for f in missing if f.kind == "blocked_obstacle" and cell(f) not in smashed]
     else:
         owed = [f for f in missing if f.kind not in WALK_CHECKED_KINDS]
     return GradedGaps(

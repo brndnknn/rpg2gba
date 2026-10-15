@@ -363,6 +363,31 @@ party member that **knows** the move. The gaps are tooling.
    - `jvNextReward` becomes an unknown input; the walk takes the not-yet arm (rung 0), and
      the higher rungs are deferred.
 
+**As built (2026-10-15).** Beyond the plan above, generating CH08 surfaced and fixed:
+- **Held per rock, not per capability.** `beat_gen._smashable_by_walk` gives the walk only
+  rocks no other event clears. CH07's rockslide is cleared by ev19, so CH07 stays as
+  approved.
+- **Revisit gaps.** These were invisible until a chapter re-entered Moki after CH06:
+  - **Global havoc:** CH06's Name Rater and trade rows "named nothing" and havocked all
+    state. `scope_search.writes_exhaustively_named` and command-level naming fix it.
+  - **Ownership:** CH06 "owned" the Moki lab scene it never walks.
+    `seed.walked_rows`/`walked_for` fix it.
+  - **Quest counter:** the gym's one-shot `var 101 += 1` widened var 101 to TOP.
+    `model._self_switch_retired_counters` fixes it.
+  - **Doors:** a gated door an earlier chapter opened no longer needs this chapter's warp
+    beat (`_opened_before`).
+  - **Seams:** a seam into a map the ROM doesn't build is the successor's (Moki → Route 3
+    is `later: CH09`).
+- **Kevlar (31) is now one of CH08's maps,** so the operator-ruled cleanup beat
+  (Map031 EV049 p2) has an owner. Its Strength rows re-propose as `blocked:strength`.
+- **A held rock's other pages leave the walk.** Its empty "smashed" page is `empty_page`,
+  and its no-capability arm is `unselected_arm`; the smash beat answers YES and asserts the
+  rock is gone.
+- **CH01/CH06/CH07 status lists changed; their beats did not.** CH01's 39 lab rows went
+  `party_model` → `unreachable`. CH06/CH07 rows went `undetermined` → `unreachable` /
+  never-fires. CH02–CH05 are byte-identical.
+- **Left refused (#144):** the lab's live-count dialogue lines.
+
 **Known divergence, not CH08's:** Uranium also accepts Boxing Gloves in place of knowing
 the move. The engine has no item fallback, so that needs fenced C when Legen Town's chapter
 grants the gloves (filed).

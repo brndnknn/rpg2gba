@@ -958,6 +958,12 @@ def _dispatch_head(
     if head in bi.INPUT_CALLS:
         spec = bi.INPUT_CALLS[head]
         value = interp.oracle.choose(InputSource(kind=spec.kind, detail=head, domain=spec.domain))
+        bump = bi.DEX_COUNT_VAR_BUMP.get(head)
+        if bump is not None and value is True:
+            current = interp.get_key(Variable(bump))
+            if not _is_int(current):
+                raise RubyRefusal("ruby_type_error", f"{head}: var {bump} non-int {current!r}", span)
+            interp.set_key(Variable(bump), current + 1)
         if head in bi.EFFECT_CALLS:
             interp.effects.append(Effect(head, tuple(args), span))
         return value

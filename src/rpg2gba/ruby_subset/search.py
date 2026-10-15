@@ -218,8 +218,10 @@ class _RunEngine:
         read_domain: Callable[[Key], "frozenset | None"],
         index_of: dict[int, int] | None = None,
         graphics_only_vars: frozenset[int] = frozenset(),
+        display_write_ok: Callable[[list[dict[str, Any]], int, int], bool] | None = None,
     ) -> None:
         self.prefix = prefix
+        self.display_write_ok = display_write_ok
         self.graphics_only_vars = graphics_only_vars
         self.havoc: set[Key] = set()
         self._next = 0
@@ -426,10 +428,17 @@ def _exec_text(engine: _RunEngine, commands: list[dict], i: int, idx: int) -> in
     return next_i
 
 
+_DEX_ATTRS = frozenset({"party", "pokedexSeen", "pokedexOwned"})
+
+
 def _reads_party(node: object) -> bool:
-    """Does this expression read `$Trainer.party` anywhere inside it?"""
-    if isinstance(node, ast.Call) and node.name == "party" and isinstance(
+    """Does this expression read party/Pokedex state anywhere inside it:
+    `$Trainer.party|pokedexSeen|pokedexOwned`, or a `PROFREWARDS[...]` index
+    (the dex-gated reward ladder, 213_Bambo_Reward.rb)?"""
+    if isinstance(node, ast.Call) and node.name in _DEX_ATTRS and isinstance(
             node.receiver, ast.GlobalVar) and node.receiver.name == "$Trainer":
+        return True
+    if isinstance(node, ast.Index) and isinstance(node.receiver, ast.Const) and node.receiver.name == "PROFREWARDS":
         return True
     if isinstance(node, ast.Node):
         return any(_reads_party(getattr(node, f)) for f in node.__dataclass_fields__
@@ -439,20 +448,28 @@ def _reads_party(node: object) -> bool:
     return False
 
 
+def _party_write_target(stmt: ast.Node) -> tuple[int, ast.Node] | None:
+    """`(N, value)` for `$game_variables[N] = value` or `pbSet(N, value)`."""
+    if isinstance(stmt, ast.Assign) and isinstance(stmt.target, ast.Index):
+        target = stmt.target
+        if (isinstance(target.receiver, ast.GlobalVar)
+                and target.receiver.name == "$game_variables"
+                and len(target.args) == 1 and isinstance(target.args[0], ast.Int)):
+            return target.args[0].value, stmt.value
+    elif (isinstance(stmt, ast.Call) and stmt.name == "pbSet" and stmt.receiver is None
+            and len(stmt.args) == 2 and isinstance(stmt.args[0], ast.Int)):
+        return stmt.args[0].value, stmt.args[1]
+    return None
+
+
 def _graphics_party_write(stmt: ast.Node, graphics_only_vars: frozenset[int]) -> int | None:
     """The variable id when `stmt` is `$game_variables[N] = <reads the party>`
-    and N only drives graphics (`story_state.graphics_vars`, operator ruling
-    2026-09-25): exempt from ruling (b)'s party_model refusal."""
-    if not (isinstance(stmt, ast.Assign) and isinstance(stmt.target, ast.Index)):
-        return None
-    target = stmt.target
-    if not (isinstance(target.receiver, ast.GlobalVar)
-            and target.receiver.name == "$game_variables"
-            and len(target.args) == 1 and isinstance(target.args[0], ast.Int)):
-        return None
-    var_id = target.args[0].value
-    if var_id in graphics_only_vars and _reads_party(stmt.value):
-        return var_id
+    (or `pbSet(N, ...)`) and N only drives graphics
+    (`story_state.graphics_vars`, operator ruling 2026-09-25): exempt from
+    ruling (b)'s party_model refusal."""
+    hit = _party_write_target(stmt)
+    if hit is not None and hit[0] in graphics_only_vars and _reads_party(hit[1]):
+        return hit[0]
     return None
 
 
@@ -465,6 +482,10 @@ def _exec_script(engine: _RunEngine, commands: list[dict], i: int, idx: int) -> 
     kept = []
     for stmt in program.statements:
         var_id = _graphics_party_write(stmt, engine.graphics_only_vars)
+        if var_id is None and engine.display_write_ok is not None:
+            hit = _party_write_target(stmt)
+            if hit is not None and _reads_party(hit[1]) and engine.display_write_ok(commands, i, hit[0]):
+                var_id = hit[0]
         if var_id is None:
             kept.append(stmt)
         else:
@@ -592,12 +613,13 @@ def _run_once(
     read_domain: Callable[[Key], "frozenset | None"],
     index_of: dict[int, int] | None = None,
     graphics_only_vars: frozenset[int] = frozenset(),
+    display_write_ok: Callable[[list[dict[str, Any]], int, int], bool] | None = None,
 ) -> _RunEngine | _Frontier:
     engine = _RunEngine(
         prefix, map_id=map_id, event_id=event_id,
         common_events_by_id=common_events_by_id, stripped_ce_ids=stripped_ce_ids,
         read_domain=read_domain, index_of=index_of,
-        graphics_only_vars=graphics_only_vars,
+        graphics_only_vars=graphics_only_vars, display_write_ok=display_write_ok,
     )
     try:
         _exec_commands(engine, commands, frozenset(), forced_index=None)
@@ -620,8 +642,11 @@ def search_scope(
     index_of: dict[int, int] | None = None,
     cap: int = 4096,
     graphics_only_vars: frozenset[int] = frozenset(),
+    display_write_ok: Callable[[list[dict[str, Any]], int, int], bool] | None = None,
 ) -> SearchResult:
-    """`graphics_only_vars`: variables a `$game_variables[N] = <party read>`
+    """`display_write_ok(commands, i, var_id)`: decides whether a party-read
+    write to N at `commands[i]` is display-only (`story_state.display_vars`);
+    such a write is dropped and N havoc'd. `graphics_only_vars`: variables a `$game_variables[N] = <party read>`
     may write without refusing the scope; N comes back in `havoc`
     (`story_state.graphics_vars`)."""
     values: dict[Key, frozenset] = {}
@@ -667,6 +692,7 @@ def search_scope(
             common_events_by_id=common_events_by_id,
             stripped_ce_ids=stripped_ce_ids, read_domain=read_domain,
             index_of=index_of, graphics_only_vars=graphics_only_vars,
+            display_write_ok=display_write_ok,
         )
         if isinstance(outcome, _Frontier):
             for value in outcome.domain:

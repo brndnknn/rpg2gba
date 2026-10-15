@@ -2334,6 +2334,91 @@ def _door_route_plan(route: dict) -> tuple[str, bool] | str:
     return faces[-1], len(faces) > 1
 
 
+# -- Pokédex-count reward ladder (Bambo, Map050 EV005) -------------------------
+# Uranium's PROFREWARDS table + jvNextReward/jvGiveReward
+# (reference/scripts_dump/213_Bambo_Reward.rb). The table is parsed from that
+# source at emit time (CLAUDE.md §4.3 -- not re-typed here) and the parse is
+# shape-checked: any drift raises rather than emitting a ladder that disagrees
+# with the game. Rung index = Uranium variable 22 (VAR_BAMBO_REWARD).
+_PROFREWARDS_SRC = (
+    Path(__file__).resolve().parents[3]
+    / "reference" / "scripts_dump" / "213_Bambo_Reward.rb"
+)
+_PROFREWARDS_RUNG_VAR = 22
+_PROFREWARDS_EGG_RUNGS = (4, 6, 8)  # jvGiveReward's `[4,6,8].include?` set
+# Scratch the ladder's give routine uses: VAR_0x800A accumulates the (inverted)
+# item-rung return value across giveitem calls (Std_ObtainItem itself only
+# touches VAR_0x8000/1/6/7, engine/data/scripts/obtain_item.inc:4-9).
+_DEX_SEEN_PBSET_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbSet\(\s*(\d+)\s*,\s*\$Trainer\.pokedexSeen\s*\)\s*$")
+_DEX_OWNED_PBSET_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbSet\(\s*(\d+)\s*,\s*\$Trainer\.pokedexOwned\s*\)\s*$")
+_PROFREWARDS_THRESHOLD_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbSet\(\s*(\d+)\s*,\s*PROFREWARDS\[\s*pbGet\(\s*"
+    + str(_PROFREWARDS_RUNG_VAR) + r"\s*\)\s*\+\s*1\s*\]\[0\]\s*\)\s*$")
+_JV_NEXT_REWARD_RE = re.compile(r"^\s*jvNextReward\s*$")
+_JV_GIVE_REWARD_RE = re.compile(r"^\s*jvGiveReward\s*$")
+
+
+@dataclass(frozen=True)
+class _ProfReward:
+    threshold: int
+    # (kind, name): kind is "item" | "species" | "starter"
+    payload: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class _ProfRewardsTable:
+    rungs: tuple[_ProfReward, ...]
+    # Uranium species id -> switch id, in source order (later assignment wins
+    # in jvGiveReward): [(species_id, switch_id), ...]
+    starter_switches: tuple[tuple[int, int], ...]
+
+
+def _load_profrewards(source: Path | None = None) -> _ProfRewardsTable:
+    text = (source or _PROFREWARDS_SRC).read_text(encoding="utf-8")
+    m = re.search(r"PROFREWARDS\s*=\s*\[(.*?)^\]", text, re.S | re.M)
+    if m is None:
+        raise ValueError("PROFREWARDS table not found in the Bambo reward source")
+    rungs: list[_ProfReward] = []
+    for line in m.group(1).splitlines():
+        row = re.match(r"^\s*\[\s*(\d+)\s*(?:,(.*?))?\]\s*,?\s*(?:#.*)?$", line)
+        if row is None:
+            if line.strip():
+                raise ValueError(f"unparseable PROFREWARDS row: {line!r}")
+            continue
+        payload: list[tuple[str, str]] = []
+        for part in (row.group(2) or "").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            pm = re.fullmatch(r"PB(Items|Species)::(\w+)", part)
+            if pm:
+                payload.append(("item" if pm.group(1) == "Items" else "species",
+                                pm.group(2)))
+            elif part == '"starter"':
+                payload.append(("starter", "starter"))
+            else:
+                raise ValueError(f"unparseable PROFREWARDS payload {part!r}")
+        rungs.append(_ProfReward(int(row.group(1)), tuple(payload)))
+    if len(rungs) != 12 or rungs[0].threshold != 0 or rungs[-1].threshold != 999:
+        raise ValueError(f"PROFREWARDS shape changed: {len(rungs)} rows")
+    for i, r in enumerate(rungs[1:-1], start=1):
+        is_egg = any(k in ("species", "starter") for k, _ in r.payload)
+        if is_egg != (i in _PROFREWARDS_EGG_RUNGS) or not r.payload:
+            raise ValueError(f"PROFREWARDS rung {i} disagrees with the egg-rung set")
+        if is_egg and len(r.payload) != 1:
+            raise ValueError(f"PROFREWARDS egg rung {i} has several payloads")
+    if "pbReceiveItem" not in text or "pbGenerateEgg(poke)" not in text:
+        raise ValueError("jvGiveReward shape changed")
+    starters = tuple(
+        (int(sp), int(sw)) for sp, sw in re.findall(
+            r"poke=(\d+) if \$game_switches\[(\d+)\]==true", text))
+    if len(starters) != 3:
+        raise ValueError("jvGiveReward starter-switch lines changed")
+    return _ProfRewardsTable(tuple(rungs), starters)
+
+
 # -- page emitter --------------------------------------------------------------
 
 _TONE_FADES = {
@@ -2404,6 +2489,13 @@ class _PageEmitter:
         # it did.
         self._active_trade: tuple["_trades.InGameTradeSpec", int] | None = None
         self._trade_consumed = False
+        # Uranium variable id -> the engine scratch var / registry var that
+        # holds its Pokédex count or ladder threshold at runtime, for the
+        # \v[N] text substitution (see _emit_dex_ladder_pbset / _emit_numeric_var_text).
+        self._numeric_text_vars: dict[int, str] = {}
+        self._profrewards: _ProfRewardsTable | None = None
+        self._bambo_give_label: str | None = None
+        self._dex_special_at = -2  # cmd index of the last ScriptGetPokedexInfo row
 
     def _emit_loop(self, nodes: list[Node], split: int) -> list[str]:
         """``nodes[split]`` is a loop label: what precedes it emits normally,
@@ -2507,6 +2599,9 @@ class _PageEmitter:
             value_text = self._emit_value_var_text(node.text)
             if value_text is not None:
                 return value_text
+            numeric_text = self._emit_numeric_var_text(node)
+            if numeric_text is not None:
+                return numeric_text
             text_source = _COLOUR_TEXT_CODE_RE.sub("", _BLUE_TEXT_CODE_RE.sub("", node.text))
             result = translate_text_codes(text_source.strip())
             if result is None:
@@ -2758,6 +2853,9 @@ class _PageEmitter:
         facing = self._emit_player_facing_idiom(node)
         if facing is not None:
             return facing
+        reward_ladder = self._emit_reward_ladder_condition(node)
+        if reward_ladder is not None:
+            return reward_ladder
         give_item = self._emit_give_item_idiom(node)
         if give_item is not None:
             return give_item
@@ -5133,6 +5231,10 @@ class _PageEmitter:
                 return None  # unnamed RMXP variable — fall through to the queue
             return [f"specialvar({var_name}, CalculatePlayerPartyCount)"]
 
+        ladder = self._emit_dex_ladder_statement(text, node)
+        if ladder is not None:
+            return ladder
+
         # pbSet(<int>, <int>) — literal id/value only (see _PBSET_LITERAL_RE
         # and the pbGet/pbSet module note above). Unnamed target variable
         # queues (never mints a scratch VAR_*, CLAUDE.md §6); a computed
@@ -5216,6 +5318,235 @@ class _PageEmitter:
                 "}",
             ]
         self._materialized_locals[local_name] = target
+        return lines
+
+    # -- Pokédex counts and Bambo's reward ladder ------------------------------
+
+    def _table(self) -> _ProfRewardsTable:
+        if self._profrewards is None:
+            self._profrewards = _load_profrewards()
+        return self._profrewards
+
+    def _emit_dex_ladder_statement(self, text: str, node: Node) -> list[str] | None:
+        """``pbSet(N, $Trainer.pokedexSeen|pokedexOwned)``, the PROFREWARDS
+        threshold ``pbSet(N, PROFREWARDS[pbGet(22)+1][0])`` and a bare
+        ``jvGiveReward`` row. ``None`` = not one of these (caller carries on);
+        a recognised head whose operands cannot be resolved queues."""
+        m_seen = _DEX_SEEN_PBSET_RE.match(text)
+        m_owned = _DEX_OWNED_PBSET_RE.match(text)
+        if m_seen or m_owned:
+            m = m_seen or m_owned
+            # ScriptGetPokedexInfo (engine/src/birch_pc.c:7): VAR_0x8004 != 0
+            # selects the national counts -> seen in VAR_0x8005, caught in
+            # VAR_0x8006. The count is only ever shown, so it stays in the
+            # engine's scratch pair instead of minting a registry var.
+            self._numeric_text_vars[int(m.group(1))] = (
+                "VAR_0x8005" if m_seen else "VAR_0x8006")
+            if node.index == self._dex_special_at + 1:
+                self._dex_special_at = node.index
+                return []  # the previous row's special filled both counters
+            self._dex_special_at = node.index
+            return ["setvar(VAR_0x8004, 1)", "special(ScriptGetPokedexInfo)"]
+        m = _PROFREWARDS_THRESHOLD_RE.match(text)
+        if m:
+            target = self.ctx.var_for_variable(int(m.group(1)))
+            rung_var = self.ctx.var_for_variable(_PROFREWARDS_RUNG_VAR)
+            if target is None or rung_var is None:
+                return [self.ctx.queue(
+                    node.index, SCRIPT,
+                    f"PROFREWARDS threshold: variable {m.group(1)} or "
+                    f"{_PROFREWARDS_RUNG_VAR} is unnamed -- cannot mint a VAR_*")]
+            rungs = self._table().rungs
+            lines = [f"# pbSet({m.group(1)}, PROFREWARDS[var{_PROFREWARDS_RUNG_VAR}+1][0])",
+                     f"switch (var({rung_var})) {{"]
+            for i in range(len(rungs) - 1):
+                lines += [f"    case {i}:",
+                          f"        setvar({target}, {rungs[i + 1].threshold})"]
+            lines.append("}")
+            self._numeric_text_vars[int(m.group(1))] = target
+            return lines
+        if _JV_GIVE_REWARD_RE.match(text):
+            label = self._ensure_bambo_give(node.index)
+            if label is None:
+                return [self.ctx.queue(
+                    node.index, SCRIPT, "jvGiveReward: variable 22 is unnamed")]
+            return [f"call({label})"]
+        if _JV_NEXT_REWARD_RE.match(text):
+            return [self.ctx.queue(
+                node.index, SCRIPT,
+                "jvNextReward outside an `if` condition -- unsupported shape")]
+        return None
+
+    def _emit_numeric_var_text(self, node: TextRun) -> list[str] | None:
+        """Dialogue whose every ``\\v[N]`` names a tracked Pokédex count or
+        ladder threshold -> ``{STR_VAR_k}`` filled by ``buffernumberstring``
+        immediately before the msgbox (event.inc:1260). Anything else falls
+        through to the generic path (which queues)."""
+        if not self._numeric_text_vars or has_inline_choice(node.text):
+            return None
+        refs = [int(m.group(1)) for m in _VALUE_VAR_RE.finditer(node.text)]
+        if not refs or any(r not in self._numeric_text_vars for r in refs):
+            return None
+        distinct = list(dict.fromkeys(refs))
+        if len(distinct) > 3:
+            return None
+        raw = node.text
+        for k, var_id in enumerate(distinct, start=1):
+            raw = raw.replace(f"\\v[{var_id}]", f"§NUMVAR{k}§")
+        # `\r<number>\c[0]` is a red highlight on the number (a tint, same
+        # disposition as \b/\C above); only \r directly before a substituted
+        # count is dropped -- any other \r still queues.
+        raw = re.sub(r"\\r(?=§NUMVAR)", "", raw)
+        source = _COLOUR_TEXT_CODE_RE.sub("", _BLUE_TEXT_CODE_RE.sub("", raw))
+        result = translate_text_codes(source.strip())
+        if result is None or result.sign:
+            return None
+        body = result.text
+        for k in range(1, len(distinct) + 1):
+            body = body.replace(f"§NUMVAR{k}§", f"{{STR_VAR_{k}}}")
+        auto = ", MSGBOX_AUTOCLOSE" if result.autoclose else ""
+        return [
+            *[f"buffernumberstring(STR_VAR_{k}, {self._numeric_text_vars[v]})"
+              for k, v in enumerate(distinct, start=1)],
+            f"msgbox({format_pory_dialogue(body)}{auto})",
+        ]
+
+    def _emit_reward_ladder_condition(self, node: IfNode) -> list[str] | None:
+        """``if jvNextReward`` / ``if jvGiveReward`` script conditions."""
+        text = _script_condition_text(node.cmd)
+        if text is None:
+            return None
+        if _JV_GIVE_REWARD_RE.match(text):
+            label = self._ensure_bambo_give(node.index)
+            if label is None:
+                return None
+            head = [f"call({label})"]
+        elif _JV_NEXT_REWARD_RE.match(text):
+            head = self._emit_bambo_next_reward()
+            if head is None:
+                return None
+        else:
+            return None
+        lines = [*head, "if (var(VAR_RESULT) == TRUE) {"]
+        lines += [f"    {ln}" for ln in self.emit_nodes(node.then)]
+        if node.otherwise:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in self.emit_nodes(node.otherwise)]
+        lines.append("}")
+        return lines
+
+    def _emit_bambo_next_reward(self) -> list[str] | None:
+        """jvNextReward: if caught >= PROFREWARDS[v22+1][0] then v22 += 1 and
+        the result is true. Unrolled over the rung variable; the final 999
+        sentinel rung can never be reached, so it has no case."""
+        rung_var = self.ctx.var_for_variable(_PROFREWARDS_RUNG_VAR)
+        if rung_var is None:
+            return None
+        rungs = self._table().rungs
+        lines = ["# jvNextReward", "setvar(VAR_0x8004, 1)",
+                 "special(ScriptGetPokedexInfo)", "setvar(VAR_RESULT, FALSE)",
+                 f"switch (var({rung_var})) {{"]
+        for i in range(len(rungs) - 1):
+            need = rungs[i + 1].threshold
+            if need >= 999:
+                lines.append(f"    # rung {i}: PROFREWARDS[{i + 1}] is the 999 sentinel -- never reached")
+                continue
+            lines += [f"    case {i}:",
+                      f"        if (var(VAR_0x8006) >= {need}) {{",
+                      f"            addvar({rung_var}, 1)",
+                      "            setvar(VAR_RESULT, TRUE)",
+                      "        }"]
+        lines.append("}")
+        return lines
+
+    def _ensure_bambo_give(self, index: int) -> str | None:
+        """Render (once per page) the jvGiveReward subroutine as an aux
+        ``script`` block and return its label; ``None`` if var 22 is unnamed.
+
+        Result protocol mirrors jvGiveReward: egg rungs return TRUE iff the egg
+        was added (pbGenerateEgg refuses with a full party, so the party count
+        is checked first -- ``giveegg`` alone would overflow to the PC); item
+        rungs return the quirky Uranium value (TRUE iff NO item was received).
+        A rung whose payload cannot be resolved queues, and returns FALSE."""
+        if self._bambo_give_label is not None:
+            return self._bambo_give_label
+        rung_var = self.ctx.var_for_variable(_PROFREWARDS_RUNG_VAR)
+        if rung_var is None:
+            return None
+        table = self._table()
+        label = f"{self.page_label}_BamboGiveReward"
+        body: list[str] = [f"switch (var({rung_var})) {{"]
+        for i in range(1, len(table.rungs) - 1):
+            payload = table.rungs[i].payload
+            body.append(f"    case {i}:")
+            inner: list[str] = []
+            if i in _PROFREWARDS_EGG_RUNGS:
+                inner += self._bambo_egg_rung(i, payload[0], index)
+            else:
+                inner += ["setvar(VAR_0x800A, TRUE)"]
+                for kind, name in payload:
+                    const = self._give_item_const(name) if kind == "item" else None
+                    if const is None:
+                        inner += [self.ctx.queue(
+                            index, SCRIPT,
+                            f"jvGiveReward rung {i}: item {name} unresolved")]
+                        continue
+                    inner += [f"giveitem({const})",
+                              "if (var(VAR_0x8007) == TRUE) {",
+                              "    setvar(VAR_0x800A, FALSE)",
+                              "}"]
+                inner += ["copyvar(VAR_RESULT, VAR_0x800A)", "return"]
+            body += [f"        {ln}" for ln in inner]
+        body.append("}")
+        body += ["# rung outside 1..10: PROFREWARDS has no payload there",
+                 "setvar(VAR_RESULT, FALSE)", "return"]
+        inner_text = "\n".join(f"    {ln}" for ln in body)
+        self.aux_blocks.append(f"script {label} {{\n{inner_text}\n}}")
+        self._bambo_give_label = label
+        return label
+
+    def _bambo_egg_rung(
+        self, rung: int, payload: tuple[str, str], index: int
+    ) -> list[str]:
+        kind, name = payload
+        full = ["getpartysize", "if (var(VAR_RESULT) >= PARTY_SIZE) {",
+                "    setvar(VAR_RESULT, FALSE)", "    return", "}"]
+        if kind == "species":
+            const = self.ctx.staged_species_constant(name)
+            if const is None:
+                return [self.ctx.queue(
+                    index, SCRIPT,
+                    f"jvGiveReward rung {rung}: species {name} is not staged "
+                    "(no SPECIES_* constant in the fork)"),
+                    "setvar(VAR_RESULT, FALSE)", "return"]
+            return [*full, f"giveegg({const})", "setvar(VAR_RESULT, TRUE)", "return"]
+        # "starter": species id picked by the has-starter switches, last
+        # assignment in jvGiveReward wins -> test in reverse source order.
+        table = self._table()
+        starters = self.ctx.starter_scene.get("starters") or []
+        arms: list[tuple[str, str]] = []  # (flag, species const)
+        for species_id, switch_id in reversed(table.starter_switches):
+            flag = self.ctx.flag_for_switch(switch_id)
+            idx = (species_id - 1) // 2  # Uranium ids 1/3/5 = the three starters
+            if (flag is None or species_id % 2 != 1 or idx >= len(starters)):
+                return [self.ctx.queue(
+                    index, SCRIPT,
+                    f"jvGiveReward rung {rung}: starter species id {species_id} "
+                    f"/ switch {switch_id} unresolved"),
+                    "setvar(VAR_RESULT, FALSE)", "return"]
+            const = self.ctx.staged_species_constant(starters[idx]["internal_name"])
+            if const is None:
+                return [self.ctx.queue(
+                    index, SCRIPT,
+                    f"jvGiveReward rung {rung}: starter {starters[idx]['internal_name']} not staged"),
+                    "setvar(VAR_RESULT, FALSE)", "return"]
+            arms.append((flag, const))
+        lines = list(full)
+        for k, (flag, const) in enumerate(arms):
+            lines.append(f"{'if' if k == 0 else 'elif'} (flag({flag})) {{")
+            lines += [f"    giveegg({const})", "    setvar(VAR_RESULT, TRUE)", "    return", "}"]
+        lines += ["# no starter switch set: pbGenerateEgg(\"starter\") has no species",
+                  "setvar(VAR_RESULT, FALSE)", "return"]
         return lines
 
     def _emit_value_var_text(self, raw: str) -> list[str] | None:

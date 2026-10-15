@@ -103,7 +103,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from rpg2gba.beat_floor.assertion import Params, RowFloor
+from rpg2gba.beat_floor.assertion import FloorAssertion, Params, RowFloor, make_params
 from rpg2gba.beat_floor.lookup import floor_for_row as _default_floor_for_row
 from rpg2gba.chapter_manifest.schema import parse_row_id
 from rpg2gba.conversion_agent.flag_registry import FlagRegistry, self_switch_flag_name
@@ -1629,6 +1629,139 @@ def obstacle_beat(
                     f"player from {before} to {after} -- it should still be "
                     f"blocking without {capability} ({shot})"
                 )
+
+    del body
+
+
+# -- smash_beat -------------------------------------------------------------
+
+#: Field capability -> (HM item, move) the walk teaches through the bag the
+#: first time a chapter needs it (CH08 §9: "teach via the real UI, once").
+TEACHABLE_CAPABILITIES: dict[str, tuple[str, str]] = {
+    "rock_smash": ("ITEM_HM06", "MOVE_ROCK_SMASH"),
+}
+
+
+def smash_beat(
+    builder: ChapterBuilder,
+    *,
+    chapter_id: str,
+    beat_name: str,
+    rows: Sequence[str],
+    capability: str,
+    group: str | None = None,
+    approach_prefer: str | None = None,
+    teach: str | None = None,
+    floor_lookup: FloorLookup | None = None,
+) -> None:
+    """Register one beat that clears every `capability` obstacle in `rows`
+    WITH the capability held (the positive twin of `obstacle_beat`, CH08 §9):
+    interact, answer YES to the field-move prompt, then check the obstacle's
+    object is gone and its cell is passable. Declares a `smashed_obstacle` per
+    row, which covers that row's floor `blocked_obstacle`.
+
+    `teach` (the capability's `capability_sites.teach_beat_name`) makes this
+    the chapter's teaching beat: before the first obstacle, the party's slot-0
+    member is taught the capability's HM through the bag UI unless some party
+    member already knows the move. Obstacles respawn on a map reload, so this
+    beat proves each one opens; nothing downstream may rely on it staying open
+    across a map change."""
+    resolved_lookup: FloorLookup = (
+        floor_lookup if floor_lookup is not None else _default_floor_for_row)
+    resolved_rows = tuple(rows)
+    if not resolved_rows:
+        raise ValueError(f"smash_beat: {beat_name}: rows= is empty")
+    if capability not in TEACHABLE_CAPABILITIES:
+        raise ValueError(
+            f"smash_beat: {beat_name}: no HM/move known for capability {capability!r} "
+            f"(TEACHABLE_CAPABILITIES has {sorted(TEACHABLE_CAPABILITIES)})")
+    if teach is not None and teach != f"teach_{capability}":
+        raise ValueError(f"smash_beat: {beat_name}: teach={teach!r} does not name "
+                         f"capability {capability!r}")
+    item, move = TEACHABLE_CAPABILITIES[capability]
+
+    obstacles: dict[str, object] = {}
+    for row_id in resolved_rows:
+        floor = resolved_lookup(row_id)
+        if floor.refused:
+            raise ValueError(
+                f"smash_beat: {beat_name}: row {row_id!r} floor is refused ({floor.refusals})")
+        found = [a for a in floor.assertions if a.kind == "blocked_obstacle"]
+        if len(found) != 1:
+            raise ValueError(
+                f"smash_beat: {beat_name}: row {row_id!r} carries {len(found)} "
+                "blocked_obstacle assertions (expected exactly 1)")
+        if found[0].param("capability") != capability:
+            raise ValueError(
+                f"smash_beat: {beat_name}: row {row_id!r} needs capability "
+                f"{found[0].param('capability')!r}, not {capability!r}")
+        obstacles[row_id] = found[0]
+
+    chapter_rows = load_chapter_rows(chapter_id)
+    row_by_id = {r.row_id: r for r in chapter_rows}
+    first_row = row_by_id.get(resolved_rows[0])
+    if first_row is None:
+        raise ValueError(
+            f"smash_beat: {beat_name}: row {resolved_rows[0]!r} is not in chapter "
+            f"{chapter_id!r}'s manifest")
+    map_constant = cell_for_row(first_row).map_constant
+    first = obstacles[resolved_rows[0]]
+    x, y = first.param("x"), first.param("y")
+
+    extras = tuple(
+        FloorAssertion(
+            row_id=row_id, kind="smashed_obstacle", list_index=-1, code=None,
+            params=make_params(x=o.param("x"), y=o.param("y"), capability=capability),
+            tag="position")
+        for row_id, o in obstacles.items())
+    declared = declare_assertions(
+        resolved_rows, executed_kinds=frozenset(), template="smash",
+        extras=extras, floor_lookup=resolved_lookup)
+
+    @builder.beat(
+        beat_name,
+        f"Every {capability} obstacle on {', '.join(resolved_rows)} ({chapter_id}) "
+        f"clears with {capability}" + (" (teaches it first)" if teach else ""),
+        map_constant=map_constant, at=(x, y), group=group,
+        rows=resolved_rows, assertions=declared,
+    )
+    def body(emu: "Emulator") -> None:
+        assertions.require_map(emu, beat_name, map_constant)
+        if teach is not None and not assertions.party_knows_move(emu, move):
+            from rpg2gba.playtest import scenarios  # lazy: scenarios is a heavy leaf
+
+            scenarios.teach_hm_from_bag(emu, item, move, party_slot=0)
+        if not assertions.party_knows_move(emu, move):
+            raise ScenarioError(
+                f"{beat_name}: no party member knows {move}; {capability} is not held "
+                "(no earlier beat taught it)")
+        for row_id in resolved_rows:
+            obstacle = obstacles[row_id]
+            ox, oy = obstacle.param("x"), obstacle.param("y")
+            parsed = parse_row_id(row_id)
+            lid = local_id(map_constant, parsed.event_id)
+            approach = approach_to(map_constant, parsed.event_id, prefer=approach_prefer)
+            facing = facing_toward(approach, (ox, oy), caller="smash_beat")
+            emu.walk_to(*approach, absorb_wild=True)
+            emu.face(facing)
+            emu.interact()
+            emu.advance_dialog(answers=[0])
+            if not _wait_for(emu, lambda: not emu.field_locked()):
+                shot = emu.screenshot(f"{beat_name}_{row_id}_locked")
+                raise ScenarioError(
+                    f"{beat_name}: {row_id}: field controls still locked after the "
+                    f"{capability} prompt ({shot})")
+            if any(ev.local_id == lid for ev in emu.object_events()):
+                shot = emu.screenshot(f"{beat_name}_{row_id}_still_there")
+                raise ScenarioError(
+                    f"{beat_name}: {row_id}: obstacle (local id {lid}) at ({ox},{oy}) is "
+                    f"still present after answering YES to {capability} ({shot})")
+            before = emu.player_pos()
+            if not assertions.try_step(emu, facing) or emu.player_pos() == before:
+                shot = emu.screenshot(f"{beat_name}_{row_id}_impassable")
+                raise ScenarioError(
+                    f"{beat_name}: {row_id}: the obstacle's cell ({ox},{oy}) is still "
+                    f"impassable after it was cleared ({shot})")
 
     del body
 

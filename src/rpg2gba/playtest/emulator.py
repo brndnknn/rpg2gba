@@ -1250,6 +1250,27 @@ class Emulator:
         mid-scenario, but there is no primitive here that assumes it can't."""
         return self.u32(self.sb2 + self.offsets["off_sb2_encryptionkey"])
 
+    def pokedex_counts(self, national: bool = True) -> tuple[int, int]:
+        """`(seen, caught)` -- `GetNationalPokedexCount(FLAG_GET_SEEN)` and
+        `(FLAG_GET_CAUGHT)` (`engine/src/pokedex.c`): the popcount of
+        `SaveBlock1.dexSeen` / `dexCaught` over bits [0, NATIONAL_DEX_COUNT)
+        (bit `nationalDexNo - 1`, as `GetSetPokedexFlag` indexes them). The
+        arrays are plain bytes, not encrypted. Only the national count is
+        implemented; the regional count needs the Hoenn order table."""
+        if not national:
+            raise NotImplementedError(
+                "pokedex_counts(national=False): regional dex counting needs "
+                "the NationalToRegionalOrder table, which is not read here")
+        o = self.offsets
+        total = o["val_national_dex_count"]
+        nbytes = (total + 7) // 8
+        counts: list[int] = []
+        for key in ("off_sb1_dexseen", "off_sb1_dexcaught"):
+            raw = self.read_bytes(self.sb1 + o[key], nbytes)
+            value = int.from_bytes(raw, "little") & ((1 << total) - 1)
+            counts.append(value.bit_count())
+        return counts[0], counts[1]
+
     def money(self) -> int:
         """The player's current money, decrypted exactly as `GetMoney`
         (`engine/src/money.c`) does: `SaveBlock1.money` is stored XOR'd

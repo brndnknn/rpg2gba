@@ -148,6 +148,40 @@ def deferred_rows(
     return frozenset(deferred)
 
 
+def walked_rows(cid: str, module_dir: Path) -> frozenset[str]:
+    """Every row id `cid`'s generated module accounts for: claimed by a beat
+    or listed in one of its status dicts (`_DEFERRAL_DICTS`). A row on
+    ANOTHER chapter's map the module never mentions was not walked by `cid`
+    (2026-10-15, CH08: CH06 sets "Gym 1 defeated", which makes the Moki lab's
+    scene live, but CH06's walk never goes to Moki) -- `build_chapter_stories`
+    keeps such a row from being owned by `cid` (`walked_for`)."""
+    path = module_dir / f"{cid.lower()}.py"
+    if not path.exists():
+        raise ValueError(
+            f"no generated module for {cid} at {path} -- run "
+            f"`beat_gen generate --chapter {cid}` first")
+    spec = importlib.util.spec_from_file_location(f"_walked_{cid.lower()}_generated", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    mentioned = {r for b in module.CHAPTER.beats for r in b.rows}
+    for name in _DEFERRAL_DICTS:
+        mentioned |= set(getattr(module, name, {}))
+    return frozenset(mentioned)
+
+
+def walked_loader(chapter_id: str, module_dir: Path) -> Callable[[str], frozenset[str] | None]:
+    """`build_chapter_stories`'s `walked_for` while generating `chapter_id`:
+    each EARLIER chapter's `walked_rows`; None for `chapter_id` itself."""
+    @functools.cache
+    def loader(cid: str) -> frozenset[str] | None:
+        if cid == chapter_id:
+            return None
+        return walked_rows(cid, module_dir)
+
+    return loader
+
+
 def deferred_loader(chapter_id: str, module_dir: Path) -> Callable[[str], frozenset[str]]:
     """`build_chapter_stories`'s `deferred_for` while generating `chapter_id`:
     each EARLIER chapter's deferred rows from its generated module. Never

@@ -28,6 +28,7 @@ TEMPLATE_CALLS: dict[str, tuple[str, str, str]] = {
                     "flavour_npc_beat", "beat_name"),
     "generic": ("rpg2gba.playtest.archetypes.generic", "generic_beat", "beat_name"),
     "obstacle": ("rpg2gba.playtest.archetypes.generic", "obstacle_beat", "beat_name"),
+    "smash": ("rpg2gba.playtest.archetypes.generic", "smash_beat", "beat_name"),
     "stair": ("rpg2gba.playtest.archetypes.generic", "stair_beat", "beat_name"),
     "seam": ("rpg2gba.playtest.archetypes.generic", "seam_beat", "beat_name"),
     "transit": ("rpg2gba.playtest.archetypes.generic", "transit_beat", "beat_name"),

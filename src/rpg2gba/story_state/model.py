@@ -11,7 +11,7 @@ from __future__ import annotations
 import functools
 import json
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -29,6 +29,7 @@ from rpg2gba.story_state.extract import (
 from rpg2gba.story_state.scope_search import (
     ComputedScope,
     named_write_targets,
+    writes_exhaustively_named,
     run_scope,
     self_contained_counters,
     witness_citations,
@@ -567,6 +568,50 @@ def _self_retiring_counters(
         )
         if others_ok:
             exact.add(key)
+    exact |= _self_switch_retired_counters(row, rows_by_id, higher, seed)
+    return frozenset(exact)
+
+
+def _self_switch_retired_counters(
+    row: RowState, rows_by_id: Mapping[str, RowState], higher: Sequence[str], seed: State,
+) -> frozenset[Key]:
+    """Constant `K += c` counters on a row that retires its own page by self
+    switch (2026-10-15, CH08): the row turns self switch L ON at or above the
+    indent of every `122` add to K, and a higher page of its event is gated on
+    nothing but L, so the page -- and the add -- fires once. CH06's gym-leader
+    reward arm (map042/ev003/p0/b1: `123 A`, `var 101 += 1`, page 1 on A) was
+    widening the quest log to TOP for every later chapter."""
+    assert row.computed is not None
+    commands = row.computed.commands
+    parsed = parse_row_id(row.row_id)
+    retiring: set[str] = set()
+    for page_id in higher:
+        page = rows_by_id.get(page_id)
+        if page is None or len(page.page_tests) != 1:
+            continue
+        (test,) = page.page_tests
+        if (isinstance(test.key, SelfSwitch) and test.op == "==" and test.value is True
+                and (test.key.map_id, test.key.event_id) == (parsed.map_id, parsed.event_id)):
+            retiring.add(test.key.letter)
+    if not retiring:
+        return frozenset()
+    set_at = [c.get("indent", 0) for c in commands
+              if c.get("code") == 123 and (c.get("parameters") or [None, 1])[0] in retiring
+              and (c.get("parameters") or [None, 1])[1] == 0]
+    if not set_at:
+        return frozenset()
+    exact: set[Key] = set()
+    for key in {Variable(c["parameters"][0]) for c in commands
+                if c.get("code") == 122 and c.get("parameters")
+                and c["parameters"][0] == c["parameters"][1]}:
+        direct = _direct_counter_writes(row.computed, key)
+        if not direct or any(not (isinstance(w, Adjust) and w.op == "+") for w in direct):
+            continue
+        add_indents = [c.get("indent", 0) for c in commands if c.get("code") == 122
+                       and (c.get("parameters") or [None])[0] == key.id]
+        if VARIABLE_TOP in _get(seed, key) or min(set_at) > min(add_indents):
+            continue
+        exact.add(key)
     return frozenset(exact)
 
 
@@ -629,11 +674,18 @@ def _resolve_computed_row(
             row.computed.commands,
             map_id=row.computed.map_id, event_id=row.computed.event_id,
         )
+        # 2026-10-15: same exhaustiveness test as extraction's refusal path
+        # (`writes_exhaustively_named`) -- a row that provably writes only
+        # what it names havocs only that, not everything.
+        exhaustive = writes_exhaustively_named(
+            row.computed.commands,
+            map_id=row.computed.map_id, event_id=row.computed.event_id,
+        )
         return replace(
             row,
             refusals=carried + (Refusal(code, f"{row.row_id}: {result.refusal.detail}"),),
             havoc_keys=tuple(named) + bag_havoc,
-            havoc_global=not named,
+            havoc_global=not named and not exhaustive,
         )
 
     writes, nonscalar = writes_from_result(
@@ -1705,6 +1757,7 @@ def build_chapter_stories(
     resolved_out: dict[str, RowState] | None = None,
     seed_out: dict[str, State] | None = None,
     deferred_for: Callable[[str], frozenset[str]] | None = None,
+    walked_for: Callable[[str], frozenset[str] | None] | None = None,
 ) -> dict[str, ChapterStory]:
     """Models `chapter_ids` (in chain order, e.g. CH01..CH05) cumulatively.
 
@@ -1736,6 +1789,12 @@ def build_chapter_stories(
     live) owns it. Never consulted for the last chapter (the one being
     generated has no module). Omitted, ownership is first-live-chapter as
     before.
+
+    `walked_for(chapter_id)` (2026-10-15, consulted only with `deferred_for`):
+    every row id that chapter's suite claims or lists, or None. A not-yet-owned
+    row on a map outside that chapter's own maps and outside this set is
+    treated as deferred by it -- the chapter made it live but never walked it
+    (CH06's gym makes the Moki lab scene live; CH08 walks it).
     """
     binding = load_binding(path=chapters_path)
     common_events = _load_common_events(build_dir)
@@ -1814,6 +1873,17 @@ def build_chapter_stories(
                 rid for rid in pending_deferred
                 if rid in cumulative_rows and not _is_pseudo_row_id(rid)
                 and parse_row_id(rid).map_id not in own_maps}
+            # 2026-10-15 (CH08): a row on another chapter's map this chapter's
+            # suite never mentions was not walked here, so it is not this
+            # chapter's to own; it waits like a deferred row.
+            walked = walked_for(chapter_id) if walked_for is not None else None
+            if walked is not None:
+                unwalked = {
+                    rid for rid in cumulative_rows
+                    if not _is_pseudo_row_id(rid) and rid not in already_owned
+                    and parse_row_id(rid).map_id not in own_maps and rid not in walked}
+                hidden |= unwalked
+                deferred_here = deferred_here | frozenset(unwalked)
         for rid in order:
             if rid not in structural_refusal:
                 structural_refusal[rid] = _structural_refusal(rid, cumulative_rows, refusal_cache)

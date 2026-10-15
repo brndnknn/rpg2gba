@@ -9,10 +9,16 @@
 """
 from __future__ import annotations
 
-from rpg2gba.capability_sites import BadgeWriteSite, CapabilityDerivation, CapabilitySite
+from rpg2gba.capability_sites import (
+    BadgeWriteSite,
+    CapabilityDerivation,
+    CapabilitySite,
+    ItemGrantSite,
+)
 from rpg2gba.chapter_manifest.capability_model import (
     ChapterCapabilityModel,
     build_capability_model,
+    taught_in_chain,
 )
 from rpg2gba.chapter_manifest.checker import CapabilityGrant
 
@@ -187,3 +193,85 @@ def test_build_capability_model_real_ch01_got_pokemon_is_granted_within_itself()
     granted = model.granted_within("got_pokemon")
     assert len(granted) == 1
     assert granted[0].chapter_id == "CH01"
+
+
+# --- field-capability item half + taught (CH08 §9, 2026-10-15) ----------------
+
+
+def _item_grant(item: str, row_id: str, map_id: int, chapter_id: str | None) -> ItemGrantSite:
+    return ItemGrantSite(
+        row_id=row_id, map_id=map_id, event_id=1, page_idx=0, item=item, chapter_id=chapter_id
+    )
+
+
+def _rock_smash_derivation(item_chapter: str | None = "CH06") -> CapabilityDerivation:
+    return CapabilityDerivation(
+        badge_writes=(_badge_write(0, "map042/ev003/p0", 42, "CH06"),),
+        item_grants=(_item_grant("HM06", "map14000/ev079/p0", 14000, item_chapter),),
+    )
+
+
+def test_badge_met_but_item_not_in_chain_returns_item_sites_not_granted() -> None:
+    """The badge is in the chain but HM06 is granted later: an honest "not
+    yet" -- the item's grant site, never a confirmed grant."""
+    model = ChapterCapabilityModel(
+        "CH06", _rock_smash_derivation(item_chapter="CH09"), frozenset({"CH06"})
+    )
+    sites = model.grant_sites("rock_smash")
+    assert sites is not None and [s.row_id for s in sites] == ["map14000/ev079/p0"]
+    assert model.granted_within("rock_smash") == ()
+    assert not model.obtainable("rock_smash")
+
+
+def test_obtainable_but_not_taught_stays_undetermined() -> None:
+    """CH07's situation: badge + HM06 in the chain, but no suite has taught
+    the move yet -- undetermined (`None`), exactly as before the item half
+    was modelled, so CH07's affirmed `blocked:rock_smash` rows stay valid."""
+    model = ChapterCapabilityModel("CH07", _rock_smash_derivation(), frozenset({"CH06", "CH07"}))
+    assert model.obtainable("rock_smash")
+    assert not model.held("rock_smash")
+    assert model.grant_sites("rock_smash") is None
+    assert model.granted_within("rock_smash") == ()
+
+
+def test_taught_in_chain_confirms_held() -> None:
+    model = ChapterCapabilityModel(
+        "CH08",
+        _rock_smash_derivation(),
+        frozenset({"CH06", "CH08"}),
+        taught=frozenset({"rock_smash"}),
+    )
+    assert model.held("rock_smash")
+    granted = {g.row_id for g in model.granted_within("rock_smash")}
+    assert granted == {"map042/ev003/p0", "map14000/ev079/p0"}
+
+
+def test_token_without_item_half_never_held_even_if_taught() -> None:
+    """`strength` has no `FIELD_CAPABILITY_ITEMS` entry: badge-only, never
+    confirmed held."""
+    derivation = CapabilityDerivation(
+        badge_writes=tuple(_badge_write(i, f"map{i:03d}/ev001/p0", i, "CH01") for i in range(4)),
+    )
+    model = ChapterCapabilityModel(
+        "CH01", derivation, frozenset({"CH01"}), taught=frozenset({"strength"})
+    )
+    assert not model.held("strength")
+    assert model.grant_sites("strength") is None
+    assert model.granted_within("strength") == ()
+
+
+def test_taught_in_chain_reads_module_text(tmp_path) -> None:
+    (tmp_path / "ch08.py").write_text('beat("teach_rock_smash")\n', encoding="utf-8")
+    (tmp_path / "ch07.py").write_text('beat("smash_rock")\n', encoding="utf-8")
+    assert taught_in_chain(frozenset({"CH07"}), tmp_path) == frozenset()
+    assert taught_in_chain(frozenset({"CH07", "CH08"}), tmp_path) == frozenset({"rock_smash"})
+
+
+def test_real_ch07_rock_smash_obtainable_not_held() -> None:
+    """Pinned against the real corpus: CH06 grants badge 1 and HM06, so
+    CH07 can obtain Rock Smash, but no committed suite teaches it."""
+    model = build_capability_model("CH07")
+    assert model is not None
+    assert model.obtainable("rock_smash")
+    assert not model.held("rock_smash")
+    assert model.grant_sites("rock_smash") is None

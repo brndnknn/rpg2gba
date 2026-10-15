@@ -105,7 +105,7 @@ from rpg2gba.beat_gen.review import RowLocation, render_review
 from rpg2gba.beat_gen.seam import (
     SeamCrossing, connection_crossings, connection_for, seam_crossings,
 )
-from rpg2gba.beat_gen.seed import deferred_loader, route_winner
+from rpg2gba.beat_gen.seed import deferred_loader, route_winner, walked_loader
 from rpg2gba.beat_gen.page_sim import Firing
 from rpg2gba.beat_gen.select import dropped_events, empty_events, select_rows
 from rpg2gba.beat_gen.round_trip import find_round_trip
@@ -115,7 +115,13 @@ from rpg2gba.conversion_agent.transpiler import smashable_rock_event_ids
 from rpg2gba.conversion_agent.orchestrator import load_map_event_strips
 from rpg2gba.story_state.extract import RowState, extract_map
 from rpg2gba.beat_gen.whiteout import place_whiteout_beats
+from rpg2gba.capability_sites import FIELD_CAPABILITY_ITEMS, teach_beat_name
 from rpg2gba.chapter_atlas.binding import ChapterBinding, load_binding
+from rpg2gba.chapter_manifest.capability_model import (
+    _chain_ids,
+    build_capability_model,
+    taught_in_chain,
+)
 from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch, classify_manifest
 from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
 from rpg2gba.playtest import chapters_gen as playtest_chapters_gen
@@ -158,6 +164,7 @@ from rpg2gba.story_state.model import (
     build_chapter_stories,
 )
 from rpg2gba.tileset_converter.map_constants import load_display_names
+from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
 from rpg2gba.traversal.collision import load_map_json
 from rpg2gba.traversal.graph import MapGraph
 from rpg2gba.traversal.triggers import DEFAULT_ENGINE_MAPS_DIR
@@ -467,6 +474,29 @@ def _gated_doors(maps: frozenset[int], build_dir: Path) -> frozenset[tuple[int, 
             kind, _ = classify_event(event, maps)
             if kind == "object" and _event_transfers_present(event):
                 out.add((map_id, event["id"]))
+    return frozenset(out)
+
+
+def _opened_before(
+    gated: frozenset[tuple[int, int]], chapter_id: str, build_dir: Path,
+    verdicts: Mapping[str, RowVerdict],
+) -> frozenset[tuple[int, int]]:
+    """Gated doors an EARLIER chapter already opened: a transfer page of the
+    door is owned (live) by a chapter other than `chapter_id` (2026-10-15,
+    CH08: the lab's exit, Map050 EV001, opens at `var101 >= 1` in CH01; the
+    revisit walks out through it with no warp beat of its own)."""
+    out: set[tuple[int, int]] = set()
+    for map_id, event_id in sorted(gated):
+        event = next((ev for ev in load_map_json(map_id, build_dir / "maps").get("events", [])
+                      if ev and ev["id"] == event_id), None)
+        if event is None:
+            continue
+        for idx, page in enumerate(event.get("pages", []) or []):
+            if not any(c.get("code") == 201 for c in page.get("list", []) or []):
+                continue
+            v = verdicts.get(f"map{map_id:03d}/ev{event_id:03d}/p{idx}")
+            if v is not None and v.owner is not None and v.owner != chapter_id:
+                out.add((map_id, event_id))
     return frozenset(out)
 
 
@@ -1182,6 +1212,62 @@ def _clearing_enablers(
     return out
 
 
+def _held_capabilities(binding: ChapterBinding, chapter_id: str) -> frozenset[str]:
+    """Field capabilities the walk holds from this chapter's START (CH08 §9):
+    obtainable by the predecessor chain -- enough badges and the HM (or its
+    alternative item) granted (`ChapterCapabilityModel.obtainable`). Whether
+    the move is taught yet doesn't matter here: the chapter's first smash beat
+    teaches it (`_with_teach`)."""
+    predecessor = binding.chapter(chapter_id).predecessor
+    if predecessor is None:
+        return frozenset()
+    model = build_capability_model(predecessor)
+    if model is None:
+        return frozenset()
+    return frozenset(t for t in FIELD_CAPABILITY_ITEMS if model.obtainable(t))
+
+
+def _with_teach(beats: Sequence[PlannedBeat], taught: Collection[str]) -> tuple[PlannedBeat, ...]:
+    """The first `smash` beat (walk order) per capability no predecessor
+    suite has taught gets `teach=<teach_beat_name>`: it teaches the HM through
+    the bag before clearing anything. That literal in the module is also what
+    `capability_model.taught_in_chain` reads to call the capability held."""
+    seen = set(taught)
+    out = []
+    for b in beats:
+        cap = dict(b.kwargs).get("capability") if b.template == "smash" else None
+        if cap is not None and cap not in seen:
+            seen.add(cap)
+            b = _merge_kwargs(b, {"teach": teach_beat_name(cap)})
+        out.append(b)
+    return tuple(out)
+
+
+def _smashable_by_walk(
+    held: Collection[str], maps: Collection[int], build_dir: Path,
+    row_states: Callable[[int], Mapping[str, RowState]],
+) -> tuple[frozenset[tuple[int, int]], frozenset[tuple[int, int]]]:
+    """(rocks the walk clears ITSELF, rocks another event clears), each as
+    (map, event), over every smashable rock on `maps` (CH08 §9). The first is
+    empty unless Rock Smash is held. A rock some other event clears (CH07's
+    rockslide: event 19's remote self-switch writes) stays that event's
+    business -- the `_released_walls` test, with every row on the map as a
+    candidate clearer -- so neither it nor its own rows count as held."""
+    if "rock_smash" not in held:
+        return frozenset(), frozenset()
+
+    def events_of(m: int) -> list[dict]:
+        return [ev for ev in load_map_json(m, build_dir / "maps").get("events", []) if ev]
+
+    rocks = _smashable_rock_walls(maps, events_of)
+    candidates = {rid for m in {m for m, _ in rocks} for rid in row_states(m)}
+    externally = _released_walls(
+        rocks, candidates, row_states=row_states,
+        pages_of=lambda m, e: next((ev.get("pages", []) for ev in events_of(m)
+                                    if ev["id"] == e), []))
+    return frozenset(rocks) - frozenset(externally), frozenset(externally)
+
+
 def _smashable_rock_walls(
     maps: Collection[int], events_of: Callable[[int], list[dict]],
 ) -> frozenset[tuple[int, int]]:
@@ -1331,6 +1417,12 @@ def _passage_enablers(
     out: dict[str, tuple[str, ...]] = {}
     if not writers:
         return out
+    # A record on a map with released walls waits on THOSE walls' clearers
+    # (CH08: Route 1's rocks are opened by Route 1's smash beat, not Moki's);
+    # elsewhere, on any clearer, as before.
+    writers_on: dict[int, set[str]] = {}
+    for (wall_map, _event), ws in released.items():
+        writers_on.setdefault(wall_map, set()).update(ws)
     skip = set(exclude_rows)
     for record in records:
         if skip & set(record.rows):
@@ -1340,7 +1432,8 @@ def _passage_enablers(
             (map_id, (record.x, record.y))]
         if (not any(s in reach_blocked for s in sites)
                 and any(s in reach_open for s in sites)):
-            out[record.rows[0]] = writers
+            local = writers_on.get(map_id)
+            out[record.rows[0]] = tuple(sorted(local)) if local else writers
     return out
 
 
@@ -1678,6 +1771,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                                     chapters_path=DEFAULT_CHAPTERS_PATH,
                                     winner_for=route_winner(chapter_id, module_dir),
                                     deferred_for=deferred_loader(chapter_id, module_dir),
+                                    walked_for=walked_loader(chapter_id, module_dir),
                                     resolved_out=resolved, seed_out=seeds)
     story = stories[chapter_id]
     verdicts = {v.row_id: v for v in story.rows}
@@ -1690,11 +1784,54 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     #    manifest (`manifest_chapter_id=`).
     stripped = load_map_event_strips(Path(__file__).resolve().parents[3] / "reference")
     empty = _empty_events(rows, build_dir)
+    held = _held_capabilities(binding, chapter_id)
+    held_obstacles, foreign_cleared = _smashable_by_walk(
+        held, chain_maps, build_dir, _row_states_for(build_dir, resolved))
     selection = split_outbound(select_rows(rows, verdicts, floors, stripped=stripped,
                                            empty=empty,
-                                           dropped=_dropped_events(rows, build_dir)),
+                                           dropped=_dropped_events(rows, build_dir),
+                                           held=held, held_obstacles=held_obstacles,
+                                           foreign_cleared=foreign_cleared),
                                floors, chain_maps,
                                successor.id if successor is not None else None)
+    # A cleared obstacle's empty page (a rock's "smashed" page: self switch A,
+    # no graphic, no commands) has nothing to talk to on the ROM; the smash
+    # beat asserts the rock is gone (CH08 §9).
+    if held_obstacles:
+        def _empty_obstacle_page(r: ManifestRow) -> bool:
+            if r.kind != "page" or r.event_id is None \
+                    or (r.map_id, r.event_id) not in held_obstacles:
+                return False
+            ev = next((e for e in load_map_json(r.map_id, build_dir / "maps").get("events", [])
+                       if e and e["id"] == r.event_id), None)
+            page = (ev or {}).get("pages", [])[r.page_idx] if ev else None
+            return page is not None and all(c.get("code") == 0 for c in page.get("list") or [])
+        cleared = [r for r in selection.owned if _empty_obstacle_page(r)]
+        if cleared:
+            gone_ids = {r.row_id for r in cleared}
+            selection = Selection(
+                owned=tuple(r for r in selection.owned if r.row_id not in gone_ids),
+                refusals=selection.refusals,
+                elsewhere=selection.elsewhere + tuple(
+                    Elsewhere(r.row_id, "empty_page",
+                              detail="the cleared obstacle's empty page; its smash beat "
+                                     "asserts the obstacle is gone")
+                    for r in cleared))
+    # A seam into a map the ROM doesn't build yet can't be crossed: the chapter
+    # that builds the far side owns it (2026-10-15, CH08: Moki's east seam to
+    # Route 3 is CH09's, #27). Before CH08 such seams were never reachable.
+    unbuilt = [r for r in selection.owned
+               if r.seam is not None and r.seam.other_map_id not in SLICE_MAP_IDS]
+    if unbuilt:
+        gone = {r.row_id for r in unbuilt}
+        selection = Selection(
+            owned=tuple(r for r in selection.owned if r.row_id not in gone),
+            refusals=selection.refusals,
+            elsewhere=selection.elsewhere + tuple(
+                Elsewhere(r.row_id, "later",
+                          successor.id if successor is not None
+                          and r.seam.other_map_id in successor.maps else None)
+                for r in unbuilt))
     inbound: tuple[ManifestRow, ...] = ()
     if predecessor is not None:
         pred_rows = load_chapter_rows(predecessor)
@@ -1719,6 +1856,24 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     # Ruling 19: exclusive arms the walk doesn't take leave the plan.
     all_verdicts = {v.row_id: v for s in stories.values() for v in s.rows}
     selection = blocked_arms(selection, all_verdicts, fork_owned)
+    # CH08 §9: with the capability held, an obstacle page's remaining arms
+    # (the no-capability / declined branch: "a Pokémon may be able to smash
+    # it") are the branch the walk does NOT take -- its smash beat answers YES.
+    if held_obstacles:
+        def _held_arm(r: ManifestRow) -> bool:
+            return (r.kind == "branch" and r.event_id is not None
+                    and (r.map_id, r.event_id) in held_obstacles)
+        declined = [r for r in selection.owned if _held_arm(r)]
+        if declined:
+            declined_ids = {r.row_id for r in declined}
+            selection = Selection(
+                owned=tuple(r for r in selection.owned if r.row_id not in declined_ids),
+                refusals=selection.refusals,
+                elsewhere=selection.elsewhere + tuple(
+                    Elsewhere(r.row_id, "unselected_arm",
+                              detail="the no-capability branch; the walk holds the "
+                                     "capability and its smash beat answers YES (CH08 §9)")
+                    for r in declined))
     # An archetype template reads its whole page -- arms included -- so a
     # match whose page has a refused arm can't register as that archetype
     # (CH01's map065/ev001: a #109 text gap on one arm). It falls to the
@@ -1740,7 +1895,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                        for row in deferred_retalks(m, rows_by_id)}
     fork_rows = tuple(r.row_id for r in selection.owned if r.row_id in fork_owned)
     beats = plan_beats(tuple(r for r in selection.owned if r.row_id not in fork_owned),
-                       matches, floors)
+                       matches, floors, held_obstacles=held_obstacles)
     beats = claim_generic_archetypes(beats, generic_claims)
     inbound_ids = frozenset(r.row_id for r in inbound)
     beats = tuple(
@@ -1826,6 +1981,12 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         obstacle_walls, {r for b in beats for r in b.rows}, row_states=row_states,
         pages_of=lambda m, e: next((ev.get("pages", []) for ev in load_map_json(
             m, build_dir / "maps").get("events", []) if ev and ev["id"] == e), []))
+    # CH08 §9: a smash beat clears its own rocks (held capability).
+    for b in beats:
+        if b.template == "smash":
+            for rid in b.rows:
+                p = parse_row_id(rid)
+                released.setdefault((p.map_id, p.event_id), tuple(b.rows))
     for pair, clearers in released.items():
         logger.info("obstacle wall map %d ev %d is cleared by %s -- released", *pair,
                     list(clearers))
@@ -1853,7 +2014,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                          lambda m: _arrival_cells(world, graphs, m, chain_maps, entry),
                          frozenset(r for b in beats if b.template == "arrival_nudge"
                                    for r in b.rows),
-                         frozenset(r for b in beats if b.template == "obstacle"
+                         frozenset(r for b in beats if b.template in ("obstacle", "smash")
                                    for r in b.rows)),
         seam_fn=_seam_fn(graphs), map_constant_fn=_map_constant_for)
     records, facing_refusals = pin_records(records, facing_pins)
@@ -1982,7 +2143,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         reach_blocked = reachable_sites(entry, graphs, world, flood_maps,
                                         _ChainOccupancy(occupancy.with_walls(released),
                                                         flood_maps))
-        excluded = {r for b in beats if b.template == "obstacle" for r in b.rows}
+        excluded = {r for b in beats if b.template in ("obstacle", "smash") for r in b.rows}
         excluded |= {w for ws in released.values() for w in ws}
         for rid, writers in _passage_enablers(
                 records, released, reach_blocked=reach_blocked, reach_open=reach_open,
@@ -2015,6 +2176,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         label=rooms.label, node_map=lambda place: place[0])
     place_world = PlaceWorld(world, rooms)
     gated = _gated_doors(chain_maps, build_dir)
+    gated = gated - _opened_before(gated, chapter_id, build_dir, all_verdicts)
     terminal = _successor_exit_group(
         beats, floors, binding.chapter(chapter_id).maps,
         successor.maps if successor is not None else None)
@@ -2046,6 +2208,10 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     group_order, picks = route_order(route.nodes)
     check_guard_order(guard_waits, group_order, group_of_row)
     beats = order_beats(beats, group_order, _picks_with_fallback(records, picks))
+    if held:
+        predecessor_chain = (_chain_ids(binding, predecessor)
+                             if predecessor is not None else frozenset())
+        beats = _with_teach(beats, taught_in_chain(predecessor_chain))
     beats, cleared_too_late = _drop_dead_before_clear(beats, clearing, group_order, group_of_row)
     nudge_groups = {b.group for b in beats if b.template == "arrival_nudge"}
     # 6b. Ruling 19 steps 4-5 (`beat_gen/state_arms.py`): with the order and

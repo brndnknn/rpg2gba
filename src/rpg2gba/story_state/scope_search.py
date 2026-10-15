@@ -27,6 +27,7 @@ from typing import Any, Callable
 from rpg2gba.conversion_agent.deterministic import join_text_lines
 from rpg2gba.conversion_agent.inline_choice import has_inline_choice
 from rpg2gba.ruby_subset import ast as ast_
+from rpg2gba.ruby_subset.builtins import EFFECT_CALLS
 from rpg2gba.ruby_subset.lexer import RubyParseError
 from rpg2gba.ruby_subset.parser import parse_program, script_block_source
 from rpg2gba.ruby_subset.search import (
@@ -34,6 +35,7 @@ from rpg2gba.ruby_subset.search import (
     load_stripped_ce_ids,
     search_scope,
 )
+from rpg2gba.story_state.display_vars import display_var_policy
 from rpg2gba.story_state.graphics_vars import graphics_only_variables
 from rpg2gba.story_state.state import (
     Assign,
@@ -61,6 +63,8 @@ __all__ = [
 _CODE_SHOW_TEXT = 101
 _CODE_SHOW_TEXT_CONT = 401
 _CODE_SCRIPT = 355
+_CODE_CONTROL_SWITCHES = 121
+_CODE_CONTROL_SELF_SWITCH = 123
 
 
 @dataclass(frozen=True, eq=False)
@@ -111,6 +115,7 @@ def run_scope(
         read_domain=read_domain,
         index_of=scope.index_of,
         graphics_only_vars=graphics_only_variables(),
+        display_write_ok=display_var_policy().write_ok,
     )
 
 
@@ -175,7 +180,122 @@ def _target_key(node: ast_.Node, map_id: int, event_id: int) -> Key | None:
             letter = node.args[1] if len(node.args) > 1 else None
             if isinstance(letter, ast_.Str) and letter.value:
                 return SelfSwitch(map_id, first.value, letter.value)
+        # pbTextEntry(help, minlen, maxlen, variableNumber[, pkmn]) stores the
+        # entered text in $game_variables[variableNumber] (Name Rater, CH06).
+        if node.name == "pbTextEntry" and len(node.args) >= 4 \
+                and isinstance(node.args[3], ast_.Int):
+            return Variable(node.args[3].value)
     return None
+
+
+def _command_write_keys(cmd: dict[str, Any], map_id: int, event_id: int) -> tuple[Key, ...]:
+    """Keys a plain RMXP write command assigns: 121 Control Switches (a
+    literal id range), 122 Control Variables (a literal id range), 123 Control
+    Self Switch (this event)."""
+    code, params = cmd.get("code"), cmd.get("parameters") or []
+    if code == _CODE_CONTROL_SWITCHES and len(params) >= 2:
+        return tuple(Switch(i) for i in range(params[0], params[1] + 1))
+    if code == _CODE_CONTROL_VARIABLES and len(params) >= 2:
+        return tuple(Variable(i) for i in range(params[0], params[1] + 1))
+    if code == _CODE_CONTROL_SELF_SWITCH and params and isinstance(params[0], str):
+        return (SelfSwitch(map_id, event_id, params[0]),)
+    return ()
+
+
+#: `pbChoosePokemon(varA, varB, proc {|x| <predicate>})` -- the party pick
+#: with an eligibility filter (Map046 EV014's trade). The subset parser has no
+#: block parameters, but the shape is fully known: the call writes vars A and B
+#: (chosen slot, chosen name), and the proc is a pure predicate (no `=` other
+#: than a comparison). Any other unparseable block keeps `havoc_global`.
+_CHOOSE_WITH_FILTER_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbChoosePokemon\(\s*(\d+)\s*,\s*(\d+)\s*,\s*proc\s*\{\s*\|\w+\|"
+    r"(?P<body>[^{}]*)\}\s*\)\s*$", re.S)
+
+
+def _choose_with_filter_keys(source: str) -> tuple[Key, ...] | None:
+    m = _CHOOSE_WITH_FILTER_RE.match(source)
+    if m is None or re.search(r"(?<![=!<>])=(?!=)", m.group("body")):
+        return None
+    return (Variable(int(m.group(1))), Variable(int(m.group(2))))
+
+
+#: Calls whose state effect `named_write_targets` names itself.
+_NAMING_CALLS = frozenset({"pbSet", "pbGet", "pbSetSelfSwitch", "pbTextEntry", "_I"})
+#: `$Trainer`-style global attributes that are pure reads of party/dex state.
+_GLOBAL_READS = frozenset({"party", "pokedexSeen", "pokedexOwned"})
+
+
+def _call_ok(node: ast_.Call) -> bool:
+    receiver = node.receiver
+    if receiver is None or (isinstance(receiver, ast_.Const) and receiver.name == "Kernel"):
+        return node.name in EFFECT_CALLS or node.name in _NAMING_CALLS
+    root = receiver
+    while isinstance(root, (ast_.Call, ast_.Index)):
+        root = root.receiver
+        if root is None:
+            return False
+    if isinstance(root, (ast_.Local, ast_.Const, ast_.ScopedConst)):
+        return True   # a method on a local object or a constant (PBSpecies.getName)
+    if isinstance(root, ast_.GlobalVar):
+        return node.name in _GLOBAL_READS or (
+            isinstance(node.receiver, ast_.GlobalVar) and node.name in _GLOBAL_READS)
+    return False
+
+
+def _assign_ok(target: ast_.Node, map_id: int, event_id: int) -> bool:
+    if isinstance(target, ast_.Local) or _target_key(target, map_id, event_id) is not None:
+        return True
+    root = target
+    while isinstance(root, (ast_.Call, ast_.Index)):
+        root = root.receiver
+        if root is None:
+            return False
+    return isinstance(root, ast_.Local)   # `pkmn.name = ...` on a local object
+
+
+def writes_exhaustively_named(
+    commands: list[dict[str, Any]], *, map_id: int, event_id: int,
+) -> bool:
+    """True iff `named_write_targets` provably names EVERY story-state key
+    the scope can write, so an empty result means "writes nothing modelled"
+    rather than "cannot tell" (2026-10-15, CH08; CH06's Name Rater nickname
+    arm and trade arm, Map046, were turning everything TOP downstream).
+
+    Every script block parses; every call is a known no-modelled-state
+    effect (`builtins.EFFECT_CALLS`), a state accessor this module names, a
+    method on a local object or constant, or a read of `$Trainer.party`/dex
+    counts; every assignment targets a local, a local object's attribute, or
+    a key `_target_key` names; and the scope calls no common event (117),
+    which could write anything."""
+    i = 0
+    while i < len(commands):
+        code = commands[i].get("code")
+        if code == _CODE_CALL_COMMON_EVENT:
+            return False
+        if code != _CODE_SCRIPT:
+            i += 1
+            continue
+        try:
+            source, next_i = script_block_source(commands, i)
+        except ValueError:
+            return False
+        if _choose_with_filter_keys(source) is not None:
+            i = next_i
+            continue
+        try:
+            program = parse_program(source)
+        except RubyParseError:
+            return False
+        for node in _walk_nodes(program.statements):
+            if isinstance(node, ast_.Call) and not _call_ok(node):
+                return False
+            if isinstance(node, (ast_.Assign, ast_.OpAssign)) \
+                    and not _assign_ok(node.target, map_id, event_id):
+                return False
+            if isinstance(node, (ast_.InstanceVar,)):
+                return False
+        i = next_i
+    return True
 
 
 def named_write_targets(
@@ -193,8 +313,15 @@ def named_write_targets(
     conservative: a script block that will not even parse contributes
     nothing, and a dynamically-indexed target (`$game_switches[i]`) is not
     named -- both leave the caller on `havoc_global`, which is sound.
+
+    *(2026-10-15, CH08: when every script block parses, the scope's plain
+    121/122/123 write commands are named too -- before, a refused row whose
+    only nameable writes were commands (CH06's Name Rater and trade NPC,
+    Map046) fell to `havoc_global` and turned var 101 TOP for every later
+    chapter. A block that will not parse still leaves the row global.)*
     """
     keys: list[Key] = []
+    all_parse = True
     i = 0
     while i < len(commands):
         if commands[i].get("code") != _CODE_SCRIPT:
@@ -202,8 +329,19 @@ def named_write_targets(
             continue
         try:
             source, next_i = script_block_source(commands, i)
+        except ValueError:
+            all_parse = False
+            i += 1
+            continue
+        chosen = _choose_with_filter_keys(source)
+        if chosen is not None:
+            keys.extend(k for k in chosen if k not in keys)
+            i = next_i
+            continue
+        try:
             program = parse_program(source)
-        except (RubyParseError, ValueError):
+        except RubyParseError:
+            all_parse = False
             i += 1
             continue
         for node in _walk_nodes(program.statements):
@@ -215,6 +353,11 @@ def named_write_targets(
             if target is not None and target not in keys:
                 keys.append(target)
         i = next_i
+    if all_parse:
+        for cmd in commands:
+            for key in _command_write_keys(cmd, map_id, event_id):
+                if key not in keys:
+                    keys.append(key)
     return tuple(keys)
 
 

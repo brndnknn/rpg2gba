@@ -437,7 +437,8 @@ def _evaluate_permissive(kind: str, text: str, map_id: int, event_id: int) -> Ev
 # 2026-09-23 against the staged CH01-CH05 corpus. The only allowed code is
 # `party_model` (REDERIVATION_PLAN.md C8 shape ruling (b)): $Trainer.party/
 # pokedexOwned reached directly or through isRockSmashSoftlocked?/
-# jvNextReward/PROFREWARDS[...]. The one `system(...)` call lives in
+# PROFREWARDS[...] (jvNextReward is a `dex_count` input since 2026-10-15
+# and no longer refuses). The one `system(...)` call lives in
 # strip-listed CE 6 and is no longer walked.
 EXPECTED_REFUSALS: tuple[tuple[int, int, int, int, str], ...] = (
     (32, 14, 0, 17, "party_model"),
@@ -455,7 +456,6 @@ EXPECTED_REFUSALS: tuple[tuple[int, int, int, int, str], ...] = (
     (49, 1, 2, 10, "party_model"),
     (49, 1, 2, 18, "party_model"),
     (50, 5, 5, 6, "party_model"),
-    (50, 5, 5, 12, "party_model"),
     (50, 5, 5, 13, "party_model"),
     (50, 5, 6, 0, "party_model"),
     (50, 24, 0, 7, "party_model"),

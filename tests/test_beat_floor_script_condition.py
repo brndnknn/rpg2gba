@@ -327,7 +327,7 @@ def test_every_condition_extractor_registered_is_callable():
         "pb_receive_item": "Kernel.pbReceiveItem(::PBItems::REVIVE)",
         "pb_rock_smash": "Kernel.pbRockSmash",
         "pb_pick_berry": "pbPickBerry(PBItems::ORANBERRY,2)",
-        "uranium_jv_reward": "jvGiveReward",
+        "uranium_jv_give_reward": "jvGiveReward",
     }
     for name, extractor in CONDITION_FAMILY_EXTRACTORS.items():
         extractor(samples.get(name, name), 0, ctx)

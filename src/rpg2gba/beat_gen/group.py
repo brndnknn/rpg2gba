@@ -9,7 +9,7 @@ STATUS: implemented (`assignments/C6/02_group.md`).
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 
 from rpg2gba.beat_floor.assertion import RowFloor
 from rpg2gba.beat_gen.plan import PlannedBeat, make_kwargs
@@ -31,9 +31,9 @@ def beat_name(template: str, rows: Sequence[ManifestRow], *, key: str = "") -> s
     """The deterministic beat name for a beat claiming `rows` (see the
     naming table in the task file). A function of the rows (and `key`, for
     obstacle capability), never of position or a counter."""
-    if template == "obstacle":
+    if template in ("obstacle", "smash"):
         map_id = rows[0].map_id
-        return f"m{map_id:03d}obstacle_{key}"
+        return f"m{map_id:03d}{template}_{key}"
 
     if template == "stair":
         map_id = rows[0].map_id
@@ -122,8 +122,14 @@ def plan_beats(
     owned: Sequence[ManifestRow],
     matches: Sequence[ArchetypeMatch],
     floors: Mapping[str, RowFloor],
+    *,
+    held_obstacles: Collection[tuple[int, int]] = frozenset(),
 ) -> tuple[PlannedBeat, ...]:
     """Every owned row claimed by exactly one planned beat.
+
+    `held_obstacles` are the (map, event) obstacles this chapter's walk clears
+    itself (CH08 §9): their rows group into a `smash` beat, the rest of the
+    map's obstacles into `obstacle` as before.
 
     Returns beats ordered by their first row's manifest position (the
     route solver reorders them later, Task 4). Raises `ValueError` if any
@@ -194,7 +200,7 @@ def plan_beats(
                 kwargs=make_kwargs(skip_claimed=True))))
 
     # --- 2. obstacles: owned rows whose floor carries blocked_obstacle -----
-    obstacle_groups: dict[tuple[int, str], list[str]] = {}
+    obstacle_groups: dict[tuple[int, str, str], list[str]] = {}
     for row in owned:
         if row.row_id not in remaining:
             continue
@@ -203,16 +209,18 @@ def plan_beats(
             continue
         caps = sorted({a.param("capability") for a in floor.assertions
                        if a.kind == "blocked_obstacle"})
+        smash = row.event_id is not None and (row.map_id, row.event_id) in held_obstacles
         for cap in caps:
-            obstacle_groups.setdefault((row.map_id, cap), []).append(row.row_id)
-    for (map_id, cap), row_ids in obstacle_groups.items():
+            obstacle_groups.setdefault(
+                (row.map_id, cap, "smash" if smash else "obstacle"), []).append(row.row_id)
+    for (map_id, cap, template), row_ids in obstacle_groups.items():
         row_ids_sorted = sorted(row_ids, key=lambda rid: position[rid])
         rows_objs = [owned_by_id[rid] for rid in row_ids_sorted]
-        name = beat_name("obstacle", rows_objs, key=cap)
+        name = beat_name(template, rows_objs, key=cap)
         pos = position[row_ids_sorted[0]]
         _claim(row_ids_sorted)
         staged.append((pos, 0, PlannedBeat(
-            name=name, template="obstacle", map_id=map_id, rows=tuple(row_ids_sorted),
+            name=name, template=template, map_id=map_id, rows=tuple(row_ids_sorted),
             group=name, kwargs=make_kwargs(capability=cap))))
 
     # --- 3. stairs: terrain rows grouped into staircases --------------------
