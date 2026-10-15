@@ -123,8 +123,8 @@
     {
       "id": "CH07", "act": "A2", "title": "Route 2 (revisit)", "wiki_page": "Route 2",
       "visit": 2, "outdoor": 35, "maps": [35],
-      "predecessor": "CH06", "tier": "thin", "status": "in_progress",
-      "notes": "Entered from the north (Nowtoch); the ev19 cutscene clears the rockslide with no capability, opening the overland route south to Kevlar. Rock Smash itself is first exercised in CH07A (operator, 2026-10-14; 07-route-2-revisit.md section 7)."
+      "predecessor": "CH06", "tier": "thin", "status": "built",
+      "notes": "Passed its §9 boot-walk gate 2026-10-15 (CH07 gen suite GREEN 480/480 from boot -- CH01-CH06 replay + CH07's own; operator walked from CH06's end: cutscene as expected, ledges jump correctly). First revisit chapter. Entered from the north (Nowtoch); the ev19 cutscene clears the rockslide with no capability, opening the overland route south to Kevlar. Rock Smash itself is first exercised in CH07A (operator, 2026-10-14; 07-route-2-revisit.md section 7)."
     },
     {
       "id": "CH07A", "act": "A2", "title": "Route 1 (revisit)", "wiki_page": "Route 1",

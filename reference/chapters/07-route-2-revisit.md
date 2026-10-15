@@ -1,7 +1,8 @@
 # Chapter 7 — Route 2 (revisit)
 
-**Status:** authored 2026-10-14 at chapter open; **not yet converted, staged or
-boot-walked**. Tier **thin** per `reference/chapters.json` (CH07 record), with §4
+**Status:** authored 2026-10-14 at chapter open; **gate-passed 2026-10-15** (gen
+suite 480/480 from boot; operator walk: cutscene as expected, ledges correct; findings
+filed as PROJECT_TODO #140 and #141). Tier **thin** per `reference/chapters.json` (CH07 record), with §4
 enumerated exhaustively because the chapter is one map and 21 events. No §8. This is
 a spec a scenario gets written from; gates and effects only, no narrative.
 
@@ -161,7 +162,8 @@ chapter does not convert cleanly until it is handled.
   `MB_JUMP_SOUTH` (`terrain_tags.column_behavior`) and sit beyond the rockslide;
   never exercised on hardware. CH07 is the first chance. `[eye]` jump direction fires
   on all 16 cells when approached from the north; do not read CH04's green gate as
-  validating it.
+  validating it. **Checked on hardware 2026-10-15 (operator walk): jumps are correct.**
+  All 16 cells are `MB_JUMP_SOUTH`, though, so only that one direction is verified.
 - CH04's 28 `blocked:rock_smash` dispositions need re-triage to `beat:` rows (CH07 has
   no manifest yet: `ls reference/manifests` shows CH01-CH06 only, CH06 with no
   dispositions file).

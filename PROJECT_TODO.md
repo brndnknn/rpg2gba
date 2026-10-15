@@ -17,6 +17,25 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 141. Phone-rematch trainers drop their `RegSpeech` line and register without asking
+
+Seen by the operator on the CH07 walk (2026-10-15, Map035 EV023 Brent; CH04's Larrie behaves
+the same). Uranium's `pbPhoneRegisterBattle(message, …)` (`scripts_dump/133_PScreen_Phone.rb:91`)
+shows `message` as a **yes/no** prompt ("Want to trade PokéPod numbers?") and registers only on
+yes, then says "Registered {class} {name} in the Poképod." If the player declines, the idle page
+(page 2) re-offers registration on every talk. Our phone-rematch classifier
+(`conversion_agent/deterministic.py` ~1286–1394) matches the `_I("…")` literal but never captures
+it, and its `_RegisterMatchCall` continue script calls `register_matchcall` without asking, so
+the player sees only the engine's "Registered … in the POKéNAV" fanfare. Auto-registering was
+deliberate (no `FLAG_HAS_MATCH_CALL` gate); losing the line was not. Fixes, smallest first:
+- Minimal: emit the line as a `msgbox` before `register_matchcall`, as vanilla does
+  (`engine/data/maps/Route102/scripts.inc:38-42`, Calvin).
+- Faithful: a `MSGBOX_YESNO` prompt, plus a re-offer on the idle page that checks
+  `IsTrainerRegistered` (`Route102/scripts.inc:24-26`). This touches the rematch beats'
+  oracle.
+
+Also: the stock text says "POKéNAV", where Uranium's word is "Poképod".
+
 ### 140. Every built map's name popup reads "LITTLEROOT TOWN"
 
 Seen by the operator on the CH07 walk (2026-10-15). `metadata_wiring.DEFAULT_MAPSEC =
