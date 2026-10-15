@@ -59,6 +59,9 @@ Design record: `reference/findings/grill_chapter_atlas_2026-07-30.md`.
 coverage command asserts that identity, so a map cannot fall through the gap.
 (`validate` also reports 17 revisit chapters, up from 16, and a tier split of
 2 full / 17 medium / 41 thin — CH07A, added 2026-08-29, is thin. See §7.)
+*(Corrected 2026-10-15: CH07A was folded into CH08, so the chain is back to **59
+chapters**; `validate` now reports 16 revisit chapters and 2 / 17 / 40. The map
+totals above predate later unbindings; `coverage` is the live identity.)*
 
 ## 2. Acts at a glance
 
@@ -92,6 +95,9 @@ Reading notes:
 * *(Corrected 2026-10-04: the Ch column's A2 row and the total were still 4 / 59 —
   they now read 5 / 60, matching `reference/chapters.json`: 60 chapter entries
   incl. CH07A. The other A2 columns remain pre-insertion.)*
+* *(2026-10-15: A2 is 4 chapters again — CH07A was folded into CH08, which now
+  owns maps 33/81 as well as Moki's 8. The Ch column above still reads 5 / 60;
+  it is 4 / 59.)*
 * **A2 is now 5 chapters, not 4** — CH07A was inserted 2026-08-29 (§7). Its two
   maps (33, 81) were already bound to CH02 in A1, so they add nothing to A2's
   "new maps" count under the de-dup rule; the rest of this table's A2 row
@@ -111,8 +117,7 @@ Tier legend: **F** full, **M** medium, **T** thin. Status is from the binding.
 | CH05 | Passage Cave | A1 | M | 2 | 3 | 5 | first dungeon |
 | CH06 | Nowtoch City | A1 | M | 8 | 6 | 11 | **Gym 1**, Rock Smash (metro maps 44/45 parked to `unbound_maps` 2026-10-10) |
 | CH07 | Route 2 (revisit) | A2 | T | 1 | 4 | 3 | overland seam opens |
-| CH07A | Route 1 (revisit) | A2 | T | 2 | 9 | 7 | inserted 2026-08-29, see §7; maps 33/81, rides Kevlar (31) as entry leg |
-| CH08 | Moki Town (revisit) | A2 | T | 8 | 1 | 7 | first revisit-model test |
+| CH08 | Route 1 + Moki Town (revisit) | A2 | T | 10 | 10 | 14 | absorbed CH07A (Route 1 revisit, maps 33/81) 2026-10-15, see §7; rides Kevlar (31) as entry leg; `08-route-1-moki-revisit.md` |
 | CH09 | Route 3 | A2 | T | 4 | 8 | 9 | Moki E seam |
 | CH10 | Burole Town | A2 | T | 9 | 8 | 3 | **Gym 2** |
 | CH11 | Route 4 | A3 | T | 2 | 8 | 11 | |
@@ -370,6 +375,13 @@ manifest.
    `tests/test_chapter_atlas.py::test_chapter_ids_are_contiguous_and_play_ordered`
    was updated to permit a letter-suffixed insertion while still requiring
    contiguous base numbers and play-ordered ids.
+
+**Superseded 2026-10-15 (operator): CH07A folded into CH08.** Decision 1's
+content (CH02's rock-gated beats, the Old Rod house, the 6 boulder beats) and
+decision 2's Kevlar ride-along now belong to CH08 "Route 1 + Moki Town
+(revisit)", maps [33, 81, 32, 48, 49, 50, 64, 65, 89, 172]. Both halves are
+what Rock Smash unlocks on the walk back, and CH07A had no manifest, suite or
+branch, so nothing was renamed. Decisions 3–5 stand; the suffix hatch is kept.
 
 ## 8. Known gaps in this atlas
 

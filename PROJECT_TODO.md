@@ -1240,7 +1240,9 @@ siblings carry none.
 
 Not urgent and not a defect — CH04 passed its §9 gate and the rule is explicitly a
 missed-opportunity warning, not an error. Right time to spend it is CH07A, the
-Rock Smash revisit that walks map 35 again. Until then `check --chapter CH04`
+Rock Smash revisit that walks map 35 again. *(2026-10-15: CH07 was the chapter that walked map
+35 again, and it smashed no rock. CH07A is now folded into CH08, the first chapter with a
+real smash.)* Until then `check --chapter CH04`
 reports 2 warnings of this kind by design; do not silence them.
 
 ### 64. `CapabilityModel.grants_capability` is the wrong signature — 28 warnings standing
@@ -1968,7 +1970,8 @@ picked up.
 ### 92. The capability model cannot see field capabilities, because their grants are not switch/var writes
 
 *(2026-10-14: **retargeted to CH07A** (operator) — CH07's rockslide is cleared by the ev19
-cutscene with no capability; Route 1's six rocks are the first unavoidable smash.)*
+cutscene with no capability; Route 1's six rocks are the first unavoidable smash.
+2026-10-15: CH07A folded into **CH08**, so this is now CH08's, which also has Moki's three rocks.)*
 *(2026-10-14, CH07: **premise corrected — Uranium does have HMs.** Rock Smash's is internal `HM06`
 (wiki "HM01"), `pbReceiveItem` at the CH06 Theo rematch (Map040 ev20/21/79), and each HM move has a
 Tinkerer key-item counterpart (Rock Smash → Boxing Gloves, Legen Town, Map167). Point 1's "grant
@@ -2062,9 +2065,9 @@ The generator refuses rows that read party or Pokedex state with a `party_model`
 green". Graphics-only vars 43 and 131 are already exempt via `story_state/graphics_vars.py`; the rest
 still refuse. Source: `reference/archive/REDERIVATION_PLAN.md` §16.3 "C8 shape".
 
-### 128. `blocked:` is held back from clerical derivation; revisit at CH07A (was CH06, then CH07)
+### 128. `blocked:` is held back from clerical derivation; revisit at CH08 (was CH06, then CH07, then CH07A)
 
-*(2026-10-14: moved to CH07A with #92 — CH07 smashes no rock.)*
+*(2026-10-14: moved to CH07A with #92 — CH07 smashes no rock. 2026-10-15: CH07A folded into CH08.)*
 
 `blocked:<spec>` is a proposal only and never dispositions a row until a human copies it into the
 dispositions file (the one negative claim, with a false-positive history on obstacle rows, #95). The

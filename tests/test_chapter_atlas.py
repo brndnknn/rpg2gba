@@ -234,13 +234,14 @@ def test_the_real_binding_validates() -> None:
 
 def test_chapter_ids_are_contiguous_and_play_ordered() -> None:
     """Ids run CH01, CH02, ... in play order, with letter-suffixed insertions
-    (CH07A) allowed immediately after the chapter they follow.
+    (CHnnA) allowed immediately after the chapter they follow.
 
     The suffix hatch exists because a chapter discovered *after* the chain was
     numbered must not renumber its successors: every `CHnn` reference in the
     reference docs and every committed `CHnn.manifest.json` filename would go
-    stale at once. CH07A "Route 1 (revisit)" is the first such insertion
-    (2026-08-29, the slice-1 coverage audit). What the chain actually has to
+    stale at once. CH07A "Route 1 (revisit)" was the first such insertion
+    (2026-08-29, the slice-1 coverage audit; folded into CH08 2026-10-15, so
+    the chain currently has none -- the hatch stays). What the chain actually has to
     guarantee is that the *base* numbers are contiguous from 1 and that play
     order matches id order -- not that ids are bare integers.
     """

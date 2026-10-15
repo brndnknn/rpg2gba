@@ -125,7 +125,7 @@ def _chapter_maps_in_build_order(
 ) -> list[tuple[str, tuple[int, ...]]]:
     """`(chapter_id, maps)` for every chapter in `chapters.json`, in file
     order, deduplicated to each id's first occurrence (a handful of ids like
-    CH07/CH07A repeat a map roster later in the corpus; only the first,
+    CH07/CH08 repeat a map roster later in the corpus; only the first,
     build-order appearance is relevant to an authoring-time union).
 
     `only_built` restricts to `status == "built"` -- the gated chapters this

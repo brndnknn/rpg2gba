@@ -110,7 +110,7 @@ def test_revisit_chapter_introduces_no_maps(tmp_path: Path) -> None:
 
 
 def test_duplicate_chapter_id_uses_only_first_occurrence(tmp_path: Path) -> None:
-    """CH07/CH07A-style reruns of an earlier map roster later in the corpus
+    """CH07/CH08-style reruns of an earlier map roster later in the corpus
     must not be double-counted into the cumulative union."""
     path = _write_chapters_json(
         tmp_path,

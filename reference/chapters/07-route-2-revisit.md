@@ -2,7 +2,9 @@
 
 **Status:** authored 2026-10-14 at chapter open; **gate-passed 2026-10-15** (gen
 suite 480/480 from boot; operator walk: cutscene as expected, ledges correct; findings
-filed as PROJECT_TODO #140 and #141). Tier **thin** per `reference/chapters.json` (CH07 record), with §4
+filed as PROJECT_TODO #140 and #141). *(2026-10-15: CH07A, named as the successor
+throughout this doc, was folded into **CH08** "Route 1 + Moki Town (revisit)"; read
+"CH07A" below as CH08.)* Tier **thin** per `reference/chapters.json` (CH07 record), with §4
 enumerated exhaustively because the chapter is one map and 21 events. No §8. This is
 a spec a scenario gets written from; gates and effects only, no narrative.
 
