@@ -17,6 +17,27 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 140. Every built map's name popup reads "LITTLEROOT TOWN"
+
+Seen by the operator on the CH07 walk (2026-10-15). `metadata_wiring.DEFAULT_MAPSEC =
+"MAPSEC_LITTLEROOT_TOWN"` is written as `region_map_section` for every slice map. It was a
+placeholder from slice S4 and was never replaced, because `map_constants.py` mints a
+`MAPSEC_<NAME>` per map but nothing adds those to the engine's
+`src/data/region_map/region_map_sections.json`. That file is the build source for
+`include/constants/region_map_sections.h` and `region_map_entries.h` (`json_data_rules.mk`).
+The popup only shows where `show_map_name` is true, which `MapFile.to_json_dict` sets to
+`map_type == MAP_TYPE_TOWN`. That is why it appears "most of the time" rather than always.
+`OW_HIDE_REPEAT_MAP_POPUP` is `FALSE`, so connection crossings re-show it even within one
+section. Not yet decided:
+- one section per Uranium map, or one per location (a town's split pieces and interiors
+  sharing one)
+- display names from `MapInfos` vs `map_name_overrides.json` (§4.3)
+- whether region-map/Fly coordinates are filled now or left zero
+- whether to flip `OW_HIDE_REPEAT_MAP_POPUP` (that changes baseline engine behaviour, so ask
+  first)
+
+This is the same kind of placeholder as `MUS_LITTLEROOT` on every map (#22).
+
 ### 139. `transpile-events run --maps full` dies in `heal_locations.py` (map 8, event 37)
 
 Found 2026-10-14 (CH07 transpiler work): the full-corpus run aborts with `ValueError: staged
