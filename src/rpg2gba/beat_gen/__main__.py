@@ -107,6 +107,7 @@ from rpg2gba.beat_gen.seam import (
 )
 from rpg2gba.beat_gen.seed import deferred_loader, route_winner, walked_loader
 from rpg2gba.beat_gen.page_sim import Firing
+from rpg2gba.beat_gen.smash_lanes import sight_trainers_for, split_lane_gated, wait_edges
 from rpg2gba.beat_gen.select import dropped_events, empty_events, select_rows
 from rpg2gba.beat_gen.round_trip import find_round_trip
 from rpg2gba.beat_gen.state_arms import FIRING_TEMPLATES, Taint, fired_pages, select_state_arms
@@ -153,7 +154,7 @@ from rpg2gba.routing.occupancy import (
 from rpg2gba.routing.connections import connections_between, load_connections
 from rpg2gba.routing.pathing import RoutePlanningError, landing_cell
 from rpg2gba.routing.plan import write_plan
-from rpg2gba.routing.solver import RouteCandidate, solve_route
+from rpg2gba.routing.solver import RouteCandidate, RouteSolverError, solve_route
 from rpg2gba.story_state.model import (
     RowVerdict,
     State,
@@ -1243,6 +1244,60 @@ def _with_teach(beats: Sequence[PlannedBeat], taught: Collection[str]) -> tuple[
     return tuple(out)
 
 
+def _rock_approach_cells(map_id: int, event_id: int) -> frozenset[tuple[int, int]]:
+    """Every walkable approach cell of a rock (a side that isn't walkable
+    raises in `approach_to` and is simply not an approach)."""
+    from rpg2gba.playtest.cells import approach_to
+    constant = _map_constant_for(map_id)
+    cells: set[tuple[int, int]] = set()
+    for side in ("north", "south", "east", "west"):
+        try:
+            cells.add(tuple(approach_to(constant, event_id, prefer=side)))  # type: ignore[arg-type]
+        except ValueError:
+            continue
+    return frozenset(cells)
+
+
+@functools.lru_cache(maxsize=None)
+def _map_lanes(constant: str) -> dict[int, frozenset[tuple[int, int]]]:
+    from rpg2gba.playtest.cells import trainer_sight_lanes
+    return trainer_sight_lanes(constant)
+
+
+def _trainer_lane(map_id: int, event_id: int) -> frozenset[tuple[int, int]] | None:
+    """A sight trainer's lane, or None when the event is no sight trainer on
+    the ROM (no object, or no sight)."""
+    from rpg2gba.playtest.cells import has_local_id, local_id
+    constant = _map_constant_for(map_id)
+    if not has_local_id(constant, event_id):
+        return None
+    return _map_lanes(constant).get(local_id(constant, event_id))
+
+
+def _solve_with_lane_gates(gates: Mapping[str, tuple[int, ...]], solver: Callable,
+                           *args: object, **kwargs: object):  # noqa: ANN202
+    """`solve_route`, failing loud about lane gates when the solve can't
+    order them: a gating trainer whose own approach needs the very rock it
+    gates (passage through a released rock) is a precedence cycle."""
+    try:
+        return solver(*args, **kwargs)
+    except RouteSolverError as exc:
+        if not gates:
+            raise
+        raise RouteSolverError(
+            f"{exc} -- lane-gated smash group(s) {dict(gates)} must follow their gating "
+            "trainers' beats; if a gating trainer cannot be reached without smashing "
+            "that rock, the order is a cycle") from exc
+
+
+def _with_sight_trainers(beats: Sequence[PlannedBeat]) -> tuple[PlannedBeat, ...]:
+    """Every smash beat gets `sight_trainers=`: the trainer events on its map
+    still undefeated when it runs, whose lanes its walk must avoid."""
+    sight = sight_trainers_for(beats, _trainer_lane)
+    return tuple(_merge_kwargs(b, {"sight_trainers": sight[b.name]})
+                 if b.template == "smash" else b for b in beats)
+
+
 def _smashable_by_walk(
     held: Collection[str], maps: Collection[int], build_dir: Path,
     row_states: Callable[[int], Mapping[str, RowState]],
@@ -1974,6 +2029,15 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     beats, facing_pins, facing_elsewhere = split_facing_arms(
         beats, sides_by_row, one_shot_by_row)
 
+    # 3d. Lane-gated rocks (`beat_gen/smash_lanes.py`): a rock every approach
+    #     of which lies in a later trainer's sight lane is smashed after that
+    #     trainer, in a second smash group.
+    lane_split = split_lane_gated(beats, approach_cells=_rock_approach_cells,
+                                  lane_of=_trainer_lane)
+    beats = lane_split.beats
+    for name, gating in lane_split.gates.items():
+        logger.info("lane-gated rocks in %s wait on trainer event(s) %s", name, list(gating))
+
     # 4. Locate. Graphs are lazy: a seam or a route may touch maps outside
     #    the chapter's own list (`routing.__main__._LazyGraphs`).
     graphs, overlays = _build_graphs_and_overlays(list(binding.chapter(chapter_id).maps),
@@ -2137,6 +2201,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     for rid, writers in clearing.items():
         logger.info("clearing actor: %s waits on any of %s", rid, list(writers))
         story_enabled_by[rid] = tuple(story_enabled_by.get(rid, ())) + (writers,)
+    for rid, groups in wait_edges(lane_split, beats).items():
+        story_enabled_by[rid] = tuple(story_enabled_by.get(rid, ())) + groups
     killers = killed_before(beats, wm=wm, seed=seeds[chapter_id],
                             claimed_rows=claimed_rows)
     if released:
@@ -2195,7 +2261,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     terminal = _successor_exit_group(
         beats, floors, binding.chapter(chapter_id).maps,
         successor.maps if successor is not None else None)
-    route = solve_route(
+    route = _solve_with_lane_gates(
+        lane_split.gates, solve_route,
         chapter_from_locations(chapter_id, records), chapter_id,
         manifest_rows=all_rows, graphs=graphs, overlays=overlays,
         world=world, map_ids=_load_map_ids(build_dir),
@@ -2248,6 +2315,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
             nudge_group=b.group in nudge_groups)
         for b in beats)
     beats = tuple(_with_return_press(b) for b in beats)
+    beats = _with_sight_trainers(beats)
 
     # 7. Map continuity (`beat_gen/continuity.py`): each warp's start and
     #    end side follow from where the player is and where the next beat is.
@@ -2323,6 +2391,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
             story.order_dependent, state_elsewhere + facing_elsewhere),
         route=route,
         liveness_problems=tuple(liveness_problems),
+        lane_gates=tuple(sorted(lane_split.gates.items())),
     )
 
 

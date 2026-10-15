@@ -61,9 +61,10 @@ smash_beat(
     chapter_id='CH08',
     beat_name='m033smash_rock_smash',
     group='m033smash_rock_smash',
-    rows=('map033/ev029/p0', 'map033/ev029/p0/b0', 'map033/ev036/p0', 'map033/ev036/p0/b0', 'map033/ev038/p0', 'map033/ev038/p0/b0', 'map033/ev040/p0', 'map033/ev040/p0/b0', 'map033/ev042/p0', 'map033/ev042/p0/b0', 'map033/ev044/p0', 'map033/ev044/p0/b0'),
+    rows=('map033/ev029/p0', 'map033/ev029/p0/b0', 'map033/ev036/p0', 'map033/ev036/p0/b0', 'map033/ev038/p0', 'map033/ev038/p0/b0', 'map033/ev040/p0', 'map033/ev040/p0/b0', 'map033/ev044/p0', 'map033/ev044/p0/b0'),
     approach_prefer='east',
     capability='rock_smash',
+    sight_trainers=(9, 10, 35, 39, 41),
     teach='teach_rock_smash',
 )
 
@@ -229,7 +230,7 @@ trainer_beats(
     chapter_id='CH08',
     beat_prefix='m033e035_trainer',
     group='m033e035_trainer',
-    approach_prefer='north',
+    approach_prefer='east',
     defeat_flag='TRAINER_FLAGS_START + TRAINER_BRANDON_18',
     double=False,
     event_id=35,
@@ -248,8 +249,19 @@ generic_beat(
     beat_name='m033e035_trainer_arms',
     group='m033e035_trainer',
     rows=('map033/ev035/p0/b0',),
-    approach_prefer='north',
+    approach_prefer='east',
     skip_claimed=True,
+)
+
+smash_beat(
+    ch08,
+    chapter_id='CH08',
+    beat_name='m033smash2_rock_smash',
+    group='m033smash2_rock_smash',
+    rows=('map033/ev042/p0', 'map033/ev042/p0/b0'),
+    approach_prefer='north',
+    capability='rock_smash',
+    sight_trainers=(),
 )
 
 item_ball_beats(
@@ -404,6 +416,7 @@ smash_beat(
     rows=('map032/ev014/p0', 'map032/ev014/p0/b0', 'map032/ev015/p0', 'map032/ev015/p0/b0', 'map032/ev033/p0', 'map032/ev033/p0/b0'),
     approach_prefer='north',
     capability='rock_smash',
+    sight_trainers=(),
 )
 
 transit_beat(

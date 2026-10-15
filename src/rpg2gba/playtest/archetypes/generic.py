@@ -101,6 +101,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import os
 import re
 from collections.abc import Callable, Sequence
@@ -134,6 +135,7 @@ from rpg2gba.playtest.cells import (
     real_connection,
     local_id,
     seam_cells,
+    trainer_sight_lanes,
 )
 from rpg2gba.playtest.chapter import ChapterBuilder
 from rpg2gba.playtest.errors import ScenarioError
@@ -142,6 +144,8 @@ from rpg2gba.story_state.state import SelfSwitch, Switch, Variable
 
 if TYPE_CHECKING:  # runtime import is lazy so this module works without mGBA bindings
     from rpg2gba.playtest.emulator import Emulator
+
+logger = logging.getLogger(__name__)
 
 # Which floor kinds the generic body checks. See the module docstring for
 # why each kind is in or out (Task 7, R1).
@@ -1693,6 +1697,7 @@ def smash_beat(
     group: str | None = None,
     approach_prefer: str | None = None,
     teach: str | None = None,
+    sight_trainers: Sequence[int] = (),
     floor_lookup: FloorLookup | None = None,
 ) -> None:
     """Register one beat that clears every `capability` obstacle in `rows`
@@ -1706,7 +1711,12 @@ def smash_beat(
     member is taught the capability's HM through the bag UI unless some party
     member already knows the move. Obstacles respawn on a map reload, so this
     beat proves each one opens; nothing downstream may rely on it staying open
-    across a map change."""
+    across a map change.
+
+    `sight_trainers` are the event ids of this map's trainers a later beat
+    still fights: their sight lanes (`cells.trainer_sight_lanes`) are routed
+    around, so a smash walk never starts a battle another beat owns. Trainers
+    already beaten are not listed and not avoided."""
     resolved_lookup: FloorLookup = (
         floor_lookup if floor_lookup is not None else _default_floor_for_row)
     resolved_rows = tuple(rows)
@@ -1794,14 +1804,22 @@ def smash_beat(
             raise ScenarioError(
                 f"{beat_name}: no party member knows {move}; {capability} is not held "
                 "(no earlier beat taught it)")
-        for row_id in obstacle_ids:
+        remaining = list(obstacle_ids)
+        all_lanes = trainer_sight_lanes(map_constant)
+        lanes = {local_id(map_constant, ev): all_lanes[local_id(map_constant, ev)]
+                 for ev in sight_trainers}
+        while remaining:
+            live = {ev.local_id for ev in emu.object_events() if ev.active}
+            sight = frozenset().union(*(cells for lid_, cells in lanes.items() if lid_ in live))
+            row_id, approach, avoid = _next_reachable_obstacle(
+                emu, beat_name, map_constant, remaining, approach_prefer, sight)
+            remaining.remove(row_id)
             obstacle = obstacles[row_id]
             ox, oy = obstacle.param("x"), obstacle.param("y")
             parsed = parse_row_id(row_id)
             lid = local_id(map_constant, parsed.event_id)
-            approach = approach_to(map_constant, parsed.event_id, prefer=approach_prefer)
             facing = facing_toward(approach, (ox, oy), caller="smash_beat")
-            emu.walk_to(*approach, absorb_wild=True)
+            emu.walk_to(*approach, absorb_wild=True, avoid=avoid)
             emu.face(facing)
             emu.interact()
             emu.advance_dialog(answers=[0])
@@ -1830,6 +1848,74 @@ def smash_beat(
                     f"impassable after it was cleared ({shot})")
 
     del body
+
+
+_SIDES: tuple[str, ...] = ("north", "south", "east", "west")
+
+
+def _next_reachable_obstacle(
+    emu: "Emulator",
+    beat_name: str,
+    map_constant: str,
+    remaining: Sequence[str],
+    approach_prefer: str | None,
+    sight: frozenset[tuple[int, int]] = frozenset(),
+) -> tuple[str, tuple[int, int], frozenset[tuple[int, int]]]:
+    """The next obstacle to clear, the cell to approach it from, and the
+    tiles the walk there must avoid.
+
+    The order is chosen live, not from the rows' source order: an obstacle
+    still standing is an object the planner routes around, so a fixed order
+    can wall the player in behind the very rocks it clears later (CH08's first
+    run: Route 1's EV036/EV038 boxed the player at (15,16) on the way to
+    EV029). `sight` is the live trainers' sight lanes: an approach standing in
+    one, or reachable only through one, starts a battle another beat owns
+    (CH08's second run: EV040's east side sits in EV039's lane), so lane-free
+    choices are tried first and the lanes are dropped only when nothing
+    lane-free remains. Within a tier, the reviewed side (`approach_prefer`)
+    wins, then the shortest route, then source order. Clearing only ever opens
+    cells, so a greedy pick never strands the walk; no reachable approach at
+    all fails loud."""
+    start = emu.player_pos()
+    tried: list[str] = []
+    for avoid in ((sight, frozenset()) if sight else (frozenset(),)):
+        best: tuple[tuple[int, int, int], str, tuple[int, int]] | None = None
+        for order, row_id in enumerate(remaining):
+            event_id = parse_row_id(row_id).event_id
+            for side in _SIDES:
+                try:
+                    cell = approach_to(map_constant, event_id, prefer=side)
+                except ValueError:
+                    continue  # that side is not walkable on static terrain
+                cell = (cell[0], cell[1])
+                if cell in avoid:
+                    continue
+                if cell == start:
+                    route = [start]
+                elif avoid:
+                    route = emu._plan_route(start, cell, avoid)
+                else:
+                    route = emu._plan_route(start, cell)
+                if route is None:
+                    tried.append(f"{row_id}@{side}{cell}")
+                    continue
+                key = (0 if side == approach_prefer else 1, len(route), order)
+                if best is None or key < best[0]:
+                    best = (key, row_id, cell)
+        if best is not None:
+            key, row_id, cell = best
+            if key[0]:
+                logger.info("%s: %s approached from %s, not the reviewed side %r (not "
+                            "plannable from %s)", beat_name, row_id, cell, approach_prefer, start)
+            if sight and not avoid:
+                logger.warning("%s: no remaining obstacle is reachable outside the live "
+                               "trainer sight lanes from %s; walking to %s for %s anyway",
+                               beat_name, start, cell, row_id)
+            return row_id, cell, avoid
+    shot = emu.screenshot(f"{beat_name}_no_reachable_obstacle")
+    raise ScenarioError(
+        f"{beat_name}: from {start} no remaining obstacle has a plannable "
+        f"approach (tried {', '.join(tried) or 'none'}) ({shot})")
 
 
 # -- stair_beat -----------------------------------------------------------

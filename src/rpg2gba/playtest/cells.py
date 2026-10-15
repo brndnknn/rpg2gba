@@ -439,6 +439,55 @@ def event_is_sight_trainer(map_constant: str, event_id: int) -> bool:
     return obj.get("trainer_type", "TRAINER_TYPE_NONE") != "TRAINER_TYPE_NONE"
 
 
+_SIGHT_DELTAS: dict[str, tuple[int, int]] = {
+    "UP": (0, -1), "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0)}
+
+
+def trainer_sight_lanes(map_constant: str) -> dict[int, frozenset[Cell]]:
+    """Every compiled sight trainer's lane on `map_constant`, keyed by its
+    compiled local id: the cells a player standing on would be seen from.
+
+    A `MOVEMENT_TYPE_FACE_*` object sees only along the directions its name
+    lists (`FACE_DOWN_AND_RIGHT` -> down and right); any other movement type
+    may face anywhere, so all four are included. A walking trainer can stand
+    anywhere within its movement range of its spawn (CH08 ROM run: Route 1's
+    EV035 is `WALK_UP_AND_DOWN` with range 2 and saw the player from below its
+    spawn lane), so rays start from every walkable cell in that box, and the
+    box itself is part of the lane. Each ray runs up to the object's sight
+    range and stops at the first statically unwalkable cell (the engine's
+    sight check is blocked by collision). Over-inclusive on
+    purpose -- a lane the trainer is not facing right now still counts --
+    because callers use this to route AROUND trainers, where over-avoiding
+    costs a detour and under-avoiding starts the wrong battle (CH08 ROM run:
+    Route 1's smash beat walked into EV039's lane)."""
+    _uid, graph = _graph_for(map_constant, resolver="trainer_sight_lanes")
+    lanes: dict[int, frozenset[Cell]] = {}
+    for index, obj in enumerate(_emitted_map_json(map_constant).get("object_events") or []):
+        if obj.get("trainer_type", "TRAINER_TYPE_NONE") == "TRAINER_TYPE_NONE":
+            continue
+        reach = int(obj.get("trainer_sight_or_berry_tree_id", 0))
+        movement = str(obj.get("movement_type", ""))
+        named = [d for d in _SIGHT_DELTAS if d in movement.split("_")]
+        directions = named if movement.startswith("MOVEMENT_TYPE_FACE_") and named else list(_SIGHT_DELTAS)
+        x, y = int(obj["x"]), int(obj["y"])
+        rx, ry = int(obj.get("movement_range_x", 0)), int(obj.get("movement_range_y", 0))
+        origins = {(x, y)} | {
+            (ox, oy)
+            for ox in range(x - rx, x + rx + 1) for oy in range(y - ry, y + ry + 1)
+            if graph.is_walkable((ox, oy))}
+        cells: set[Cell] = origins - {(x, y)}
+        for ox, oy in origins:
+            for direction in directions:
+                dx, dy = _SIGHT_DELTAS[direction]
+                for step in range(1, reach + 1):
+                    cell = (ox + dx * step, oy + dy * step)
+                    if not graph.is_walkable(cell):
+                        break
+                    cells.add(cell)
+        lanes[index + 1] = frozenset(cells)
+    return lanes
+
+
 def native_berry_tree_id(map_id: int, event_id: int) -> int | None:
     """The engine berry tree id the ROM runs Uranium map `map_id`'s event
     `event_id` as (its compiled object's script is `BerryTreeScript`), else

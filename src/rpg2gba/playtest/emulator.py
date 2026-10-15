@@ -2246,9 +2246,15 @@ class Emulator:
         return self._map_graph_source(map_id)
 
     def _plan_route(self, start: tuple[int, int],
-                    goal: tuple[int, int]) -> list[tuple[int, int]] | None:
+                    goal: tuple[int, int],
+                    extra_avoid: frozenset[tuple[int, int]] = frozenset(),
+                    ) -> list[tuple[int, int]] | None:
         """Least-cost walkable route between two map-relative tiles, or
         None.
+
+        `extra_avoid` is a caller's own set of tiles to treat as blocked on
+        top of the warps and objects below (the smash template's live trainer
+        sight lanes, CH08); the goal itself is never avoided.
 
         Static walkability -- collision, staircases, one-way ledges -- comes
         from the offline `MapGraph` for the current map (`_current_map_graph`,
@@ -2328,7 +2334,7 @@ class Emulator:
                 f"walk_to{goal} targets a tile outside the loaded map grid "
                 f"({map_w}x{map_h}, map_location={self.map_location()}) — "
                 "wrong map, or the grid belongs to another one")
-        avoid = self._warp_tiles() - {goal}
+        avoid = (self._warp_tiles() | extra_avoid) - {goal}
         occupied = self._occupied_object_tiles(goal)
         # `_grass_cost_context` is undefined on the lightweight `_plan_route`
         # test fakes that predate this primitive (`test_plan_route_objects.
@@ -2558,7 +2564,9 @@ class Emulator:
 
         return "; ".join(bits)
 
-    def _route_waypoints(self, tx: int, ty: int) -> list[tuple[int, int]]:
+    def _route_waypoints(self, tx: int, ty: int,
+                         avoid: frozenset[tuple[int, int]] = frozenset(),
+                         ) -> list[tuple[int, int]]:
         """Turn a planned route into the corner tiles `_walk_greedy` can
         reach in a straight line, ending at the target.
 
@@ -2591,7 +2599,8 @@ class Emulator:
         start = self.player_pos()
         if start == (tx, ty):
             return [(tx, ty)]
-        route = self._plan_route(start, (tx, ty))
+        route = (self._plan_route(start, (tx, ty), avoid) if avoid
+                 else self._plan_route(start, (tx, ty)))
         if route is None:
             raise RoutePlanningError(self._diagnose_unroutable(start, (tx, ty)))
         corners = [
@@ -2604,7 +2613,8 @@ class Emulator:
     def walk_to(self, tx: int, ty: int, frame_budget: int = 3000,
                 max_sidesteps: int = 8, *,
                 resolve_interruptions: bool = False,
-                absorb_wild: bool = False) -> None:
+                absorb_wild: bool = False,
+                avoid: frozenset[tuple[int, int]] = frozenset()) -> None:
         """Walk to `(tx, ty)` on the current map, planning around walls.
 
         The route comes from the engine's own collision grid
@@ -2643,11 +2653,19 @@ class Emulator:
         scene, a touch page -- re-raises the original `WalkInterrupted`
         untouched, because the caller decides whether that was its own
         event. Encounters are RNG, not a fact the generator can order.
+
+        `avoid` is passed to the planner as extra blocked tiles
+        (`_plan_route`'s `extra_avoid`); only the absorb-wild path takes it.
         """
+        if avoid and (resolve_interruptions or not absorb_wild):
+            raise ValueError("walk_to: avoid= is only supported with absorb_wild=True")
         if absorb_wild and not resolve_interruptions:
             for _ in range(_MAX_ABSORBED_WILD):
                 try:
-                    _walk_to_once(self, tx, ty, frame_budget, max_sidesteps)
+                    if avoid:
+                        _walk_to_once(self, tx, ty, frame_budget, max_sidesteps, avoid=avoid)
+                    else:
+                        _walk_to_once(self, tx, ty, frame_budget, max_sidesteps)
                     return
                 except WalkInterrupted as exc:
                     if not self._absorb_wild_battle(exc.battle, exc.stopped_at):
@@ -3278,7 +3296,8 @@ class Emulator:
 
 
 def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
-                  max_sidesteps: int) -> None:
+                  max_sidesteps: int, *,
+                  avoid: frozenset[tuple[int, int]] = frozenset()) -> None:
     """The body of `Emulator.walk_to`, without interruption resolution -- a
     single attempt that either arrives, raises `WalkInterrupted`, or fails
     loud with a stuck/budget diagnosis.
@@ -3309,7 +3328,8 @@ def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
         # walk on the bare target -- B3's mechanism. If planning still fails
         # after `_MAX_REPLANS`, the diagnosis below is raised.
         try:
-            waypoints = emu._route_waypoints(tx, ty)
+            waypoints = (emu._route_waypoints(tx, ty, avoid) if avoid
+                         else emu._route_waypoints(tx, ty))
         except RoutePlanningError as exc:
             stuck, reason, waypoints = True, str(exc), ()
         for wx, wy in waypoints:

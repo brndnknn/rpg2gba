@@ -197,6 +197,8 @@ class ChapterPlan:
     order_dependent: tuple[OrderDependentKey, ...] = ()
     route: RoutePlan | None = field(default=None, compare=False)
     liveness_problems: tuple[LivenessProblem, ...] = ()
+    #: lane-gated smash beat name -> gating trainer event ids (review doc note)
+    lane_gates: tuple[tuple[str, tuple[int, ...]], ...] = ()
 
     def __post_init__(self) -> None:
         names = [b.name for b in self.beats]

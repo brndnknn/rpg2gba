@@ -160,10 +160,14 @@ def _beat_cells(beat: PlannedBeat, locate: Locator | None) -> str:
 def _order(plan: ChapterPlan, *, locate: Locator | None) -> list[str]:
     lines = ["| # | beat | map | x,y | template | rows | pick |",
              "|---|---|---|---|---|---|---|"]
+    gates = dict(plan.lane_gates)
     for i, beat in enumerate(plan.beats, start=1):
+        pick = _pick(beat)
+        if beat.name in gates:
+            pick += " (lane-gated by " + ", ".join(f"ev{e:03d}" for e in gates[beat.name]) + ")"
         lines.append(
             f"| {i} | {beat.name} | {_beat_map(beat, locate)} | {_beat_cells(beat, locate)} | "
-            f"{beat.template} | {len(beat.rows)} | {_pick(beat)} |")
+            f"{beat.template} | {len(beat.rows)} | {pick} |")
     return lines
 
 

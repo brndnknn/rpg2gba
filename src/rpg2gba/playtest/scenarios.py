@@ -536,6 +536,11 @@ def teach_hm_from_bag(emu: Emulator, item: str, move: str,
         shot = emu.screenshot("teach_hm_pocket")
         raise ScenarioError(
             f"teach_hm_from_bag: could not reach pocket {pocket_want} (at {pocket}) ({shot})")
+    # Showing a pocket re-sorts it in place (item_menu.c UpdatePocketItemList:
+    # the TM/HM and Berry pockets are SortItemsInBag(SORT_BY_INDEX)), so the
+    # slot read before the bag opened can be stale -- CH08's first run taught
+    # TM45 Attract from HM06's old slot. Re-read it from the sorted pocket.
+    pocket_want, index_want = _locate_bag_item(emu, item_id)
     for _ in range(64):
         pocket, index = _bag_position(emu)
         if index == index_want:
