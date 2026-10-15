@@ -253,6 +253,28 @@ id 17 in EV078; the two-row `seenStorageCreator` script in Map031 EV049.
     route) is decided once the model exists: a dex-seeded harness start, or converted but
     not walked until a later chapter.
 
+**Lead resolutions 2026-10-15** (items 6–11, verified against source; all closed):
+- **6. Closed, no action.** `isRockSmashSoftlocked?` returns false unless Nuzlocke **and**
+  randomizer are on (`scripts_dump/221_Extra_Scripts.rb:797`), so the self-smash arm can
+  never fire. The rock idiom already drops both arms deliberately (`goto(EventScript_RockSmash)`,
+  commented, on all 14 built rocks), and the standalone strip covers non-rock sites. No
+  `strip_list.json` entry (that file is whole-artifact strips). #50 annotated.
+- **7. Closed: no table.** `encounters_raw.json` map 33 has a null rock-smash slot (density 0),
+  the same as map 35. Native `RockSmashWildEncounter` returns FALSE on a NULL table (CH07 §7 4),
+  so Route 1's six rocks never start a battle.
+- **8. Closed: reconciled.** 10 `blocked:strength` rows over 7 events, all CH03 (map 19 is CH03's
+  cave; CH05's Passage Cave is 36/37 with 4 `blocked:surf` holds), plus 1 Bike Wheel arm
+  (derived `unreachable`). Post-Gym-5 sits inside a Strength event. The sw130 gift is already
+  `unreachable`, so "B26's re-triage" is done. Atlas §7 decision 3 and #61 corrected.
+- **9. Closed: #44 is superseded.** The generated CH01/CH03 suites cover the listed interior rows;
+  the residuals are dispositioned (sw125 twins `unreachable`, Map073 EV005 p1/p2 `NEVER_FIRES`,
+  EV001 b1 `refused:#109`). CH08 owes nothing beyond §3.5's gate-state re-walk.
+- **10. Closed: #138 is postgame only.** `Map032_EV080_Dispatch` runs Page1 only under
+  `FLAG_FINAL_EVENT` (sw125); "visible in built CH01" was inferred, not observed. Dormant here.
+- **11. Confirmed: `var101` = 5.** There are exactly four writes in the corpus: CH01's three (→1,
+  →2, →4) and CH06's Map042 EV003 `+= 1`, inside the TM-grant success branch, which is the
+  walked arm. So Bambo p5 is live at CH08 start (a full bag at the gym would leave it at 4).
+
 1. **Do the Moki rocks gate the east exit? — ANSWERED analytically 2026-10-15.**
    `rpg2gba.traversal` on Map032 (`reachable_with`, held `{}` vs `{rock_smash}`, start
    (27,43)): with nothing held, the map's east edge (x=71) is **not reached**; with

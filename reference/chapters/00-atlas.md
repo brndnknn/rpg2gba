@@ -367,6 +367,11 @@ manifest.
    re-triage to `unreachable`. No leg in the 60-chapter chain re-crosses
    Kevlar at or after CH25; it is Fly-only. The operator chose to record this
    as a countable hold rather than mint a revisit chapter now.
+   *(Corrected 2026-10-15: this breakdown mixes events with rows and double-counts. The hold
+   is 10 `blocked:strength` rows over 7 events, all in CH03 (map 31 + map 19, which is
+   CH03's cave, not CH05's Passage Cave), plus 1 Bike Wheel arm. Post-Gym-5 is inside a
+   Strength-gated event, and the sw130 row is already `unreachable`. Reconciled in
+   `PROJECT_TODO.md` #61.)*
 4. **The other 12 legs are recorded as countable debt**, each owed a re-check
    once its chapters have dispositions.
 5. **Id `CH07A`, not a renumber.** `binding.py` accepts any unique string id;
