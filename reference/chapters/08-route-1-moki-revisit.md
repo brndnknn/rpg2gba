@@ -323,6 +323,50 @@ id 17 in EV078; the two-row `seenStorageCreator` script in Map031 EV049.
 12. **Census agreement:** doc totals equal the census where compared; the census "queue"
     numbers are stale (§1) and not used.
 
+## 9. Pre-loop build: Rock Smash + #127 (design ruled 2026-10-15)
+
+Research (three read-only passes, 2026-10-15) found the ROM side complete: the rock idiom
+goes to the engine's `EventScript_RockSmash`; the badge gate (`field_move.c`
+`HasAtLeastBadges(1)`) is met; all three starters' teachable learnsets contain
+`MOVE_ROCK_SMASH`; `ITEM_HM06` is granted in CH06 (Map040 EV079). `checkfieldmove` needs a
+party member that **knows** the move. The gaps are tooling.
+
+**Operator rulings:**
+- **Teach via the real UI, once.** A generated setup beat goes Bag → HM06 → teach to the
+  starter, handling the forget-a-move menu, the first time a chapter needs the capability.
+- **"Held" is derived.** `rock_smash` is held iff the chain's badge count ≥ 1 AND
+  (`BagHas(HM06)` OR `BagHas(BOXINGGLOVES)`) in the story model. Teaching is performed by
+  the setup beat, not annotated.
+- **`pbPhoneRegisterNPC` (Bambo p5) is dropped**, documented in a comment and filed in the
+  backlog next to #141.
+- **Format changes approved:** a new floor assertion kind `smashed_obstacle`, and new
+  story-state key kinds. Manifest, dispositions and derived formats are unchanged.
+
+**Build order:**
+1. **Harness:** party-move read, dex-count read, an HM-teach scenario, and Rock Smash
+   prompt handling.
+2. **Capability model:** a "held" answer from badge count + key items (#92, #128).
+3. **Generator:**
+   - a positive `smash` beat template and its floor assertion;
+   - re-offer of rows CH01/CH02 claimed with negative obstacle beats, once the capability
+     is held;
+   - a smash beat releases its own rock wall (Moki's east exit);
+   - a teach-HM setup beat on first need;
+   - rocks respawn, so nothing may rely on one staying smashed across a map change.
+4. **Transpiler:**
+   - `pbSet(n, $Trainer.pokedexSeen/Owned)` → `ScriptGetPokedexInfo` (national counts);
+   - the `jvNextReward`/`jvGiveReward` ladder emitted natively (`giveitem`/`giveegg`);
+   - `pbPhoneRegisterNPC` is a documented no-op.
+5. **Story model:**
+   - a display-only-variable exemption (vars read only by `\v[N]`), next to
+     `graphics_vars`;
+   - `jvNextReward` becomes an unknown input; the walk takes the not-yet arm (rung 0), and
+     the higher rungs are deferred.
+
+**Known divergence, not CH08's:** Uranium also accepts Boxing Gloves in place of knowing
+the move. The engine has no item fallback, so that needs fenced C when Legen Town's chapter
+grants the gloves (filed).
+
 ---
 
 *Companion docs: `reference/chapters/01-moki.md`, `02-route-1.md`, `03-kevlar-town.md`,

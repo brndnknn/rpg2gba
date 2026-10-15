@@ -17,6 +17,23 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 143. Boxing Gloves don't stand in for Rock Smash on the ROM
+
+Uranium's Rock Smash gate is badge count ≥ 1 AND (a party member knows ROCKSMASH OR
+BOXINGGLOVES is in the bag) (`scripts_dump/103__PField_HiddenMoves.rb:385-389`). The engine's
+`checkfieldmove` (`engine/src/scrcmd.c:2319`) only checks known moves, with no item fallback.
+The story model treats the gloves as granting the capability (CH08 §9 "held" rule), so the
+model and the ROM disagree once the gloves are obtainable (Legen Town, Map167 EV28). The fix
+is a fenced `RPG2GBA`/`URANIUM` edit in the field-move check. Due in the chapter that grants
+the gloves.
+
+### 142. Bambo's `pbPhoneRegisterNPC` is dropped (no NPC phone contact)
+
+Ruled 2026-10-15 (CH08 §9): Map050 EV005 p5's `pbPhoneRegisterNPC(35,"Professor Bamb'o",50)`
+emits as a documented no-op, so the player gets no phone contact for him. A faithful port would
+add an Emerald Match Call contact (engine data). Revisit alongside #141 if phone fidelity is
+taken up.
+
 ### 141. Phone-rematch trainers drop their `RegSpeech` line and register without asking
 
 Seen by the operator on the CH07 walk (2026-10-15, Map035 EV023 Brent; CH04's Larrie behaves
