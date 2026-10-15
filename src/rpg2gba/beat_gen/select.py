@@ -13,7 +13,7 @@ from collections.abc import Collection, Mapping, Sequence
 
 from rpg2gba.beat_floor.assertion import RowFloor
 from rpg2gba.beat_gen.plan import Blocker, Elsewhere, Refusal, Selection
-from rpg2gba.chapter_manifest.schema import ManifestRow
+from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
 from rpg2gba.story_state.model import RowVerdict
 from rpg2gba.tileset_converter.metadata_wiring import blank_touch_drop
 from rpg2gba.tileset_converter.stairs import stair_event_ids
@@ -265,6 +265,19 @@ def select_rows(
             refusals.append(Refusal(row.row_id, blocker_for(reason), reason,
                                      floor.refusals[0].detail))
             continue
+
+        # Rule 7b: an arm of a page whose floor is refused inherits the refusal.
+        # The arm's floor repeats the page's `trigger`, which no arms-only beat
+        # can prove, and the arm runs only inside the page's one firing
+        # (2026-10-15, CH08: Map050 EV027 p0's dex-count text, #144).
+        if row.kind == "branch":
+            owner = parse_row_id(row.row_id).owning_page_row_id
+            owner_floor = floors.get(owner) if owner is not None else None
+            if owner_floor is not None and owner_floor.refusals:
+                reason = owner_floor.refusals[0].reason
+                refusals.append(Refusal(row.row_id, blocker_for(reason), reason,
+                                         owner_floor.refusals[0].detail))
+                continue
 
         # Rule 8: owned.
         owned.append(row)

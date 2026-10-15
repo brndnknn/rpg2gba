@@ -1,0 +1,38 @@
+{
+  "map031/ev001/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "e868f0fb10d95c62"
+  },
+  "map031/ev037/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "e868f0fb10d95c62"
+  },
+  "map033/ev013/p0": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "dfba1cd5ea05162f"
+  },
+  "map033/ev020/p0": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "2e2951ede454e802"
+  },
+  "map033/ev039/p0": {
+    "disposition": "beat:m033e039p0",
+    "affirmed_hash": "6ab4d4df014865a8",
+    "archetype_exempt": "phone-rematch trainer: the generator refuses its rematch count (story-state unmodelled_outcome:phone_battle_count), so the battle page is walked by a generic beat, not the trainer template; same shape as CH04 Larrie / CH07 Brent (operator, 2026-10-15)"
+  },
+  "map033/ev039/p1": {
+    "disposition": "cosmetic",
+    "affirmed_hash": "b70f4993e755bb3c",
+    "archetype_exempt": "phone-rematch trainer: the rematch-count retalk page is refused (story-state unmodelled_outcome:phone_battle_count); same shape as CH07 map035/ev003/p1 (operator, 2026-10-15)"
+  },
+  "map033/ev039/p2": {
+    "disposition": "beat:m033e039p2",
+    "affirmed_hash": "aab203a1b3ff459f",
+    "archetype_exempt": "phone-rematch trainer: the retalk page is walked by a generic beat because the rematch count is unmodelled (story-state unmodelled_outcome:phone_battle_count); same shape as CH04 Larrie / CH07 Brent (operator, 2026-10-15)"
+  },
+  "map033/ev053/p1": {
+    "disposition": "cosmetic",
+    "affirmed_hash": "8df9e93830710be7",
+    "archetype_exempt": "phone-rematch trainer battled in CH02: the rematch-count retalk page is refused (story-state unmodelled_outcome:phone_battle_count) and the generator records it unreachable, not CH02-owned, so the owned-row precedence does not reach it; same shape as CH07 map035/ev003/p1 (lead-proposed, operator-approved 2026-10-15)"
+  }
+}

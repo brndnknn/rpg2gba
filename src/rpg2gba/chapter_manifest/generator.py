@@ -840,6 +840,40 @@ def _generate_terrain_rows(
     return rows
 
 
+def held_capabilities_at_start(
+    chapter_id: str, *, build_dir: Path, chapters_path: Path,
+) -> frozenset[str]:
+    """Field-capability tokens the player already HOLDS when `chapter_id`
+    starts, per `capability_model.ChapterCapabilityModel.held` (operator
+    ruling 2026-10-15, "subtract held caps"): the one held computation, not a
+    second one. Empty for a chapter id not registered in
+    `reference/chapters.json` (`build_capability_model` returns None -- a
+    synthetic/test chapter has no chain to hold anything over). A malformed
+    corpus raises through (§4.5).
+
+    Imported lazily: `capability_model` imports `checker`, which imports
+    this module's siblings; keeping the edge out of module import time
+    avoids a cycle.
+    """
+    from rpg2gba.capability_sites import FIELD_CAPABILITY_ITEMS
+    from rpg2gba.chapter_manifest.capability_model import build_capability_model
+
+    # Anchored to the repo, not the CWD (same reason as `generate_chapter_
+    # manifest`'s own `ref`): the capability model's relative defaults would
+    # turn "ran from another directory" into a FileNotFoundError.
+    ref = Path(__file__).resolve().parents[3] / "reference"
+    model = build_capability_model(
+        chapter_id,
+        maps_dir=build_dir / "maps",
+        switches_json=ref / "uranium_switches.json",
+        variables_json=ref / "uranium_variables.json",
+        chapters_json=chapters_path,
+    )
+    if model is None:
+        return frozenset()
+    return frozenset(token for token in FIELD_CAPABILITY_ITEMS if model.held(token))
+
+
 def _generate_page_rows(
     map_id: int,
     map_data: dict[str, Any],
@@ -848,6 +882,7 @@ def _generate_page_rows(
     unhandled_counts: Counter[tuple[int, int, int]],
     reachability_context: ReachabilityContext | None,
     staged_map_ids: set[int],
+    held: frozenset[str] = frozenset(),
 ) -> list[ManifestRow]:
     reachability_consulted = reachability_context is not None
     rows: list[ManifestRow] = []
@@ -867,7 +902,12 @@ def _generate_page_rows(
             continue
         event_name = event.get("name")
         event_cell = (event["x"], event["y"])
-        reach_requires = _reachability_requires(reachability_context, event_cell)
+        # Held capabilities are subtracted from BOTH sources (per-head and
+        # reachability): `requires` answers "what is the player still
+        # missing", not "what does the map geometry mention".
+        reach_requires = tuple(
+            c for c in _reachability_requires(reachability_context, event_cell)
+            if c not in held)
         for page_idx, page in enumerate(event.get("pages", [])):
             condition = _build_condition(
                 page.get("condition") or {}, switch_names, var_names)
@@ -882,7 +922,8 @@ def _generate_page_rows(
             for scope in scopes:
                 extracted = _extract_page(scope.commands)
                 skeleton = _arms_skeleton(scope.nodes)
-                requires = tuple(sorted(set(extracted["requires"]) | set(reach_requires)))
+                requires = tuple(sorted(
+                    (set(extracted["requires"]) - held) | set(reach_requires)))
                 if scope.branch is None:
                     # Trunk-only hash (REDERIVATION_PLAN.md §16.3 C1b): every
                     # page-level, non-command field (condition/graphic/
@@ -993,8 +1034,14 @@ def generate_chapter_manifest(
     *,
     build_dir: Path,
     chapters_path: Path,
+    held_capabilities: frozenset[str] | None = None,
 ) -> list[ManifestRow]:
     """Generates every manifest row for `chapter_id`'s maps.
+
+    `ManifestRow.requires` omits every capability the player already holds
+    at the chapter's start (operator ruling 2026-10-15; see
+    `held_capabilities_at_start`). `held_capabilities=None` computes that
+    set from the capability model; pass an explicit set to override.
 
     Pure derivation from `build_dir` (`output/uranium-build/`) and
     `chapters_path` (`reference/chapters.json`). Never filters (Q2ii): every
@@ -1003,6 +1050,12 @@ def generate_chapter_manifest(
     """
     map_ids = _load_chapter_maps(chapter_id, chapters_path)
     maps_dir = build_dir / "maps"
+    held = (held_capabilities if held_capabilities is not None
+            else held_capabilities_at_start(
+                chapter_id, build_dir=build_dir, chapters_path=chapters_path))
+    if held:
+        logger.info("chapter manifest: %s holds %s at start -- subtracted "
+                    "from every row's requires", chapter_id, sorted(held))
 
     # Shared with the flag registry — one loader for the two sidecars (H2).
     # Anchored to the repo, not the CWD: the loader now fails loud on a missing
@@ -1033,7 +1086,7 @@ def generate_chapter_manifest(
         consulted_by_map[map_id] = reachability_context is not None
         rows.extend(_generate_page_rows(
             map_id, map_data, switch_names, var_names, unhandled_counts,
-            reachability_context, staged_map_ids))
+            reachability_context, staged_map_ids, held))
 
     rows.extend(_generate_seam_rows(set(map_ids), connections, consulted_by_map))
 

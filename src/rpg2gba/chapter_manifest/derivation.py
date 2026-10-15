@@ -29,6 +29,18 @@ all CLERICAL. Lowest, not between beat and blocked, on purpose: it only
 fills rows that derived None before, so every pre-existing sidecar entry is
 left byte-identical (no churn), and the generator's record never overrides a
 verdict the manifest itself supports.
+
+CORRECTION (operator ruling 2026-10-15, "owned rows outrank cosmetic"): the
+paragraph above is true of every generator record EXCEPT an `elsewhere:`
+record whose reason starts with `later:` (another, earlier chapter owns the
+row, e.g. `elsewhere:later: CH01`). That one record is consulted BEFORE
+rule 5's `cosmetic` and wins over it: a revisit chapter's retalk page of a
+trainer beaten earlier would otherwise derive `cosmetic` and fail the
+checker's `archetype_conformance` (a trainer page prescribes a beat;
+`elsewhere:` satisfies that, `cosmetic` does not). Narrow on purpose --
+`refused:`, `unreachable:` and every other `elsewhere:` stay lowest. This
+does change a pre-existing `cosmetic` entry to `elsewhere:later:` where
+both apply.
 """
 from __future__ import annotations
 
@@ -132,10 +144,16 @@ def derive_entry(
        the parent lookup (None -> no carve-out).
     5. `row.may_be_derived` -> `"cosmetic"`, CLERICAL. (Already implies
        `requires` is empty and no citation is owed -- rule 4 above returns
-       before this is ever reached when `requires` is non-empty.)
+       before this is ever reached when `requires` is non-empty.) EXCEPTION
+       (operator ruling 2026-10-15, "owned rows outrank cosmetic"): if the
+       generator's record for the row is an `elsewhere:` spec whose reason
+       starts with `later:` (an earlier chapter owns the row), that record
+       wins over `cosmetic` -- see the module docstring.
     6. `generator_status.spec_for(row.row_id)` -> that spec
-       (`elsewhere:`/`refused:`/`unreachable:`), CLERICAL. Reached only when
-       rules 2-5 derive nothing, so it adds entries and never changes one.
+       (`elsewhere:`/`refused:`/`unreachable:`), CLERICAL. Otherwise reached
+       only when rules 2-5 derive nothing, so it adds entries and does not
+       change one; the sole exception is the `elsewhere:later:` record
+       moved above rule 5 (2026-10-15, operator).
        Not reached for rule 1 (a human must still classify/cite) or for an
        ambiguous multi-family beat claim (rule 3 returns None outright).
     7. Otherwise None.
@@ -168,14 +186,25 @@ def derive_entry(
         return DerivedEntry(disposition=spec, derived_hash=row.content_hash,
                             proposed=not clerical)
 
+    spec = generator_status.spec_for(row.row_id) if generator_status is not None else None
+
     if row.may_be_derived:
+        if spec is not None and _is_owned_elsewhere(spec):
+            return DerivedEntry(disposition=spec, derived_hash=row.content_hash)
         return DerivedEntry(disposition="cosmetic", derived_hash=row.content_hash)
 
-    spec = generator_status.spec_for(row.row_id) if generator_status is not None else None
     if spec is not None:
         return DerivedEntry(disposition=spec, derived_hash=row.content_hash)
 
     return None
+
+
+def _is_owned_elsewhere(spec: str) -> bool:
+    """True for an `elsewhere:later:...` spec -- another, earlier chapter owns
+    the row (operator ruling 2026-10-15). Tolerates whitespace after the
+    colons (`elsewhere:later: CH01`)."""
+    head, _, rest = spec.partition(":")
+    return head == "elsewhere" and rest.lstrip().startswith("later:")
 
 
 _ARM_SUFFIX = re.compile(r"^(?P<parent>.+)/b\d+$")

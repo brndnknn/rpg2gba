@@ -207,9 +207,15 @@ def plan_beats(
         floor = floors.get(row.row_id)
         if floor is None:
             continue
-        caps = sorted({a.param("capability") for a in floor.assertions
-                       if a.kind == "blocked_obstacle"})
         smash = row.event_id is not None and (row.map_id, row.event_id) in held_obstacles
+        # A held rock's owned arm is its YES arm (`beat_gen.__main__` drops the
+        # no-capability one): the smash beat claims it with its page. It
+        # carries no `blocked_obstacle` itself -- its page's capability is its.
+        source = floor
+        if smash and row.kind == "branch":
+            source = floors.get(owning_page(row), floor)
+        caps = sorted({a.param("capability") for a in source.assertions
+                       if a.kind == "blocked_obstacle"})
         for cap in caps:
             obstacle_groups.setdefault(
                 (row.map_id, cap, "smash" if smash else "obstacle"), []).append(row.row_id)

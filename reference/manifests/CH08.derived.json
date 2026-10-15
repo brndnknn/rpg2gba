@@ -1,0 +1,2934 @@
+{
+  "map031/ev001/p0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "e868f0fb10d95c62",
+    "proposed": true
+  },
+  "map031/ev002/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "cd8ad7e175f9b723"
+  },
+  "map031/ev002/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "dd9f034e6ea44b7b"
+  },
+  "map031/ev002/p1/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map031/ev002/p1/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map031/ev003/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "6fafe0f0c75f5192"
+  },
+  "map031/ev003/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "dd9f034e6ea44b7b"
+  },
+  "map031/ev003/p1/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map031/ev003/p1/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map031/ev004/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "8353134bf1f79290"
+  },
+  "map031/ev004/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "dd9f034e6ea44b7b"
+  },
+  "map031/ev004/p1/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map031/ev004/p1/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map031/ev006/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "fb1ad2ee114864cd"
+  },
+  "map031/ev006/p0/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "3c87066e69796dcf"
+  },
+  "map031/ev006/p0/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "0c81027f0304f13c"
+  },
+  "map031/ev006/p0/b2": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "4f83f99a1b5e284b"
+  },
+  "map031/ev006/p0/b3": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "35f2ca9edf9d8e25"
+  },
+  "map031/ev006/p0/b4": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "b009d89655c8eb62"
+  },
+  "map031/ev006/p0/b5": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "c1662f6720e2498c"
+  },
+  "map031/ev007/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "334d77da82e86112"
+  },
+  "map031/ev007/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "0266f82861405a7f"
+  },
+  "map031/ev007/p1/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "eb6c76683e7cdf3f"
+  },
+  "map031/ev007/p1/b1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "c3c5987f94ce7b3a"
+  },
+  "map031/ev007/p2": {
+    "disposition": "cosmetic",
+    "derived_hash": "f2f4c27f14ca60c1"
+  },
+  "map031/ev008/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "01180b5cce31d520"
+  },
+  "map031/ev008/p0/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "fe9d8de245fa87c1"
+  },
+  "map031/ev008/p0/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "7797851a0397b018"
+  },
+  "map031/ev008/p0/b2": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "15f9f18acbf9b9ae"
+  },
+  "map031/ev008/p0/b3": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "f42d7dede3adf677"
+  },
+  "map031/ev009/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "195ad572ac82ef48"
+  },
+  "map031/ev010/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "9fd59487d9876023"
+  },
+  "map031/ev011/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map031/ev012/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "a22c72c136392d0c"
+  },
+  "map031/ev012/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map031/ev012/p1/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map031/ev012/p1/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map031/ev013/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "5945b9ca24e15a7d"
+  },
+  "map031/ev013/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map031/ev013/p1/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map031/ev013/p1/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map031/ev014/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "68761f731a1261d1"
+  },
+  "map031/ev014/p0/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "1e13041eb3ae874d"
+  },
+  "map031/ev014/p0/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "dfbd2ecdc396ee4d"
+  },
+  "map031/ev014/p0/b2": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "7a025924319cb33a"
+  },
+  "map031/ev014/p0/b3": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "26c3a31cb397cc4d"
+  },
+  "map031/ev017/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map031/ev019/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "6357c2a1e535d41c"
+  },
+  "map031/ev023/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "3f3495343b8d553c"
+  },
+  "map031/ev023/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "50a1f42b5255a708"
+  },
+  "map031/ev023/p1/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "15159e8843c858aa"
+  },
+  "map031/ev023/p1/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map031/ev028/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map031/ev029/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map031/ev030/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map031/ev031/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "d2e2e7dc7f46fcf0"
+  },
+  "map031/ev032/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map031/ev033/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map031/ev034/p0": {
+    "disposition": "elsewhere:later",
+    "derived_hash": "f4c34a7d67b8cf44"
+  },
+  "map031/ev034/p1": {
+    "disposition": "elsewhere:never_fires: archetype_kwargs: map031/ev034/p1: no warp lands on this arrival autorun's cell (13,7) on map 31 -- it never fires",
+    "derived_hash": "5539cd09d8efee80"
+  },
+  "map031/ev034/p1/b0": {
+    "disposition": "cosmetic",
+    "derived_hash": "744e1fb92a7097bb"
+  },
+  "map031/ev034/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map031/ev035/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "bccd2320a6d66b67"
+  },
+  "map031/ev035/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "50a1f42b5255a708"
+  },
+  "map031/ev035/p1/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "15159e8843c858aa"
+  },
+  "map031/ev035/p1/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map031/ev036/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "d2e2e7dc7f46fcf0"
+  },
+  "map031/ev037/p0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "e868f0fb10d95c62",
+    "proposed": true
+  },
+  "map031/ev039/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "42b3c7c4ebb8252a"
+  },
+  "map031/ev040/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "b843275edda3181c"
+  },
+  "map031/ev041/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "07c482bf97f50dd5"
+  },
+  "map031/ev041/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map031/ev041/p1/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map031/ev041/p1/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map031/ev042/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "73142c52d3bd9e42"
+  },
+  "map031/ev042/p0/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "c340e0174bf72d6e"
+  },
+  "map031/ev042/p0/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "c9d555914c8233ba"
+  },
+  "map031/ev042/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "e3273445c72667a1"
+  },
+  "map031/ev043/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "d30b4b6150954078"
+  },
+  "map031/ev044/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "5ee93ebb450c405e"
+  },
+  "map031/ev044/p0/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "d6b3e68a9d332ff4"
+  },
+  "map031/ev044/p0/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "b491a611197c08bf"
+  },
+  "map031/ev044/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "e3273445c72667a1"
+  },
+  "map031/ev045/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "5ee93ebb450c405e"
+  },
+  "map031/ev045/p0/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "d6b3e68a9d332ff4"
+  },
+  "map031/ev045/p0/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "b491a611197c08bf"
+  },
+  "map031/ev045/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "e3273445c72667a1"
+  },
+  "map031/ev046/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "d30b4b6150954078"
+  },
+  "map031/ev048/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "4eb53610d8eedf66"
+  },
+  "map031/ev048/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "08bb9083eeabb3f0"
+  },
+  "map031/ev049/p0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "5b043ea4ee64d7dd"
+  },
+  "map031/ev049/p0/b0": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "b39456f911c99e9d"
+  },
+  "map031/ev049/p0/b1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "d6596f0a55556344"
+  },
+  "map031/ev049/p0/b2": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "ddfd807049dde249"
+  },
+  "map031/ev049/p0/b3": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "caeb339b67eff286"
+  },
+  "map031/ev049/p1": {
+    "disposition": "elsewhere:later: CH03",
+    "derived_hash": "88b8302eb47b355b"
+  },
+  "map031/ev049/p2": {
+    "disposition": "beat:m031e049p2",
+    "derived_hash": "b55a7071c4bdc8ff"
+  },
+  "map031/ev050/p0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "a7e5fdd2a97c4a4c"
+  },
+  "map031/ev050/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "8d25d68759f3863c"
+  },
+  "map031/seam/N/map035": {
+    "disposition": "beat:m031seamN035",
+    "derived_hash": "125372b734127799"
+  },
+  "map031/terrain/stairs/25,16": {
+    "disposition": "beat:m031stair25x16",
+    "derived_hash": "2f62cbb973930670"
+  },
+  "map031/terrain/stairs/25,17": {
+    "disposition": "beat:m031stair25x16",
+    "derived_hash": "668a6e31387cefec"
+  },
+  "map031/terrain/stairs/25,18": {
+    "disposition": "beat:m031stair25x16",
+    "derived_hash": "6caf4821e5444e13"
+  },
+  "map032/ev001/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "94f8bd3825a70cda"
+  },
+  "map032/ev002/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "db001c61984f9c53"
+  },
+  "map032/ev002/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "95245ec7d3a5ba74"
+  },
+  "map032/ev003/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "e93cdfabc6a76e1c"
+  },
+  "map032/ev003/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "ccf123346750a770"
+  },
+  "map032/ev003/p1/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map032/ev003/p1/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map032/ev004/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "051483ae6eab6efc"
+  },
+  "map032/ev005/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "0b900d5b9af25917"
+  },
+  "map032/ev005/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map032/ev005/p1/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map032/ev005/p1/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map032/ev006/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "a5b70c3b36f14d92"
+  },
+  "map032/ev006/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map032/ev006/p1/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map032/ev006/p1/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map032/ev007/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f2d339bcdb7c944f"
+  },
+  "map032/ev007/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map032/ev007/p1/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map032/ev007/p1/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map032/ev008/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "51b52b6ad8cb0a7e"
+  },
+  "map032/ev009/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "9c1720107feef210"
+  },
+  "map032/ev009/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "eb223ccc3afb71cc"
+  },
+  "map032/ev009/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "1ee7d9dca199c628"
+  },
+  "map032/ev009/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "0f687d4ccd0461d2"
+  },
+  "map032/ev009/p1/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "eb223ccc3afb71cc"
+  },
+  "map032/ev009/p1/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "1ee7d9dca199c628"
+  },
+  "map032/ev009/p2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "47c4c01dd8eca644"
+  },
+  "map032/ev009/p2/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "eb223ccc3afb71cc"
+  },
+  "map032/ev009/p2/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "1ee7d9dca199c628"
+  },
+  "map032/ev009/p2/b10": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "59a1c0a863497392"
+  },
+  "map032/ev009/p2/b11": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "1b50c1aa8bacf60d"
+  },
+  "map032/ev009/p2/b12": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "abc9f8fc2cfb6125"
+  },
+  "map032/ev009/p2/b13": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "3e7555976e2ada81"
+  },
+  "map032/ev009/p2/b14": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f1b0b3342abbd963"
+  },
+  "map032/ev009/p2/b15": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "53873bcb8a012831"
+  },
+  "map032/ev009/p2/b16": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "6f1dd576deead40f"
+  },
+  "map032/ev009/p2/b17": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "a5e84e581ce2f46c"
+  },
+  "map032/ev009/p2/b2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "3a2e2f4bc4bea1bb"
+  },
+  "map032/ev009/p2/b3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5001cfc358f62449"
+  },
+  "map032/ev009/p2/b4": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "caa99559e3ef498d"
+  },
+  "map032/ev009/p2/b5": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "e3f609ea32e46d7c"
+  },
+  "map032/ev009/p2/b6": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "9bb011f9c5a6b2f8"
+  },
+  "map032/ev009/p2/b7": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "27f8760356dc40f4"
+  },
+  "map032/ev009/p2/b8": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "55c8838ca731f136"
+  },
+  "map032/ev009/p2/b9": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "2d19345aab668df2"
+  },
+  "map032/ev009/p3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "ecbd249e6754a096"
+  },
+  "map032/ev010/p0": {
+    "disposition": "elsewhere:later",
+    "derived_hash": "e541b1b105ad5c0c"
+  },
+  "map032/ev011/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "9d093067f0231cf2"
+  },
+  "map032/ev012/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "e6412de6c39e9277"
+  },
+  "map032/ev012/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "68d5a6cddcfa2ae0"
+  },
+  "map032/ev012/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "7797851a0397b018"
+  },
+  "map032/ev012/p0/b2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "db927b209c2f421c"
+  },
+  "map032/ev012/p0/b3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5576ce9b91be3889"
+  },
+  "map032/ev012/p0/b4": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "0e5b3c5568ce9090"
+  },
+  "map032/ev012/p0/b5": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5ab5d2c4c8f535dc"
+  },
+  "map032/ev012/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "7a41b24633df6292"
+  },
+  "map032/ev013/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "ac354602e0b1c198"
+  },
+  "map032/ev013/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "33c6031fda53e734"
+  },
+  "map032/ev013/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "7797851a0397b018"
+  },
+  "map032/ev013/p0/b2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f02b473fbd8acc65"
+  },
+  "map032/ev013/p0/b3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f42d7dede3adf677"
+  },
+  "map032/ev013/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "6de98f66b3e32208"
+  },
+  "map032/ev014/p0": {
+    "disposition": "beat:m032smash",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map032/ev014/p0/b0": {
+    "disposition": "beat:m032smash",
+    "derived_hash": "c4620541050f877a"
+  },
+  "map032/ev014/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "1218a24522ee04c1"
+  },
+  "map032/ev014/p0/b2": {
+    "disposition": "refused:story-state: unmodelled_outcome:nuzlocke/randomizer + bag HM06 + badge + party/box move-knowledge state",
+    "derived_hash": "4d6b135dcff956f3"
+  },
+  "map032/ev014/p0/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "35859e2e37bc46d5"
+  },
+  "map032/ev014/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map032/ev015/p0": {
+    "disposition": "beat:m032smash",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map032/ev015/p0/b0": {
+    "disposition": "beat:m032smash",
+    "derived_hash": "c4620541050f877a"
+  },
+  "map032/ev015/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "1218a24522ee04c1"
+  },
+  "map032/ev015/p0/b2": {
+    "disposition": "refused:story-state: unmodelled_outcome:nuzlocke/randomizer + bag HM06 + badge + party/box move-knowledge state",
+    "derived_hash": "4d6b135dcff956f3"
+  },
+  "map032/ev015/p0/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "35859e2e37bc46d5"
+  },
+  "map032/ev015/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map032/ev016/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "94d04403444e03cd"
+  },
+  "map032/ev016/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "95245ec7d3a5ba74"
+  },
+  "map032/ev017/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "0ef992c4f4c301ab"
+  },
+  "map032/ev017/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map032/ev017/p1/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map032/ev017/p1/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map032/ev018/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "7c4c8b618bb4d244"
+  },
+  "map032/ev020/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "fea47f36d6d9c598"
+  },
+  "map032/ev021/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "24355db870054dac"
+  },
+  "map032/ev022/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "3caf279fc3b7e904"
+  },
+  "map032/ev023/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "dba287c962ea039c"
+  },
+  "map032/ev023/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5539cd09d8efee80"
+  },
+  "map032/ev023/p1/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "15159e8843c858aa"
+  },
+  "map032/ev023/p1/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map032/ev024/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "24355db870054dac"
+  },
+  "map032/ev025/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "24355db870054dac"
+  },
+  "map032/ev027/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "9f245a11ab984a15"
+  },
+  "map032/ev027/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "3791abe0887815db"
+  },
+  "map032/ev027/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "c5297db3c2d164fc"
+  },
+  "map032/ev027/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "680f969f45c0b633"
+  },
+  "map032/ev027/p2": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "809264b950c1399a"
+  },
+  "map032/ev027/p2/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "243e26ca4663f812"
+  },
+  "map032/ev027/p2/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "c5297db3c2d164fc"
+  },
+  "map032/ev027/p3": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "45568db30ccb9b1a"
+  },
+  "map032/ev030/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "24355db870054dac"
+  },
+  "map032/ev031/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "24355db870054dac"
+  },
+  "map032/ev032/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "24355db870054dac"
+  },
+  "map032/ev033/p0": {
+    "disposition": "beat:m032smash",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map032/ev033/p0/b0": {
+    "disposition": "beat:m032smash",
+    "derived_hash": "c4620541050f877a"
+  },
+  "map032/ev033/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "1218a24522ee04c1"
+  },
+  "map032/ev033/p0/b2": {
+    "disposition": "refused:story-state: unmodelled_outcome:nuzlocke/randomizer + bag HM06 + badge + party/box move-knowledge state",
+    "derived_hash": "4d6b135dcff956f3"
+  },
+  "map032/ev033/p0/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "35859e2e37bc46d5"
+  },
+  "map032/ev033/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map032/ev034/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "24355db870054dac"
+  },
+  "map032/ev035/p0": {
+    "disposition": "elsewhere:later",
+    "derived_hash": "0dc0493448f2bcf5"
+  },
+  "map032/ev036/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "49c2b05410401764"
+  },
+  "map032/ev036/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "50a1f42b5255a708"
+  },
+  "map032/ev036/p1/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "15159e8843c858aa"
+  },
+  "map032/ev036/p1/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map032/ev037/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "dba287c962ea039c"
+  },
+  "map032/ev037/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5539cd09d8efee80"
+  },
+  "map032/ev037/p1/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "15159e8843c858aa"
+  },
+  "map032/ev037/p1/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map032/ev048/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "b462fb37dcedac46"
+  },
+  "map032/ev048/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "2d225fd91ba6522c"
+  },
+  "map032/ev052/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "24355db870054dac"
+  },
+  "map032/ev053/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "24355db870054dac"
+  },
+  "map032/ev054/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "24355db870054dac"
+  },
+  "map032/ev055/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "24355db870054dac"
+  },
+  "map032/ev068/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "57eeb472f30882a5"
+  },
+  "map032/ev068/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "4c6bb9ad63b8d722"
+  },
+  "map032/ev069/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4b097227bb8d6b5b"
+  },
+  "map032/ev069/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "c1329764ce2c0280"
+  },
+  "map032/ev070/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "bcf5cbfaa36ee968"
+  },
+  "map032/ev070/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "acb6186f904e523e"
+  },
+  "map032/ev071/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "98707120de34850c"
+  },
+  "map032/ev071/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "0afa6226e48fbc89"
+  },
+  "map032/ev072/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "591958663d1fa592"
+  },
+  "map032/ev072/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "92a64c346b738a25"
+  },
+  "map032/ev073/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5d00dd5c1a3559a0"
+  },
+  "map032/ev073/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "92385f7922d8b760"
+  },
+  "map032/ev074/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "9ad28dd1ff22596e"
+  },
+  "map032/ev074/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "34172767d3c74f5f"
+  },
+  "map032/ev074/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "524df61f13173001"
+  },
+  "map032/ev074/p0/b2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "21383bc13448d10e"
+  },
+  "map032/ev074/p0/b3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "48bb811786194d20"
+  },
+  "map032/ev074/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "b6b767cdd4848bfa"
+  },
+  "map032/ev074/p2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "d32b642985b7900e"
+  },
+  "map032/ev075/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "88d6377ec34994eb"
+  },
+  "map032/ev075/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map032/ev075/p2": {
+    "disposition": "cosmetic",
+    "derived_hash": "d32b642985b7900e"
+  },
+  "map032/ev076/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "11406d38b3c55b31"
+  },
+  "map032/ev076/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "95245ec7d3a5ba74"
+  },
+  "map032/ev077/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "f581c4a69534ec23"
+  },
+  "map032/ev077/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "95245ec7d3a5ba74"
+  },
+  "map032/ev078/p0": {
+    "disposition": "beat:m032e078",
+    "derived_hash": "7eeb696086415e20"
+  },
+  "map032/ev078/p0/b0": {
+    "disposition": "beat:m032e078",
+    "derived_hash": "f1d111455297a1fb"
+  },
+  "map032/ev078/p0/b1": {
+    "disposition": "beat:m032e078",
+    "derived_hash": "69f3038a8101e189"
+  },
+  "map032/ev078/p0/b2": {
+    "disposition": "beat:m032e078",
+    "derived_hash": "6a91c445fe52a06d"
+  },
+  "map032/ev078/p0/b3": {
+    "disposition": "elsewhere:unselected_arm: not taken on the walk: else of `$game_player.y<=45` from cell (27, 43) (event at (27, 42)) (ruling 19)",
+    "derived_hash": "1be107ef0250123d"
+  },
+  "map032/ev078/p1": {
+    "disposition": "beat:m032e078p1",
+    "derived_hash": "24a9df3ba394a4f5"
+  },
+  "map032/ev079/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "23b76a8913d2a6a5"
+  },
+  "map032/ev079/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map032/ev080/p0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "174b5eb059434e0f"
+  },
+  "map032/ev080/p0/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "541776a645a64a1d"
+  },
+  "map032/ev080/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "f4bb41d8f626cfc0"
+  },
+  "map032/ev080/p0/b2": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "02bb55414e9e1882"
+  },
+  "map032/ev080/p0/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "bd56562acb370042"
+  },
+  "map032/ev080/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "b6b767cdd4848bfa"
+  },
+  "map032/ev081/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "86a1be8101c6ed0b"
+  },
+  "map032/ev081/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "2a035c55154bb0d7"
+  },
+  "map032/seam/E/map059": {
+    "disposition": "elsewhere:later: CH09",
+    "derived_hash": "e004561c2ea4cbeb"
+  },
+  "map033/ev002/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "255c5f02ae1512de"
+  },
+  "map033/ev002/p0/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "a8d4aef19b39ad89"
+  },
+  "map033/ev002/p0/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "982c2df0810a97de"
+  },
+  "map033/ev002/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev003/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "255c5f02ae1512de"
+  },
+  "map033/ev003/p0/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "a8d4aef19b39ad89"
+  },
+  "map033/ev003/p0/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "982c2df0810a97de"
+  },
+  "map033/ev003/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev004/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "b3354e11683672b0"
+  },
+  "map033/ev004/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev008/p0": {
+    "disposition": "beat:m033e008",
+    "derived_hash": "102c78ebcad688ec"
+  },
+  "map033/ev008/p0/b0": {
+    "disposition": "beat:m033e008",
+    "derived_hash": "d919bbe7203d89f7"
+  },
+  "map033/ev008/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "73a2e13b70b8db48"
+  },
+  "map033/ev008/p1": {
+    "disposition": "beat:m033e008",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev009/p0": {
+    "disposition": "beat:m033e009",
+    "derived_hash": "5599e725d9aa7ad5"
+  },
+  "map033/ev009/p0/b0": {
+    "disposition": "beat:m033e009",
+    "derived_hash": "95e2b00dc640f98c"
+  },
+  "map033/ev009/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "5a70b21133cb5937"
+  },
+  "map033/ev009/p1": {
+    "disposition": "beat:m033e009",
+    "derived_hash": "b5ab7d0b59c9d5ee"
+  },
+  "map033/ev010/p0": {
+    "disposition": "beat:m033e010",
+    "derived_hash": "41e2fcc9cd6abe9b"
+  },
+  "map033/ev010/p0/b0": {
+    "disposition": "beat:m033e010",
+    "derived_hash": "13f58cb9abe2bddb"
+  },
+  "map033/ev010/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "557c7582c79572d4"
+  },
+  "map033/ev010/p1": {
+    "disposition": "beat:m033e010",
+    "derived_hash": "14ed96408d12f789"
+  },
+  "map033/ev013/p0": {
+    "disposition": "blocked:surf",
+    "derived_hash": "dfba1cd5ea05162f",
+    "proposed": true
+  },
+  "map033/ev020/p0": {
+    "disposition": "blocked:surf",
+    "derived_hash": "2e2951ede454e802",
+    "proposed": true
+  },
+  "map033/ev022/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "915ec4ba4671381d"
+  },
+  "map033/ev022/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "d25f35247b40bcee"
+  },
+  "map033/ev022/p1/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "15159e8843c858aa"
+  },
+  "map033/ev022/p1/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map033/ev023/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "42e2f08246a68f5a"
+  },
+  "map033/ev023/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "5539cd09d8efee80"
+  },
+  "map033/ev023/p1/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "15159e8843c858aa"
+  },
+  "map033/ev023/p1/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map033/ev024/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "42e2f08246a68f5a"
+  },
+  "map033/ev024/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "50a1f42b5255a708"
+  },
+  "map033/ev024/p1/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "15159e8843c858aa"
+  },
+  "map033/ev024/p1/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map033/ev025/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "aa0efa62d8c69735"
+  },
+  "map033/ev025/p0/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "12db9366187ed884"
+  },
+  "map033/ev025/p0/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "4abb86e4b1d91544"
+  },
+  "map033/ev025/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev027/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "8db80fad1a745500"
+  },
+  "map033/ev027/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "0d8898fba19fac94"
+  },
+  "map033/ev027/p1/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map033/ev027/p1/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map033/ev028/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map033/ev029/p0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map033/ev029/p0/b0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "22ca1d7986838b74"
+  },
+  "map033/ev029/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "9689b7cffeb3327b"
+  },
+  "map033/ev030/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "bf6e47ffd756a188"
+  },
+  "map033/ev030/p0/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "e1a2b519e8a4dd85"
+  },
+  "map033/ev030/p0/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "fc52d7e7076f7427"
+  },
+  "map033/ev030/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "b0ac8392867a971c"
+  },
+  "map033/ev032/p0": {
+    "disposition": "beat:m033e032",
+    "derived_hash": "8a7f0e7b5918083a"
+  },
+  "map033/ev032/p0/b0": {
+    "disposition": "beat:m033e032",
+    "derived_hash": "44d80c5fc6bde38e"
+  },
+  "map033/ev032/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "1dd4842c176bd68d"
+  },
+  "map033/ev032/p1": {
+    "disposition": "beat:m033e032",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev034/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "0396e74497ea12af"
+  },
+  "map033/ev034/p0/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "aae459dbc8bfc642"
+  },
+  "map033/ev034/p0/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "19dbacd64c310d53"
+  },
+  "map033/ev034/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "9c5d2166a40123d7"
+  },
+  "map033/ev035/p0": {
+    "disposition": "beat:m033e035",
+    "derived_hash": "125c986316a2294a"
+  },
+  "map033/ev035/p0/b0": {
+    "disposition": "beat:m033e035",
+    "derived_hash": "850aca1355a212b9"
+  },
+  "map033/ev035/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "99712def1d6bf4bb"
+  },
+  "map033/ev035/p1": {
+    "disposition": "beat:m033e035",
+    "derived_hash": "b745181a4937bafa"
+  },
+  "map033/ev036/p0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map033/ev036/p0/b0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "22ca1d7986838b74"
+  },
+  "map033/ev036/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "9689b7cffeb3327b"
+  },
+  "map033/ev037/p0": {
+    "disposition": "beat:m033e037",
+    "derived_hash": "75af4f4020b20bec"
+  },
+  "map033/ev037/p0/b0": {
+    "disposition": "beat:m033e037",
+    "derived_hash": "df9e59b053bc9b1f"
+  },
+  "map033/ev037/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "a94ef1de37c7df45"
+  },
+  "map033/ev037/p1": {
+    "disposition": "beat:m033e037",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev038/p0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map033/ev038/p0/b0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "22ca1d7986838b74"
+  },
+  "map033/ev038/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "9689b7cffeb3327b"
+  },
+  "map033/ev039/p0": {
+    "disposition": "beat:m033e039p0",
+    "derived_hash": "6ab4d4df014865a8"
+  },
+  "map033/ev039/p0/b0": {
+    "disposition": "beat:m033e039p0",
+    "derived_hash": "85e44c4f00fab8a5"
+  },
+  "map033/ev039/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "ab899c23cee8c8e3"
+  },
+  "map033/ev039/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "b70f4993e755bb3c"
+  },
+  "map033/ev039/p1/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "a95d4eb81af50458"
+  },
+  "map033/ev039/p1/b1": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "c46d850af924a861"
+  },
+  "map033/ev039/p1/b2": {
+    "disposition": "cosmetic",
+    "derived_hash": "e91d917d8267f06c"
+  },
+  "map033/ev039/p1/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "60de0b9b1006e85d"
+  },
+  "map033/ev039/p2": {
+    "disposition": "beat:m033e039p2",
+    "derived_hash": "aab203a1b3ff459f"
+  },
+  "map033/ev039/p2/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "46cc1e6a74e92aaf"
+  },
+  "map033/ev039/p2/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "c5a5bda38147360b"
+  },
+  "map033/ev040/p0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map033/ev040/p0/b0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "22ca1d7986838b74"
+  },
+  "map033/ev040/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "9689b7cffeb3327b"
+  },
+  "map033/ev041/p0": {
+    "disposition": "beat:m033e041",
+    "derived_hash": "32b68435e24151da"
+  },
+  "map033/ev041/p0/b0": {
+    "disposition": "beat:m033e041",
+    "derived_hash": "a839ec992e1c45b3"
+  },
+  "map033/ev041/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "2c8a5d181bef6f8e"
+  },
+  "map033/ev041/p1": {
+    "disposition": "beat:m033e041",
+    "derived_hash": "f244ffb65eb13b86"
+  },
+  "map033/ev042/p0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map033/ev042/p0/b0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "22ca1d7986838b74"
+  },
+  "map033/ev042/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "9689b7cffeb3327b"
+  },
+  "map033/ev044/p0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "a930201f885e155b"
+  },
+  "map033/ev044/p0/b0": {
+    "disposition": "beat:m033smash",
+    "derived_hash": "22ca1d7986838b74"
+  },
+  "map033/ev044/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "9689b7cffeb3327b"
+  },
+  "map033/ev045/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "6770c55b4394d5d7"
+  },
+  "map033/ev045/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "5539cd09d8efee80"
+  },
+  "map033/ev045/p1/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "15159e8843c858aa"
+  },
+  "map033/ev045/p1/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map033/ev046/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "a7c1fca82e1fd7cc"
+  },
+  "map033/ev046/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "5539cd09d8efee80"
+  },
+  "map033/ev046/p1/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "15159e8843c858aa"
+  },
+  "map033/ev046/p1/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map033/ev050/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "aa0efa62d8c69735"
+  },
+  "map033/ev050/p0/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "12db9366187ed884"
+  },
+  "map033/ev050/p0/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "4abb86e4b1d91544"
+  },
+  "map033/ev050/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map033/ev053/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "c08d5665ae3bd8e5"
+  },
+  "map033/ev053/p0/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "8f4b0a7831a0a7ca"
+  },
+  "map033/ev053/p0/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "fe017a87d56e45da"
+  },
+  "map033/ev053/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "8df9e93830710be7"
+  },
+  "map033/ev053/p1/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "5b822ce0c639dc48"
+  },
+  "map033/ev053/p1/b1": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "3a0dc27d8bc6f9eb"
+  },
+  "map033/ev053/p1/b2": {
+    "disposition": "cosmetic",
+    "derived_hash": "e91d917d8267f06c"
+  },
+  "map033/ev053/p1/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "26dd002a14fb13c8"
+  },
+  "map033/ev053/p2": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "ccb073b2b9d1064e"
+  },
+  "map033/ev053/p2/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "5367cf53648ffc50"
+  },
+  "map033/ev053/p2/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "414ecf945973a039"
+  },
+  "map033/ev097/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "d2946527c34d4094"
+  },
+  "map033/ev098/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "81a1e738410912f5"
+  },
+  "map033/ev099/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "1a251388ed5ff3b6"
+  },
+  "map033/ev100/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "5ee93ebb450c405e"
+  },
+  "map033/ev100/p0/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "d6b3e68a9d332ff4"
+  },
+  "map033/ev100/p0/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "b491a611197c08bf"
+  },
+  "map033/ev100/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "e3273445c72667a1"
+  },
+  "map033/ev101/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "d30b4b6150954078"
+  },
+  "map033/ev102/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "5ee93ebb450c405e"
+  },
+  "map033/ev102/p0/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "d6b3e68a9d332ff4"
+  },
+  "map033/ev102/p0/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "b491a611197c08bf"
+  },
+  "map033/ev102/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "e3273445c72667a1"
+  },
+  "map033/ev103/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "ab23305b095877bb"
+  },
+  "map033/ev103/p0/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "6ec0466e7401f4f5"
+  },
+  "map033/ev103/p0/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "d2b0d04f4516ceea"
+  },
+  "map033/ev103/p1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "ae1add3b7d6e1007"
+  },
+  "map033/ev141/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "3c896bd547f9aebe"
+  },
+  "map033/ev143/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "abfcd9fc28f137f6"
+  },
+  "map033/ev143/p0/b0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "011c27825e2cc2a0"
+  },
+  "map033/ev143/p0/b1": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "769ab8fd33ebedc8"
+  },
+  "map033/ev144/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "abfcd9fc28f137f6"
+  },
+  "map033/ev144/p0/b0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "011c27825e2cc2a0"
+  },
+  "map033/ev144/p0/b1": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "769ab8fd33ebedc8"
+  },
+  "map033/ev145/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "abfcd9fc28f137f6"
+  },
+  "map033/ev145/p0/b0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "011c27825e2cc2a0"
+  },
+  "map033/ev145/p0/b1": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "769ab8fd33ebedc8"
+  },
+  "map033/ev146/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "abfcd9fc28f137f6"
+  },
+  "map033/ev146/p0/b0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "011c27825e2cc2a0"
+  },
+  "map033/ev146/p0/b1": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "769ab8fd33ebedc8"
+  },
+  "map033/ev147/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "abfcd9fc28f137f6"
+  },
+  "map033/ev147/p0/b0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "011c27825e2cc2a0"
+  },
+  "map033/ev147/p0/b1": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",
+    "derived_hash": "769ab8fd33ebedc8"
+  },
+  "map033/terrain/stairs/52,41": {
+    "disposition": "beat:m033stair52x41",
+    "derived_hash": "46947329f720a5c1"
+  },
+  "map033/terrain/stairs/52,42": {
+    "disposition": "beat:m033stair52x41",
+    "derived_hash": "a0e3e63bfbbc12c6"
+  },
+  "map033/terrain/stairs/53,43": {
+    "disposition": "beat:m033stair52x41",
+    "derived_hash": "aeffa36189f99e06"
+  },
+  "map033/terrain/stairs/53,44": {
+    "disposition": "beat:m033stair52x41",
+    "derived_hash": "9ca7f6d5f80331e3"
+  },
+  "map033/terrain/stairs/57,10": {
+    "disposition": "beat:m033stair57x9",
+    "derived_hash": "870fd6cb8cacbaf7"
+  },
+  "map033/terrain/stairs/57,11": {
+    "disposition": "beat:m033stair57x9",
+    "derived_hash": "3c255189ddf2e314"
+  },
+  "map033/terrain/stairs/57,9": {
+    "disposition": "beat:m033stair57x9",
+    "derived_hash": "9ee66c3cc3ecbd96"
+  },
+  "map048/ev001/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "b1a558ead287cc64"
+  },
+  "map048/ev001/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map048/ev002/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "564a925bcb714827"
+  },
+  "map048/ev003/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "38d9cbae6473d652"
+  },
+  "map048/ev004/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4d0c4905d63fb50f"
+  },
+  "map048/ev005/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "b5b861fced586b74"
+  },
+  "map048/ev005/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map048/ev006/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "6c2a5bdcca7ac42d"
+  },
+  "map048/ev007/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "cbce31a6b42e4c01"
+  },
+  "map048/ev008/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "cbce31a6b42e4c01"
+  },
+  "map048/ev009/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "6c2a5bdcca7ac42d"
+  },
+  "map048/ev010/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "433f94711295c634"
+  },
+  "map048/ev011/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "48a09f04e5d47c8b"
+  },
+  "map048/ev011/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "87698fe1b3a236d4"
+  },
+  "map048/ev011/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5b4ff3a414db4ff4"
+  },
+  "map048/ev011/p0/b2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "0f101ac633225204"
+  },
+  "map048/ev011/p0/b3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "d4352e51b1e0e139"
+  },
+  "map048/ev011/p0/b4": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "1e7eff9c79b4a936"
+  },
+  "map048/ev011/p0/b5": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "8cc9b973403de4ae"
+  },
+  "map048/ev012/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "433f94711295c634"
+  },
+  "map048/ev013/p0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "5a207d7ff53b3267"
+  },
+  "map049/ev001/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f16862b33d3bc897"
+  },
+  "map049/ev001/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "423ee60258b3d583"
+  },
+  "map049/ev001/p2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "acd73294ccc40fa2"
+  },
+  "map049/ev001/p2/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:party_has_species",
+    "derived_hash": "86c1cde786d83f16"
+  },
+  "map049/ev001/p2/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "7bcc1b640a33e908"
+  },
+  "map049/ev001/p2/b2": {
+    "disposition": "refused:story-state: unmodelled_outcome:party_has_species",
+    "derived_hash": "4c44289a67d79570"
+  },
+  "map049/ev001/p2/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "1f6b759f51594f63"
+  },
+  "map049/ev001/p2/b4": {
+    "disposition": "refused:story-state: unmodelled_outcome:party_has_species",
+    "derived_hash": "19d9d0180fd36602"
+  },
+  "map049/ev001/p2/b5": {
+    "disposition": "cosmetic",
+    "derived_hash": "250a432de94764da"
+  },
+  "map049/ev001/p3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "905a584b6be4b9fd"
+  },
+  "map049/ev001/p3/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "fca6162053f7a94a"
+  },
+  "map049/ev001/p3/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "6f60c9c3c5f6a94a"
+  },
+  "map049/ev001/p3/b10": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "98b212e5d007cc62"
+  },
+  "map049/ev001/p3/b11": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4077d9da3d23e105"
+  },
+  "map049/ev001/p3/b12": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "1c02f0f8a137764a"
+  },
+  "map049/ev001/p3/b13": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f0a9d6e910970d20"
+  },
+  "map049/ev001/p3/b14": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "97a12334531e8d2f"
+  },
+  "map049/ev001/p3/b15": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "7fe68f66fe4e9719"
+  },
+  "map049/ev001/p3/b16": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "d6ff46883abee93f"
+  },
+  "map049/ev001/p3/b17": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "394db15de082c88c"
+  },
+  "map049/ev001/p3/b18": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "84a05ac1abd039c7"
+  },
+  "map049/ev001/p3/b19": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "01d11553f58f4e87"
+  },
+  "map049/ev001/p3/b2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "c0623fb2450f7b2b"
+  },
+  "map049/ev001/p3/b20": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "30b47a8e785d94a6"
+  },
+  "map049/ev001/p3/b21": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "a164257e5c948106"
+  },
+  "map049/ev001/p3/b22": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "b5965a4404cb4d62"
+  },
+  "map049/ev001/p3/b23": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "40614f03a43b99bd"
+  },
+  "map049/ev001/p3/b24": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "150482cb1fefc34a"
+  },
+  "map049/ev001/p3/b25": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "d0bd576a5e9947e3"
+  },
+  "map049/ev001/p3/b3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "c6d23262e758fac6"
+  },
+  "map049/ev001/p3/b4": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "e0e98614a8665e67"
+  },
+  "map049/ev001/p3/b5": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "88694403b371e140"
+  },
+  "map049/ev001/p3/b6": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5b1fe6a482b6a4fa"
+  },
+  "map049/ev001/p3/b7": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "bf306d656b5bbc89"
+  },
+  "map049/ev001/p3/b8": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "ffe88c4c670e4f25"
+  },
+  "map049/ev001/p3/b9": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f89bdab62b6512cc"
+  },
+  "map049/ev001/p4": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "7f69fb835920055b"
+  },
+  "map049/ev002/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "43abd0900270dcfd"
+  },
+  "map049/ev002/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "b31e08a427aa41a1"
+  },
+  "map049/ev002/p2": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "2b61ac3e534d52f9"
+  },
+  "map049/ev002/p3": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "3adc20d15e446d7f"
+  },
+  "map049/ev003/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "903f55005984bcd1"
+  },
+  "map049/ev004/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "a3d834f51c339752"
+  },
+  "map049/ev005/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "a3d834f51c339752"
+  },
+  "map049/ev006/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "241b5b4bcfc37fc1"
+  },
+  "map049/ev007/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f54233e704f8b62d"
+  },
+  "map049/ev008/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f54233e704f8b62d"
+  },
+  "map049/ev009/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "bddd172f40c26830"
+  },
+  "map049/ev010/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "1e51685a471a3be1"
+  },
+  "map049/ev011/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "1b36cedbac7ae716"
+  },
+  "map049/ev012/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "e8eefe40d23b4741"
+  },
+  "map049/ev013/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "20138b80099e74dd"
+  },
+  "map049/ev014/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "20138b80099e74dd"
+  },
+  "map049/ev015/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "d991c9d2c852c10d"
+  },
+  "map049/ev016/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "a68be8083b1b4949"
+  },
+  "map049/ev017/p0": {
+    "disposition": "elsewhere:stripped: strip_list.json map_events (Lucille)",
+    "derived_hash": "e8a83d6cce66361d"
+  },
+  "map049/ev018/p0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "fe0b5f5533c02a79"
+  },
+  "map049/ev018/p0/b0": {
+    "disposition": "cosmetic",
+    "derived_hash": "ea9425ee867bded6"
+  },
+  "map049/ev018/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "89bef42d17048880"
+  },
+  "map049/ev018/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map049/ev019/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "1769732ce271e65e"
+  },
+  "map049/ev019/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map049/ev020/p0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "33c86bf6f00ef1b6"
+  },
+  "map049/ev020/p0/b0": {
+    "disposition": "refused:story-state: unclassified_condition",
+    "derived_hash": "85143620c70d0d21"
+  },
+  "map049/ev020/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "e0be7bd1fab0e97f"
+  },
+  "map049/ev020/p0/b2": {
+    "disposition": "refused:C8: unparsed_state_write",
+    "derived_hash": "c66bae62a0df65a2"
+  },
+  "map049/ev020/p0/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "1bd86f442f0ed2bc"
+  },
+  "map049/ev020/p0/b4": {
+    "disposition": "refused:C8: unparsed_state_write",
+    "derived_hash": "bda24ba9302980a9"
+  },
+  "map049/ev020/p0/b5": {
+    "disposition": "cosmetic",
+    "derived_hash": "6ed273c15518d4f7"
+  },
+  "map049/ev020/p0/b6": {
+    "disposition": "refused:C8: unparsed_state_write",
+    "derived_hash": "ad307d78e4e082ab"
+  },
+  "map049/ev020/p0/b7": {
+    "disposition": "cosmetic",
+    "derived_hash": "9707c083555d5497"
+  },
+  "map049/ev020/p0/b8": {
+    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "derived_hash": "89aa4c1dbb4a8506"
+  },
+  "map049/ev020/p0/b9": {
+    "disposition": "cosmetic",
+    "derived_hash": "870a7bfc59c7a5ec"
+  },
+  "map049/ev021/p0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "9b9b73f2d8f13144"
+  },
+  "map049/ev021/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "60f2e952f9bc7332"
+  },
+  "map049/ev022/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5a207d7ff53b3267"
+  },
+  "map050/ev001/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "8ad04a997e71a346"
+  },
+  "map050/ev001/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "0c8fec614eb33b60"
+  },
+  "map050/ev002/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "03486816fba5eae8"
+  },
+  "map050/ev002/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "d32b642985b7900e"
+  },
+  "map050/ev003/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "76272e2ff01e5065"
+  },
+  "map050/ev004/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "bd3b1ae98065a575"
+  },
+  "map050/ev004/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "85dddba80bbe4cbb"
+  },
+  "map050/ev004/p2": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "21e3b0219d3a8b09"
+  },
+  "map050/ev004/p2/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:$PokemonGlobal custom-ruleset flags",
+    "derived_hash": "e5584058ec2385e3"
+  },
+  "map050/ev004/p2/b1": {
+    "disposition": "refused:story-state: unmodelled_outcome:$PokemonGlobal custom-ruleset flags",
+    "derived_hash": "a88213da6f677bd4"
+  },
+  "map050/ev004/p2/b2": {
+    "disposition": "cosmetic",
+    "derived_hash": "b414759e9c6bb26d"
+  },
+  "map050/ev004/p2/b3": {
+    "disposition": "refused:story-state: unmodelled_outcome:$PokemonGlobal custom-ruleset flags",
+    "derived_hash": "c7f8260b8084cc01"
+  },
+  "map050/ev004/p2/b4": {
+    "disposition": "refused:story-state: unmodelled_outcome:$PokemonGlobal custom-ruleset flags",
+    "derived_hash": "885c2ea211247ef3"
+  },
+  "map050/ev004/p2/b5": {
+    "disposition": "refused:story-state: unmodelled_outcome:$PokemonGlobal custom-ruleset flags",
+    "derived_hash": "dda4bf6d9c6fdb2b"
+  },
+  "map050/ev004/p2/b6": {
+    "disposition": "refused:story-state: unmodelled_outcome:$PokemonGlobal custom-ruleset flags",
+    "derived_hash": "176e0d016929f2c7"
+  },
+  "map050/ev004/p2/b7": {
+    "disposition": "refused:story-state: unmodelled_outcome:$PokemonGlobal custom-ruleset flags",
+    "derived_hash": "7c52d2ac1b9beaaa"
+  },
+  "map050/ev004/p2/b8": {
+    "disposition": "refused:story-state: unmodelled_outcome:$PokemonGlobal custom-ruleset flags",
+    "derived_hash": "9ef605b01cdbebcf"
+  },
+  "map050/ev005/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "8dd2c11ff149ce0e"
+  },
+  "map050/ev005/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "d54e40d71e43af6d"
+  },
+  "map050/ev005/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "055bd5e4de147126"
+  },
+  "map050/ev005/p0/b2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "b6d1a70115177d7f"
+  },
+  "map050/ev005/p0/b3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "d01b0c6700452939"
+  },
+  "map050/ev005/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "b4736fbb321f6982"
+  },
+  "map050/ev005/p2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "e11534beb8024fe5"
+  },
+  "map050/ev005/p2/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4b2e0c9fdaa463e9"
+  },
+  "map050/ev005/p2/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "941e92398e7325b0"
+  },
+  "map050/ev005/p2/b2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "c3669d7c0c70ac97"
+  },
+  "map050/ev005/p2/b3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "e1604c26f58ceafe"
+  },
+  "map050/ev005/p2/b4": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "b87f10375356f46d"
+  },
+  "map050/ev005/p2/b5": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "043ce3f4d66defc1"
+  },
+  "map050/ev005/p3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "d32b642985b7900e"
+  },
+  "map050/ev005/p4": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "73eb21980251f045"
+  },
+  "map050/ev005/p5": {
+    "disposition": "beat:m050e005p5",
+    "derived_hash": "74490290038dbc23"
+  },
+  "map050/ev005/p5/b0": {
+    "disposition": "refused:#109: text_unnormalizable -- code 101 @list[10]: unrecognized control code in fragments [\"Hmmm\\\\wt[8].\\\\wt[8].\\\\wt[8].\\\\wt[15]So, you've seen \\\\r\\\\v[2]\\\\c[0] Pokémon\\\\nand caught \\\\r\\\\v[3]\\\\c[0] of them...\"]",
+    "derived_hash": "7bf52fb1cc380310"
+  },
+  "map050/ev005/p5/b1": {
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "050f2e58ec3df08e"
+  },
+  "map050/ev005/p5/b10": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "06b5b7260d4db990"
+  },
+  "map050/ev005/p5/b11": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "7acb7479a75e3495"
+  },
+  "map050/ev005/p5/b12": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "b104d6f6692ea73f"
+  },
+  "map050/ev005/p5/b13": {
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "44a97422e808e15c"
+  },
+  "map050/ev005/p5/b14": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "de0fc5299192ef48"
+  },
+  "map050/ev005/p5/b15": {
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "92c9bbb53e2a4bcb"
+  },
+  "map050/ev005/p5/b16": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "cfa64a3c6df3e338"
+  },
+  "map050/ev005/p5/b17": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "183f7115d71bd318"
+  },
+  "map050/ev005/p5/b18": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "af08d41400922ebe"
+  },
+  "map050/ev005/p5/b19": {
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "1cd7c637fececb0a"
+  },
+  "map050/ev005/p5/b2": {
+    "disposition": "refused:#109: text_unnormalizable -- code 101 @list[17]: unrecognized control code in fragments [\"When you catch \\\\r\\\\v[1]\\\\c[0] Pokémon, come speak to me and I'll give you a special reward!\"]",
+    "derived_hash": "82090a557b711258"
+  },
+  "map050/ev005/p5/b20": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "44db6f00cbd719bf"
+  },
+  "map050/ev005/p5/b21": {
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "540d9b40584ea524"
+  },
+  "map050/ev005/p5/b22": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "9d725c2c5548c66a"
+  },
+  "map050/ev005/p5/b23": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "23cd4d34f7aa4ed7"
+  },
+  "map050/ev005/p5/b24": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "7d3b7f588cf8dbc9"
+  },
+  "map050/ev005/p5/b25": {
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "f8d31e7fddff56ca"
+  },
+  "map050/ev005/p5/b26": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "55bd976589e14abc"
+  },
+  "map050/ev005/p5/b27": {
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "6b85629aa006f694"
+  },
+  "map050/ev005/p5/b28": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "d4f5d759829ea8fb"
+  },
+  "map050/ev005/p5/b29": {
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "336d3b54f8943dbc"
+  },
+  "map050/ev005/p5/b3": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "6b7c4b268ca2f341"
+  },
+  "map050/ev005/p5/b30": {
+    "disposition": "refused:#109: text_unnormalizable -- code 101 @list[141]: unrecognized control code in fragments [\"When you catch \\\\r\\\\v[1]\\\\c[0] Pokémon, come speak to me and I'll give you a special reward!\"]",
+    "derived_hash": "18c0b6a3968e1cbd"
+  },
+  "map050/ev005/p5/b31": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "aa49eea0956b64de"
+  },
+  "map050/ev005/p5/b32": {
+    "disposition": "elsewhere:unselected_arm: not taken on the walk: it sits inside map050/ev005/p5/b30, which the walk doesn't take (ruling 19)",
+    "derived_hash": "3ca2effe94750ced"
+  },
+  "map050/ev005/p5/b33": {
+    "disposition": "beat:m050e005p5",
+    "derived_hash": "ac45cf602bc32c14"
+  },
+  "map050/ev005/p5/b4": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "1c701e6e3bf79b31"
+  },
+  "map050/ev005/p5/b5": {
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "c2e16bc965d75fcc"
+  },
+  "map050/ev005/p5/b6": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "6d9e858f0eac4075"
+  },
+  "map050/ev005/p5/b7": {
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "37651684b9d3f14e"
+  },
+  "map050/ev005/p5/b8": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "e12619390143c211"
+  },
+  "map050/ev005/p5/b9": {
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "f62a0e4b5c19aa30"
+  },
+  "map050/ev005/p6": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "d4ec06cb5dda8994"
+  },
+  "map050/ev005/p6/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "1e1f62c9682cb62a"
+  },
+  "map050/ev005/p6/b1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "a894b8ff39e7c2c3"
+  },
+  "map050/ev005/p7": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "88b5236bc11863a2"
+  },
+  "map050/ev006/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "cbce31a6b42e4c01"
+  },
+  "map050/ev007/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "cbce31a6b42e4c01"
+  },
+  "map050/ev008/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "76272e2ff01e5065"
+  },
+  "map050/ev009/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "344b7ffc13cc462f"
+  },
+  "map050/ev009/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "cb3cc47d7c84f9af"
+  },
+  "map050/ev009/p1/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "7bcaf5c0fa0951e0"
+  },
+  "map050/ev009/p1/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "0b3c21176c926ed5"
+  },
+  "map050/ev010/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "fc28e550b85e5a38"
+  },
+  "map050/ev011/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "fc28e550b85e5a38"
+  },
+  "map050/ev012/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "fc28e550b85e5a38"
+  },
+  "map050/ev013/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "76272e2ff01e5065"
+  },
+  "map050/ev014/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f07b965f32b210a4"
+  },
+  "map050/ev015/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "fe6b920035e3d936"
+  },
+  "map050/ev016/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "fc28e550b85e5a38"
+  },
+  "map050/ev017/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "2f3cf83eb2d92fc7"
+  },
+  "map050/ev018/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "2f3cf83eb2d92fc7"
+  },
+  "map050/ev019/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "cd82405f611bd33f"
+  },
+  "map050/ev019/p0/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "22af18dbdec9602a"
+  },
+  "map050/ev019/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "92b9cd61541286eb"
+  },
+  "map050/ev019/p0/b2": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "eea79cb112c8fa5f"
+  },
+  "map050/ev019/p0/b3": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "d13b468df5c56fb9"
+  },
+  "map050/ev019/p0/b4": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "f37dd80714941cca"
+  },
+  "map050/ev019/p0/b5": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "66bf4d0bc5d42419"
+  },
+  "map050/ev019/p0/b6": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "111696ef08a259ad"
+  },
+  "map050/ev019/p0/b7": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "3d50b8de92ed4c02"
+  },
+  "map050/ev019/p0/b8": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "7f6e973a3ac86c13"
+  },
+  "map050/ev019/p0/b9": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "83b72576e79ea402"
+  },
+  "map050/ev019/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "84588dfa7478a6b8"
+  },
+  "map050/ev019/p2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "e643061340bd7fe5"
+  },
+  "map050/ev020/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "e3eaeb462463e71a"
+  },
+  "map050/ev020/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "d32b642985b7900e"
+  },
+  "map050/ev021/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "344b7ffc13cc462f"
+  },
+  "map050/ev021/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "cb3cc47d7c84f9af"
+  },
+  "map050/ev021/p1/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "7bcaf5c0fa0951e0"
+  },
+  "map050/ev021/p1/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "0b3c21176c926ed5"
+  },
+  "map050/ev022/p0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "b57a60611615d9d5"
+  },
+  "map050/ev022/p0/b0": {
+    "disposition": "cosmetic",
+    "derived_hash": "7b54e5a861ac0072"
+  },
+  "map050/ev022/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "705d4d65dfe9ed0d"
+  },
+  "map050/ev022/p0/b2": {
+    "disposition": "cosmetic",
+    "derived_hash": "ab55e9fb5f9eae50"
+  },
+  "map050/ev022/p0/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "eb75ed69b9ae32a6"
+  },
+  "map050/ev022/p0/b4": {
+    "disposition": "cosmetic",
+    "derived_hash": "cf942e45fa386a16"
+  },
+  "map050/ev022/p0/b5": {
+    "disposition": "cosmetic",
+    "derived_hash": "597dc3a43865a6ea"
+  },
+  "map050/ev022/p0/b6": {
+    "disposition": "cosmetic",
+    "derived_hash": "204c73fe7f8e442e"
+  },
+  "map050/ev022/p0/b7": {
+    "disposition": "cosmetic",
+    "derived_hash": "ab6800c91472a58c"
+  },
+  "map050/ev022/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map050/ev023/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "07dabff69eb5c582"
+  },
+  "map050/ev024/p0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "9d04047914ab8261"
+  },
+  "map050/ev024/p0/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "b28da68dd1fcafa0"
+  },
+  "map050/ev024/p0/b1": {
+    "disposition": "refused:C8: unparsed_state_write",
+    "derived_hash": "1a9bc654f919078e"
+  },
+  "map050/ev024/p0/b2": {
+    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "derived_hash": "037a676b56cd195a"
+  },
+  "map050/ev024/p0/b3": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "291c96767231674b"
+  },
+  "map050/ev025/p0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "9f539fbd26f57318"
+  },
+  "map050/ev026/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "b35fbfcac95acace"
+  },
+  "map050/ev026/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "01f2a42edfd25131"
+  },
+  "map050/ev026/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "8cc5d065a226330f"
+  },
+  "map050/ev027/p0": {
+    "disposition": "refused:#109: text_unnormalizable -- code 101 @list[12]: unrecognized control code in fragments [\"Hmmm\\\\wt[8].\\\\wt[8].\\\\wt[8].\\\\wt[15]So, you've seen \\\\r\\\\v[2]\\\\c[0] Pokémon\\\\nand caught \\\\r\\\\v[3]\\\\c[0] of them...\"]",
+    "derived_hash": "a2605f58e2356f58"
+  },
+  "map050/ev027/p0/b0": {
+    "disposition": "cosmetic",
+    "derived_hash": "163d5f46e562142d"
+  },
+  "map050/ev027/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "bcbf906f7547a77d"
+  },
+  "map050/ev027/p1": {
+    "disposition": "beat:m050e027p1",
+    "derived_hash": "c0bfeec11374bc17"
+  },
+  "map050/ev027/p2": {
+    "disposition": "cosmetic",
+    "derived_hash": "57b8a39dc24af0b3"
+  },
+  "map064/ev001/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5d676868aa16ecf0"
+  },
+  "map064/ev001/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4dc28d9d8909a26a"
+  },
+  "map064/ev001/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "b907d048bc36580c"
+  },
+  "map064/ev001/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "92aeb2c05a0254f8"
+  },
+  "map064/ev001/p1/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "721e69912cb919d2"
+  },
+  "map064/ev001/p1/b1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "63ad9970d227a232"
+  },
+  "map064/ev002/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "bcd7c6543919eb03"
+  },
+  "map064/ev002/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4f56a337e3e54f40"
+  },
+  "map064/ev002/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "58cd9e3ce4b3b864"
+  },
+  "map064/ev002/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "b770eebc63a2af12"
+  },
+  "map064/ev002/p1/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "a3321301d6ae3004"
+  },
+  "map064/ev002/p1/b1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "e389defed6f8ace5"
+  },
+  "map064/ev003/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "7b92396e9807f076"
+  },
+  "map064/ev004/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "81a1e738410912f5"
+  },
+  "map065/ev001/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "288fd0274aa74f7f"
+  },
+  "map065/ev001/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "153efc1c3ca28c96"
+  },
+  "map065/ev001/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f734d1152187192a"
+  },
+  "map065/ev001/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "9bdb87cae4c161e6"
+  },
+  "map065/ev001/p1/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "d1bad23f353d1de5"
+  },
+  "map065/ev001/p1/b1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "0d1e29e83852017f"
+  },
+  "map065/ev002/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "04a070b6c56ff8cf"
+  },
+  "map065/ev002/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "0e1bfcf5de51681f"
+  },
+  "map065/ev002/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "15e340224640fd15"
+  },
+  "map065/ev002/p1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "ee00c2771ec65bd8"
+  },
+  "map065/ev002/p1/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "fda5269331f97733"
+  },
+  "map065/ev002/p1/b1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "1e81e188d0a6208d"
+  },
+  "map065/ev003/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "4b69dd45bfc667f1"
+  },
+  "map081/ev001/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "dcb4a76ce2a8c69e"
+  },
+  "map081/ev001/p0/b0": {
+    "disposition": "beat:m081e001p0",
+    "derived_hash": "d6f7f1250a86ba95"
+  },
+  "map081/ev001/p0/b1": {
+    "disposition": "refused:story-state: unmodelled_outcome:bag_contents",
+    "derived_hash": "502d30c576218b6d"
+  },
+  "map081/ev001/p0/b2": {
+    "disposition": "refused:story-state: unmodelled_outcome:bag_contents",
+    "derived_hash": "0e67c8e595bba033"
+  },
+  "map081/ev001/p0/b3": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "6a2921fd06a78144"
+  },
+  "map081/ev001/p1": {
+    "disposition": "beat:m081e001p1",
+    "derived_hash": "c56b4b0e4ddf1c06"
+  },
+  "map081/ev002/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "c2f1288b0620f558"
+  },
+  "map081/ev002/p0/b0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "d4e4c86e6d3c385a"
+  },
+  "map081/ev002/p0/b1": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "dee3af7dd64f3da5"
+  },
+  "map081/ev003/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "4c97f242e207c065"
+  },
+  "map081/ev004/p0": {
+    "disposition": "elsewhere:later: CH02",
+    "derived_hash": "e111d0c06f99f00d"
+  },
+  "map089/ev002/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "1330a330004f9028"
+  },
+  "map089/ev003/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "cbce31a6b42e4c01"
+  },
+  "map089/ev004/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5e96513d909dd001"
+  },
+  "map089/ev004/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "d8c3e211ab964298"
+  },
+  "map089/ev004/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "3837e3243dcc93da"
+  },
+  "map089/ev005/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "cbce31a6b42e4c01"
+  },
+  "map089/ev006/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "53ecd0e1533d9ba4"
+  },
+  "map089/ev007/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "67b33772e4fc8fdb"
+  },
+  "map172/ev001/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f3d4e9d41e7dcc55"
+  },
+  "map172/ev001/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "f24588ef78c48019"
+  },
+  "map172/ev001/p2": {
+    "disposition": "beat:m172e001p2",
+    "derived_hash": "e47789dc2130ceb0"
+  },
+  "map172/ev001/p3": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "d0e6119d9eb5376e"
+  },
+  "map172/ev001/p3/b0": {
+    "disposition": "refused:story-state: unclassified_condition",
+    "derived_hash": "85143620c70d0d21"
+  },
+  "map172/ev001/p3/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "e0be7bd1fab0e97f"
+  },
+  "map172/ev001/p3/b2": {
+    "disposition": "refused:C8: unparsed_state_write",
+    "derived_hash": "e536824a8089f227"
+  },
+  "map172/ev001/p3/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "1bd86f442f0ed2bc"
+  },
+  "map172/ev001/p3/b4": {
+    "disposition": "refused:C8: unparsed_state_write",
+    "derived_hash": "30e20280fde46f51"
+  },
+  "map172/ev001/p3/b5": {
+    "disposition": "cosmetic",
+    "derived_hash": "6ed273c15518d4f7"
+  },
+  "map172/ev001/p3/b6": {
+    "disposition": "refused:C8: unparsed_state_write",
+    "derived_hash": "547d4e1c73425d55"
+  },
+  "map172/ev001/p3/b7": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f1e6ec624206988"
+  },
+  "map172/ev001/p3/b8": {
+    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "derived_hash": "21b0675c021f87d2"
+  },
+  "map172/ev001/p3/b9": {
+    "disposition": "cosmetic",
+    "derived_hash": "6b766e16d33a8a25"
+  },
+  "map172/ev002/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "9993151c16915466"
+  },
+  "map172/ev003/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "c9e424c5d1b0fda1"
+  },
+  "map172/ev004/p0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "a40a381c635b17d9"
+  },
+  "map172/ev004/p0/b0": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "7642657152a6045f"
+  },
+  "map172/ev004/p0/b1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "5da3601d0faadf9b"
+  },
+  "map172/ev004/p0/b2": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "da021371fca0030b"
+  },
+  "map172/ev004/p0/b3": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "baa9b40e9c4977a6"
+  },
+  "map172/ev004/p0/b4": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "cbf3058c971f06df"
+  },
+  "map172/ev004/p0/b5": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "13341cb11abe38ac"
+  },
+  "map172/ev004/p1": {
+    "disposition": "elsewhere:later: CH01",
+    "derived_hash": "331e082dfe47215a"
+  },
+  "map172/ev004/p2": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "f2d8fe0186438b02"
+  },
+  "map172/ev004/p2/b0": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "7fe4c7e12738e51f"
+  },
+  "map172/ev004/p2/b1": {
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
+    "derived_hash": "abaeb13bda91f703"
+  },
+  "map172/ev004/p3": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  }
+}

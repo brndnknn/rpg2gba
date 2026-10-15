@@ -108,7 +108,7 @@
     "derived_hash": "ee182f2b61cd6f9c"
   },
   "map042/ev004/p2": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "00e31a8bb64be298"
   },
   "map042/ev005/p0": {
@@ -124,7 +124,7 @@
     "derived_hash": "0c8de9b2a0d860c7"
   },
   "map043/ev001/p0/b1": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "1aaab34234ba85fe"
   },
   "map043/ev001/p0/b2": {
@@ -356,15 +356,15 @@
     "derived_hash": "f9607f38031b489b"
   },
   "map046/ev003/p1": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "6b57e99d6e6eacdc"
   },
   "map046/ev003/p1/b0": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "32567da1026842d0"
   },
   "map046/ev003/p1/b1": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "7559b9e2842531cf"
   },
   "map046/ev003/p1/b10": {
@@ -380,7 +380,7 @@
     "derived_hash": "3a2e0453e69a1e3e"
   },
   "map046/ev003/p1/b13": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "6611282cae20dd9b"
   },
   "map046/ev003/p1/b14": {
@@ -404,7 +404,7 @@
     "derived_hash": "359e43a917c34a64"
   },
   "map046/ev003/p1/b19": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "7e31cd9285c8cfe9"
   },
   "map046/ev003/p1/b2": {
@@ -432,7 +432,7 @@
     "derived_hash": "f92a7feec32c8908"
   },
   "map046/ev003/p1/b25": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "e70bb2d559caf0a1"
   },
   "map046/ev003/p1/b26": {
@@ -460,7 +460,7 @@
     "derived_hash": "2170a650a3e890af"
   },
   "map046/ev003/p1/b31": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "1563b3500a9d526b"
   },
   "map046/ev003/p1/b32": {
@@ -484,7 +484,7 @@
     "derived_hash": "2496312494028e07"
   },
   "map046/ev003/p1/b37": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "f282c30df6336570"
   },
   "map046/ev003/p1/b38": {
@@ -512,7 +512,7 @@
     "derived_hash": "edb30b0b81fa62bf"
   },
   "map046/ev003/p1/b43": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "6a6f0a2df81b633e"
   },
   "map046/ev003/p1/b44": {
@@ -536,7 +536,7 @@
     "derived_hash": "d4feceb58c95066f"
   },
   "map046/ev003/p1/b49": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "4addfd73268d8e59"
   },
   "map046/ev003/p1/b5": {
@@ -564,7 +564,7 @@
     "derived_hash": "1dca9a792018140d"
   },
   "map046/ev003/p1/b55": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "62355a2d529eeccc"
   },
   "map046/ev003/p1/b56": {
@@ -592,7 +592,7 @@
     "derived_hash": "bd02236b28229c40"
   },
   "map046/ev003/p1/b61": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "2c93ccbcd6504243"
   },
   "map046/ev003/p1/b62": {
@@ -616,11 +616,11 @@
     "derived_hash": "ad7ae16ec06ab63e"
   },
   "map046/ev003/p1/b67": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "bb71dd26b328e601"
   },
   "map046/ev003/p1/b7": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "unreachable:beat_gen: the story model places it in no chapter",
     "derived_hash": "02bb589b338dd89c"
   },
   "map046/ev003/p1/b8": {
@@ -716,7 +716,7 @@
     "derived_hash": "6f3793f5520e6db1"
   },
   "map046/ev014/p1": {
-    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "disposition": "elsewhere:never_fires: map046/ev014/p1 (needs self switch A == True) is not its event's live page at this route position: self switch A == True fails: self switch A is [False] (seed state), never written on the route; the rows that could write it none are not walked before it; live page: map046/ev014/p0 (needs no condition)",
     "derived_hash": "a610056a645574c4"
   },
   "map046/ev015/p0": {
@@ -1028,11 +1028,11 @@
     "derived_hash": "5539cd09d8efee80"
   },
   "map14000/ev052/p1/b0": {
-    "disposition": "cosmetic",
+    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
     "derived_hash": "483613f75931ffe6"
   },
   "map14000/ev052/p1/b1": {
-    "disposition": "cosmetic",
+    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
     "derived_hash": "4f8217c3e24208a2"
   },
   "map14000/ev057/p0": {
@@ -1044,11 +1044,11 @@
     "derived_hash": "5539cd09d8efee80"
   },
   "map14000/ev057/p1/b0": {
-    "disposition": "cosmetic",
+    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
     "derived_hash": "483613f75931ffe6"
   },
   "map14000/ev057/p1/b1": {
-    "disposition": "cosmetic",
+    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
     "derived_hash": "4f8217c3e24208a2"
   },
   "map14000/ev059/p0": {

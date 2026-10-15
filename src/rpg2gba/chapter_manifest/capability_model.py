@@ -28,6 +28,7 @@ It joins two facts that live in different places on purpose:
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from rpg2gba.capability_sites import (
@@ -69,7 +70,10 @@ def taught_in_chain(
             continue
         text = path.read_text(encoding="utf-8")
         for token in FIELD_CAPABILITY_ITEMS:
-            if f'"{teach_beat_name(token)}"' in text:
+            # The generator writes module literals with repr() (single
+            # quotes); hand-written modules use double. Accept both.
+            name = re.escape(teach_beat_name(token))
+            if re.search(rf"""["']{name}["']""", text):
                 taught.add(token)
     return frozenset(taught)
 

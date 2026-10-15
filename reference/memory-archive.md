@@ -1166,3 +1166,41 @@ Regenerated modules differ from committed in CH01–CH04 only (CH05/CH06 byte-id
 ### Archived 2026-10-15 — Last Session Summary 2026-10-13c (HM gates = Uranium; chapters end at the next chapter's crossing; 467/467)
 
 **2026-10-13c (HM gates = Uranium; chapters end at the next chapter's crossing; 467/467):** Operator saw badges 1 and 3 in the CH06 complete save, and the save ending back in Passage Cave. (1) `field_move.c`: every HM gate is now Uranium's badge COUNT (`HasAtLeastBadges`, fenced; Cut 3, Rock Smash 1, Strength 4, Surf 5, Dive 7, Fly 8, Waterfall 8, Flash 0); the new-game badge-3 rig is deleted (`HARNESS_ONLY` empty; PROJECT_TODO #121 done). (2) CH06 ended in the cave because park ev019 p2 (re-opened cave warp, var 104 >= 3) only goes live late and the solver had no chapter exit -- the way on is the overland 35 seam. `beat_gen._successor_exit_group` names the one group crossing into the successor chapter's maps; `solve_route(terminal_group=)` pins it last (edges `successor_exit:`; exit point left default -- a seam stop can't path back onto its edge cell). (3) The reorder exposed a locator bug: event-touch pages realized only as coord events (Trainer(N) sight rays) offered every neighbour as a side; `routing.locations._rom_touch_cells` keeps only sides on the ROM trigger cells (Map14000 EV079 north approach fired nothing). Warp census: all 41 CH01–CH06 doorways crossed both ways. Regen CH01–CH05 byte-identical, manifests 0 errors; CH06 re-approved by operator; ROM sha256 `66c4d7ef`; CH06 gen **467/467**; suite 5327. Complete save now ends Nowtoch (12,61), taildropped as `CH06-complete-66c4d7ef.gba`. Scratch: `warp_directions.py`, `build_and_run_ch06.sh`, `regen_and_run_ch06.sh`.
+
+### Archived 2026-10-15 — Last Session Summary 2026-10-14 (CH07 opened, transpiler items, suite generated, ROM 480/480)
+
+**2026-10-14 (CH07 opened; MEMORY housekeeping):** Branch `ch07-route-2-revisit` cut from `main` `62ed5944`. Census CH07: 1 map, 21 ev, 40 pages, 398 cmds, 4 trainers, 3 item grants, queue 6. `reference/chapters/07-route-2-revisit.md` authored (thin, ~170 lines; Sonnet-drafted, lead-checked). Headline §7 question: Map035 EV019 (scene @25,26) runs `for i in 14..18 pbSetSelfSwitch(i,"A",true)` — clears all five rockslide rocks itself, so whether CH07 needs a Rock Smash capability gate at all depends on EV019's reachability (passability BFS not yet run); its loop is 2 of the 6 queue rows. Also: N seam lands on split piece 14000 (CH04 doc still says 40); rocks call `pbRockSmashRandomEncounter` but map 35 has no `rock_smash_mons` table. Housekeeping: the ~8 KB `Next` cell (10-06 → 10-13d STATE entries) and the 10-13b summary moved to `reference/memory-archive.md` → Current Phase chronicle; stale "#124 left" / "no branch open" lines fixed. **Later the same session, three read-only investigations:**
+- ev19 is reachable from the N seam with no capabilities, so no Rock Smash gate is needed from the north.
+- Facing east skips the scene, and the transpiler emits that guard correctly.
+- Map 35 has no rock-smash encounter table in Uranium either; the native special returns FALSE cleanly.
+- Rock respawn: the operator ruled to keep respawning everywhere (Decisions Made).
+
+The ev19 loop transpile should therefore be `removeobject` ×5, not SSA writes. Answers are in the CH07 doc §7 items 1–4a.
+
+**Built the same day:**
+- `transpiler.py`:
+  - `smashable_rock_event_ids` + `TranspileContext.register_map_rocks`, called once per map from `transpile_driver.transpile_map`.
+  - `_emit_remote_self_switch`: a rock target with `true` → `removeobject`.
+  - `_collapse_self_switch_loops` for the exact `for v in A..B` / `pbSetSelfSwitch(v,…)` / `end` shape; anything else still queues.
+  - `_EMOTE_MOVEMENT_TOKENS {32: emote_heart}`, emitted as a per-page movement block.
+- New `tests/test_transpiler_remote_rocks_heart.py`, 11 tests; suite 5339 passed.
+- Slice re-transpile changed `Map035.pory` only. The queue lost 4 ev19 rows.
+- The CH04 manifest was regenerated (seven rock-gated rows' `unhandled` 4 → 0). CH04 check 0 errors.
+- Full-corpus transpile is broken by an unrelated `heal_locations` error (#139).
+
+**Then the chapter loop, first revisit chapter.** `beat_gen generate --chapter CH07` hit four generator gaps in turn, each fixed, CH01–CH06 byte-identical at every step (see Decisions Made 2026-10-14):
+1. story ownership ignored geography;
+2. obstacle walls never released;
+3. hidden cutscene actors 20–22 counted as walls;
+4. manifest claims from replayed `CH05:` beats.
+
+The lead's own flood corrected one agent claim: with all five rocks solid, the pocket and the south are disconnected; no ledge bypass. CH04 module re-approved (one ELSEWHERE annotation). Approved suite + manifests committed. Scratch: `output/scratch/ch07_*.py`, `regress.sh`, `regen_manifests.sh`, `manifest_errors.py`.
+
+**Then the ROM runs (CH07 → `in_progress`).** CH01–CH06 replayed green throughout; each CH07 failure was fixed at its source and the CH01–CH06 suites and manifests stayed byte-identical:
+1. The obstacle beat's walk tripped ev19's `Trainer(4)` sight tripwire (coord cells (25,27..29)). The cutscene fired and cleared the rocks first. Fix: `beat_gen._tripwire_refusals` refuses an obstacle whose every approach crosses its clearer's tripwire (`clearer_tripwire`).
+2. The floor asserted rock `_SSA` writes the transpiler turns into `removeobject`. Fix: `beat_floor.walk` skips them (`removed_rocks`).
+3. Actors 20–22 (opacity-0, `addobject`ed) stayed drawn after the scene. Fix: the transpiler emits `removeobject` with a remote self-switch ON that selects the target's blank last page (`blanking_self_switches` / `register_map_vanishers`; self-targets and never-drawn events excluded). It also lands on Maps 32/49/68, where it is a no-op after their RefreshVisibility.
+4. ev19's arm b1 was walked as a second bump. Fix: `facing.one_shot_arms` also treats "turns ON a self switch a higher page is conditioned on" as one-shot.
+5. `slice_growth` and the atlas test rejected a revisit chapter going `in_progress`. Fix: `visit > 1` introduces no maps.
+
+pytest 5375 passed. Scratch: `rebuild.sh` (transpile→stage→assemble→make), `ch07_tripwire_flood.py`, `ch07_affirm_rocks.py`.

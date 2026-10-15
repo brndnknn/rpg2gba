@@ -111,7 +111,7 @@ from rpg2gba.beat_gen.select import dropped_events, empty_events, select_rows
 from rpg2gba.beat_gen.round_trip import find_round_trip
 from rpg2gba.beat_gen.state_arms import FIRING_TEMPLATES, Taint, fired_pages, select_state_arms
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
-from rpg2gba.conversion_agent.transpiler import smashable_rock_event_ids
+from rpg2gba.conversion_agent.transpiler import _ROCK_SMASH_RE, smashable_rock_event_ids
 from rpg2gba.conversion_agent.orchestrator import load_map_event_strips
 from rpg2gba.story_state.extract import RowState, extract_map
 from rpg2gba.beat_gen.whiteout import place_whiteout_beats
@@ -1268,6 +1268,16 @@ def _smashable_by_walk(
     return frozenset(rocks) - frozenset(externally), frozenset(externally)
 
 
+def _rock_yes_arm(row: ManifestRow) -> bool:
+    """Is `row` the `then` arm of a rock's `Kernel.pbRockSmash` test -- the arm
+    the held walk takes (its smash beat answers YES)? The else arm is the
+    no-capability one."""
+    b = row.branch
+    return (row.kind == "branch" and b is not None and b.arm_kind == "then"
+            and b.condition_type == 12 and isinstance(b.condition_text, str)
+            and _ROCK_SMASH_RE.match(b.condition_text) is not None)
+
+
 def _smashable_rock_walls(
     maps: Collection[int], events_of: Callable[[int], list[dict]],
 ) -> frozenset[tuple[int, int]]:
@@ -1855,14 +1865,19 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                   for rid in f.owned_row_ids}
     # Ruling 19: exclusive arms the walk doesn't take leave the plan.
     all_verdicts = {v.row_id: v for s in stories.values() for v in s.rows}
-    selection = blocked_arms(selection, all_verdicts, fork_owned)
+    # A held rock's YES arm is `capability:`-blocked in the story model (it
+    # holds no capability there) but the walk takes it: the smash beat claims it.
+    held_yes_arms = {r.row_id for r in selection.owned
+                     if _rock_yes_arm(r) and (r.map_id, r.event_id) in held_obstacles}
+    selection = blocked_arms(selection, all_verdicts, fork_owned | held_yes_arms)
     # CH08 §9: with the capability held, an obstacle page's remaining arms
     # (the no-capability / declined branch: "a Pokémon may be able to smash
     # it") are the branch the walk does NOT take -- its smash beat answers YES.
     if held_obstacles:
         def _held_arm(r: ManifestRow) -> bool:
             return (r.kind == "branch" and r.event_id is not None
-                    and (r.map_id, r.event_id) in held_obstacles)
+                    and (r.map_id, r.event_id) in held_obstacles
+                    and r.row_id not in held_yes_arms)
         declined = [r for r in selection.owned if _held_arm(r)]
         if declined:
             declined_ids = {r.row_id for r in declined}

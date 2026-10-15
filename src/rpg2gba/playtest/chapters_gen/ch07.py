@@ -171,6 +171,7 @@ ELSEWHERE: dict[str, str] = {
     'map035/ev003/p0': 'later: CH04',
     'map035/ev003/p0/b0': 'later: CH04',
     'map035/ev003/p0/b1': 'later: CH04',
+    'map035/ev003/p1': 'unreachable',
     'map035/ev003/p2': 'later: CH04',
     'map035/ev009/p0': 'later: CH04',
     'map035/ev009/p0/b0': 'later: CH04',
@@ -187,13 +188,13 @@ ELSEWHERE: dict[str, str] = {
     'map035/ev019/p0/b0': 'unselected_arm: facing arm of map035/ev019/p0, which turns self switch A on, lifting a higher page, after one firing (map035/ev019/p0/b0): the walk fires it once, from north, and takes the facing arms legal there (2026-10-12)',
     'map035/ev019/p0/b5': 'unselected_arm: not taken on the walk: else of `$game_player.y<=28` from cell (25, 27) (event at (25, 26)) (ruling 19)',
     'map035/ev023/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
+    'map035/ev023/p1': 'unreachable',
     'map035/ev024/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
     'map035/ev025/p0/b1': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',
     'map035/ev026/p0/b1': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',
 }
 
 REFUSED: dict[str, str] = {
-    'map035/ev003/p1': 'story-state: undetermined -- story model could not determine this row',
     'map035/ev003/p1/b0': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
     'map035/ev003/p1/b1': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
     'map035/ev003/p1/b2': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
@@ -203,7 +204,6 @@ REFUSED: dict[str, str] = {
     'map035/ev015/p0': "cell: clearer_tripwire -- every approach crosses the sight tripwire of ['map035/ev019'], which clears this obstacle -- it is gone before it can be refused",
     'map035/ev016/p0': "cell: clearer_tripwire -- every approach crosses the sight tripwire of ['map035/ev019'], which clears this obstacle -- it is gone before it can be refused",
     'map035/ev018/p0': "cell: clearer_tripwire -- every approach crosses the sight tripwire of ['map035/ev019'], which clears this obstacle -- it is gone before it can be refused",
-    'map035/ev023/p1': 'story-state: undetermined -- story model could not determine this row',
     'map035/ev023/p1/b0': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
     'map035/ev023/p1/b1': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',
     'map035/ev023/p1/b2': 'story-state: unmodelled_outcome:phone_battle_count(trainer)',

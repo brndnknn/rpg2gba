@@ -35,10 +35,15 @@ checked until audio is mapped" -- `bgm_song_id()` reads BGM only, no SE
 read exists, so this is the code's own standing position, not a new call
 made here. `choice`/`warp`/`pokemon_grant`/`service`/ (the first and
 last two since wired, below)
-`displacement`/`event_position`/`erase_event` are each a real, cited
+`displacement`/`event_position` are each a real, cited
 observation gap in `assignments/C6/research/07_generic.md` §2 -- none
 buys enough (`warp`'s single-page-in-a-multi-step-loop map-change problem
 in particular) to be worth the design complexity here.
+
+`erase_event` joined 2026-10-15 (CH08): `pbEraseThisEvent` is `removeobject`,
+so the check is one stateless read -- the event's object is no longer an active
+slot in `gObjectEvents`. On an arrival page, erasing its OWN event is also the
+proof the page fired (it re-admits `trigger`, like a self-switch write).
 
 `heal_party` joined 2026-09-25 (REDERIVATION_PLAN.md §16.3 ruling 17): the
 party is usually full when a heal plays, so a full-HP read proves nothing.
@@ -144,7 +149,7 @@ GENERIC_EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text",
     "switch_write", "var_write", "self_switch_write", "engine_flag_write",
     "visual", "heal_party", "var_text", "item_grant", "item_remove", "choice", "service",
-    "battle", "pokemon_grant",
+    "battle", "pokemon_grant", "erase_event",
 })
 
 #: Services `_handle_service` can prove opened (ruling 20). Any other service
@@ -1030,7 +1035,25 @@ def _handle_battle(emu: "Emulator", beat_name: str, step: Step) -> None:
             f"set after the win ({shot})")
 
 
+def _handle_erase_event(emu: "Emulator", beat_name: str, step: Step) -> None:
+    """`pbEraseThisEvent` / code 116 is `removeobject`: once the page has run
+    the event's object is no longer an ACTIVE slot in `gObjectEvents`
+    (`Emulator.object_events`). The event is on the row's own map and is
+    addressed by its compiled local id (`cells.local_id`)."""
+    from rpg2gba.routing.locations import _map_constant_for  # the only resolver
+
+    event_id = int(dict(step.params)["event_id"])
+    map_constant = _map_constant_for(parse_row_id(step.row_id).map_id)
+    lid = local_id(map_constant, event_id)
+    if any(ev.local_id == lid for ev in emu.object_events()):
+        shot = emu.screenshot(f"{beat_name}_erase_{event_id}")
+        raise ScenarioError(
+            f"{beat_name}: {step.row_id}: event {event_id} (local id {lid}) is still an "
+            f"active object after its page erased it ({shot})")
+
+
 STEP_HANDLERS.update({
+    "erase_event": _handle_erase_event,
     "battle": _handle_battle,
     "choice": _handle_choice,
     "service": _handle_service,
@@ -1238,6 +1261,14 @@ def generic_beat(
                 and dict(s.params).get("event_id") == page_row.event_id
                 and dict(s.params).get("value") is True
                 for s in middle_steps):
+            arrival_kinds = frozenset({"trigger"})
+        elif page_row_id in resolved_rows and any(
+                s.kind == "erase_event" and s.row_id == page_row_id
+                and dict(s.params).get("event_id") == page_row.event_id
+                for s in middle_steps):
+            # Erasing ITS OWN event is the other proof the page fired: the
+            # object is gone (`_handle_erase_event`) only if the page ran
+            # (Kevlar's cleanup autorun, Map031 EV049 p2).
             arrival_kinds = frozenset({"trigger"})
         middle_steps = [s for s in middle_steps
                         if s.kind not in _NOT_AFTER_THE_FACT and s.kind != _GIFT_CEREMONY]
@@ -1637,6 +1668,16 @@ def obstacle_beat(
 
 #: Field capability -> (HM item, move) the walk teaches through the bag the
 #: first time a chapter needs it (CH08 §9: "teach via the real UI, once").
+#: What `smash_beat` proves of a rock page's YES arm. `trigger`: the A press
+#: answered the prompt; `completes`: the field is released; `erase_event`: the
+#: rock's object is gone (`_handle_erase_event`). `self_switch_write` is the
+#: rock's own "smashed" page switch -- the native `EventScript_RockSmash` the
+#: idiom collapses to never latches it (porymap's null flag; the rock respawns
+#: on a map reload), so its observable effect IS the erase and the object-gone
+#: check witnesses it. `audio`/`visual`/`displacement` are walk-checked kinds.
+_SMASH_ARM_KINDS: frozenset[str] = frozenset(
+    {"trigger", "completes", "erase_event", "self_switch_write"})
+
 TEACHABLE_CAPABILITIES: dict[str, tuple[str, str]] = {
     "rock_smash": ("ITEM_HM06", "MOVE_ROCK_SMASH"),
 }
@@ -1681,12 +1722,18 @@ def smash_beat(
     item, move = TEACHABLE_CAPABILITIES[capability]
 
     obstacles: dict[str, object] = {}
+    arm_rows: list[str] = []
     for row_id in resolved_rows:
         floor = resolved_lookup(row_id)
         if floor.refused:
             raise ValueError(
                 f"smash_beat: {beat_name}: row {row_id!r} floor is refused ({floor.refusals})")
         found = [a for a in floor.assertions if a.kind == "blocked_obstacle"]
+        if not found and parse_row_id(row_id).kind == "branch":
+            # The rock page's YES arm (sfx, move route, erase, encounter call):
+            # claimed with its page; its floor is covered below.
+            arm_rows.append(row_id)
+            continue
         if len(found) != 1:
             raise ValueError(
                 f"smash_beat: {beat_name}: row {row_id!r} carries {len(found)} "
@@ -1697,15 +1744,20 @@ def smash_beat(
                 f"{found[0].param('capability')!r}, not {capability!r}")
         obstacles[row_id] = found[0]
 
+    obstacle_ids = tuple(r for r in resolved_rows if r in obstacles)
+    for arm in arm_rows:
+        if parse_row_id(arm).owning_page_row_id not in obstacles:
+            raise ValueError(
+                f"smash_beat: {beat_name}: arm {arm!r} has no blocked_obstacle page in rows=")
     chapter_rows = load_chapter_rows(chapter_id)
     row_by_id = {r.row_id: r for r in chapter_rows}
-    first_row = row_by_id.get(resolved_rows[0])
+    first_row = row_by_id.get(obstacle_ids[0])
     if first_row is None:
         raise ValueError(
-            f"smash_beat: {beat_name}: row {resolved_rows[0]!r} is not in chapter "
+            f"smash_beat: {beat_name}: row {obstacle_ids[0]!r} is not in chapter "
             f"{chapter_id!r}'s manifest")
     map_constant = cell_for_row(first_row).map_constant
-    first = obstacles[resolved_rows[0]]
+    first = obstacles[obstacle_ids[0]]
     x, y = first.param("x"), first.param("y")
 
     extras = tuple(
@@ -1715,8 +1767,15 @@ def smash_beat(
             tag="position")
         for row_id, o in obstacles.items())
     declared = declare_assertions(
-        resolved_rows, executed_kinds=frozenset(), template="smash",
-        extras=extras, floor_lookup=resolved_lookup)
+        resolved_rows, executed_kinds=_SMASH_ARM_KINDS if arm_rows else frozenset(),
+        template="smash", extras=extras, floor_lookup=resolved_lookup)
+    if arm_rows:
+        # Only the arm rows' kinds are declared (the page rows keep their
+        # floor's capability-block scoping).
+        arm_set = set(arm_rows)
+        declared = frozenset(
+            a for a in declared
+            if a.row_id in arm_set or a.kind == "smashed_obstacle")
 
     @builder.beat(
         beat_name,
@@ -1735,7 +1794,7 @@ def smash_beat(
             raise ScenarioError(
                 f"{beat_name}: no party member knows {move}; {capability} is not held "
                 "(no earlier beat taught it)")
-        for row_id in resolved_rows:
+        for row_id in obstacle_ids:
             obstacle = obstacles[row_id]
             ox, oy = obstacle.param("x"), obstacle.param("y")
             parsed = parse_row_id(row_id)
@@ -1756,6 +1815,13 @@ def smash_beat(
                 raise ScenarioError(
                     f"{beat_name}: {row_id}: obstacle (local id {lid}) at ({ox},{oy}) is "
                     f"still present after answering YES to {capability} ({shot})")
+            for arm in arm_rows:
+                if parse_row_id(arm).owning_page_row_id != row_id:
+                    continue
+                for a in resolved_lookup(arm).assertions:
+                    if a.kind == "erase_event":
+                        STEP_HANDLERS["erase_event"](emu, beat_name, Step(
+                            arm, a.kind, a.list_index, a.params))
             before = emu.player_pos()
             if not assertions.try_step(emu, facing) or emu.player_pos() == before:
                 shot = emu.screenshot(f"{beat_name}_{row_id}_impassable")
