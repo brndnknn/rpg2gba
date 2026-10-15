@@ -2060,6 +2060,10 @@ tables dropped corpus-wide) and #36 (Luz strip). Source: `reference/archive/REDE
 
 ### 127. No real party/dex model: the `party_model` refusal blocks 68+ CH01 rows
 
+*(2026-10-15: **built in CH08** (operator). It is needed for Rock Smash's party-knows-move
+check, the lab's Poké Ball scene (Map050 EV027) and the Pokédex reward NPC (Map050 EV005
+p5–p7). See `reference/chapters/08-route-1-moki-revisit.md` §7 rulings.)*
+
 The generator refuses rows that read party or Pokedex state with a `party_model` blocker. CH01 has
 68+ such refused rows. C8 ruling (b) deferred the model to "the first chapter that needs those rows
 green". Graphics-only vars 43 and 131 are already exempt via `story_state/graphics_vars.py`; the rest

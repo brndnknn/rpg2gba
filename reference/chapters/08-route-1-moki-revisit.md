@@ -236,6 +236,23 @@ id 17 in EV078; the two-row `seenStorageCreator` script in Map031 EV049.
 
 ## 7. Open items for the lead
 
+**Operator rulings 2026-10-15** (answering items 2–5):
+- **Item 2: CH09 builds the Moki E seam (#27).** CH08's route ends once the Moki rocks are
+  smashed; the seam is CH09's opening work.
+- **Item 3: assert the Kevlar cleanup.** One beat on the transit leg: the tutorial guide
+  (Map031 EV049) is absent after gym 1.
+- **Items 4 + 5: #127 (party/dex model) is built in CH08.** CH08 needs it three times: Rock
+  Smash's party-knows-move check, the lab scene and the reward NPC.
+  - The lab scene (Map050 EV027) emits fully: 10 Poké Balls plus live seen/owned counts via
+    `ScriptGetPokedexInfo` (`engine/src/birch_pc.c`). Use the national counts
+    (`VAR_0x8004 != 0`); the regional count is Hoenn's dex, not Tandor's (#31).
+  - The reward NPC's whole ladder (`scripts_dump/213_Bambo_Reward.rb`, `PROFREWARDS`: items
+    at 10/20/30/75/125/175/194 owned, Eggs at 50/100/150) is converted natively with
+    `giveitem`/`giveegg`.
+  - Rung 0 is walked on ROM. Coverage of the higher rungs (≥10 owned is beyond the natural
+    route) is decided once the model exists: a dex-seeded harness start, or converted but
+    not walked until a later chapter.
+
 1. **Do the Moki rocks gate the east exit? — ANSWERED analytically 2026-10-15.**
    `rpg2gba.traversal` on Map032 (`reachable_with`, held `{}` vs `{rock_smash}`, start
    (27,43)): with nothing held, the map's east edge (x=71) is **not reached**; with
