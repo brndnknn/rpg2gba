@@ -264,6 +264,62 @@ story progress to test it.
 
 Stage 1 is kept either way.
 
+### Stage 0 results (2026-10-16)
+
+**Budget census, the whole corpus**
+(`output/scratch/budget_census.py`, results in `budget_census.jsonl`, summary
+via `budget_summary.py`). Merge off, every map in the build, map 040 unsplit.
+- **Every buildable map fits** (193 of 199). Slack = 1024 − tile 0 − 16 door
+  slots − animated tiles − worst 16×16 window.
+- **The tightest is map 101,** with 176 slots spare. It has 184 animated
+  tiles, which is a pinned cost.
+- The next tightest are 151 (272), 122 (304), 040 (323), 146 (333), 187 (340)
+  and 094 (399).
+- No map comes near zero.
+- **Without streaming,** 21 maps go over 1024 tiles with merge off and 8 go
+  over 1024 metatiles. Those are what full-quality art would cost under
+  today's engine.
+- **Errors:** the 5 known empty maps (14, 30, 38, 55, 56), and map 071.
+- **Caveat:** each map's own grid only. A window at a connected edge also
+  shows the neighbour's strip, which isn't counted. The build-time check
+  (stage 2) counts it, because it runs on the final layout with imported
+  strips.
+
+**Map 071 (`Floatstone.png`)**
+- The missing autotile is tileset 54's slot 0, and it is **map 071's base
+  floor**: 4566 of 6724 layer-0 cells.
+- It is absent everywhere under the Uranium source tree, and nothing near
+  it is named similarly.
+- A transparent fallback would produce a void map, so it isn't a fix.
+- The fix is to **re-extract the asset from the game's original archive or
+  install** into `Graphics/Autotiles/`. No code change is needed. The
+  `CORPUS_UNRENDERABLE` entry (`tile_merge.py:59-61`) then goes.
+- This is an operator action. A placeholder floor is the fallback if the
+  file can't be found.
+
+**Unsplit 040 on one 13-palette set, compared with today's pieces**
+(`output/scratch/render_unsplit40.py`; images in `output/scratch/s0_40/`,
+`piece_<uid>.png` = source | today's piece from the built ROM | unsplit 13
+palettes).
+- Mean colour error against the source is slightly higher for every piece:
+
+  | | Today's pieces | Unsplit, 13 palettes |
+  |---|---|---|
+  | Mean error (range over pieces) | 9.3–16.4 | 13.4–18.4 |
+  | Share of pixels with error above 60 | 1.0–2.0% | 1.4–2.5% |
+
+- **By eye** (pieces 14000 and 14003 checked): both are close to the
+  source. The visible difference is pavement contrast. The unsplit version
+  shows the paving checker pattern more strongly, and today's pieces are
+  slightly darker and flatter. Trees, buildings and roads are near
+  identical.
+- **Operator verdict pending.**
+
+**Build-time window check:** moved to stage 2. Its correct input is the
+final layout, with imported neighbour strips, which only exists at layout
+conversion. The scratch census answers stage 0's question with the same
+numbers.
+
 ## 6. Risks
 
 | Risk | Mitigation |
