@@ -446,6 +446,79 @@ Caveats:
   games.
 - **Middle path:** not worth it.
 
+#### Feasibility research (2026-10-16, after first discussion)
+
+The operator asked how feasible streaming really is, whether anyone has done
+it, and what could make it a waste. They chose "measure more first".
+
+**Prior art.**
+- **Metatile cap:** solved, with a published recipe. The pret wiki's
+  "Expanding The Metatile Count" takes metatile ids from 10 to 12 bits (4096)
+  by reclaiming the unused collision bit and one elevation bit, and it has
+  been used in hacks. It fits our data: the converter only writes elevation 0
+  or 3 and two collision values (`tile_map.py:56-57`). The grid stays `u16`,
+  so there is no EWRAM cost. One catch: the save stores raw grid cells around
+  the player (`SaveBlock1.mapView`, `fieldmap.c:568-698`). The size doesn't
+  change, but the meaning does, so this must land before a save the operator
+  intends to keep (I6).
+- **Tile cap (streaming VRAM tiles):** no public pokeemerald/pokefirered
+  implementation found. The technique itself is documented for the same
+  10-bit limit on DS (BlocksDS scrolling-backgrounds tutorial: a wider index
+  format, only visible tiles resident, ref-counted frees). The engine already
+  streams the tilemap; tiles would be new.
+
+**Does a screen ever need more than 1024 tiles?** Measured with merge off
+(full quality), the real build, and every window position
+(`output/scratch/window_census.py`, `window_census40.py`). The 17×12 window is
+the screen plus a one-metatile scroll margin.
+
+| Map | Unique tiles, whole map | Worst 15×10 screen | Worst 17×12 window |
+|---|---|---|---|
+| 040 (unsplit) | 1748 | 464 | 564 |
+| 094 | 2012 | 338 | 436 |
+| 101 | 2039 | 467 | **590** |
+| 187 | 1674 | 387 | 505 |
+| 122 | 1770 | 448 | 530 |
+
+The worst window uses 58% of the pool, so there is about 1.7× headroom. The
+counts are flip-canonical tiles before quantization, a slight overcount.
+Connected-map seams (two maps in one window) were not measured.
+
+**Engine audit: what assumes "tile N lives in VRAM slot N".** A read-only sweep
+of `engine/src` (2026-10-16) found the hazard surface small and concentrated:
+- **One choke point for drawing:** `field_camera.c` `DrawMetatile`/`DrawMetatileAt`
+  and the `RedrawMapSlice*` functions copy raw metatile tile words into the
+  tilemap. Every runtime metatile change (Cut, Rock Smash, script swaps,
+  braille, escalator; about 11 caller files) goes through it, so translating
+  slots there covers them all.
+- **Whole-tileset uploads:** `fieldmap.c:1025-1136`, called only from
+  `overworld.c` (map load, connection crossing, return-to-field, credits).
+  These get replaced.
+- **Fixed-slot writers:** tile animations write to absolute slots (Uranium's
+  generated ones use 7 slots; vanilla's ~20 are attached to stock tileset
+  headers, so they only run on stock tilesets),
+  so they get pinned slots. Doors use slots 1008–1023
+  (`field_door.c:433-441`), so that range is reserved.
+- **The shop buy menu** (`shop.c:800-825`) redraws the map around the player
+  from raw tile words. That area is on screen, so it is resident. Low risk,
+  but it needs a check.
+- **Safe:** battle transitions, the message box, the name popup, field-move
+  cut-ins, the spotlight effect (`field_effect.c:3450`, which turned out to be
+  BG0/charblock 2) and weather. They all use BG0/charblock 2 or GPU registers
+  only. Battle, menus and the bag wipe VRAM, and the return path reloads the
+  map, so the cache only needs a reset hook there (plus `fldeff_flash.c:138`).
+
+**Risks that remain:**
+1. A missed fixed-slot writer. The audit makes this smaller, but walks are the
+   final check.
+2. VBlank timing on real hardware. Check the prototype on the operator's flash
+   cart early.
+3. The 13-palette limit is untouched by streaming. No map hits it, but a
+   future seam between maps with different palettes still could.
+   (`seam_warps.json` has zero seams today; map 040's split is the only
+   arrow-warp source.)
+4. Our tools (viewer, oracle, emitter, tests) assume fixed tile numbering.
+
 ### I5. Where the ROM size limit actually comes from
 
 **The question.** The project has worked to a maximum ROM size. Is that limit
