@@ -71,7 +71,48 @@ The operator expects this to need a longer conversation. It is a big change
 from how the project has been working, which is why it is being raised
 between acts.
 
-**Status:** recorded, not yet discussed.
+**Status:** researched 2026-10-16 (below); not yet discussed.
+
+#### Research (2026-10-16)
+
+**Short answer: most of the engine is already generated. The hand-written
+Uranium C is a short list, and stripping stock content has real levers. Some
+already exist, and one is already on.**
+
+**What the engine edits are today.** 96 engine files changed since the vendor
+import (`git diff --stat 80cdfce2 HEAD -- engine/`, +3402/−373), plus the three
+files edited before import. Sorted by kind:
+
+| Kind | What | Examples |
+|---|---|---|
+| **Already generated** (include hooks) | ~30 sites `#include` a pipeline-written, gitignored `*.gen.h`. Each has a generator module behind it. | species, cries, learnsets, dex numbers, trainers, parties, rematches, trades, tilesets, metatiles, anims, object-event graphics, move routes, wild encounters, heal locations, map groups/layouts, flag constants |
+| **Generic fan-game features** | C any RPG Maker conversion wants, not tied to Uranium content | expanded flag/var ranges (`config/rpg2gba.h`); the RMXP move-route interpreter (`MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE`); Change Graphic; warp retain-facing; split-map sibling and connection-remap mechanisms; pacing knobs (text speed, fades, BGM tempo) |
+| **Hand-written Uranium facts** | Data typed into C by hand. **Every one has a source the pipeline could read.** | HM gates by badge count (`field_move.c:11-100` ← `Settings.rb` `BADGEFOR*`); new-game spawn (`new_game.c:179-226` ← metadata Home); 4 berries + 2 key items + Maria's Key typed into `items.h`/`berry.c` (← PBS items; this is #41's "106 items never reach the engine"); trainer-count capacity (← trainer PBS); the early-rival heal fix (`battle_setup.c:1328`, a named trainer) |
+| **Test harness** | Exists for the playtests, not the game | intro skip, the map walker (761 lines), the embedded save |
+
+So I3 is not "pull Uranium out of a hand-written engine". It is three smaller
+jobs:
+1. **Turn the 5 hand-written fact groups into generators.** Items (#41) is the
+   big one. HM gates and the spawn point are small.
+2. **Rename and fence the generic features as `RPG2GBA`, not `URANIUM`.** They
+   are the reusable engine for the next game. Today they are labelled as
+   Uranium work, and some are sized by Uranium's census (flag/var counts),
+   which a generator could size per game.
+3. **Strip stock content** (below). This is the part I5 makes mandatory.
+
+**Stripping stock content: the levers.**
+
+| Content | ROM today | Lever | Entanglement |
+|---|---|---|---|
+| Species (~1500, Uranium uses ~200) | 5.88 MiB | **Built in:** `include/config/species_enabled.h` has a `P_FAMILY_<NAME>` switch per family. Setting one FALSE drops its info, graphics, learnsets, cries and follower sprites. `SPECIES_*` ids stay defined, so nothing renumbers. rpg2gba sets none today. | Low: the engine's own feature, designed for this. Caveats: the file warns that changing the latest generation changes the save block (dex flags), and whether it builds cleanly with Uranium's appended species is unverified. A generator would write the switches from the species Uranium actually uses. |
+| Music and sound | 10.05 MiB | `sound/song_table.inc` is positional. Pointing an unused song's row at a dummy keeps every `MUS_*` id stable, with no C changes. | Medium: 46 `src/` files and every stock map header name `MUS_*`. Shared instrument samples only shrink if no kept song uses them (unverified). Depends on #22's audio decision. |
+| Stock map layouts | (≈1.1 MiB, already saved) | **Already on:** `phase5._stub_stock_layout_bins` (default `drop_stock_map_data=True`) points every stock layout at a 2-byte stub, so all constants stay valid. | None. Done. |
+| Stock map scripts, events, tilesets | part of `maps.o` / `tilesets.o` / scripts | Same repoint-don't-delete idea: stub the scripts and tilesets of maps that are never loaded. | High if deleted: 18 `src/` files and 12 script files name stock maps. The 2026-07-01 critique already ruled "repoint, don't delete" so the vendored engine stays diffable. The 2026-07-14 audit estimated 2–4 MiB recoverable here. |
+
+**Prior record.** `reference/findings/corpus_scaling_audit_2026-07-14.md:133-159`
+had already concluded the full corpus "fits only with vanilla stripping": a
+full-corpus add of ~8.5–11 MiB against 7.08 MiB of headroom at the time. I5's
+fresher numbers agree. This is a known conclusion that never got scheduled.
 
 ### I4. Stream the world instead of splitting maps
 
@@ -272,7 +313,65 @@ Possible shapes the operator raised:
   and puts that party into the next walk ROM's start state.
 - Some other way of getting the same result.
 
-**Status:** recorded, not yet discussed.
+**Status:** researched 2026-10-16 (below); not yet discussed.
+
+#### Research (2026-10-16)
+
+**Short answer: doable, but not today.** Three things in the current design
+work against it, and all three are fixable.
+
+**1. Walk ROMs ignore in-game saves, by design.** A walk ROM carries an
+embedded save, the "seed blob": the four save blocks copied raw out of
+emulator RAM and patched into the ROM (`playtest/stamp.py`, engine
+`uranium_embedded_save.c`). At boot the engine loads the blob *before* looking
+at the `.sav` (`new_game.c:359-387`). That was deliberate: it fixed the
+2026-08-01 bug where an old `.sav` hijacked the walk. The consequence is that
+**saving on a walk ROM does nothing useful.** Every boot returns to the
+stamped point. So today the operator *cannot* carry progress forward even
+within one ROM.
+
+**2. A rebuild can silently change what saved data means.** The pokeemerald
+save has no version field. A `.sav` loads if every sector's signature and
+checksum match, and the checksums cover struct-sized chunks. So:
+- if a rebuild changes a save struct's **size**, an old save is rejected as
+  corrupt;
+- if sizes stay equal, the save **loads, but nothing is re-mapped**. Any id that
+  moved now points at the wrong thing.
+
+What can move between builds, checked against the code:
+
+| Saved thing | Stable today? | Why |
+|---|---|---|
+| **Flag / var numbers** | **No: the main problem** | `flag_registry.dump_header` (`flag_registry.py:585-599`) numbers flags by *sorted position*, not by id. Only 31 of Uranium's 235 switches are minted so far. Any later chapter that mints a lower-numbered switch shifts every flag above it. Hide flags are worse: they are numbered *after* all self-switches, so any new self-switch shifts every hide flag. |
+| Map numbers | Mostly yes | `map_constants.write_map_groups` orders maps by id-sorted position too, but all 204 maps (whole corpus plus split pieces) are already minted, so new chapters don't add any. A future split that removes a map would shift the ones after it. |
+| Species | Yes | Append-only by design (`species_converter/common.py:7-9`). The dex flag arrays grow by one byte every 8 new species, which changes the save block size. |
+| Heal locations | Yes in effect | The save stores the warp (map number + x/y), not the heal-location enum. |
+| Object local ids | Not saved | Hidden/removed state lives in flags, so it rides on the flag row above. |
+| Items | Unknown | How Uranium-added item ids are assigned at staging wasn't traced (#41). |
+| Save struct sizes | Changes occasionally | Flag/var range changes and dex growth change sizes. The CH04 work avoided one such change precisely because it "invalidates every save and seed blob". |
+
+The seed blob has the same exposure. The engine checks only a magic number
+and the four sizes, which is why blobs are thrown away on every rebuild (keyed
+by ROM hash). That is a *policy* guarding against the silent-shift row above,
+not a format limit.
+
+**3. No tooling reads a party from a save file.** The harness reads the party
+from live emulator RAM (`assertions.read_party_species`/`_moves`, with the
+decryption already written), and it can write a save by driving the START
+menu. Nothing parses a `.sav` file or moves data between builds.
+
+**What each of the operator's options would take:**
+
+| Option | Needs | Notes |
+|---|---|---|
+| **A. Keep one `.sav` across builds** | (1) a "play" build mode where the `.sav` wins and the blob only seeds a first boot; (2) **stable ids**: flags/vars numbered by their Uranium id (or a persisted append-only order) instead of sorted position, which is a flag-registry policy change, so the operator's call; (3) a save-format version stamped into the ROM, so a build that changes a size fails loud instead of rejecting the save as "corrupt". | Closest to "just playing". Once ids are stable, most chapter builds wouldn't break the save at all. Size changes would still need a migration step. |
+| **B. Transplant the party** | A `.sav` reader (sector layout, checksums, the encrypted party/box format; the decryption exists for RAM reads) and a writer that puts the party, plus bag and money, into the next walk ROM's seed blob before stamping. | Doesn't depend on stable flags, since story state comes from the suite and only the party carries over. Works today's way: one ROM per walk, now with the operator's own team. Story choices don't carry. |
+| **C. Migrate the full save** | B's reader and writer, plus a translation table per build (old flag/var/map ids → new) from the registry state of both builds. | Most general, and the most machinery. Mostly unnecessary if A's stable ids land. |
+
+**Observation.** A's step (2), stable flag numbering, is a correctness
+improvement regardless. It is the same silent-shift hazard that forces seed
+blobs to be thrown away on every rebuild. With it in place, B becomes a small
+tool and C is rarely needed.
 
 ---
 
