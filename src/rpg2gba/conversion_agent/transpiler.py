@@ -405,6 +405,17 @@ _BAG_QUANTITY_CMP_RE = re.compile(
     r"\s*(>|==)\s*0\s*$"
 )
 
+# $PokemonBag.pbStoreItem(::PBItems::SYMBOL[, qty]) as a type-12 condition — a
+# SILENT bag add that returns whether it fit; the event shows its own "got
+# an X!" message before it (Map081 EV001 page 0 cmd 6, the Route 1 fisherman's
+# Old Rod, output/uranium-build/maps/Map081.json). Fork-native `additem`
+# (engine/src/scrcmd.c ScrCmd_additem) is the same silent add and leaves
+# AddBagItem's bool in VAR_RESULT.
+_STORE_ITEM_RE = re.compile(
+    r"^\s*\$PokemonBag\.pbStoreItem\(\s*(?:::)?PBItems::([A-Za-z0-9_]+)\s*"
+    r"(?:,\s*(\d+)\s*)?\)\s*$"
+)
+
 # $PokemonGlobal.nuzlocke==true — Nuzlocke mode is not ported (user-approved
 # strip, 2026-08-19), so the guard is statically false: Map068 EV015 page 1
 # cmd 16 (output/uranium-build/maps/Map068.json), 2 then-nodes / 0 else-nodes.
@@ -2862,6 +2873,9 @@ class _PageEmitter:
         bag_quantity = self._emit_bag_quantity_idiom(node)
         if bag_quantity is not None:
             return bag_quantity
+        store_item = self._emit_store_item_idiom(node)
+        if store_item is not None:
+            return store_item
         guard = self._emit_unsatisfiable_numeric_guard(node)
         if guard is not None:
             return guard
@@ -3521,6 +3535,36 @@ class _PageEmitter:
         if else_lines:
             lines.append("} else {")
             lines += [f"    {ln}" for ln in else_lines]
+        lines.append("}")
+        return lines
+
+    def _emit_store_item_idiom(self, node: IfNode) -> list[str] | None:
+        """``if $PokemonBag.pbStoreItem(::PBItems::SYMBOL[, qty])`` — a silent
+        bag add whose then-arm runs only if the item fit (``_STORE_ITEM_RE``).
+        Emits fork-native ``additem`` (silent, ``VAR_RESULT`` = AddBagItem's
+        bool) and branches on ``VAR_RESULT == TRUE``. The item resolves through
+        ``_give_item_const`` (symbol table + fork forward check); an
+        unresolved symbol or any other shape returns ``None`` (the queue)."""
+        params = node.cmd.get("parameters", [])
+        if len(params) < 2 or params[0] != 12 or not isinstance(params[1], str):
+            return None
+        m = _STORE_ITEM_RE.match(params[1])
+        if not m:
+            return None
+        symbol, qty = m.group(1), m.group(2)
+        const = self._give_item_const(symbol)
+        if const is None:
+            return None  # unresolved/un-forked item symbol — fall through to the queue
+        lines = [
+            f"additem({const}, {qty})" if qty else f"additem({const})",
+            "if (var(VAR_RESULT) == TRUE) {",
+        ]
+        lines += [f"    {ln}" for ln in self.emit_nodes(node.then)]
+        if node.otherwise is not None:
+            else_lines = self.emit_nodes(node.otherwise)
+            if else_lines:
+                lines.append("} else {")
+                lines += [f"    {ln}" for ln in else_lines]
         lines.append("}")
         return lines
 

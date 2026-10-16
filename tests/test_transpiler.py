@@ -1507,6 +1507,57 @@ def test_bag_quantity_wrong_operator_still_queues(ctx: T.TranspileContext) -> No
 
 
 # ----------------------------------------------------------------------------
+# silent bag add as a condition ($PokemonBag.pbStoreItem(...))
+# ----------------------------------------------------------------------------
+
+
+def test_store_item_condition_emits_additem(ctx: T.TranspileContext) -> None:
+    # Map081 EV001 page 0 cmd 6: the Route 1 fisherman's Old Rod; the then-arm
+    # sets self switch A only if the rod fit (CH08 ROM run).
+    ctx.items = {"OLDROD": "ITEM_OLD_ROD"}
+    ctx.fork_item_constants = frozenset({"ITEM_OLD_ROD"})
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$PokemonBag.pbStoreItem(::PBItems::OLDROD)"], indent=0),
+        cmd(T.SHOW_TEXT, ["stored"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], map_id=81, event_id=1, trigger=0)
+    assert res.unhandled == []
+    assert "additem(ITEM_OLD_ROD)" in res.text
+    assert "if (var(VAR_RESULT) == TRUE) {" in res.text
+    assert "stored" in res.text
+    assert "giveitem" not in res.text
+
+
+def test_store_item_condition_with_quantity_and_else(ctx: T.TranspileContext) -> None:
+    ctx.items = {"POTION": "ITEM_POTION"}
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$PokemonBag.pbStoreItem(PBItems::POTION, 3)"], indent=0),
+        cmd(T.SHOW_TEXT, ["fit"], indent=1),
+        cmd(T.ELSE_BRANCH, indent=0),
+        cmd(T.SHOW_TEXT, ["bag full"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert res.unhandled == []
+    assert "additem(ITEM_POTION, 3)" in res.text
+    assert "} else {" in res.text and "bag full" in res.text
+
+
+def test_store_item_unforked_constant_still_queues(ctx: T.TranspileContext) -> None:
+    ctx.items = {"BACUBERRY": "ITEM_BACU_BERRY"}
+    ctx.fork_item_constants = frozenset({"ITEM_POTION"})
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$PokemonBag.pbStoreItem(::PBItems::BACUBERRY)"], indent=0),
+        cmd(T.SHOW_TEXT, ["stored"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert len(res.unhandled) == 1
+    assert "additem" not in res.text
+
+
+# ----------------------------------------------------------------------------
 # three-option starter-pick choice menu (multichoice)
 # ----------------------------------------------------------------------------
 
