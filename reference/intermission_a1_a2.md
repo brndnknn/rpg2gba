@@ -730,4 +730,24 @@ nothing in §1 touches.
 
 ## 3. Decisions
 
-*(None yet.)*
+- **2026-10-16, ordering (operator):** "far less concerned about the save
+  format if we can do something to make the team level up and/or add more
+  Pokémon"; streaming (I4) is the item the operator is most interested in.
+  So the I6 save-format batch is **not** a prerequisite. I1's need is met
+  for now by the debug menu (below), and I4 goes first.
+- **2026-10-16, I1:** the debug menu is the walk-party answer for now.
+  Verified on a ROM run: a level-31 Uranium species and Rare Candies were
+  given. Recipe and species ids: `reference/guides/walk_party_debug_menu.md`.
+- **2026-10-16, quick fixes on branch `intermission-streaming`:**
+  - I2a fixed: `MergeTable.apply_metatile` writes merged static quadrants
+    into every animation frame and fails loud if the static/animated slot
+    mask changes. Rebuilt: 0 spurious animated tiles across all 15 Uranium
+    animations (was 29 on uranium1033).
+  - #69/#70 fixed: tests can't write `reference/playtest_rule_versions.json`
+    any more.
+  - #44 and #50 closed.
+- **2026-10-16, I4:** a prototype plan is written,
+  `reference/streaming_prototype_plan.md`, awaiting operator review. It
+  answers the "how do we test map 101" concern: prototype on map 040, plus
+  the Map Walker ROM and an automatic VRAM-vs-oracle screen check for the
+  unreached maps.
