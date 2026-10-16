@@ -32,7 +32,52 @@ without fighting.
 
 so that a walk doesn't stall on healing, Pokémon Center trips, or lost battles.
 
-**Status:** recorded, not yet discussed.
+**Status:** researched 2026-10-16 (below); not yet discussed.
+
+#### Research (2026-10-16)
+
+**Why the party stays weak.** The suite never fights honestly. Its battle
+driver (`playtest/battle.py:193-340`, `win_battle`/`zero_enemy_hp`) writes the
+enemy's HP to 0 in RAM and lets the real faint path end the battle. So:
+- the player never takes damage in a suite run;
+- the starter gets only the experience those instant wins pay;
+- the only other party members are scripted gifts the chapters walk (the Luxi
+  gift; CH03's Magikarp check).
+
+Nothing boosts levels. The starter is given at level 5
+(`MokiTownProfessorLab/scripts.inc:2414`), so a walk ROM inherits a party that
+was fine for the harness and useless for a human.
+
+**Usable today, with no code change: the engine's debug menu.**
+pokeemerald-expansion's overworld debug menu is on in non-release builds
+(`include/config/debug.h:5`, `DISABLED_ON_RELEASE`). Our builds aren't release
+builds, and `Debug_ShowMainMenu` is linked into the current ROM. **Hold R and
+press START in the overworld.** It offers:
+- "Heal party" (`debug.c:616`);
+- "Pokémon (Basic)" / "(Complex)": pick a species and level, and optionally
+  moves, IVs and nature (`debug.c:2819`, `:2861`, `:3018`).
+
+Not yet checked: whether the species list reaches the 38 staged Uranium species
+(they are appended after the expansion's roster), and whether any of our
+input hooks swallow R+START outside the map-walker build.
+
+**Options for a real fix:**
+
+| Option | How | Notes |
+|---|---|---|
+| **a. Debug menu by hand** | The operator gives and heals as they go. | Works now. Manual every walk. |
+| **b. Walk party stamped into walk ROMs** | Before stamping, the harness runs the engine's own give-Pokémon routine, or writes the party into RAM, then syncs it into the save. A per-act party spec (species + level) would be a small reference file. | A RAM *writer* doesn't exist yet: the readers decode the encrypted Pokémon format but nothing encodes it. Running `ScriptGiveMon`/`givemon` through the engine avoids writing that encoder, but needs a hook to run a script from the harness. There's precedent: a removed boot-party rig in `new_game.c` (re-arm recipe in `ROM_TEST_DEV.md`). |
+| **c. Catch along the way** | The suite catches wild Pokémon (the encounter tables are converted) and keeps them. | The most "real" option. It needs a capture driver, and catches would change the suite's own state, which every later chapter replays. The heaviest of the three. |
+| **d. Make battles easier instead** | Experience and level-cap configs (`config/battle.h`, `caps.h`). No level scaling exists. | Doesn't fix a level-5 starter, and changes engine balance (baseline behaviour, so the operator would need to approve it). |
+
+**Which species are available.** 38 Uranium species are staged
+(`species_converter/common.py:64-158`), plus every vanilla species. Several
+of CH01–CH08's wild Pokémon are *not* staged (Comite, Cocaran, Cassnail,
+Brailip, Tubjaw). How their encounter slots are emitted wasn't traced.
+
+**Relationship to I6.** If I6's option A or B lands, the operator's own party
+replaces the stamped one, and (b) becomes the fallback for walks that start
+from a fresh suite state.
 
 ### I2. Graphics cleanup
 
@@ -47,7 +92,75 @@ overhang the water glitch.
 **I2b. Large boulders use the wrong palette.** The large boulders don't share
 the palette of the surrounding rocky terrain, so they look out of place.
 
-**Status:** recorded, not yet discussed.
+**Status:** researched 2026-10-16 (below); not yet discussed.
+
+#### Research (2026-10-16)
+
+**I2a: root cause found, and it's a bug in the near-duplicate tile merge, not
+in animation.** Confirmed in the code.
+
+- **The animation itself is consistent.** A cell with animated water under a
+  tree or rock composites the overlay into every frame (`build_slice_tilesets.py:317-333`).
+  None of these is the cause:
+  - frame counts are the least common multiple of the source animations
+    (Route 1 has 4, 5, 19 and 95; no guard hits);
+  - the cycle wraps correctly;
+  - every frame keeps one palette;
+  - animated tile slots are never shared with static tiles.
+- **The bug: `MergeTable.apply_metatile` (`tile_merge.py:237-252`).** When the
+  merge swaps a *static* 8×8 quarter for its near-duplicate representative,
+  it writes the new art into frame 0 only, then returns the metatile with its
+  original animation frames unchanged (`:252` passes `mt.frames` through).
+  - In a column that has animation anywhere (e.g. water elsewhere in the same
+    metatile), that static quarter now has frame 0 = merged art and frames
+    1…n = original art.
+  - The "is this really static?" check (`emit._effective_frames`) sees the
+    frames differ, so it emits the quarter as a spurious animated tile.
+  - **On screen:** once per cycle, and at map load, the tree or rock quarter
+    flips to slightly different art and back.
+- **Measured on Route 1 (tileset `uranium1033`):** 29 such tiles. 28 are in
+  the 19-frame water animation and 1 is in the 4-frame one. Their pixel change
+  at the 0→1 and 18→0 frame transitions is ~10× that of every other step.
+  - The source pond animation changes smoothly, so the jump is ours.
+  - They also waste ROM (28 tiles × 19 frames) and per-frame DMA.
+- **Not yet done:**
+  - Booting the ROM to match these tiles to the exact spots the operator saw.
+  - A count of other tilesets. Any tileset with an animated column and a
+    merged static quarter has the same bug.
+- **Fix (small):**
+  - In `apply_metatile`, write the replacement quarter into every frame, so a
+    static quarter stays static.
+  - Add a fail-loud check in emit for the signature "frame 0 differs, frames
+    1…n identical".
+  - Add a test in `tests/test_tile_merge.py` for a metatile with frames plus a
+    merged static quarter. No such test exists.
+
+**I2b: probably the sprite palette packing. Moderate confidence; it needs the
+operator to confirm which boulder.**
+- **The rocks and boulders are sprites (object events), not map tiles.** They
+  are converted Uranium sheets:
+  - the Rock Smash rock is `fk107-rocksmash` → `OBJ_EVENT_GFX_URANIUM_FK107_ROCKSMASH`;
+  - the Strength boulder is `HGSS_267` → `OBJ_EVENT_GFX_URANIUM_HGSS_267`
+    (`reference/npc_gfx_map.json:72-76`, `:287-291`).
+- **Sprite colours are shared across all NPCs.** `sprite_emit.py` packs *all*
+  NPC and prop sheets into at most 4 shared 15-colour sprite palettes
+  (`MAX_PALETTES = 4`; the banks hold 17/35/26/11 sheets). Both boulder sheets
+  share bank 1 with dozens of others.
+- **Measured on the Rock Smash rock:** its tan-grey source colours come out
+  olive and brighter (e.g. (80,72,56) → (66,82,49)).
+- **Why they can't match the ground.** Sprite palettes and map palettes are
+  separate hardware banks, quantized independently. Nothing ties a rock
+  sprite's colours to the rocky ground it sits on.
+- **Fix options:**
+  - give rock and boulder props their own sprite palette, as the player
+    sprite has;
+  - reserve a prop-only shared bank;
+  - snap prop colours to the map's rock palette at emit time.
+
+  The constraint is the sprite palette budget: 4 shared banks plus the player.
+- **Open:** whether the operator means the Rock Smash rocks (Route 1, Moki,
+  Route 2), the Strength boulders (Kevlar), or a large boulder drawn as map
+  tiles, which isn't ruled out.
 
 ### I3. Generate the game-specific engine code instead of hand-writing it
 
