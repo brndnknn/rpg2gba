@@ -46,7 +46,8 @@ from ...beat_floor.assertion import FloorAssertion, make_params
 from ...beat_floor.lookup import floor_for_row as _default_floor_for_row
 from ...chapter_manifest.schema import page_row_id
 from .. import assertions
-from ..cells import arrival_cell, warp_cell
+from ...routing.locations import _rom_touch_cells
+from ..cells import arrival_cell, event_is_sight_trainer, warp_cell
 from ..errors import ScenarioError
 from . import (
     FloorLookup, declare_assertions, find_match, load_chapter_rows,
@@ -574,6 +575,12 @@ def warp_beat(
 
     crossing = warp_cell(map_constant, to=dest_map_constant, event_id=event_id)
     arrival = arrival_cell(dest_map_constant, from_map=map_constant, event_id=event_id)
+    # A `Trainer(N)` sight event fires by sight: as an object (a compiled
+    # sight trainer) its lane is unbounded here; as a tripwire (touch pages
+    # realized as coord events along its ray, `_rom_touch_cells`) only its
+    # own coord cells can fire it.
+    tripwire = _rom_touch_cells(map_id, event_id)
+    sight_page = bool(tripwire) or event_is_sight_trainer(map_constant, event_id)
 
     # Registration-time cross-check (task brief point 1): the RMXP source
     # floor's own (map_id, x, y) for this row's code-201 must agree with the
@@ -786,8 +793,26 @@ def warp_beat(
             # between the step and the map change; `wait_for_map` alone
             # would sit on the first text box until its budget ran out.
             dx, dy = _APPROACH_DELTA[crossing_direction]
-            emu.walk_to(crossing_cell[0] + dx, crossing_cell[1] + dy, absorb_wild=True)
-            assertions.try_step(emu, crossing_direction)
+            if sight_page:
+                # A `Trainer(N)` sight event fires its page when the player
+                # enters its lane -- on the way to, or on, the approach cell
+                # (CH08 ROM run: Moki EV078's return scene at (27,43)). A
+                # non-battle lock on the way IS this page; its texts and the
+                # map change below still have to follow.
+                from rpg2gba.playtest.emulator import WalkInterrupted  # lazy: mGBA bindings
+
+                try:
+                    emu.walk_to(crossing_cell[0] + dx, crossing_cell[1] + dy, absorb_wild=True)
+                except WalkInterrupted as exc:
+                    if exc.battle or (tripwire and tuple(exc.stopped_at) not in tripwire):
+                        raise
+                    logger.info("%s: sight event %d fired at %s on the approach",
+                                beat_name, event_id, exc.stopped_at)
+                else:
+                    assertions.try_step(emu, crossing_direction)
+            else:
+                emu.walk_to(crossing_cell[0] + dx, crossing_cell[1] + dy, absorb_wild=True)
+                assertions.try_step(emu, crossing_direction)
             for step in texts:
                 STEP_HANDLERS["text"](emu, beat_name, step)
             assertions.wait_for_map(emu, beat_name, dest_map)
