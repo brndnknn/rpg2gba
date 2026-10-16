@@ -256,6 +256,35 @@ def test_seam_hop_presses_the_arrows_own_direction(monkeypatch):
     assert step[2] == ("MAP_1", 1, 9, "LEFT", "MAP_2")
 
 
+def test_warp_hop_never_stands_on_another_warp_tile(monkeypatch):
+    # 2026-10-15, CH08 ROM run: Route 1's stacked east exits EV022-24 at
+    # (70,11)-(70,13). `reach` floods through warp tiles, so EV023's first
+    # side in `_PRESS_INTO` order (south, pressing UP) was EV022's own tile;
+    # the walk warped on arrival instead of pressing. The west side wins.
+    from types import SimpleNamespace
+
+    from rpg2gba.beat_gen import __main__ as bg
+
+    monkeypatch.setattr(bg, "_map_constant_for", lambda m: f"MAP_{m}")
+    monkeypatch.setattr(bg, "landing_cell", lambda graph, cell, facing: cell)
+    stack = {(5, 4): 23, (5, 5): 22, (5, 6): 24}
+    edges = [SimpleNamespace(kind="warp", src_map=1, dst_map=2, event_id=ev,
+                             src_cell=cell, dst_cell=(1, 1)) for cell, ev in stack.items()]
+    world = SimpleNamespace(edges_from=lambda m: edges if m == 1 else [])
+    exits = {cell: (SimpleNamespace(event_id=ev, dest_facing=0),) for cell, ev in stack.items()}
+    graphs = {1: SimpleNamespace(warp_exits=exits), 2: SimpleNamespace(warp_exits={})}
+    rooms = SimpleNamespace(place_of=lambda m, cell: (m, 0),
+                            landing_place=lambda e: (e.dst_map, 0))
+    reach = frozenset({(1, c) for c in stack} | {(1, (4, 4)), (1, (4, 5)), (1, (4, 6)),
+                                                 (2, (1, 1))})
+    _route, door_steps = bg._route_between(world, frozenset({1, 2}), reach, graphs, rooms=rooms)
+
+    for (_m, ev), steps in door_steps.items():
+        for _src, _dst, hop, _ev in steps:
+            assert (hop[1], hop[2]) not in stack, (ev, hop)
+            assert hop[3] == "RIGHT"
+
+
 def test_seam_hop_unreachable_from_its_press_side_is_not_used(monkeypatch):
     route, door_steps = _seam_route(monkeypatch, [(12, (0, 9), (5, 9))], press="LEFT")
     with pytest.raises(ValueError, match="no warp route"):

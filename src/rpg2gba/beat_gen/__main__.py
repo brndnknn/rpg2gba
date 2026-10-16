@@ -640,8 +640,14 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
                 return None
             return (_map_constant_for(edge.src_map), x + dx, y + dy, press,
                     _map_constant_for(edge.dst_map))
+        # `reach` floods through warp tiles, so a side can itself be another
+        # warp: never stand on one (CH08 ROM run: Route 1's stacked east
+        # exits EV022-24 -- the first side of EV023 (70,11) was EV022's own
+        # tile (70,12), and the walk warped before the hop's press).
+        warp_cells = graphs[edge.src_map].warp_exits
         for (dx, dy), press in _PRESS_INTO:
-            if (edge.src_map, (x + dx, y + dy)) in reach:
+            cell = (x + dx, y + dy)
+            if (edge.src_map, cell) in reach and cell not in warp_cells:
                 return (_map_constant_for(edge.src_map), x + dx, y + dy, press,
                         _map_constant_for(edge.dst_map))
         return None
