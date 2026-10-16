@@ -84,7 +84,9 @@ from rpg2gba.beat_gen.facing import (
     check_title_pages,
     event_ids_by_map,
     facing_sides,
+    fold_one_shot_arms,
     one_shot_arms,
+    one_shot_pages,
     pin_records,
     split_facing_arms,
 )
@@ -2342,6 +2344,16 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                                     if a.kind == "choice"] if rid in floors else [])
     check_title_pages(
         beats, lambda page: row_states(parse_row_id(page).map_id)[page].trigger)
+    # 6c. An arms beat of a one-shot page another beat fires has no second
+    #     firing to step into (`beat_gen/facing.py` `fold_one_shot_arms`).
+    page_owners = {o for b in beats if b.template == "generic" for r in b.rows
+                   if (o := parse_row_id(r).owning_page_row_id) is not None}
+    one_shot_pg: dict[str, OneShot] = {}
+    for map_id in sorted({parse_row_id(o).map_id for o in page_owners}):
+        one_shot_pg.update(one_shot_pages(
+            map_id, load_map_json(map_id, build_dir / "maps"),
+            (o for o in page_owners if parse_row_id(o).map_id == map_id)))
+    beats, one_shot_elsewhere = fold_one_shot_arms(beats, one_shot_pg, floors)
     beats = tuple(
         _apply_route_kwargs(
             b, boundary=b.template == "warp" and is_boundary_warp(b, floors, chain_maps),
@@ -2419,7 +2431,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         beats=beats,
         refusals=selection.refusals + tuple(cell_refusals),
         elsewhere=(selection.elsewhere + dead_elsewhere + choice_elsewhere + facing_elsewhere
-                   + state_elsewhere + cleared_too_late),
+                   + state_elsewhere + one_shot_elsewhere + cleared_too_late),
         order_dependent=_live_order_dependent(
             story.order_dependent, state_elsewhere + facing_elsewhere),
         route=route,

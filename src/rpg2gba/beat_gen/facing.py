@@ -117,6 +117,64 @@ def _turns_on(commands: Sequence[Mapping[str, Any]], event_id: int, switch: str)
     return False
 
 
+_Ender = tuple[str, bool, Callable[[Sequence[Mapping[str, Any]]], bool]]
+
+
+def _page_enders(event: Mapping[str, Any], page_idx: int) -> list[_Ender]:
+    """(switch, lifts, predicate) for each way page `page_idx` of `event` ends
+    itself: turning its own condition self switch OFF, or turning ON a self
+    switch a HIGHER page is conditioned on (`lifts`). The predicate tests a
+    command list."""
+    event_id = event["id"]
+    page = event["pages"][page_idx]
+    cond = page.get("condition") or {}
+    enders: list[_Ender] = []
+    if cond.get("self_switch_valid"):
+        off = cond["self_switch_ch"]
+        enders.append((off, False, lambda cmds, s=off: any(
+            c.get("code") == _SELF_SWITCH
+            and (c.get("parameters") or [None, None])[:2] == [s, _SELF_SWITCH_OFF]
+            for c in cmds)))
+    for higher in event["pages"][page_idx + 1:]:
+        hc = higher.get("condition") or {}
+        if hc.get("self_switch_valid"):
+            on = hc["self_switch_ch"]
+            enders.append((on, True, lambda cmds, s=on: _turns_on(cmds, event_id, s)))
+    return enders
+
+
+def one_shot_pages(map_id: int, map_data: Mapping[str, Any],
+                   pages: Iterable[str]) -> dict[str, OneShot]:
+    """{page row id: OneShot} for each page of `pages` that ends itself on its
+    first firing from its TRUNK -- the ender sits at the page's top level, so
+    every firing runs it whichever arm is taken (an ender inside an arm only
+    ends the page when that arm runs, and is not counted). Pages with no
+    ender are absent."""
+    events = {e["id"]: e for e in map_data.get("events", []) or []}
+    out: dict[str, OneShot] = {}
+    for page_row in sorted(set(pages)):
+        parsed = parse_row_id(page_row)
+        if parsed.map_id != map_id or parsed.event_id is None or parsed.page_idx is None:
+            raise ValueError(f"{page_row}: not a page row of map {map_id}")
+        event = events.get(parsed.event_id)
+        if event is None:
+            raise ValueError(f"map{map_id:03d}/ev{parsed.event_id:03d}: event not in map data")
+        enders = _page_enders(event, parsed.page_idx)
+        if not enders:
+            continue
+        page = event["pages"][parsed.page_idx]
+        trunk = next((s for s in iter_page_scopes(map_id, event, parsed.page_idx, page)
+                      if s.row_id == page_row), None)
+        if trunk is None:
+            raise ValueError(f"{page_row}: page has no trunk scope")
+        found = next(((switch, lifts) for switch, lifts, ends in enders
+                      if ends(trunk.commands)), None)
+        if found is not None:
+            out[page_row] = OneShot(page=page_row, switch=found[0], ender=page_row,
+                                    lifts=found[1])
+    return out
+
+
 def one_shot_arms(map_id: int, map_data: Mapping[str, Any],
                   gated: Iterable[str]) -> dict[str, OneShot]:
     """{row id: OneShot} for each row of `gated` (facing-gated branch rows)
@@ -142,19 +200,7 @@ def one_shot_arms(map_id: int, map_data: Mapping[str, Any],
         if event is None:
             raise ValueError(f"map{map_id:03d}/ev{event_id:03d}: event not in map data")
         page = event["pages"][page_idx]
-        cond = page.get("condition") or {}
-        enders: list[tuple[str, bool, Callable[[Sequence[Mapping[str, Any]]], bool]]] = []
-        if cond.get("self_switch_valid"):
-            off = cond["self_switch_ch"]
-            enders.append((off, False, lambda cmds, s=off: any(
-                c.get("code") == _SELF_SWITCH
-                and (c.get("parameters") or [None, None])[:2] == [s, _SELF_SWITCH_OFF]
-                for c in cmds)))
-        for higher in event["pages"][page_idx + 1:]:
-            hc = higher.get("condition") or {}
-            if hc.get("self_switch_valid"):
-                on = hc["self_switch_ch"]
-                enders.append((on, True, lambda cmds, s=on: _turns_on(cmds, event_id, s)))
+        enders = _page_enders(event, page_idx)
         if not enders:
             continue
         scopes = {s.row_id: s for s in iter_page_scopes(map_id, event, page_idx, page)}
@@ -171,6 +217,65 @@ def one_shot_arms(map_id: int, map_data: Mapping[str, Any],
                 out[row_id] = OneShot(page=chain[-1], switch=found[0], ender=found[2],
                                       lifts=found[1])
     return out
+
+
+def fold_one_shot_arms(
+    beats: Sequence[PlannedBeat], one_shot: Mapping[str, OneShot],
+    floors: Mapping[str, Any],
+) -> tuple[tuple[PlannedBeat, ...], tuple[Elsewhere, ...]]:
+    """Drop the arms beat of a one-shot page another beat already fires.
+
+    A beat whose rows are all branch arms of pages (`one_shot`, from
+    `one_shot_pages`) whose trunk row another beat claims would step into an
+    event that ended itself on that beat's walk (CH08: Moki Town ev078 p0
+    sets its own A, lifting p1; the `_arms` beat's second bump started no
+    script). Its arms ran inside that single firing, so each becomes an
+    `unselected_arm` elsewhere entry naming the trunk beat and the ender. An
+    arm whose floor holds anything beyond `trigger`/`completes` has an
+    assertion that firing does not evidence: fail loud. Any other beat, and a
+    beat with an arm of a page that is not one-shot, is untouched."""
+    trunk_beat: dict[str, str] = {}
+    for b in beats:
+        for r in b.rows:
+            trunk_beat.setdefault(r, b.name)
+    out: list[PlannedBeat] = []
+    elsewhere: list[Elsewhere] = []
+    for b in beats:
+        owners = {parse_row_id(r).owning_page_row_id for r in b.rows
+                  if parse_row_id(r).kind == "branch"}
+        if (b.template != "generic" or not b.rows or len(owners) == 0 or None in owners
+                or any(parse_row_id(r).kind != "branch" for r in b.rows)
+                or not all(o in one_shot and trunk_beat.get(o, b.name) != b.name
+                           for o in owners if o is not None)):
+            out.append(b)
+            continue
+        for r in b.rows:
+            owner = parse_row_id(r).owning_page_row_id
+            info = one_shot[owner]
+            trunk = trunk_beat[owner]
+            floor = floors.get(r)
+            if floor is None:
+                raise ValueError(f"{r}: no floor for an arm folded into beat {trunk}")
+            kinds = sorted({a.kind for a in floor.assertions})
+            extra = [k for k in kinds if k not in _FIRING_KINDS]
+            if extra:
+                raise ValueError(
+                    f"{r}: arm of one-shot page {owner} (trunk beat {trunk}, which ends the "
+                    f"page after one firing) has floor kinds {extra} beyond "
+                    f"{sorted(_FIRING_KINDS)}; the single firing cannot evidence them and "
+                    "a second bump would start no script")
+            turn = "on, lifting a higher page," if info.lifts else "off"
+            elsewhere.append(Elsewhere(
+                r, "unselected_arm",
+                detail=(f"ran inside the single firing of {owner} by beat {trunk}: the page "
+                        f"turns self switch {info.switch} {turn} at its top level "
+                        f"({info.ender}), so it fires once and a second bump starts no "
+                        f"script; this arm's floor ({', '.join(kinds)}) is evidenced by "
+                        "that firing")))
+    return tuple(out), tuple(elsewhere)
+
+
+_FIRING_KINDS: frozenset[str] = frozenset({"trigger", "completes"})
 
 
 def split_facing_arms(

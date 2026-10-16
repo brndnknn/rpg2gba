@@ -357,16 +357,6 @@ warp_beat(
 generic_beat(
     ch08,
     chapter_id='CH08',
-    beat_name='m032e078_warp_arms',
-    group='m032e078_warp',
-    rows=('map032/ev078/p0/b0', 'map032/ev078/p0/b1', 'map032/ev078/p0/b2'),
-    approach_prefer='south',
-    skip_claimed=True,
-)
-
-generic_beat(
-    ch08,
-    chapter_id='CH08',
     beat_name='m032e078p1',
     group='m032e078p1',
     rows=('map032/ev078/p1',),
@@ -694,6 +684,9 @@ ELSEWHERE: dict[str, str] = {
     'map032/ev074/p0/b3': 'later: CH01',
     'map032/ev074/p1': 'later: CH01',
     'map032/ev074/p2': 'later: CH01',
+    'map032/ev078/p0/b0': "unselected_arm: ran inside the single firing of map032/ev078/p0 by beat m032e078_warp: the page turns self switch A on, lifting a higher page, at its top level (map032/ev078/p0), so it fires once and a second bump starts no script; this arm's floor (completes, trigger) is evidenced by that firing",
+    'map032/ev078/p0/b1': "unselected_arm: ran inside the single firing of map032/ev078/p0 by beat m032e078_warp: the page turns self switch A on, lifting a higher page, at its top level (map032/ev078/p0), so it fires once and a second bump starts no script; this arm's floor (completes, trigger) is evidenced by that firing",
+    'map032/ev078/p0/b2': "unselected_arm: ran inside the single firing of map032/ev078/p0 by beat m032e078_warp: the page turns self switch A on, lifting a higher page, at its top level (map032/ev078/p0), so it fires once and a second bump starts no script; this arm's floor (completes, trigger) is evidenced by that firing",
     'map032/ev078/p0/b3': 'unselected_arm: not taken on the walk: else of `$game_player.y<=45` from cell (27, 43) (event at (27, 42)) (ruling 19)',
     'map032/ev080/p0': 'unreachable',
     'map032/ev080/p0/b0': 'unreachable',

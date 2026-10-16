@@ -17,6 +17,15 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 147. One-shot page arms are recorded as `unselected_arm` though they ran
+
+Ruled 2026-10-15 (CH08): `beat_gen` folds the arms of a one-shot page whose trunk another beat
+fires (`facing.fold_one_shot_arms`; Moki EV078's position loops, walked by `m032e078_warp`) into
+ELSEWHERE as `unselected_arm`, with a detail saying they ran inside that single firing. The status
+word is wrong for them; it was reused because adding one is a `chapter_manifest` vocabulary change
+(`schema.ELSEWHERE_STATUSES`). Add a dedicated status (e.g. `walked_with_page`) when that file is
+next touched.
+
 ### 146. `_emit_give_item_idiom` branches on `VAR_RESULT` after `giveitem`, which is the pocket id
 
 Found 2026-10-15 by the CH08 transpiler work: `giveitem` (`engine/asm/macros/event.inc:2122`)
