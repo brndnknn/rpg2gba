@@ -16,21 +16,27 @@
     "NEVER by the wiki, per ROM_TEST_DEV.md Branch A1(b). Recorded disagreements",
     "live in reference/chapters/00-atlas.md.",
     "",
-    "Design record: reference/findings/grill_chapter_atlas_2026-07-30.md"
+    "Design record: reference/findings/grill_chapter_atlas_2026-07-30.md",
+    "",
+    "Act boundaries follow the wiki's sections with one deliberate exception",
+    "(operator, 2026-10-16): A1 ends at CH08, not at the Gym #1 chapter. The",
+    "Route 2 revisit and the walk back to Moki Town close out the first arc, so",
+    "A2 starts at Route 3. wiki_heading still names the wiki section an act",
+    "starts in."
   ],
 
   "acts": [
     {
       "id": "A1",
-      "title": "Moki Town -> Gym #1 (Nowtoch City)",
+      "title": "Moki Town -> Gym #1 (Nowtoch City) -> Returning to Moki Town",
       "wiki_heading": "'''Moki Town &#8594; Gym #1 (Nowtoch City)'''",
-      "chapters": ["CH01", "CH02", "CH03", "CH04", "CH05", "CH06"]
+      "chapters": ["CH01", "CH02", "CH03", "CH04", "CH05", "CH06", "CH07", "CH08"]
     },
     {
       "id": "A2",
-      "title": "Returning to Moki Town -> Gym #2 (Burole Town)",
+      "title": "Route 3 -> Gym #2 (Burole Town)",
       "wiki_heading": "'''Returning to Moki Town &#8594; Gym #2 (Burole Town)'''",
-      "chapters": ["CH07", "CH08", "CH09", "CH10"]
+      "chapters": ["CH09", "CH10"]
     },
     {
       "id": "A3",
@@ -121,13 +127,13 @@
     },
 
     {
-      "id": "CH07", "act": "A2", "title": "Route 2 (revisit)", "wiki_page": "Route 2",
+      "id": "CH07", "act": "A1", "title": "Route 2 (revisit)", "wiki_page": "Route 2",
       "visit": 2, "outdoor": 35, "maps": [35],
       "predecessor": "CH06", "tier": "thin", "status": "built",
       "notes": "Passed its §9 boot-walk gate 2026-10-15 (CH07 gen suite GREEN 480/480 from boot -- CH01-CH06 replay + CH07's own; operator walked from CH06's end: cutscene as expected, ledges jump correctly). First revisit chapter. Entered from the north (Nowtoch); the ev19 cutscene clears the rockslide with no capability, opening the overland route south to Kevlar. Rock Smash itself is first exercised in CH07A (operator, 2026-10-14; 07-route-2-revisit.md section 7)."
     },
     {
-      "id": "CH08", "act": "A2", "title": "Route 1 + Moki Town (revisit)", "wiki_page": "Moki Town",
+      "id": "CH08", "act": "A1", "title": "Route 1 + Moki Town (revisit)", "wiki_page": "Moki Town",
       "visit": 2, "outdoor": 32, "maps": [31, 33, 81, 32, 48, 49, 50, 64, 65, 89, 172],
       "predecessor": "CH07", "tier": "thin", "status": "built",
       "notes": "CH07A (Route 1 revisit) folded into CH08 2026-10-15 (operator): both halves are what Rock Smash unlocks on the walk back, and CH07A had no manifest, suite or branch, so nothing was renamed. Route 1 half (was CH07A): added 2026-08-29 by the slice-1 coverage audit (PLAYTEST_AUTHORING_IMPROVEMENT_V2.md Q11; the chain edit that was bound as a slice-1 exit criterion). The CH07->CH08 walk is 35 -> 31 -> 33 -> 32, and maps 31 and 33 belonged to no chapter at or after that leg -- the only two true strandings in the whole 59-chapter chain once the audit was re-run against the full 1108-edge warp graph instead of connections.json's 14 overland rows. Restores CH02's 10 DEFERRED_ROCK_GATED beats (5 trainer battles, B3's staircase run, B14b, 3 item balls) and owes 6 boulder beats never authored, Rock Smash having been granted in CH06. The Old Rod content in 81 unblocks on the same leg (VAR_BATTLE_VAR01 >= 5, written by CH06/Map042) -- ~4 beats, no stubs written. Kevlar (31) deliberately does NOT get its own chapter: it rides along as this chapter's entry leg (enter from Route 2, cross Kevlar, exit south into Route 1, full warp assertion per seam per v1 section 5.7), because at Rock Smash time it owes nothing -- its deferrals are Strength x7, Bike Wheel x1, post-Gym-5 x1, and B26 whose dev-only flag sw130 is never set anywhere in the corpus (that one is a mis-disposition, owed a re-triage to unreachable). (The id was CH07A rather than a renumber of CH08-CH59; the letter-suffix hatch in binding.py stays.) Moki half: same maps as CH01 at a later story state; no new conversion, only new gate states. Inherits the Rock Smash modelling deferred from CH07 (#92, #128, the HM06 slice of #127). The Moki rocks (Map032 EV014/015/033) are CH01's blocked:rock_smash rows; the Route 3 seam (#27) is CH09's crossing."

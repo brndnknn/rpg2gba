@@ -46,7 +46,7 @@ canvas (46) holding a Ranger office, the game's first Move Tutor, and its
 first scripted in-game trade, plus a second interior (47) tied to the
 Gym-unlock cutscene. A Metro building (44/45) offers a 3-city fast-travel
 menu — present in the data but its early availability is questioned in §5/§6.
-The chapter ends walking south across the Route 2 seam into Act 2 (CH07).
+The chapter ends walking south across the Route 2 seam into CH07 (Act 1 continues through CH08; re-split 2026-10-16, see `00-atlas.md` §1).
 
 ## 2. Map inventory
 

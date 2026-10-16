@@ -50,7 +50,7 @@ Design record: `reference/findings/grill_chapter_atlas_2026-07-30.md`.
 
 | Term | Definition |
 |---|---|
-| **Act** | One top-level section of the walkthrough. Nine progression acts, each ending at a Gym, plus a postgame act. |
+| **Act** | One top-level section of the walkthrough. Nine progression acts, each ending at a Gym, plus a postgame act. **One exception (operator, 2026-10-16):** A1 runs through CH08 rather than ending at Gym #1 (CH06) — the Route 2 revisit and the walk back to Moki Town close out the first arc, so A2 starts at Route 3 (CH09). |
 | **Chapter** | One location-unit within an act — a town plus its interiors, or a route plus its side rooms. **Chapter ≡ slice ≡ one §9 boot gate ≡ one ROM-test scenario.** |
 | **Revisit** | A location entered again later behind new traversal is a **separate chapter** over the same map ids, with `visit > 1`. Map ids are deliberately *not* unique across chapters. |
 | **Tier** | `full` / `medium` / `thin` — how deep that chapter's document goes. Distance from the frontier, promoted one tier where a mechanic first appears. |
@@ -70,8 +70,8 @@ visited, so "new maps" sums to 187 and revisit chapters contribute 0 new maps.
 
 | Act | Title | Ch | New maps | Revisited | Events | Commands | Trainers | Item grants | Enc maps |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|
-| A1 | Moki Town → Gym #1 (Nowtoch City) | 6 | 26 | 0 | 514 | 7187 | 28 | 38 | 5 |
-| A2 | Returning to Moki Town → Gym #2 (Burole Town) | 5 | 13 | 9 | 209 | 2480 | 16 | 12 | 1 |
+| A1 | Moki Town → Gym #1 (Nowtoch City) → Returning to Moki Town | 8 | 30 | 0 | 504 | 7022 | 28 | 37 | 5 |
+| A2 | Route 3 → Gym #2 (Burole Town) | 2 | 13 | 0 | 209 | 2480 | 16 | 12 | 1 |
 | A3 | Route 4 → Gym #3 (Bealbeach City) | 9 | 39 | 0 | 885 | 10988 | 62 | 97 | 11 |
 | A4 | Bealbeach City → Gym #4 (Vinoville Town) | 4 | 12 | 4 | 392 | 5745 | 28 | 24 | 2 |
 | A5 | Legen Town → Gym #5 (Amatree Town) | 7 | 21 | 11 | 706 | 6674 | 30 | 85 | 5 |
@@ -83,6 +83,13 @@ visited, so "new maps" sums to 187 and revisit chapters contribute 0 new maps.
 | | **total** | **60** | **187** | **94** | **5232** | **67249** | **317** | **419** | **50** |
 
 Reading notes:
+
+* *(2026-10-16: A1/A2 re-split — CH07/CH08 moved into A1, see §1. Both rows were
+  recomputed from today's `census --all` under the de-dup rule; A1's 30 new maps
+  vs the old 26 reflects bindings made since the table was first generated, so
+  the **total** row and the other acts' rows are still the original generation.
+  A1 is now 8 chapters but adds 0 revisited maps, since CH07/CH08 only revisit
+  A1's own maps; the old A2 row's "9 revisited" was entirely CH07/CH08.)*
 
 * **A3 is the largest act** — 39 new maps and 9 chapters, versus A1's 26/6. It
   is not a good second slice target and should not be planned as one unit.
@@ -116,8 +123,8 @@ Tier legend: **F** full, **M** medium, **T** thin. Status is from the binding.
 | CH04 | Route 2 | A1 | M | 1 | 4 | 3 | rockslide gate; `04-route-2.md` (spec), `reference/archive/CH04_TODO.md` (retired) |
 | CH05 | Passage Cave | A1 | M | 2 | 3 | 5 | first dungeon |
 | CH06 | Nowtoch City | A1 | M | 8 | 6 | 11 | **Gym 1**, Rock Smash (metro maps 44/45 parked to `unbound_maps` 2026-10-10) |
-| CH07 | Route 2 (revisit) | A2 | T | 1 | 4 | 3 | overland seam opens |
-| CH08 | Route 1 + Moki Town (revisit) | A2 | T | 10 | 10 | 14 | absorbed CH07A (Route 1 revisit, maps 33/81) 2026-10-15, see §7; rides Kevlar (31) as entry leg; `08-route-1-moki-revisit.md` |
+| CH07 | Route 2 (revisit) | A1 | T | 1 | 4 | 3 | overland seam opens |
+| CH08 | Route 1 + Moki Town (revisit) | A1 | T | 10 | 10 | 14 | absorbed CH07A (Route 1 revisit, maps 33/81) 2026-10-15, see §7; rides Kevlar (31) as entry leg; `08-route-1-moki-revisit.md` |
 | CH09 | Route 3 | A2 | T | 4 | 8 | 9 | Moki E seam |
 | CH10 | Burole Town | A2 | T | 9 | 8 | 3 | **Gym 2** |
 | CH11 | Route 4 | A3 | T | 2 | 8 | 11 | |
