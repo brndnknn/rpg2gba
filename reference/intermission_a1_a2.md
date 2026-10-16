@@ -162,6 +162,55 @@ operator to confirm which boulder.**
   Route 2), the Strength boulders (Kevlar), or a large boulder drawn as map
   tiles, which isn't ruled out.
 
+**Correction (operator, 2026-10-16): I2b is the large boulders drawn into the
+map as tiles**, not the Rock Smash or Strength sprites. The sprite-palette
+finding above is real but is not this defect. Re-investigation of the tile-art
+boulders follows.
+
+**I2b, tile-art boulders: root cause found. High confidence; confirmed by eye.**
+A source-vs-ROM render of Route 2 shows pink and salmon wedges and red
+streaks on the big boulders' shaded lower edges, where the source is an even
+brown (`output/scratch/boulder_crop_35_13_12.png`, a scratch artefact).
+- **Which art.** RMXP tileset 22 (`PU-Route01-02-Moki-Kevlar`) has 2×2 boulders
+  (tile ids 667/668/675/676 and a second shape 665/666/673/674). Maps 31, 32,
+  33 and 35 all use that tileset. Route 2 has ~25 of these boulders; Route 1
+  has none (its rock is cliff plateau).
+- **Mechanism: palette families decided by one colour per 8×8 piece.**
+  1. The production packer (`quantize.build_quantized_tileset_family`,
+     `quantize.py:578-626`) sorts every 8×8 piece into a hue family.
+  2. It decides by the piece's single most frequent colour
+     (`_dominant_family`, `quantize.py:444-482`).
+  3. Hue below 15° counts as "red" and 15–45° as "brown".
+  4. The boulder's dark shaded quarters fall just under the 15° cut. 5 of the
+     16 pieces of one boulder were classed "red" and packed into a palette of
+     rail oranges and pinks (pal 9, no tan ramp).
+  5. The colours are then snapped to the nearest entry in that palette, so the
+     tans turn pink. Even the "brown" pieces were split across two palettes
+     (0 and 6), so one boulder ended up on three palettes.
+  6. Nothing keeps the pieces of one multi-tile object together.
+- **Measured.**
+  - Ground: mean error 0.2–3 per piece.
+  - Boulder: 5–13 per piece.
+  - Example remap: (192,144,104) → (200,128,128).
+  - 895 of the boulder's 1024 pixels sit within a small distance of palette 0
+    (the ground's tan ramp), so keeping it on palette 0 would be nearly
+    lossless.
+- **Likely corpus-wide.** Any shaded brown or red-brown object near the 15°
+  cut is at risk: rocks, cliffs, trunks, roofs, cave walls. Only tileset 22 has
+  been measured.
+- **Fixes, cheapest first, all in `quantize.py`:**
+  1. Tune the family cuts (`FamilyParams`, `quantize.py:435-442`): widen
+     "brown" down to ~5°, or make the red cut depend on saturation and
+     brightness.
+  2. Classify a piece by *all* its colours, not just the most frequent one.
+  3. Before packing, put a piece in an existing palette from another family
+     when that palette already covers its colours within a small error.
+  4. Keep the pieces of one multi-tile object in the same family. This is the
+     real coherence fix and needs new plumbing.
+
+  Any of these changes every map's palettes. Each needs a by-eye check over
+  the built maps (trunks, rails, roofs) before it lands.
+
 ### I3. Generate the game-specific engine code instead of hand-writing it
 
 **What the operator sees.** Getting this game working has taken many hand
