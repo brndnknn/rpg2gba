@@ -335,7 +335,7 @@ transit_beat(
     chapter_id='CH08',
     beat_name='m032e078_warp_transit',
     group='m032e078_warp',
-    hops=(('MAP_ROUTE_01', 70, 10, 'DOWN', 'MAP_MOKI_TOWN'),),
+    hops=(('MAP_ROUTE_01', 69, 11, 'RIGHT', 'MAP_MOKI_TOWN'),),
 )
 
 warp_beat(

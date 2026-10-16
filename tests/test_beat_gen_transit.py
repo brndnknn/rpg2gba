@@ -272,11 +272,18 @@ def test_warp_hop_never_stands_on_another_warp_tile(monkeypatch):
                              src_cell=cell, dst_cell=(1, 1)) for cell, ev in stack.items()]
     world = SimpleNamespace(edges_from=lambda m: edges if m == 1 else [])
     exits = {cell: (SimpleNamespace(event_id=ev, dest_facing=0),) for cell, ev in stack.items()}
-    graphs = {1: SimpleNamespace(warp_exits=exits), 2: SimpleNamespace(warp_exits={})}
+
+    def neighbors(cell):
+        x, y = cell
+        return [SimpleNamespace(target=n) for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))]
+
+    graphs = {1: SimpleNamespace(warp_exits=exits, neighbors=neighbors),
+              2: SimpleNamespace(warp_exits={}, neighbors=neighbors)}
     rooms = SimpleNamespace(place_of=lambda m, cell: (m, 0),
                             landing_place=lambda e: (e.dst_map, 0))
+    # (5,3) is a pocket above the stack: in `reach` only through the warps.
     reach = frozenset({(1, c) for c in stack} | {(1, (4, 4)), (1, (4, 5)), (1, (4, 6)),
-                                                 (2, (1, 1))})
+                                                 (1, (5, 3)), (2, (1, 1))})
     _route, door_steps = bg._route_between(world, frozenset({1, 2}), reach, graphs, rooms=rooms)
 
     for (_m, ev), steps in door_steps.items():

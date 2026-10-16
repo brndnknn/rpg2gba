@@ -611,6 +611,32 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
          and lands_reachably(e)] + connection_edges(),
         key=lambda e: (e.src_map, e.dst_map, e.src_cell, e.dst_cell))
 
+    @functools.cache
+    def dry_main(map_id: int) -> frozenset[tuple[int, int]]:
+        """The largest region of `map_id`'s reachable cells connected without
+        stepping on a warp tile -- where the live walker (which never steps
+        on one) actually roams. `reach` alone floods through warps."""
+        graph = graphs[map_id]
+        warps = graph.warp_exits
+        cells = {c for m, c in reach if m == map_id and c not in warps}
+        best: set[tuple[int, int]] = set()
+        seen: set[tuple[int, int]] = set()
+        for seed in sorted(cells):
+            if seed in seen:
+                continue
+            region = {seed}
+            todo = [seed]
+            while todo:
+                cur = todo.pop()
+                for e in graph.neighbors(cur):
+                    if e.target in cells and e.target not in region:
+                        region.add(e.target)
+                        todo.append(e.target)
+            seen |= region
+            if len(region) > len(best):
+                best = region
+        return frozenset(best)
+
     def hop_for(edge) -> tuple[str, int, int, str, str] | None:  # noqa: ANN001
         x, y = edge.src_cell
         if edge.kind == "connection":
@@ -641,13 +667,14 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
             return (_map_constant_for(edge.src_map), x + dx, y + dy, press,
                     _map_constant_for(edge.dst_map))
         # `reach` floods through warp tiles, so a side can itself be another
-        # warp: never stand on one (CH08 ROM run: Route 1's stacked east
-        # exits EV022-24 -- the first side of EV023 (70,11) was EV022's own
-        # tile (70,12), and the walk warped before the hop's press).
-        warp_cells = graphs[edge.src_map].warp_exits
+        # warp, or a pocket reachable only across one: stand only in the
+        # map's main warp-free region (`dry_main`). CH08 ROM runs: Route 1's
+        # stacked east exits EV022-24 -- EV023 (70,11)'s south side was
+        # EV022's own tile (70,12), its north side (70,10) a pocket above the
+        # stack; the west side (69,11) is the one CH02's own warp beat uses.
+        dry = dry_main(edge.src_map)
         for (dx, dy), press in _PRESS_INTO:
-            cell = (x + dx, y + dy)
-            if (edge.src_map, cell) in reach and cell not in warp_cells:
+            if (x + dx, y + dy) in dry:
                 return (_map_constant_for(edge.src_map), x + dx, y + dy, press,
                         _map_constant_for(edge.dst_map))
         return None
