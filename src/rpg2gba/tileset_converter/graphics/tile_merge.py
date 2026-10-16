@@ -205,6 +205,11 @@ def _merge_group(
     return assign
 
 
+def _static_slot_mask(mt: MetatileImage) -> tuple[bool, ...]:
+    """Per quadrant slot: True if it is static (one effective frame)."""
+    return tuple(len(_effective_frames(fr)) == 1 for fr in _slot_frames_for_metatile(mt))
+
+
 # --------------------------------------------------------------------------- table
 
 class MergeTable:
@@ -236,6 +241,10 @@ class MergeTable:
 
     def apply_metatile(self, mt: MetatileImage) -> MetatileImage:
         bot, top = mt.bottom.copy(), mt.top.copy()
+        # A static quadrant of an ANIMATED metatile repeats in every frame; the
+        # replacement must go into every frame too, or frame 0 alone changes and
+        # emit sees a spurious animated slot (the I2a overhang glitch).
+        frames = mt.frames  # copied on the first replacement only
         for si, fr in enumerate(_slot_frames_for_metatile(mt)):
             fr = _effective_frames(fr)
             if len(fr) > 1 or all(int(f[..., 3].max()) == 0 for f in fr):
@@ -246,10 +255,18 @@ class MergeTable:
                 continue
             rep = np.frombuffer(rk, dtype=np.uint8).reshape(8, 8, 4)
             q = _apply_flip(np.asarray(ORIENTS[o](rep), dtype=np.uint8), h, v)
-            layer = bot if si < 4 else top
             r, c = _POSITIONS[si % 4]
-            layer[r:r + 8, c:c + 8] = q
-        return MetatileImage(bot, top, mt.layer_type, mt.behavior, mt.frames)
+            if frames and frames is mt.frames:
+                frames = [(fb.copy(), ft.copy()) for fb, ft in mt.frames]
+            for layer in [bot if si < 4 else top] + [f[0 if si < 4 else 1] for f in frames or []]:
+                layer[r:r + 8, c:c + 8] = q
+        out = MetatileImage(bot, top, mt.layer_type, mt.behavior, frames)
+        if _static_slot_mask(out) != _static_slot_mask(mt):
+            raise AssertionError(
+                "merge changed which quadrants are animated (static/animated slot "
+                f"mask {_static_slot_mask(mt)} -> {_static_slot_mask(out)})"
+            )
+        return out
 
     def stats(self) -> dict:
         quads = Counter(self._groups[q] for q in self._assign)

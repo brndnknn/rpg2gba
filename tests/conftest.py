@@ -68,6 +68,30 @@ def _synthetic_tilesets_skip_corpus_tile_merge(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(bst, "_rom_tile_merge_enabled", lambda: False)
 
 
+_REAL_RULE_VERSIONS = (REPO_ROOT / "reference" / "playtest_rule_versions.json").resolve()
+
+
+@pytest.fixture(autouse=True)
+def _rule_versions_never_touch_reference(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """#69/#70: a green `run_chapter` records its rule-set version, and tests used
+    to leak fixture chapter names into the tracked `reference/` file. Point the
+    default at a per-test temp file, and fail any write that still names the real
+    one."""
+    from rpg2gba.playtest import rules
+
+    monkeypatch.setattr(rules, "DEFAULT_RECORDED_VERSIONS_PATH",
+                        tmp_path / "playtest_rule_versions.json")
+    real_record = rules.record_chapter_version
+
+    def guarded(path: Path, chapter: str, version: int) -> None:
+        if Path(path).resolve() == _REAL_RULE_VERSIONS:
+            pytest.fail(f"test wrote {chapter!r} into tracked {_REAL_RULE_VERSIONS}")
+        real_record(path, chapter, version)
+
+    monkeypatch.setattr(rules, "record_chapter_version", guarded)
+
+
 @pytest.fixture(scope="session")
 def reference_dir() -> Path:
     """The repo's committed `reference/` sidecars."""

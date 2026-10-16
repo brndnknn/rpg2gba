@@ -164,6 +164,30 @@ def test_animated_and_empty_quadrants_untouched():
     del frames
 
 
+def test_static_quadrant_of_animated_metatile_merges_in_every_frame():
+    # I2a regression: a static quad (e.g. a rock) sharing a metatile with animated
+    # water. Merging it in frame 0 only made emit see a spurious animated slot, so the
+    # water animation DMA overwrote the rock. Every frame must get the replacement.
+    base, near = _other(5), _bump(_other(5), 1)
+    water = [_other(20), _other(21), _other(22)]
+    mt = _mt([near, water[0], base, base])
+    mt.frames = []
+    for w in water[1:]:
+        fb = mt.bottom.copy()
+        fb[0:8, 8:16] = w                  # quadrant 1 animates; quadrant 0 static
+        mt.frames.append((fb, mt.top.copy()))
+    heavy = tm.collect_quads([(_mt([base] * 4), 100), (_mt([near] * 4), 1), (mt, 1)])
+    table = tm.build_merge_table(heavy, PARAMS)
+    assert table.rep_for(_canon(near)[0])[0] == _canon(base)[0]   # near does merge
+    out = table.apply_metatile(mt)
+    got = out.bottom[0:8, 0:8]
+    assert not np.array_equal(got, near)
+    for fb, _ft in out.frames:
+        assert np.array_equal(fb[0:8, 0:8], got)            # same in every frame
+    assert tm._static_slot_mask(out) == tm._static_slot_mask(mt)
+    assert np.array_equal(mt.frames[0][0][0:8, 0:8], near)   # input not mutated
+
+
 def test_same_quad_gets_identical_output_across_metatiles():
     base, near = _other(6), _bump(_other(6), 2)
     m1 = _mt([near, base, base, base])

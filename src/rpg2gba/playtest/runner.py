@@ -1237,7 +1237,7 @@ def run_chapter(chapter: Chapter, rom: Path, engine: Path, *,
                  emulator_factory: EmulatorFactory | None = None,
                  rerun_on_failure: bool = True,
                  beat_timeout_s: int = DEFAULT_BEAT_TIMEOUT_S,
-                 rule_versions_path: Path = playtest_rules.DEFAULT_RECORDED_VERSIONS_PATH,
+                 rule_versions_path: Path | None = None,
                  ) -> ChapterRunResult:
     """Run `chapter` beat by beat and return a structured result.
 
@@ -1249,7 +1249,9 @@ def run_chapter(chapter: Chapter, rom: Path, engine: Path, *,
     `rule_versions_path`: where each chapter's last-recorded green rule-set
     version lives (Q7.3) -- read to pin replayed ancestor beats to their own
     chapter's version, and written (only on a full, `from_beat=None`, pass
-    verdict) to advance this chapter's own recorded version.
+    verdict) to advance this chapter's own recorded version. `None` means
+    `playtest_rules.DEFAULT_RECORDED_VERSIONS_PATH`, resolved at call time so
+    the test suite can redirect it (#69/#70).
     """
     # Q13 slice 1, check 1: static, offline, no emulator time spent -- run
     # before anything else so a bad at=/locations= declaration is reported
@@ -1261,6 +1263,8 @@ def run_chapter(chapter: Chapter, rom: Path, engine: Path, *,
     output_root = output_root or Path("output") / "playtest"
     blobs_dir = output_root / "blobs"
     emulator_factory = emulator_factory or _default_emulator_factory
+    if rule_versions_path is None:
+        rule_versions_path = playtest_rules.DEFAULT_RECORDED_VERSIONS_PATH
     recorded_rule_versions = playtest_rules.load_recorded_versions(rule_versions_path)
 
     attempts: list[AttemptResult] = []
