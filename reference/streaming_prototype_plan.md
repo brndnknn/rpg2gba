@@ -296,6 +296,20 @@ via `budget_summary.py`). Merge off, every map in the build, map 040 unsplit.
   `CORPUS_UNRENDERABLE` entry (`tile_merge.py:59-61`) then goes.
 - This is an operator action. A placeholder floor is the fallback if the
   file can't be found.
+- **Is map 071 live? Yes** (checked 2026-10-16 after operator asked, since
+  some maps are test maps or old versions;
+  `output/scratch/who_warps_to.py 71`). Six direct Transfer Player commands
+  lead into it:
+  - map 84 EV115;
+  - map 97 EV53 pages 1 and 2;
+  - map 204 EV29 p2;
+  - map 213 EV51 p1;
+  - common event 12, a reset handler that checks for this map and sends the
+    player back into it.
+
+  The atlas places it in **CH59**, an optional late side quest, with maps
+  213 and 84. The entry maps 97 and 204 are CH36/CH47 and CH49. So the fix
+  is due by CH59, not now.
 
 **Unsplit 040 on one 13-palette set, compared with today's pieces**
 (`output/scratch/render_unsplit40.py`; images in `output/scratch/s0_40/`,
