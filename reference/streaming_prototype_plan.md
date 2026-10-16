@@ -11,7 +11,9 @@ The aim is to stop splitting maps (map 040 is split into seven pieces joined by
 arrow warps) and to stop trading art quality for fit (the lossy tile merge).
 
 **Non-goals for the prototype:**
-- **Palettes.** The 13-palette limit is unchanged. No map hits it today.
+- **Palettes.** The tile prototype keeps 13 palettes per map. Palette
+  streaming is a separate, later stage (§3.6, stage P), because it only pays
+  off with a new kind of quantizer.
 - **Corpus-wide rollout.** Only opted-in maps take the new path. Everything
   else keeps today's load-once path.
 - **The map viewer and oracle.** Their rework belongs to rollout (§6).
@@ -124,23 +126,72 @@ because a window at a map edge also shows the neighbour's strip.
 
 ### 3.5 Connections and seams
 
+*(Corrected 2026-10-16 after operator review: the first draft proposed
+joining 040 and 035 into one shared tileset group. That would force
+Kevlar, Route 2 and Nowtoch into one set of 13 palettes, and the group
+grows transitively as chapters add connections.)*
+
 The stock engine draws a connected neighbour's cells through the
-**current** map's tileset. That is why connected maps either share one
-synthetic tileset (`map_set.tileset_groups`) or need an id-remapped seam
-(`connection_remap`). Those seams import border strips and eat into the
-caps.
+**current** map's tileset. The pipeline has two ways to handle that:
+1. **Shared group** (`map_set.tileset_groups`): maps on the *same* RMXP
+   tileset, joined by a connection, share one synthetic tileset and so one
+   set of 13 palettes. Kevlar (31) and Route 2 (035), both RMXP tileset 22,
+   are such a group today.
+2. **Remapped seam** (`connection_remap`): each side imports the other's
+   border strip into its *own* tileset, re-quantized into its *own*
+   palettes. No palettes are shared. Map 040 is RMXP tileset 23, so
+   035↔040 is already a remapped seam and never joins the 31+35 group.
 
-Once both caps are gone, **sharing one tileset across a connected group
-always fits** (except for palettes). The group's tileset is the union, and
-only the visible window has to fit in VRAM. For the prototype:
-- Map 040 and Route 2 (035) join one group. Today the 035↔14000 connection
-  survives only by a tight fit (tileset 1040 at 1020/1024 metatiles and
-  1013/1024 tiles).
-- The palette check for that group is a Stage 0 item.
+Today the imported strips eat into the 1024 caps, and the caps are why
+seams are hard (#27). With streaming, an imported strip costs metatile ids
+(4096 available) but no permanent VRAM. So remapped seams always fit, and
+the pipeline can **prefer remapped seams over shared groups**. That keeps
+every map on its own 13 palettes, with no transitive growth. The visible
+cost is a slight colour shift on the neighbour's strip, which already
+exists on today's remapped seams.
 
-This is also the clean answer for #27 (Moki E → Route 03) later.
+This is also the answer for #27 (Moki E → Route 03).
 
-### 3.6 Opt-in
+### 3.6 Palettes: what streaming them would and wouldn't buy
+
+Streaming palettes is mechanically possible, and the engine already does it
+for overworld *sprites*: tag-based palette allocation, with
+`UpdateSpritePaletteWithWeather` (`field_weather.c:849`) re-applying weather
+when a palette loads. For BG tiles it works like slots: each tilemap word
+carries a 4-bit palette number, so `DrawMetatile` can map a tileset's
+"virtual" palette to one of the 13 hardware palettes, refcounted.
+
+**But measured on the built ROM** (`output/scratch/window_palettes.py`), the
+quantizer already fills all 13 palettes on almost every map. The worst
+16×16 window on most maps uses all 13 too. The packer spreads colour
+families across every palette, so each screen needs nearly all of them.
+Streaming palettes alone gains nothing.
+
+It only pays off together with a **location-aware quantizer**: more than 13
+palettes per map, chosen so that any one screen needs at most 13. That
+would mean:
+- better colours on big maps;
+- unsplit Nowtoch keeping roughly the colour budget its seven pieces get
+  today (7 × 13 palettes);
+- relief for I2b-type palette cramming.
+
+Constraining palettes per window is a genuinely open problem. It is the
+riskiest piece here and is kept **out of the tile prototype**. It gets its
+own Python-only experiment first (§5, stage P), so no engine work is spent
+until the art is judged by eye.
+
+### 3.7 What unsplitting 040 costs in colour
+
+Today map 040's seven pieces each have their own 13 palettes. Unsplit 040
+with tile streaming but **not** palette streaming gets one set of 13 for
+the whole city. That may look worse than today. Stage 0 renders unsplit
+040 through the real ROM quantizer and compares it with the current pieces
+by eye, before any engine work. If it looks worse, the choices are:
+- unsplit 040 waits for stage P;
+- accept the colours for the sake of removing the arrow warps (operator's
+  call).
+
+### 3.8 Opt-in
 
 A layout-level flag marks a map as streamed:
 - **Streamed maps:** the wide tile words (§3.2) and the cache path.
@@ -198,11 +249,12 @@ story progress to test it.
 
 | Stage | Work | Exit criterion |
 |---|---|---|
-| **0. Prep** | Per-map slot budget (anim + doors + worst window, including neighbour strips); palette check for the 040+035 group; promote the window census into a build-time check (report-only for now); fix the missing `Floatstone.png` for map 071 if it's cheap | Budget table for all 204 maps; 040+035 fits 13 palettes or a fallback is chosen |
+| **0. Prep** | Per-map slot budget (anim + doors + worst window, including neighbour strips); **render unsplit 040 with one 13-palette set and compare by eye with today's pieces (§3.7)**; promote the window census into a build-time check (report-only for now); fix the missing `Floatstone.png` for map 071 if it's cheap | Budget table for all 204 maps; your by-eye verdict on unsplit-040 colours |
 | **1. 12-bit metatile ids** | §3.1, engine + pipeline + harness readers | Full pytest green; CH08 suite green from boot; no visual change |
 | **2. Streaming core** | §3.2–3.4, behind the per-map flag; the screen check (§4.3); Map Walker build including the over-cap maps | Zero screen-check mismatches on 040, 094, 101, 122, 187; your Map Walker walk, including the flash cart |
-| **3. Map 040 unsplit** | Retire `split_maps.json`'s map-40 entry, join 040+035 in one group, regenerate CH06–CH08 suites (§9 review), merge off for streamed maps | CH08 suite green from boot; your CH08 walk passes |
-| **4. Rollout (later)** | Other maps opt in as their chapters arrive; viewer/oracle learn the streamed format; I2b's palette tuning on merge-off art; #27 via shared groups | Per chapter, as usual |
+| **3. Map 040 unsplit** | Retire `split_maps.json`'s map-40 entry, keep 035↔040 as a remapped seam (§3.5), regenerate CH06–CH08 suites (§9 review), merge off for streamed maps | CH08 suite green from boot; your CH08 walk passes |
+| **4. Rollout (later)** | Other maps opt in as their chapters arrive; viewer/oracle learn the streamed format; I2b's palette tuning on merge-off art; #27 as a remapped seam |
+| **P. Palettes (separate, optional)** | Python-only first: a location-aware quantizer (more than 13 palettes per map, at most 13 per 16×16 window), rendered and judged by eye on 040 and a seam. Only if the art wins: the engine's palette cache (§3.6) | Your by-eye verdict before any engine work | Per chapter, as usual |
 
 **Stop rule.** Stop and keep Stage 1 plus splitting if either happens:
 - Stage 2 can't reach zero screen-check mismatches on 040 and 101 within
@@ -219,7 +271,7 @@ Stage 1 is kept either way.
 | A code path writes map tiles to fixed slots that the audit missed | The audit found the hazard surface (intermission doc §I4). The screen check catches anything drawn wrong, and the CH08 suite covers gameplay paths. |
 | VBlank timing on hardware | Uploads go before the tilemap in the same VBlank. Flash-cart check at Stage 2 exit, not at the end. |
 | Refcount drift (a slot freed while still on screen) | The screen check plus back-and-forth churn runs. A debug-build consistency check can recount refs from the tilemaps on demand. |
-| A palette overflow when 040+035 share a group | Checked in Stage 0, before any engine work. |
+| Unsplit 040 looks worse on one 13-palette set | By-eye comparison in Stage 0, before any engine work (§3.7). |
 | Our tools assume fixed tile numbering | Streamed maps are opt-in; viewer/oracle work is in Stage 4. Until then, the screen check is the oracle for streamed maps. |
 | Engine baseline change | Approval needed (CLAUDE.md §10). The changes are fenced under a new sentinel, `RPG2GBA STREAMING`, so they can be found against upstream. |
 

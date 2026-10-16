@@ -513,10 +513,14 @@ of `engine/src` (2026-10-16) found the hazard surface small and concentrated:
    final check.
 2. VBlank timing on real hardware. Check the prototype on the operator's flash
    cart early.
-3. The 13-palette limit is untouched by streaming. No map hits it, but a
-   future seam between maps with different palettes still could.
-   (`seam_warps.json` has zero seams today; map 040's split is the only
-   arrow-warp source.)
+3. The 13-palette limit is untouched by tile streaming. *(Corrected
+   2026-10-16: "no map hits it" was wrong.)* The quantizer fills all 13 on
+   almost every map, and most screens use all 13
+   (`output/scratch/window_palettes.py`). So it never *overflows*, but
+   colour is always budget-bound. Seams are fine without shared palettes:
+   remapped seams re-quantize the neighbour's strip into each map's own
+   palettes. Unsplit 040 would drop from 7 × 13 palettes to 13. See
+   `reference/streaming_prototype_plan.md` §3.5–3.7.
 4. Our tools (viewer, oracle, emitter, tests) assume fixed tile numbering.
 
 ### I5. Where the ROM size limit actually comes from
