@@ -78,7 +78,7 @@ _METATILE_GRASS = 2
 # stamp one (see `add_warp`).
 _METATILE_DOOR = 3
 
-_COLLISION_BLOCKED = 0x0400  # bits 10-11 nonzero -> (block >> 10) & 0x3 != 0
+_COLLISION_BLOCKED = 0x0800  # collision bit 11 (RPG2GBA STREAMING 11-bit metatile ids)
 
 _GMAPHEADER = 0x4000
 _GBACKUP = 0x3000

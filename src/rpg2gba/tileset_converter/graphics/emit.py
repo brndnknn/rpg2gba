@@ -30,6 +30,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from rpg2gba.tileset_converter.tile_map import NUM_METATILES_TOTAL as _TILE_MAP_NUM_METATILES_TOTAL
 from rpg2gba.tileset_converter.graphics.quantize import (
     QuantizeResult,
     build_quantized_tileset,
@@ -45,7 +46,8 @@ NUM_METATILES_IN_PRIMARY: int = 512
 NUM_PALS_IN_PRIMARY: int = 6
 NUM_PALS_TOTAL: int = 13
 NUM_TILES_TOTAL: int = 1024
-NUM_METATILES_TOTAL: int = 1024
+# 2048 since the RPG2GBA STREAMING 11-bit metatile ids; one definition, in tile_map.
+NUM_METATILES_TOTAL: int = _TILE_MAP_NUM_METATILES_TOTAL
 
 # Fail-loud ceiling on a single tileset's animation frame art, in ROM bytes.
 # Animated tiles cost VRAM once (n_tiles) but ROM per frame: an effect stores

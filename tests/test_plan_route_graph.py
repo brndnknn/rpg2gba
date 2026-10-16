@@ -49,7 +49,7 @@ _OFFSETS = {
     "val_dir_south": 1, "val_dir_north": 2, "val_dir_west": 3, "val_dir_east": 4,
 }
 
-_COLLISION_BLOCKED = 0x0400  # bits 10-11 nonzero -> (block >> 10) & 0x3 != 0
+_COLLISION_BLOCKED = 0x0800  # collision bit 11 (RPG2GBA STREAMING 11-bit metatile ids)
 
 _GMAPHEADER = 0x4000
 _GBACKUP = 0x3000

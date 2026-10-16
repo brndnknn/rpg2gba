@@ -1238,9 +1238,10 @@ def run_fork_pass(
         consts, SLICE_MAP_IDS, batch_layouts, staging_layouts_json,
     )
 
-    from rpg2gba.tileset_converter.layout import append_layouts
+    from rpg2gba.tileset_converter.layout import append_layouts, repack_stock_layouts
     if not dry_run:
         shutil.copy2(pristine_layouts_json, gen_layouts_json)  # full upstream manifest
+        repack_stock_layouts(fork, gen_layouts_json)          # stock bins -> 11-bit ids
         append_layouts(entries, gen_layouts_json)             # + slice layouts
         logger.info("  wrote %s (+%d slice layouts)", _GEN_LAYOUTS, len(entries))
     else:

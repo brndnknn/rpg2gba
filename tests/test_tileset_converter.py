@@ -51,11 +51,71 @@ _VARIABLES = _REPO_ROOT / "reference" / "uranium_variables.json"
 # --- helpers that are real already (no skip needed) ---------------------------
 
 def test_metatile_block_packing() -> None:
-    """Metatile.to_block packs metatile|collision<<10|elevation<<12 (no skip — pure)."""
-    block = Metatile(metatile_id=0x123, collision=2, elevation=3).to_block()
+    """Metatile.to_block packs metatile|collision<<11|elevation<<12 (RPG2GBA STREAMING
+    11-bit ids, engine/include/global.fieldmap.h)."""
+    block = Metatile(metatile_id=0x123, collision=1, elevation=3).to_block()
     assert block & METATILE_ID_MASK == 0x123
-    assert (block >> 10) & 0x3 == 2
+    assert (block >> 11) & 0x1 == 1
     assert (block >> 12) & 0xF == 3
+    # the widened id: 2047 survives, and doesn't touch collision/elevation
+    top = Metatile(metatile_id=0x7FF, collision=0, elevation=15).to_block()
+    assert top == 0xF7FF
+    assert METATILE_ID_MASK == 0x7FF
+
+
+@pytest.mark.parametrize("kw", [
+    {"metatile_id": 0x800}, {"metatile_id": -1}, {"collision": 2}, {"collision": 3},
+    {"elevation": 16},
+])
+def test_metatile_block_packing_fails_loud_on_overflow(kw: dict) -> None:
+    """A field that doesn't fit must raise, never spill into a neighbouring field."""
+    args = {"metatile_id": 1, "collision": 0, "elevation": 3} | kw
+    with pytest.raises(ValueError):
+        Metatile(**args).to_block()
+
+
+def test_repack_legacy_block_moves_collision_keeps_elevation() -> None:
+    """Upstream stock layout (10-bit id, collision at bit 10) -> 11-bit layout."""
+    from rpg2gba.tileset_converter.tile_map import repack_legacy_block, repack_legacy_bin
+
+    # id 0x1A5, collision 1, elevation 15 (stock bridge "multi-level")
+    legacy = 0x1A5 | (1 << 10) | (15 << 12)
+    new = repack_legacy_block(legacy)
+    assert new & METATILE_ID_MASK == 0x1A5
+    assert (new >> 11) & 1 == 1
+    assert new >> 12 == 15
+    assert repack_legacy_block(0x3FF) == 0x3FF            # MAPGRID_UNDEFINED-style id kept
+    with pytest.raises(ValueError):
+        repack_legacy_block(0x005 | (2 << 10))            # collision 2 has no 1-bit form
+    raw = struct.pack("<2H", legacy, 0x0042 | (9 << 12))
+    out = struct.unpack("<2H", repack_legacy_bin(raw))
+    assert out == (new, 0x0042 | (9 << 12))
+    with pytest.raises(ValueError):
+        repack_legacy_bin(b"\x00")
+
+
+def test_repack_stock_layouts_repoints_only_stock_and_is_idempotent(tmp_path: Path) -> None:
+    """Stock bins get repacked copies under RpgRepackedStock/; originals untouched."""
+    fork = tmp_path
+    stock = fork / "data/layouts/Petalburg"
+    stock.mkdir(parents=True)
+    legacy = struct.pack("<2H", 0x0010 | (1 << 10) | (3 << 12), 0x0011)
+    (stock / "map.bin").write_bytes(legacy)
+    (stock / "border.bin").write_bytes(struct.pack("<H", 0x0012 | (1 << 10)))
+    gen = fork / "data/layouts/layouts.gen.json"
+    gen.write_text(json.dumps({"layouts": [{
+        "id": "LAYOUT_PETALBURG",
+        "blockdata_filepath": "data/layouts/Petalburg/map.bin",
+        "border_filepath": "data/layouts/Petalburg/border.bin"}]}), encoding="utf-8")
+    assert layout_mod.repack_stock_layouts(fork, gen) == 1
+    entry = json.loads(gen.read_text(encoding="utf-8"))["layouts"][0]
+    assert entry["blockdata_filepath"] == "data/layouts/RpgRepackedStock/Petalburg/map.bin"
+    got = struct.unpack("<2H", (fork / entry["blockdata_filepath"]).read_bytes())
+    assert got == (0x0010 | (1 << 11) | (3 << 12), 0x0011)
+    assert (stock / "map.bin").read_bytes() == legacy      # tracked original untouched
+    layout_mod.repack_stock_layouts(fork, gen)             # second run: already repointed
+    entry2 = json.loads(gen.read_text(encoding="utf-8"))["layouts"][0]
+    assert entry2 == entry
 
 
 def test_tilegrid_indexing() -> None:
@@ -181,18 +241,20 @@ def test_tile_map_validate_rejects(tmp_path: Path) -> None:
         p.write_text(json.dumps(d), encoding="utf-8")
         load_tile_map(p, None)
 
-    with pytest.raises(ValueError):  # metatile beyond the 10-bit field
-        _load(lambda d: d["tiles"]["19"].update({"384": {"metatile": 0x400}}))
+    with pytest.raises(ValueError):  # metatile beyond the 11-bit field
+        _load(lambda d: d["tiles"]["19"].update({"384": {"metatile": 0x800}}))
     with pytest.raises(ValueError):  # bad collision
         _load(lambda d: d["tiles"]["19"].update({"384": {"metatile": 5, "collision": 4}}))
+    with pytest.raises(ValueError):  # collision 2 has no 1-bit form any more
+        _load(lambda d: d["tiles"]["19"].update({"384": {"metatile": 5, "collision": 2}}))
     with pytest.raises(ValueError):  # tiles references an unknown tileset
         _load(lambda d: d["tiles"].update({"77": {}}))
     with pytest.raises(ValueError):  # bucket missing a role
         _load(lambda d: d["buckets"]["19"].pop("void"))
     with pytest.raises(ValueError):  # missing secondary
         _load(lambda d: d["tilesets"]["19"].pop("secondary"))
-    with pytest.raises(ValueError):  # warp metatile beyond the 10-bit field
-        _load(lambda d: d.update({"warps": {"19": {"metatile": 0x400}}}))
+    with pytest.raises(ValueError):  # warp metatile beyond the 11-bit field
+        _load(lambda d: d.update({"warps": {"19": {"metatile": 0x800}}}))
     with pytest.raises(ValueError):  # warp references an unknown tileset
         _load(lambda d: d.update({"warps": {"77": {"metatile": 5}}}))
 
@@ -548,12 +610,12 @@ def test_warp_override_stamps_warp_metatile() -> None:
     g = _grid(2, 1, [384, 500])  # cell (0,0) passable; cell (1,0) tile 500 (blocked)
     plain = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
     assert plain.blocks[1] & METATILE_ID_MASK == 11  # blocked bucket (tile 500 blocks)
-    assert (plain.blocks[1] >> 10) & 0x3 == 1        # blocked collision without override
+    assert (plain.blocks[1] >> 11) & 0x1 == 1        # blocked collision without override
     forced = layout_mod.convert_layout(
         _map_json(g), tm, name="T", layout_const="LAYOUT_T", warp_overrides={(1, 0)}
     )
     assert forced.blocks[1] & METATILE_ID_MASK == 99  # the warp metatile (door behavior)
-    assert (forced.blocks[1] >> 10) & 0x3 == 0        # collision 0 -> steppable
+    assert (forced.blocks[1] >> 11) & 0x1 == 0        # collision 0 -> steppable
     assert (forced.blocks[1] >> 12) & 0xF == 0        # elevation 0 (door transition)
 
 
@@ -583,13 +645,13 @@ def test_blocked_cells_stamps_collision_keeps_visual_metatile() -> None:
     g = _grid(2, 1, [384, 384])  # both passable ground -> both bucket id 10
     plain = layout_mod.convert_layout(_map_json(g), tm, name="T", layout_const="LAYOUT_T")
     assert plain.blocks[1] & METATILE_ID_MASK == 10
-    assert (plain.blocks[1] >> 10) & 0x3 == 0  # passable collision
+    assert (plain.blocks[1] >> 11) & 0x1 == 0  # passable collision
 
     forced = layout_mod.convert_layout(
         _map_json(g), tm, name="T", layout_const="LAYOUT_T", blocked_cells={(1, 0)}
     )
     assert forced.blocks[1] & METATILE_ID_MASK == 10  # same visual metatile
-    assert (forced.blocks[1] >> 10) & 0x3 == 1  # forced blocked collision
+    assert (forced.blocks[1] >> 11) & 0x1 == 1  # forced blocked collision
     assert (forced.blocks[1] >> 12) & 0xF == 0  # forced blocked elevation
     assert forced.blocks[0] == plain.blocks[0]  # untouched cell unaffected
 

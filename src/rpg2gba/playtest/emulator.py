@@ -18,6 +18,7 @@ from pathlib import Path
 from ..text_validator.engine_metrics import load_charmap
 from ..tileset_converter.map_constants import DEFAULT_STATE_PATH as _DEFAULT_MAP_CONSTANTS_STATE
 from ..tileset_converter.map_constants import MapConstantRegistry
+from ..tileset_converter.tile_map import COLLISION_MASK as _MAPGRID_COLLISION_MASK
 from ..traversal.graph import MapGraph, build_map_graph
 from .charmap import invert_charmap_english_first
 from .contact_sheet import Waypoint
@@ -559,7 +560,7 @@ def _collision_walkable(blocks: Sequence[int], width: int, off: int,
     """
     if not (0 <= x < map_w and 0 <= y < map_h):
         return False
-    return (blocks[(x + off) + width * (y + off)] >> 10) & 0x3 == 0
+    return blocks[(x + off) + width * (y + off)] & _MAPGRID_COLLISION_MASK == 0
 
 
 class _MapGraphSource:

@@ -116,7 +116,7 @@ def test_tileset_key_warp_override_uses_synth_key(tmp_path) -> None:
 
     # cell (1,0) overridden by warp metatile (99, collision 0)
     assert layout.blocks[1] & METATILE_ID_MASK == 99
-    assert (layout.blocks[1] >> 10) & 0x3 == 0
+    assert (layout.blocks[1] >> 11) & 0x1 == 0
 
 
 def test_tileset_key_warp_override_prefers_per_column_metatile() -> None:
@@ -152,7 +152,7 @@ def test_tileset_key_warp_override_prefers_per_column_metatile() -> None:
     # cell (1,0)'s own column key ((0,500),) has a per-column entry (42), not the
     # generic fallback (99).
     assert layout.blocks[1] & METATILE_ID_MASK == 42
-    assert (layout.blocks[1] >> 10) & 0x3 == 0  # collision forced to 0
+    assert (layout.blocks[1] >> 11) & 0x1 == 0  # collision forced to 0
 
 
 def test_tileset_key_warp_override_falls_back_for_unmapped_column() -> None:
@@ -204,10 +204,10 @@ def test_unblocked_cells_force_passable_keep_art() -> None:
     )
 
     assert layout.blocks[1] & METATILE_ID_MASK == 11  # blocked-bucket art kept
-    assert (layout.blocks[1] >> 10) & 0x3 == 0  # collision forced passable
+    assert (layout.blocks[1] >> 11) & 0x1 == 0  # collision forced passable
     assert (layout.blocks[1] >> 12) & 0xF == 3  # walkable elevation
     # the neighbouring cell is untouched
-    assert (layout.blocks[0] >> 10) & 0x3 == 0
+    assert (layout.blocks[0] >> 11) & 0x1 == 0
 
 
 def test_unblocked_cells_conflict_with_blocked_fails_loud() -> None:
@@ -275,7 +275,7 @@ def test_behavior_override_stamps_metatile_and_forces_passable() -> None:
     )
 
     assert layout.blocks[1] & METATILE_ID_MASK == 30  # its own column's stair art
-    assert (layout.blocks[1] >> 10) & 0x3 == 0  # PASSABLE_COLLISION
+    assert (layout.blocks[1] >> 11) & 0x1 == 0  # PASSABLE_COLLISION
     assert (layout.blocks[1] >> 12) & 0xF == 3  # PASSABLE_ELEVATION
     # untouched neighbour cell still resolves normally (passable bucket, tile 384)
     assert layout.blocks[0] & METATILE_ID_MASK == 10
@@ -297,7 +297,7 @@ def test_behavior_override_falls_back_for_unmapped_column() -> None:
     )
 
     assert layout.blocks[1] & METATILE_ID_MASK == 77  # fallback
-    assert (layout.blocks[1] >> 10) & 0x3 == 0
+    assert (layout.blocks[1] >> 11) & 0x1 == 0
 
 
 def test_behavior_override_conflict_with_warp_fails_loud() -> None:
@@ -345,4 +345,4 @@ def test_behavior_override_wins_over_unblocked_cells_overlap() -> None:
     )
 
     assert layout.blocks[1] & METATILE_ID_MASK == 30  # behavior metatile, not bucket art
-    assert (layout.blocks[1] >> 10) & 0x3 == 0
+    assert (layout.blocks[1] >> 11) & 0x1 == 0

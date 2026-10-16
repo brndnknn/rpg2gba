@@ -82,7 +82,7 @@ fenced, so a sentinel grep does find them. That is the whole point:
 
 Re-run that `git diff` whenever you need to know what's custom — don't trust a
 prose summary (including the one below) to still be accurate; verify against
-the diff first, then grep the four sentinels for anything below the baseline.
+the diff first, then grep the five sentinels for anything below the baseline.
 
 ### Orientation (not an inventory) of the major feature areas
 
@@ -157,8 +157,9 @@ check the diff. Verified against `git diff 80cdfce2 HEAD -- engine/` on
   the same white-out-respawn feature (§14.7/§15.6 in `REDERIVATION_PLAN.md`).
 
 Every item above is fenced with a sentinel comment naming its feature area
-(`URANIUM PATHFINDER SLICE`, `URANIUM MAP WALKER`, `URANIUM EMBEDDED SAVE`, or
-`RPG2GBA EVENT RANGE EXPANSION`) — grep the tree for those four strings to find
+(`URANIUM PATHFINDER SLICE`, `URANIUM MAP WALKER`, `URANIUM EMBEDDED SAVE`,
+`RPG2GBA EVENT RANGE EXPANSION`, or `RPG2GBA STREAMING` — the 11-bit metatile ids
+in `global.fieldmap.h`/`fieldmap.h`, 2026-10-16) — grep the tree for those five strings to find
 every fenced block. A handful of single-line edits to existing `#define`s
 (e.g. `constants/flags.h`'s `TRAINER_REGISTERED_FLAGS_START`,
 `constants/opponents.h`'s trainer-count constants) carry an inline explanatory

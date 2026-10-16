@@ -524,6 +524,42 @@ def append_layouts(entries: list[dict], path: Path) -> None:
     path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
 
 
+REPACKED_STOCK_LAYOUT_DIR = "RpgRepackedStock"
+
+
+def repack_stock_layouts(fork: Path, gen_layouts: Path) -> int:
+    """Point every stock layout in ``gen_layouts`` at a repacked copy of its bins.
+
+    The vendored stock ``map.bin``/``border.bin`` are in the upstream block layout;
+    the engine reads the RPG2GBA STREAMING layout (``tile_map.repack_legacy_block``).
+    Copies go to ``data/layouts/RpgRepackedStock/<Dir>/`` (gitignored, regenerated
+    every assembly); the tracked originals are never touched. Call this on the
+    freshly-copied pristine manifest, BEFORE the Uranium batch is appended, so only
+    stock entries are repointed. Entries already pointing elsewhere (the walker's
+    stub) are left alone. Returns the number of entries repointed."""
+    from .tile_map import repack_legacy_bin
+
+    data = json.loads(gen_layouts.read_text(encoding="utf-8"))
+    n = 0
+    for entry in data.get("layouts", []):
+        for key in ("blockdata_filepath", "border_filepath"):
+            rel = entry.get(key)
+            if not rel or not rel.startswith("data/layouts/") or REPACKED_STOCK_LAYOUT_DIR in rel:
+                continue
+            src = fork / rel
+            if not src.is_file():
+                raise FileNotFoundError(f"stock layout bin missing: {src}")
+            new_rel = rel.replace("data/layouts/", f"data/layouts/{REPACKED_STOCK_LAYOUT_DIR}/", 1)
+            dest = fork / new_rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(repack_legacy_bin(src.read_bytes()))
+            entry[key] = new_rel
+        n += 1
+    gen_layouts.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    logger.info("  repacked %d stock layout(s) into data/layouts/%s/", n, REPACKED_STOCK_LAYOUT_DIR)
+    return n
+
+
 def write_blockdata(blocks: list[int], path: Path) -> None:
     """Write packed u16 blocks to `path` as little-endian binary (idempotent)."""
     path.parent.mkdir(parents=True, exist_ok=True)

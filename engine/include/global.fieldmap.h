@@ -1,15 +1,20 @@
 #ifndef GUARD_GLOBAL_FIELDMAP_H
 #define GUARD_GLOBAL_FIELDMAP_H
 
-// Masks/shifts for blocks in the map grid
-// Map grid blocks consist of a 10 bit metatile id, a 2 bit collision value, and a 4 bit elevation value
+// BEGIN RPG2GBA STREAMING — 11-bit metatile ids (2048 per map). Stock data only ever
+// uses collision 0/1, so the collision field shrinks to one bit and its spare bit
+// becomes metatile id bit 10. Elevation keeps all 4 bits (stock uses 9 and 15).
+// The pipeline repacks stock map.bin/border.bin into this layout at assembly
+// (tile_map.repack_legacy_block); Uranium layouts are emitted in it directly.
+// Map grid blocks consist of an 11 bit metatile id, a 1 bit collision value, and a 4 bit elevation value
 // This is the data stored in each data/layouts/*/map.bin file
-#define MAPGRID_METATILE_ID_MASK 0x03FF // Bits 0-9
-#define MAPGRID_COLLISION_MASK   0x0C00 // Bits 10-11
+#define MAPGRID_METATILE_ID_MASK 0x07FF // Bits 0-10
+#define MAPGRID_COLLISION_MASK   0x0800 // Bit 11
 #define MAPGRID_ELEVATION_MASK   0xF000 // Bits 12-15
 #define MAPGRID_METATILE_ID_SHIFT 0
-#define MAPGRID_COLLISION_SHIFT  10
+#define MAPGRID_COLLISION_SHIFT  11
 #define MAPGRID_ELEVATION_SHIFT  12
+// END RPG2GBA STREAMING
 
 enum
 {

@@ -36,12 +36,17 @@ logger = logging.getLogger(__name__)
 DEFAULT_TILE_MAP_PATH = Path("reference/tileset_map.json")
 DEFAULT_PASSAGES_PATH = Path("output/uranium-build/tilesets.json")
 
-# pokeemerald block-packing (shared with layout.py). block u16 =
-# metatile | collision<<10 | elevation<<12.
-METATILE_ID_MASK = 0x03FF
-COLLISION_SHIFT = 10
+# pokeemerald block-packing (shared with layout.py), RPG2GBA STREAMING layout
+# (engine/include/global.fieldmap.h): block u16 = metatile (11 bits) | collision<<11
+# (1 bit) | elevation<<12 (4 bits). Stock Emerald map.bin files are still in the
+# upstream layout (10-bit id, 2-bit collision at bit 10); `repack_legacy_block`
+# converts them at assembly.
+METATILE_ID_MASK = 0x07FF
+COLLISION_SHIFT = 11
+COLLISION_MASK = 1 << COLLISION_SHIFT
 ELEVATION_SHIFT = 12
 NUM_METATILES_IN_PRIMARY = 0x200  # secondary tileset metatiles start here
+NUM_METATILES_TOTAL = METATILE_ID_MASK + 1  # 2048: the engine's NUM_METATILES_TOTAL
 
 # RMXP tile-id ranges.
 AUTOTILE_BASE = 48   # ids 48..383 are autotiles, 48 per autotile
@@ -76,9 +81,35 @@ BEHAVIOR_KINDS = frozenset({
     "arrow_warp_up", "arrow_warp_down", "arrow_warp_left", "arrow_warp_right",
 })
 
-_MAX_METATILE = METATILE_ID_MASK  # 0x3FF — anything larger truncates in to_block
-_VALID_COLLISION = {0, 1, 2, 3}
+_MAX_METATILE = METATILE_ID_MASK  # 0x7FF — anything larger truncates in to_block
+_VALID_COLLISION = {0, 1}
 _MAX_ELEVATION = 0xF
+
+
+_LEGACY_METATILE_ID_MASK = 0x03FF
+_LEGACY_COLLISION_SHIFT = 10
+
+
+def repack_legacy_block(block: int) -> int:
+    """Convert one upstream-layout map.bin block (10-bit id, 2-bit collision at bit
+    10, 4-bit elevation) to the RPG2GBA STREAMING layout. Elevation is unchanged.
+    Fails loud on collision 2/3, which the 1-bit field cannot hold (stock data only
+    ever uses 0/1 -- measured 2026-10-16 across every stock layout)."""
+    collision = (block >> _LEGACY_COLLISION_SHIFT) & 0x3
+    if collision > 1:
+        raise ValueError(f"legacy block 0x{block:04X}: collision {collision} has no 1-bit form")
+    return (block & _LEGACY_METATILE_ID_MASK) | (collision << COLLISION_SHIFT) | (block & 0xF000)
+
+
+def repack_legacy_bin(data: bytes) -> bytes:
+    """`repack_legacy_block` over a whole little-endian u16 map.bin / border.bin."""
+    if len(data) % 2:
+        raise ValueError(f"map/border bin has odd length {len(data)}")
+    out = bytearray(len(data))
+    for i in range(0, len(data), 2):
+        v = repack_legacy_block(int.from_bytes(data[i:i + 2], "little"))
+        out[i:i + 2] = v.to_bytes(2, "little")
+    return bytes(out)
 
 
 @dataclass(frozen=True)
@@ -90,7 +121,14 @@ class Metatile:
     elevation: int = 3
 
     def to_block(self) -> int:
-        """Pack into the little-endian u16 stored in map.bin."""
+        """Pack into the little-endian u16 stored in map.bin. Fails loud on a field
+        that doesn't fit: a 2+ collision would spill into the elevation bits."""
+        if not 0 <= self.metatile_id <= METATILE_ID_MASK:
+            raise ValueError(f"metatile id {self.metatile_id} out of 0..0x{METATILE_ID_MASK:X}")
+        if self.collision not in _VALID_COLLISION:
+            raise ValueError(f"collision {self.collision} not in {_VALID_COLLISION}")
+        if not 0 <= self.elevation <= _MAX_ELEVATION:
+            raise ValueError(f"elevation {self.elevation} out of 0..{_MAX_ELEVATION}")
         return (
             (self.metatile_id & METATILE_ID_MASK)
             | (self.collision << COLLISION_SHIFT)

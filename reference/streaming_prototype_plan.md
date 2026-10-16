@@ -40,24 +40,39 @@ about 870 slots for streaming, against a worst case of 671.
 
 ## 3. Design
 
-### 3.1 Metatile ids: 10 → 12 bits (published recipe)
+### 3.1 Metatile ids: 10 → 11 bits (built 2026-10-16)
 
-Follow the pret wiki's "Expanding The Metatile Count". The map grid cell
-stays `u16`: 12-bit metatile id, 1 collision bit, 3 elevation bits. That
-gives 4096 metatiles per map, enough for 094's 1815.
-- **Data fit:** the converter writes only elevation 0 or 3 and two collision
-  values (`tile_map.py:56-57`), so nothing is lost.
-- **Engine:** the `MAPGRID_*` masks (`global.fieldmap.h:7-12`), the
-  `NUM_METATILES_*` constants (`fieldmap.h`), and the primary/secondary split.
-- **Pipeline:** `tile_map.py`'s packing, layout emit, the map-constant and
-  porymap writers, and every Python reader of `map.bin` (the harness's
-  collision reader `_collision_walkable`, the viewer and the oracle).
+*(Changed from the draft's 12-bit pret recipe during stage 1.)* The 12-bit
+version cuts elevation to 3 bits. Emerald's own stock layouts use elevations 9
+and 15 (bridges are `ELEVATION_MULTI_LEVEL` = 15), so they would break. The
+11-bit version drops only the collision field's unused high bit:
+- **Format:** the map grid cell stays `u16`, with an 11-bit metatile id
+  (2048 per map), a 1-bit collision at bit 11, and 4-bit elevation
+  unchanged.
+- **Room:** 2048 covers the largest map, 094 with 1815. A map that ever
+  exceeds it fails loud at emit.
+- **Data fit:** measured on every built layout, Uranium uses only collision
+  0/1 and elevation 0/3; stock uses only collision 0/1.
+- **Engine:** `global.fieldmap.h` (masks), `fieldmap.h`
+  (`NUM_METATILES_TOTAL` 2048), fenced `RPG2GBA STREAMING`. Every engine
+  reader goes through the masks or `UNPACK_*`. The `== 1` collision checks
+  (`fldeff_cut.c:207`, `rotating_gate.c:884`) now behave like their BUGFIX
+  branches, because collision can only be 0 or 1.
+- **Stock layouts:** the vendored stock `map.bin`/`border.bin` stay in the
+  upstream layout and are never edited. Assembly writes repacked copies to
+  `data/layouts/RpgRepackedStock/` (gitignored) and points
+  `layouts.gen.json` at them (`layout.repack_stock_layouts`,
+  `tile_map.repack_legacy_block`; it fails loud on collision 2/3).
+- **Pipeline:** the constants live in one place (`tile_map.py`), and
+  `emit.py`/`connection_remap.py` import them. `Metatile.to_block` now fails
+  loud on any field overflow. The harness's `_collision_walkable` reads the
+  shared mask.
 - **Save:** the save's `mapView` (`fieldmap.c:568-698`) holds raw grid cells.
   The size is unchanged, but saves made before this change decode wrongly
   near the player until the next map load. Accepted: walk ROMs re-seed on
   every boot.
 
-This stage is useful on its own, because it removes the metatile cap for
+This stage is useful on its own, because it removes the 1024-metatile cap for
 every map.
 
 ### 3.2 Tile words wider than 10 bits
@@ -144,7 +159,7 @@ The stock engine draws a connected neighbour's cells through the
 
 Today the imported strips eat into the 1024 caps, and the caps are why
 seams are hard (#27). With streaming, an imported strip costs metatile ids
-(4096 available) but no permanent VRAM. So remapped seams always fit, and
+(2048 available) but no permanent VRAM. So remapped seams always fit, and
 the pipeline can **prefer remapped seams over shared groups**. That keeps
 every map on its own 13 palettes, with no transitive growth. The visible
 cost is a slight colour shift on the neighbour's strip, which already
@@ -250,7 +265,7 @@ story progress to test it.
 | Stage | Work | Exit criterion |
 |---|---|---|
 | **0. Prep** | Per-map slot budget (anim + doors + worst window, including neighbour strips); **render unsplit 040 with one 13-palette set and compare by eye with today's pieces (§3.7)**; promote the window census into a build-time check (report-only for now); fix the missing `Floatstone.png` for map 071 if it's cheap | Budget table for all 204 maps; your by-eye verdict on unsplit-040 colours |
-| **1. 12-bit metatile ids** | §3.1, engine + pipeline + harness readers | Full pytest green; CH08 suite green from boot; no visual change |
+| **1. 11-bit metatile ids** | §3.1, engine + pipeline + harness readers | Full pytest green; CH08 suite green from boot; no visual change |
 | **2. Streaming core** | §3.2–3.4, behind the per-map flag; the screen check (§4.3); Map Walker build including the over-cap maps | Zero screen-check mismatches on 040, 094, 101, 122, 187; your Map Walker walk, including the flash cart |
 | **3. Map 040 unsplit** | Retire `split_maps.json`'s map-40 entry, keep 035↔040 as a remapped seam (§3.5), regenerate CH06–CH08 suites (§9 review), merge off for streamed maps | CH08 suite green from boot; your CH08 walk passes |
 | **4. Rollout (later)** | Other maps opt in as their chapters arrive; viewer/oracle learn the streamed format; I2b's palette tuning on merge-off art; #27 as a remapped seam |
@@ -347,7 +362,7 @@ numbers.
 
 ## 7. Operator decisions (2026-10-16)
 
-1. **Engine baseline changes: APPROVED.** This covers 12-bit metatile ids for
+1. **Engine baseline changes: APPROVED.** This covers 11-bit metatile ids for
    all maps and the opt-in streaming path.
 2. **Streamed maps turn the tile merge OFF**, for full-quality art.
 3. **Unsplit-040 colours on one 13-palette set: ACCEPTED** ("the colors look

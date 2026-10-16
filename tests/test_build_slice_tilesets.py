@@ -1148,7 +1148,7 @@ def test_stair_cell_layout_block_passable_despite_blocked_source_passage(
     )
 
     def _collision_at(x: int, y: int) -> int:
-        return (layout.blocks[y * m["width"] + x] >> COLLISION_SHIFT) & 0x3
+        return (layout.blocks[y * m["width"] + x] >> COLLISION_SHIFT) & 0x1
 
     assert _collision_at(0, 0) == 0  # PASSABLE — stair override wins
     assert _collision_at(1, 0) == 1  # BLOCKED — plain cell, same tile, no override

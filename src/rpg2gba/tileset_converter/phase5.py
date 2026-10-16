@@ -306,13 +306,15 @@ def _assemble_fork(
 
     # layouts.gen.json: pristine upstream manifest + the batch layouts (the tracked
     # layouts.json stays byte-for-byte upstream; map_data_rules.mk reads the overlay).
-    from rpg2gba.tileset_converter.layout import append_layouts
+    from rpg2gba.tileset_converter.layout import append_layouts, repack_stock_layouts
     gen_layouts = fork / "data" / "layouts" / _GEN_LAYOUTS
     shutil.copy2(fork / "data" / "layouts" / "layouts.json", gen_layouts)
     # Repoint the pristine (stock-only) entries at a dummy BEFORE appending the
     # Uranium batch, so only stock maps are stubbed; the batch keeps real art.
     if drop_stock_map_data:
         _stub_stock_layout_bins(fork, gen_layouts)
+    else:
+        repack_stock_layouts(fork, gen_layouts)  # stock bins -> 11-bit metatile ids
     # Append THIS batch's entries (passed in), never the cumulative staging
     # layouts.json — a prior wider run would leak layouts whose tilesets this
     # build doesn't emit (undefined gTileset_Uranium* refs at link).
