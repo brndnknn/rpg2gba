@@ -382,6 +382,70 @@ taken, so how much is really free needs a VRAM map before believing it.
   would have made. It is reusable for every future fan game, which ties it to
   I3. It also changes what "a map" is for every tool downstream.
 
+#### Follow-up research (2026-10-16): the middle path, and a fresh census
+
+**The middle path doesn't work as hoped.** Giving the bottom and top metatile
+layers their own 1024-tile spaces needs another 32 KB of BG VRAM. Only about
+6 KB is free.
+- **How BG VRAM is used:** 64 KB in total.
+  - The map tileset takes 32 KB (tiles 0–1023, charblocks 0–1).
+  - BG0 text and UI takes 573 tiles (dialogue window buffer, message box,
+    window frames, map-name popup outline; high-water at tile `0x23D` of
+    charblock 2, `map_name_popup.c:658`).
+  - The four screen maps take the top 8 KB.
+  - That leaves ~195 free tiles (`0x0600C7A0–0x0600E000`).
+- **The best case**, which means moving BG0 and the screen maps, is ~1216
+  tiles shared between the two layers. That is about +190 over today, minus
+  tiles both layers use, which would have to be duplicated.
+- **The cost:**
+  - **Re-routing:** the bottom layer goes on BG2 for "normal" metatiles but
+    BG3 for others (`field_camera.c:245-310`), so it has to be re-routed.
+  - **Engine format:** the tileset gets a second tile pool.
+  - **Animations:** animated tiles used by the top layer must be DMA'd twice.
+  - **Hard-coded field effects** (`field_effect.c:3450-3458`) break if BG0
+    moves.
+  - **Packer:** the packer (`emit.py`) needs per-layer pools.
+  - Roughly 8–10 engine files and a rewrite of the packer's core: a medium-large
+    change for a small gain.
+
+**The bigger finding: the over-limit list is mostly stale.** The tile merge
+and metatile dedup, both on by default since the July audit, already fit **10
+of the 16** listed maps (060, 084, 117, 128, 143, 144, 146, 151, 209, 213) with
+no split and no engine change. Measured by running the real build for each map
+with merge off and on (`output/scratch/layer_census.py`, a scratch artefact):
+
+| Map | Metatiles (merge on) | Tiles (merge on) | Status |
+|---|---|---|---|
+| 040 | 1278 (merge off; merge-on not measurable) | 1544 (off) | Over both caps. Already split. |
+| 094 | 1202 | 1295 | Over both; bottom layer alone is 1046 |
+| 101 | 1081 | 1368 | Over both; bottom layer alone is 1101 |
+| 187 | 1159 | 1164 | Over both |
+| 122 | 842 | 1136 | Over tiles only |
+| 071 | — | — | **Can't build at all:** autotile `Floatstone.png` is missing from the unpacked source (tileset 54). Needs fixing regardless. |
+| the other 10 | ≤1024 | ≤1024 | Fit today |
+
+**So the real remaining problem is small:**
+- **4 maps over the metatile cap** (040, 094, 101, 187). No VRAM trick touches
+  that cap.
+- **1 tile-only overflow** (122).
+- **1 unbuildable map** (071).
+
+Caveats:
+- The counts leave out seam-strip imports, so margins are a little worse in
+  the real ROM.
+- The merge that rescues those 10 maps is *lossy* (near-duplicate art is
+  replaced). The operator turned it off for Map 40 for quality, and it carries
+  the I2a bug. Relying on it is a quality trade, not a free win.
+
+**What this means for I4:**
+- **Keep splitting:** about 4–5 more maps (094, 101, 187, maybe 122). That is
+  far smaller than the "15 more splits" estimated earlier.
+- **Streaming engine:** still the only option that removes both caps, keeps
+  merge-free art, and solves seams (#27). Its *necessity* for Uranium is now
+  low. Its value is in quality (no lossy merge), seams, and reuse for future
+  games.
+- **Middle path:** not worth it.
+
 ### I5. Where the ROM size limit actually comes from
 
 **The question.** The project has worked to a maximum ROM size. Is that limit
