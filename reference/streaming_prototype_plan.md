@@ -345,13 +345,14 @@ numbers.
 | Our tools assume fixed tile numbering | Streamed maps are opt-in; viewer/oracle work is in Stage 4. Until then, the screen check is the oracle for streamed maps. |
 | Engine baseline change | Approval needed (CLAUDE.md §10). The changes are fenced under a new sentinel, `RPG2GBA STREAMING`, so they can be found against upstream. |
 
-## 7. Decisions needed from the operator
+## 7. Operator decisions (2026-10-16)
 
-1. Approve the engine baseline changes: 12-bit metatile ids for all maps,
-   and the opt-in streaming path.
-2. Merge off for streamed maps, the full-quality art (recommended), or keep
-   the merge on.
-3. Confirm map 040 as the prototype map and the Map Walker as the test bed
-   for the unreached maps.
-4. CH09 timing: open CH09 now and build the #27 seam the existing way, or
-   wait for Stage 3 and build it as a shared group.
+1. **Engine baseline changes: APPROVED.** This covers 12-bit metatile ids for
+   all maps and the opt-in streaming path.
+2. **Streamed maps turn the tile merge OFF**, for full-quality art.
+3. **Unsplit-040 colours on one 13-palette set: ACCEPTED** ("the colors look
+   fine"). Map 040 is the prototype map, with the Map Walker and the screen
+   check as the test bed for the unreached maps.
+4. **CH09 is not opening.** The intermission continues on branch
+   `intermission-streaming`. The operator asked that between-acts work live on
+   a branch.
