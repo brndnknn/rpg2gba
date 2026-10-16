@@ -1328,15 +1328,6 @@ generic_beat(
     choice_answers=((2, 1),),
 )
 
-generic_beat(
-    ch01,
-    chapter_id='CH01',
-    beat_name='m050e020p1',
-    group='m050e020p1',
-    rows=('map050/ev020/p1',),
-    approach_prefer='east',
-)
-
 flavour_npc_beat(
     ch01,
     chapter_id='CH01',
@@ -1640,7 +1631,6 @@ warp_beat(
 
 NEVER_FIRES: dict[str, str] = {
     'map050/ev001/p0': "map050/ev001/p0 fires only on (14, 19); while it is the live page the walk can't step on them: arrival (14, 18) -> start (14, 8) (scene map050/ev005/p0); arrival (14, 7) -> start (14, 4) (scene map050/ev005/p0); arrival (14, 7) -> start (14, 7) (scene map050/ev005/p0); ev002 pushes the player off row y=16 (x=11..20, 8 cells); over 4 story state(s) the reachable region (101 cells) touches none of them and has no way out of the map; map050/ev001/p1 supersedes it once variable 101 >= 1",
-    'map050/ev005/p3': "map050/ev005/p3 (needs var 101 >= 1) is not its event's live page at this route position: var 101 >= 1 fails: var 101 is [0] (seed state), never written on the route; the rows that could write it none are not walked before it; live page: map050/ev005/p1 (needs self switch C == True)",
     'map050/ev005/p4': "map050/ev005/p4 (needs var 101 >= 2) is not its event's live page at this route position: var 101 >= 2 fails: var 101 is [0] (seed state), never written on the route; the rows that could write it none are not walked before it; live page: map050/ev005/p1 (needs self switch C == True)",
 }
 
@@ -1665,8 +1655,10 @@ EMPTY_PAGES: dict[str, str] = {
     'map032/ev081/p1': 'every page of the event is empty; nothing to check on the ROM',
     'map049/ev019/p0': 'every page of the event is empty; nothing to check on the ROM',
     'map049/ev019/p1': 'every page of the event is empty; nothing to check on the ROM',
+    'map050/ev005/p3': 'a blank, empty page: the ROM hides the object by flag on it, so there is nothing to talk to',
     'map050/ev017/p0': 'every page of the event is empty; nothing to check on the ROM',
     'map050/ev018/p0': 'every page of the event is empty; nothing to check on the ROM',
+    'map050/ev020/p1': 'a blank, empty page: the ROM hides the object by flag on it, so there is nothing to talk to',
     'map050/ev023/p0': 'every page of the event is empty; nothing to check on the ROM',
 }
 

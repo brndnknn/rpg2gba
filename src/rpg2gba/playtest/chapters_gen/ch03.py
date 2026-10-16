@@ -760,29 +760,6 @@ generic_beat(
     skip_claimed=True,
 )
 
-transit_beat(
-    ch03,
-    chapter_id='CH03',
-    beat_name='m068e008_warp_transit',
-    group='m068e008_warp',
-    hops=(('MAP_KEVLAR_TOWN', 20, 13, 'UP', 'MAP_KEVLAR_TOWN_POKEMON_CENTER'),),
-)
-
-warp_beat(
-    ch03,
-    chapter_id='CH03',
-    beat_name='m068e008_warp',
-    group='m068e008_warp',
-    dest_map_constant='MAP_KEVLAR_TOWN',
-    direction='DOWN',
-    end_side='dest',
-    event_id=8,
-    map_constant='MAP_KEVLAR_TOWN_POKEMON_CENTER',
-    map_id=68,
-    mechanism='threshold',
-    start_side='origin',
-)
-
 escort_beat(
     ch03,
     chapter_id='CH03',
@@ -796,29 +773,20 @@ escort_beat(
     map_id=31,
 )
 
-transit_beat(
+warp_beat(
     ch03,
     chapter_id='CH03',
-    beat_name='m031e049p1_transit',
-    group='m031e049p1',
-    hops=(('MAP_KEVLAR_TOWN_POKEMON_CENTER', 7, 18, 'DOWN', 'MAP_KEVLAR_TOWN'),),
-)
-
-generic_beat(
-    ch03,
-    chapter_id='CH03',
-    beat_name='m031e049p1',
-    group='m031e049p1',
-    rows=('map031/ev049/p1',),
-    approach_prefer='west',
-)
-
-transit_beat(
-    ch03,
-    chapter_id='CH03',
-    beat_name='m068e015p0_transit',
-    group='m068e015p0',
-    hops=(('MAP_KEVLAR_TOWN', 20, 13, 'UP', 'MAP_KEVLAR_TOWN_POKEMON_CENTER'),),
+    beat_name='m068e008_warp',
+    group='m068e008_warp',
+    dest_map_constant='MAP_KEVLAR_TOWN',
+    direction='DOWN',
+    end_side='origin',
+    event_id=8,
+    map_constant='MAP_KEVLAR_TOWN_POKEMON_CENTER',
+    map_id=68,
+    mechanism='threshold',
+    return_direction='UP',
+    start_side='origin',
 )
 
 generic_beat(
@@ -1065,6 +1033,7 @@ NEVER_FIRES: dict[str, str] = {
 EMPTY_PAGES: dict[str, str] = {
     'map031/ev031/p0': 'every page of the event is empty; nothing to check on the ROM',
     'map031/ev036/p0': 'every page of the event is empty; nothing to check on the ROM',
+    'map031/ev049/p1': 'a blank, empty page: the ROM hides the object by flag on it, so there is nothing to talk to',
     'map067/ev005/p0': 'every page of the event is empty; nothing to check on the ROM',
     'map068/ev005/p0': 'every page of the event is empty; nothing to check on the ROM',
     'map068/ev005/p1': 'every page of the event is empty; nothing to check on the ROM',

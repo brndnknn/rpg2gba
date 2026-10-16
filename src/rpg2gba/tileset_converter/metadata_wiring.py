@@ -3418,6 +3418,28 @@ def build_object_events(
         if expr is not None:
             refresh_entries.append((eid, ev.get("name", ""), vis_flags[eid], local_id, expr))
 
+    # A `terminal_hide` event is hidden by a script, but RMXP page selection
+    # still decides it afterwards: Map050 EV005 (Bambo) leaves the lab at the
+    # end of CH01 (opacity 0, var101 -> 1, a blank page) and is back on a
+    # graphic page once var101 >= 2. A permanent FLAG_HIDE_* alone kept him
+    # gone (CH08 ROM run). When its pages make visibility genuinely
+    # conditional, the minted flag gets the same transition/refresh lines as a
+    # vanishing NPC; a hide with no visible page left, or one an ungated page
+    # would always undo, keeps the plain flag.
+    for eid in hide_only_ids:
+        local_id = result.local_id_map.get(str(eid))
+        if local_id is None:
+            continue
+        ev = event_by_id[eid]
+        expr, always_visible = _visibility_expr(ev["pages"], uid, eid, flag_registry)
+        if expr is None or always_visible:
+            continue
+        lines, _ = _visibility_transition_lines(
+            ev["pages"], uid, eid, ev.get("name", ""), hide_flags[eid], flag_registry,
+        )
+        result.transition_lines.extend(lines)
+        refresh_entries.append((eid, ev.get("name", ""), hide_flags[eid], local_id, expr))
+
     # --- hidden cutscene actors (findings §3.3/§5) ---------------------------
     for eid in hidden_actor_ids:
         actor_event = event_by_id[eid]

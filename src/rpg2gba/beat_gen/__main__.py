@@ -129,7 +129,7 @@ from rpg2gba.chapter_manifest.archetypes import ArchetypeMatch, classify_manifes
 from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
 from rpg2gba.playtest import chapters_gen as playtest_chapters_gen
 from rpg2gba.playtest.archetypes import load_chapter_rows, map_uranium_id
-from rpg2gba.playtest.cells import seam_press, seam_warp_cells
+from rpg2gba.playtest.cells import emitted_object, has_local_id, seam_press, seam_warp_cells
 from rpg2gba.playtest.chapter import load_chapter
 from rpg2gba.routing.__main__ import (
     DEFAULT_CHAPTERS_PATH,
@@ -1917,6 +1917,41 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                               detail="the cleared obstacle's empty page; its smash beat "
                                      "asserts the obstacle is gone")
                     for r in cleared))
+    # A blank, empty page of an object the ROM hides by flag (the visibility
+    # machinery, `metadata_wiring.build_object_events`) has nothing to talk to
+    # either: on that page the object isn't spawned (2026-10-15, CH08: Theo's
+    # father Cam, Map172 EV001 p2 on sw55 -- absent in Uranium too).
+    def _hidden_blank_page(r: ManifestRow) -> bool:
+        if r.kind != "page" or r.event_id is None:
+            return False
+        ev = next((e for e in load_map_json(r.map_id, build_dir / "maps").get("events", [])
+                   if e and e["id"] == r.event_id), None)
+        pages = (ev or {}).get("pages", [])
+        if r.page_idx is None or r.page_idx >= len(pages):
+            return False
+        page = pages[r.page_idx]
+        if (page.get("graphic") or {}).get("character_name") \
+                or not all(c.get("code") == 0 for c in page.get("list") or []):
+            return False
+        const = _map_constant_for(r.map_id)
+        if not has_local_id(const, r.event_id):
+            return False
+        # Only the minted FLAG_HIDE_* hides (`FlagRegistry.mint_hide_flag`):
+        # an item ball's own flag hides it too, but its spent page keeps the
+        # approved "re-touch grants nothing" beat (CH05 map036 ev003/ev005 p1).
+        return str(emitted_object(const, r.event_id).get("flag", "")).startswith("FLAG_HIDE_MAP")
+
+    hidden_blank = [r for r in selection.owned if _hidden_blank_page(r)]
+    if hidden_blank:
+        gone_ids = {r.row_id for r in hidden_blank}
+        selection = Selection(
+            owned=tuple(r for r in selection.owned if r.row_id not in gone_ids),
+            refusals=selection.refusals,
+            elsewhere=selection.elsewhere + tuple(
+                Elsewhere(r.row_id, "empty_page",
+                          detail="a blank, empty page: the ROM hides the object by flag "
+                                 "on it, so there is nothing to talk to")
+                for r in hidden_blank))
     # A seam into a map the ROM doesn't build yet can't be crossed: the chapter
     # that builds the far side owns it (2026-10-15, CH08: Moki's east seam to
     # Route 3 is CH09's, #27). Before CH08 such seams were never reachable.

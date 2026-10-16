@@ -508,6 +508,12 @@ def native_berry_tree_id(map_id: int, event_id: int) -> int | None:
     return int(obj["trainer_sight_or_berry_tree_id"])
 
 
+def emitted_object(map_constant: str, event_id: int) -> dict:
+    """Event `event_id`'s compiled object event (its map JSON entry), found
+    by local id; fails loud on an event that isn't one (`local_id`)."""
+    return _emitted_object(map_constant, event_id, resolver="emitted_object")
+
+
 def _emitted_object(map_constant: str, event_id: int, *, resolver: str) -> dict:
     """Event `event_id`'s compiled object, found by local id."""
     objects = _emitted_map_json(map_constant).get("object_events") or []

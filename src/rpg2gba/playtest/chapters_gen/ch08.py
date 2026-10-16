@@ -363,22 +363,23 @@ generic_beat(
     approach_prefer='south',
 )
 
+smash_beat(
+    ch08,
+    chapter_id='CH08',
+    beat_name='m032smash_rock_smash',
+    group='m032smash_rock_smash',
+    rows=('map032/ev014/p0', 'map032/ev014/p0/b0', 'map032/ev015/p0', 'map032/ev015/p0/b0', 'map032/ev033/p0', 'map032/ev033/p0/b0'),
+    approach_prefer='west',
+    capability='rock_smash',
+    sight_trainers=(),
+)
+
 transit_beat(
     ch08,
     chapter_id='CH08',
-    beat_name='m050e005p5_transit',
-    group='m050e005p5',
+    beat_name='m050e027p1_transit',
+    group='m050e027p1',
     hops=(('MAP_MOKI_TOWN', 17, 12, 'UP', 'MAP_MOKI_TOWN_PROFESSOR_LAB'),),
-)
-
-generic_beat(
-    ch08,
-    chapter_id='CH08',
-    beat_name='m050e005p5',
-    group='m050e005p5',
-    rows=('map050/ev005/p5', 'map050/ev005/p5/b33'),
-    approach_prefer='south',
-    choice_answers=((4, 1),),
 )
 
 generic_beat(
@@ -390,40 +391,14 @@ generic_beat(
     approach_prefer='north',
 )
 
-transit_beat(
-    ch08,
-    chapter_id='CH08',
-    beat_name='m032smash_rock_smash_transit',
-    group='m032smash_rock_smash',
-    hops=(('MAP_MOKI_TOWN_PROFESSOR_LAB', 14, 18, 'DOWN', 'MAP_MOKI_TOWN'),),
-)
-
-smash_beat(
-    ch08,
-    chapter_id='CH08',
-    beat_name='m032smash_rock_smash',
-    group='m032smash_rock_smash',
-    rows=('map032/ev014/p0', 'map032/ev014/p0/b0', 'map032/ev015/p0', 'map032/ev015/p0/b0', 'map032/ev033/p0', 'map032/ev033/p0/b0'),
-    approach_prefer='north',
-    capability='rock_smash',
-    sight_trainers=(),
-)
-
-transit_beat(
-    ch08,
-    chapter_id='CH08',
-    beat_name='m172e001p2_transit',
-    group='m172e001p2',
-    hops=(('MAP_MOKI_TOWN', 56, 43, 'UP', 'MAP_MOKI_TOWN_THEOS_HOUSE_1F'),),
-)
-
 generic_beat(
     ch08,
     chapter_id='CH08',
-    beat_name='m172e001p2',
-    group='m172e001p2',
-    rows=('map172/ev001/p2',),
-    approach_prefer='north',
+    beat_name='m050e005p5',
+    group='m050e005p5',
+    rows=('map050/ev005/p5', 'map050/ev005/p5/b33'),
+    approach_prefer='south',
+    choice_answers=((4, 1),),
 )
 
 NEVER_FIRES: dict[str, str] = {
@@ -465,6 +440,7 @@ EMPTY_PAGES: dict[str, str] = {
     'map050/ev017/p0': 'every page of the event is empty; nothing to check on the ROM',
     'map050/ev018/p0': 'every page of the event is empty; nothing to check on the ROM',
     'map050/ev023/p0': 'every page of the event is empty; nothing to check on the ROM',
+    'map172/ev001/p2': 'a blank, empty page: the ROM hides the object by flag on it, so there is nothing to talk to',
 }
 
 WALK_CHECKED: dict[str, str] = {}
