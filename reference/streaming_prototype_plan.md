@@ -518,6 +518,8 @@ connection where the tileset changes, and stage 4 prefers exactly those seams (Â
   - The pre-existing load stall (about 4â€“5 frames) now shows as a still frame instead of
     garbage.
   - Cost: 6 KB EWRAM for the copy list (now 93.5% used).
+- **Operator walk on the swap ROM (2026-10-17): "That looks great!"** This is the stage 3
+  exit. The operator didn't say whether the walk was on the flash cart.
 - **Not the swap:** a thin black band at the screen edge for the rest of the step after a
   crossing is the seam strip depth (#150), and it was there before.
 
