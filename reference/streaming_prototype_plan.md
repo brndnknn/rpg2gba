@@ -483,7 +483,10 @@ quantize edge, not the cache). Kevlar is as far as a walk can go in that ROM.
 
   The 035 walk stalled at (20,2), the same Walker quirk as 032 in stage 2. The
   seam strip into 040 is covered by 040's own walk along its south edge.
-- **Left for the exit:** the CH08 suite from boot, then the operator's CH08 walk.
+- **Operator Walker walk of 040 (2026-10-17):** "Map 40 looks great."
+- **CH08 gen suite: GREEN 498/498 from boot** (511 before, minus the 13 transit beats). Full pytest: 5558 passed.
+- **Left for the exit:** the operator's real-game walk from CH06's end in Nowtoch
+  (`output/playtest-gen/walk/nowtoch-streamed-walk.gba`, Nowtoch (32,73)).
 
 ## 6. Risks
 
