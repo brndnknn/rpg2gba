@@ -17,6 +17,29 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 149. Tests tied to the engine's build state break on any rebuild or Walker build
+
+`tests/test_playtest_teach_hm.py` boots `output/playtest-gen/walk/CH07-m035seamN14000_transit.gba`,
+whose seed blob is keyed to one ROM build. Any engine rebuild breaks it until
+`playtest run --chapter CH07` and `playtest walk --at-beat m035seamN14000_transit` are re-run
+(found 2026-10-16, stage 1). Likewise about 50 tests read the engine tree's *generated* state
+(flag header, map constants, NPC gfx) and fail whenever `engine/` holds a Map Walker build
+instead of the chapter build (2026-10-17). Either skip with a clear reason when the engine state
+doesn't match, or document "restore the chapter build before pytest".
+
+### 148. 15 maps exceed the engine's map-data buffer and load as border only
+
+Found 2026-10-17 (streaming stage 2, `reference/streaming_prototype_plan.md` "Stage 2 progress").
+`InitMapLayoutData` (`engine/src/fieldmap.c:184`) silently skips loading a map whose backup grid
+`(w+15)*(h+14)` exceeds `MAX_MAP_DATA_SIZE` (10240); the player sees only the border pattern.
+Over: 094 (27060), 187, 143, 117, 106, 184, 133, 008, 132, 193, 074, 059, 213, 127, 121, 022
+(`output/scratch/map_data_size.py`). `map_split.derive` already respects the limit for split
+pieces, and `streaming.check_streamed_layout` now fails loud for streamed maps. Nothing guards
+the Map Walker `full` corpus or a future chapter map. The fixes are splitting, or raising the
+buffer (2 bytes/cell of EWRAM; 094 needs about 33 KB more, which isn't free). Due before the
+first chapter that reaches one of these maps. A general fail-loud check at layout emit should
+come first.
+
 ### 147. One-shot page arms are recorded as `unselected_arm` though they ran
 
 Ruled 2026-10-15 (CH08): `beat_gen` folds the arms of a one-shot page whose trunk another beat

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from rpg2gba.tileset_converter.streaming import streamed_map_ids
 from rpg2gba.tileset_converter.map_set import (
     SLICE_MAP_IDS,
     WALKER_EXCLUDED_MAP_IDS,
@@ -62,11 +63,14 @@ def test_parse_full_profile(tmp_path: Path) -> None:
 
 
 def test_full_profile_excludes_walker_exclusions(tmp_path: Path) -> None:
+    # A streamed map (reference/streamed_maps.json) is back in: streaming is how an
+    # overflow map builds.
+    streamed = streamed_map_ids()
     excluded = sorted(WALKER_EXCLUDED_MAP_IDS)  # overflow + empty placeholders
     maps_dir = _make_maps(tmp_path, [49, 48, 32, 7, *excluded])
     result = parse_map_ids("full", maps_dir)
-    assert result == [7, 32, 48, 49]
-    assert not (set(result) & WALKER_EXCLUDED_MAP_IDS)
+    assert result == sorted([7, 32, 48, 49, *(WALKER_EXCLUDED_MAP_IDS & streamed)])
+    assert not (set(result) & (WALKER_EXCLUDED_MAP_IDS - streamed))
 
 
 def test_explicit_ids_still_include_excluded_maps(tmp_path: Path) -> None:

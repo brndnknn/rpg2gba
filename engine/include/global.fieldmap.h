@@ -111,6 +111,15 @@ struct Tileset
     /*0x0C*/ const u16 *metatiles;
     /*0x10*/ const u16 *metatileAttributes;
     /*0x14*/ TilesetCB callback;
+    // BEGIN RPG2GBA STREAMING — streamed tileset (field_stream.c). Non-NULL only on a
+    // streamed map's PRIMARY: every metatile (primary and secondary ids, no split) as
+    // 8 u32 words, (pool tile id << 16) | flip/palette bits. `tiles` then holds the
+    // whole pool, which may exceed NUM_TILES_TOTAL; pool tiles below numPinnedTiles
+    // (tile 0 + the animated tiles) live at the slot of the same number.
+    /*0x18*/ const u32 *streamMetatiles;
+    /*0x1C*/ u16 numStreamTiles;
+    /*0x1E*/ u16 numPinnedTiles;
+    // END RPG2GBA STREAMING
 };
 
 struct MapLayout

@@ -22,6 +22,9 @@
 #include "uranium_connection_remap.h"
 #include "field_camera.h"
 // END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA STREAMING
+#include "field_stream.h"
+// END RPG2GBA STREAMING
 
 struct ConnectionFlags
 {
@@ -1085,18 +1088,47 @@ static void LoadTilesetPalette(struct Tileset const *tileset, u16 destOffset, u1
     }
 }
 
+// BEGIN RPG2GBA STREAMING — a streamed layout has no whole-tileset copy: the primary
+// load starts the tile cache, and the secondary load is a no-op once it runs.
+static bool32 StreamPrimaryLoad(struct MapLayout const *mapLayout)
+{
+    return FieldStream_OnTilesetLoad(mapLayout);
+}
+
+static bool32 StreamSecondaryLoad(struct MapLayout const *mapLayout)
+{
+    if (!FieldStream_IsLayoutStreamed(mapLayout))
+        return FALSE;
+    if (gFieldStream.source != mapLayout->primaryTileset)
+        FieldStream_OnTilesetLoad(mapLayout);
+    return TRUE;
+}
+// END RPG2GBA STREAMING
+
 void CopyPrimaryTilesetToVram(struct MapLayout const *mapLayout)
 {
+    // BEGIN RPG2GBA STREAMING
+    if (StreamPrimaryLoad(mapLayout))
+        return;
+    // END RPG2GBA STREAMING
     CopyTilesetToVram(mapLayout->primaryTileset, GetNumTilesInPrimary(mapLayout), 0);
 }
 
 void CopySecondaryTilesetToVram(struct MapLayout const *mapLayout)
 {
+    // BEGIN RPG2GBA STREAMING
+    if (StreamSecondaryLoad(mapLayout))
+        return;
+    // END RPG2GBA STREAMING
     CopyTilesetToVram(mapLayout->secondaryTileset, NUM_TILES_TOTAL - GetNumTilesInPrimary(mapLayout), GetNumTilesInPrimary(mapLayout));
 }
 
 void CopySecondaryTilesetToVramUsingHeap(struct MapLayout const *mapLayout)
 {
+    // BEGIN RPG2GBA STREAMING
+    if (StreamSecondaryLoad(mapLayout))
+        return;
+    // END RPG2GBA STREAMING
     CopyTilesetToVramUsingHeap(mapLayout->secondaryTileset, NUM_TILES_TOTAL - GetNumTilesInPrimary(mapLayout), GetNumTilesInPrimary(mapLayout));
 }
 
@@ -1115,6 +1147,10 @@ void LoadSecondaryTilesetPalette(struct MapLayout const *mapLayout, bool8 skipFa
 // LoadMapFromCameraTransition, for connections that change primary tileset.
 void UraniumCopyPrimaryTilesetToVramUsingHeap(struct MapLayout const *mapLayout)
 {
+    // BEGIN RPG2GBA STREAMING
+    if (StreamPrimaryLoad(mapLayout))
+        return;
+    // END RPG2GBA STREAMING
     CopyTilesetToVramUsingHeap(mapLayout->primaryTileset, GetNumTilesInPrimary(mapLayout), 0);
 }
 
@@ -1126,6 +1162,10 @@ void UraniumLoadPrimaryTilesetPalette(struct MapLayout const *mapLayout, bool8 s
 
 void CopyMapTilesetsToVram(struct MapLayout const *mapLayout)
 {
+    // BEGIN RPG2GBA STREAMING
+    if (StreamPrimaryLoad(mapLayout))
+        return;
+    // END RPG2GBA STREAMING
     if (mapLayout)
     {
         CopyTilesetToVramUsingHeap(mapLayout->primaryTileset, GetNumTilesInPrimary(mapLayout), 0);

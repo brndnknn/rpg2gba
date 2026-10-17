@@ -36,6 +36,20 @@
 
 static bool8 sWalkerActive = FALSE;
 
+// BEGIN URANIUM MAP WALKER — emulator harness warp (rpg2gba.playtest.screen_check).
+// The harness writes a destination and sets `pending`; the walker task warps there
+// on its next frame, the same way the START menu does. Never set in normal play.
+struct UWalkerHarnessWarp
+{
+	u8 pending;
+	u8 mapGroup;
+	u8 mapNum;
+	s8 x;
+	s8 y;
+};
+EWRAM_DATA struct UWalkerHarnessWarp gUraniumWalkerHarnessWarp = {0};
+// END URANIUM MAP WALKER
+
 // ---------------------------------------------------------------------------
 // L-toggle debug HUD
 // ---------------------------------------------------------------------------
@@ -675,6 +689,19 @@ static void Task_UraniumWalker(u8 taskId)
 
 	if (sWarpPending)
 		return;  // ignore input during a warp transition until the next map loads
+
+	// BEGIN URANIUM MAP WALKER — emulator harness warp
+	if (gUraniumWalkerHarnessWarp.pending)
+	{
+		gUraniumWalkerHarnessWarp.pending = FALSE;
+		SetWarpDestination(gUraniumWalkerHarnessWarp.mapGroup, gUraniumWalkerHarnessWarp.mapNum,
+		                   WARP_ID_NONE, gUraniumWalkerHarnessWarp.x, gUraniumWalkerHarnessWarp.y);
+		DoWarp();
+		UraniumWalker_RearmAfterWarp();
+		sWarpPending = TRUE;
+		return;
+	}
+	// END URANIUM MAP WALKER
 
 	if (JOY_NEW(A_BUTTON))
 	{

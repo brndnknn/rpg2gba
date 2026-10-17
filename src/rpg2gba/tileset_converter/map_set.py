@@ -272,8 +272,13 @@ def parse_map_ids(spec: str, maps_dir: Path, *, strip_list: Path | None = None) 
     if spec == "slice":
         return list(SLICE_MAP_IDS)
     if spec == "full":
+        # A streamed map (reference/streamed_maps.json) builds past the 1024 caps,
+        # so the overflow exclusion no longer applies to it.
+        from rpg2gba.tileset_converter.streaming import streamed_map_ids
+
+        excluded = WALKER_EXCLUDED_MAP_IDS - streamed_map_ids()
         ids = discover_all_map_ids(maps_dir, strip_list=strip_list)
-        return [i for i in ids if i not in WALKER_EXCLUDED_MAP_IDS]
+        return [i for i in ids if i not in excluded]
 
     try:
         requested = [int(tok) for tok in spec.split(",") if tok.strip()]

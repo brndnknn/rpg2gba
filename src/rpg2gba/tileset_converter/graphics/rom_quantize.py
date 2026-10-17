@@ -30,12 +30,16 @@ ROM_TILE_MERGE: bool = True
 
 
 def tile_merge_exempt(map_ids: Iterable[int]) -> bool:
-    """A tileset holding a split piece (`rpg2gba.map_split`) never gets the tile
-    merge: splitting a map is how it fits WITHOUT the merge's visual loss
-    (operator decision 2026-10-09, reference/guides/map_split_stage.md)."""
+    """A tileset holding a split piece (`rpg2gba.map_split`) or a streamed map
+    (`tileset_converter.streaming`) never gets the tile merge: splitting and
+    streaming are both ways to fit WITHOUT the merge's visual loss (operator
+    decisions 2026-10-09, reference/guides/map_split_stage.md, and 2026-10-16,
+    reference/streaming_prototype_plan.md §7)."""
     from rpg2gba.map_split.ids import is_piece
+    from rpg2gba.tileset_converter.streaming import is_streamed_tileset
 
-    return any(is_piece(m) for m in map_ids)
+    ids = list(map_ids)
+    return any(is_piece(m) for m in ids) or is_streamed_tileset(ids)
 
 
 def rom_tile_merge_for(map_ids: Iterable[int]) -> bool:

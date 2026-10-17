@@ -417,7 +417,9 @@ void DoWhiteOut(void)
     // and the respawn map's converted autorun (a home heal or a Center nurse
     // scene) runs on arrival and clears it. Without this, those pages never
     // run. Revert this line to restore the silent native respawn.
+#if URANIUM_MAP_WALKER == FALSE // the Map Walker build has no flag registry
     FlagSet(FLAG_STARTING_OVER);
+#endif
     // END URANIUM PATHFINDER SLICE
     HealPlayerParty();
     Overworld_ResetStateAfterWhiteOut();

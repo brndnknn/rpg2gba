@@ -28,6 +28,9 @@
 #include "scanline_effect.h"
 #include "script.h"
 #include "shop.h"
+// BEGIN RPG2GBA STREAMING
+#include "field_stream.h"
+// END RPG2GBA STREAMING
 #include "sound.h"
 #include "sprite.h"
 #include "string_util.h"
@@ -816,6 +819,21 @@ static void BuyMenuDrawMapBg(void)
             else
                 metatileLayerType = METATILE_LAYER_TYPE_COVERED;
 
+            // BEGIN RPG2GBA STREAMING — the buy menu keeps the field's VRAM, so its
+            // map view acquires cache slots too. The uses are never released: leaving
+            // the menu reloads the field, which resets the cache.
+            if (FieldStream_IsActive())
+            {
+                const u32 *wide = mapLayout->primaryTileset->streamMetatiles + metatile * NUM_TILES_PER_METATILE;
+                u16 words[NUM_TILES_PER_METATILE];
+                u32 k;
+
+                for (k = 0; k < NUM_TILES_PER_METATILE; k++)
+                    words[k] = FieldStream_Acquire(wide[k]);
+                BuyMenuDrawMapMetatile(i, j, words, metatileLayerType);
+                continue;
+            }
+            // END RPG2GBA STREAMING
             if (metatile < numMetatilesInPrimary)
                 BuyMenuDrawMapMetatile(i, j, mapLayout->primaryTileset->metatiles + metatile * NUM_TILES_PER_METATILE, metatileLayerType);
             else

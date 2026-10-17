@@ -139,6 +139,7 @@ Every converter must be safely re-runnable from scratch. If running it twice pro
 | Corrected map identity / display name (overrides `MapInfos`) | `reference/map_name_overrides.json` |
 | Act / chapter chain, tiers, map membership | `reference/chapters.json` (prose half: `reference/chapters/00-atlas.md`) |
 | Seam warp pairs (arrow-warp substitution for a connection whose maps can't share a tileset) | `reference/seam_warps.json` |
+| Which maps use the streaming tile engine (past 1024 tiles, no tile merge) | `reference/streamed_maps.json` |
 
 Anything else that *uses* these reads from the source of truth. Nothing else *creates* them.
 

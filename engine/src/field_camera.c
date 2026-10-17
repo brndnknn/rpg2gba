@@ -3,6 +3,9 @@
 #include "bike.h"
 #include "field_camera.h"
 #include "field_player_avatar.h"
+// BEGIN RPG2GBA STREAMING
+#include "field_stream.h"
+// END RPG2GBA STREAMING
 #include "fieldmap.h"
 #include "event_object_movement.h"
 #include "gpu_regs.h"
@@ -31,6 +34,10 @@ static s32 MapPosToBgTilemapOffset(struct FieldCameraOffset *, s32, s32);
 static void DrawWholeMapViewInternal(int, int, const struct MapLayout *);
 static void DrawMetatileAt(const struct MapLayout *, u16, int, int);
 static void DrawMetatile(s32, const u16 *, u16);
+// BEGIN RPG2GBA STREAMING
+static void DrawStreamedMetatile(s32, const u32 *, u16);
+static void DrawStreamedRawMetatile(s32, const u16 *, u16);
+// END RPG2GBA STREAMING
 static void CameraPanningCB_PanAhead(void);
 
 static struct FieldCameraOffset sFieldCameraOffset;
@@ -95,6 +102,10 @@ void DrawWholeMapView(void)
 {
     DrawWholeMapViewInternal(gSaveBlock1Ptr->pos.x, gSaveBlock1Ptr->pos.y, gMapHeader.mapLayout);
     sFieldCameraOffset.copyBGToVRAM = TRUE;
+    // BEGIN RPG2GBA STREAMING
+    gFieldStream.camTileX = sFieldCameraOffset.xTileOffset;
+    gFieldStream.camTileY = sFieldCameraOffset.yTileOffset;
+    // END RPG2GBA STREAMING
 }
 
 static void DrawWholeMapViewInternal(int x, int y, const struct MapLayout *mapLayout)
@@ -218,6 +229,11 @@ void DrawDoorMetatileAt(int x, int y, u16 *tiles)
 
     if (offset >= 0)
     {
+        // BEGIN RPG2GBA STREAMING
+        if (FieldStream_IsActive())
+            DrawStreamedRawMetatile(METATILE_LAYER_TYPE_COVERED, tiles, offset);
+        else
+        // END RPG2GBA STREAMING
         DrawMetatile(METATILE_LAYER_TYPE_COVERED, tiles, offset);
         sFieldCameraOffset.copyBGToVRAM = TRUE;
     }
@@ -230,6 +246,14 @@ static void DrawMetatileAt(const struct MapLayout *mapLayout, u16 offset, int x,
 
     if (metatileId > NUM_METATILES_TOTAL)
         metatileId = 0;
+    // BEGIN RPG2GBA STREAMING — a streamed map's metatiles are one u32 array, no split
+    if (FieldStream_IsActive())
+    {
+        DrawStreamedMetatile(MapGridGetMetatileLayerTypeAt(x, y),
+                             mapLayout->primaryTileset->streamMetatiles + metatileId * NUM_TILES_PER_METATILE, offset);
+        return;
+    }
+    // END RPG2GBA STREAMING
     if (metatileId < GetNumMetatilesInPrimary(mapLayout))
     {
         metatiles = mapLayout->primaryTileset->metatiles;
@@ -308,6 +332,74 @@ static void DrawMetatile(s32 metatileLayerType, const u16 *tiles, u16 offset)
     ScheduleBgCopyTilemapToVram(2);
     ScheduleBgCopyTilemapToVram(3);
 }
+
+// BEGIN RPG2GBA STREAMING — DrawMetatile for the streaming tile cache. Each cell
+// acquires its new tile before releasing the old word, so a tile kept across the
+// redraw never drops to refcount 0. The NORMAL layer's bottom BG gets tile 0, not
+// the stock 0x3014 "garbage", because slot 0x14 is a streamed slot here.
+static inline void PutStreamed(u16 *buffer, u32 cell, u16 word)
+{
+    u16 old = buffer[cell];
+    buffer[cell] = word;
+    FieldStream_Release(old);
+}
+
+static void PutStreamedQuad(u16 *buffer, u16 offset, const u32 *words)
+{
+    PutStreamed(buffer, offset, FieldStream_Acquire(words[0]));
+    PutStreamed(buffer, offset + 1, FieldStream_Acquire(words[1]));
+    PutStreamed(buffer, offset + 0x20, FieldStream_Acquire(words[2]));
+    PutStreamed(buffer, offset + 0x21, FieldStream_Acquire(words[3]));
+}
+
+static void PutRawQuad(u16 *buffer, u16 offset, const u16 *words)
+{
+    static const u16 sClear[4] = {0};
+
+    if (words == NULL)
+        words = sClear;
+    PutStreamed(buffer, offset, words[0]);
+    PutStreamed(buffer, offset + 1, words[1]);
+    PutStreamed(buffer, offset + 0x20, words[2]);
+    PutStreamed(buffer, offset + 0x21, words[3]);
+}
+
+static void DrawStreamedMetatile(s32 metatileLayerType, const u32 *words, u16 offset)
+{
+    switch (metatileLayerType)
+    {
+    case METATILE_LAYER_TYPE_SPLIT:
+        PutStreamedQuad(gOverworldTilemapBuffer_Bg3, offset, words);
+        PutRawQuad(gOverworldTilemapBuffer_Bg2, offset, NULL);
+        PutStreamedQuad(gOverworldTilemapBuffer_Bg1, offset, words + 4);
+        break;
+    case METATILE_LAYER_TYPE_COVERED:
+        PutStreamedQuad(gOverworldTilemapBuffer_Bg3, offset, words);
+        PutStreamedQuad(gOverworldTilemapBuffer_Bg2, offset, words + 4);
+        PutRawQuad(gOverworldTilemapBuffer_Bg1, offset, NULL);
+        break;
+    case METATILE_LAYER_TYPE_NORMAL:
+        PutRawQuad(gOverworldTilemapBuffer_Bg3, offset, NULL);
+        PutStreamedQuad(gOverworldTilemapBuffer_Bg2, offset, words);
+        PutStreamedQuad(gOverworldTilemapBuffer_Bg1, offset, words + 4);
+        break;
+    }
+    ScheduleBgCopyTilemapToVram(1);
+    ScheduleBgCopyTilemapToVram(2);
+    ScheduleBgCopyTilemapToVram(3);
+}
+
+static void DrawStreamedRawMetatile(s32 metatileLayerType, const u16 *tiles, u16 offset)
+{
+    // Only doors come here, always as COVERED (DrawDoorMetatileAt).
+    PutRawQuad(gOverworldTilemapBuffer_Bg3, offset, tiles);
+    PutRawQuad(gOverworldTilemapBuffer_Bg2, offset, tiles + 4);
+    PutRawQuad(gOverworldTilemapBuffer_Bg1, offset, NULL);
+    ScheduleBgCopyTilemapToVram(1);
+    ScheduleBgCopyTilemapToVram(2);
+    ScheduleBgCopyTilemapToVram(3);
+}
+// END RPG2GBA STREAMING
 
 static s32 MapPosToBgTilemapOffset(struct FieldCameraOffset *cameraOffset, s32 x, s32 y)
 {
@@ -429,6 +521,10 @@ void CameraUpdate(void)
     int movementSpeedX;
     int movementSpeedY;
 
+    // BEGIN RPG2GBA STREAMING
+    FieldStream_NewFrame();
+    // END RPG2GBA STREAMING
+
     if (gFieldCamera.callback != NULL)
         gFieldCamera.callback(&gFieldCamera);
     movementSpeedX = gFieldCamera.movementSpeedX;
@@ -486,6 +582,10 @@ void CameraUpdate(void)
     AddCameraPixelOffset(&sFieldCameraOffset, movementSpeedX, movementSpeedY);
     gTotalCameraPixelOffsetX -= movementSpeedX;
     gTotalCameraPixelOffsetY -= movementSpeedY;
+    // BEGIN RPG2GBA STREAMING
+    gFieldStream.camTileX = sFieldCameraOffset.xTileOffset;
+    gFieldStream.camTileY = sFieldCameraOffset.yTileOffset;
+    // END RPG2GBA STREAMING
 }
 
 void MoveCameraAndRedrawMap(int deltaX, int deltaY) //unused

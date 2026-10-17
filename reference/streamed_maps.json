@@ -1,0 +1,4 @@
+{
+  "_doc": "Maps that use the streaming tile engine (reference/streaming_prototype_plan.md). A streamed map's tileset may hold more than 1024 tiles; only what is on screen lives in VRAM. Streamed maps never get the lossy tile merge. Read by rpg2gba.tileset_converter.streaming; every other map keeps the stock load-once path. 094 and 187 were tried 2026-10-17 and taken out: they exceed the engine's map-data buffer ((w+15)*(h+14) > MAX_MAP_DATA_SIZE 10240), a separate limit streaming does not touch.",
+  "maps": [40, 101, 122]
+}

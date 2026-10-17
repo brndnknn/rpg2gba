@@ -676,3 +676,54 @@ def test_all_transparent_metatile(tmp_path):
         assert (v & 0x3FF) == 0, (
             f"slot {slot}: expected tile index 0 for all-transparent metatile, got {v & 0x3FF}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Streamed format (RPG2GBA STREAMING, reference/streaming_prototype_plan.md §3.2)
+# ---------------------------------------------------------------------------
+
+
+def _three_colour_metatiles() -> list[MetatileImage]:
+    return [
+        make_metatile(bottom=solid(248, 0, 0)),
+        make_metatile(bottom=solid(0, 248, 0), top=solid(0, 0, 248)),
+        make_metatile(bottom=solid(0, 0, 248)),
+    ]
+
+
+def test_streamed_pool_passes_the_stock_tile_cap(tmp_path, monkeypatch):
+    """A streamed tileset may exceed the 1024-tile hardware cap: the whole pool goes
+    into PRIMARY's tiles.png, SECONDARY's is one blank tile."""
+    import rpg2gba.tileset_converter.graphics.emit as emit_mod
+
+    monkeypatch.setattr(emit_mod, "NUM_TILES_TOTAL", 2)
+    monkeypatch.setattr(emit_mod, "NUM_TILES_IN_PRIMARY", 2)
+    result, pdir, sdir = _run(tmp_path, _three_colour_metatiles(), stream=True)
+    assert result.streamed and result.n_tiles == 4 and result.n_pinned == 1
+    prim = Image.open(pdir / "tiles.png")
+    assert prim.size[0] // 8 * (prim.size[1] // 8) >= 4
+    assert Image.open(sdir / "tiles.png").size == (128, 8)
+
+
+def test_streamed_wide_words_match_narrow_words(tmp_path):
+    """metatiles_wide.bin holds every metatile unsplit as u32 (tile << 16) | attrs,
+    agreeing with metatiles.bin wherever the tile fits in 10 bits."""
+    result, pdir, _ = _run(tmp_path, _three_colour_metatiles(), stream=True)
+    wide = struct.unpack(f"<{result.n_metatiles * 8}I", (pdir / "metatiles_wide.bin").read_bytes())
+    narrow = struct.unpack(f"<{result.n_metatiles * 8}H", (pdir / "metatiles.bin").read_bytes())
+    for w, n in zip(wide, narrow):
+        assert w & 0xFFFF == n & 0xFC00
+        assert w >> 16 == n & 0x3FF
+
+
+def test_streamed_pool_cap_fails_loud(tmp_path, monkeypatch):
+    import rpg2gba.tileset_converter.graphics.emit as emit_mod
+
+    monkeypatch.setattr(emit_mod, "STREAM_MAX_TILES", 2)
+    with pytest.raises(ValueError, match="streamed tile-pool limit"):
+        _run(tmp_path, _three_colour_metatiles(), stream=True)
+
+
+def test_stock_emit_writes_no_wide_metatiles(tmp_path):
+    _run(tmp_path, _three_colour_metatiles())
+    assert not (tmp_path / "primary" / "metatiles_wide.bin").exists()

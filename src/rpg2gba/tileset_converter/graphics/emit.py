@@ -30,6 +30,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from rpg2gba.tileset_converter.streaming import (
+    STREAM_INFO_NAME,
+    STREAM_MAX_TILES,
+    write_stream_info,
+)
 from rpg2gba.tileset_converter.tile_map import NUM_METATILES_TOTAL as _TILE_MAP_NUM_METATILES_TOTAL
 from rpg2gba.tileset_converter.graphics.quantize import (
     QuantizeResult,
@@ -115,6 +120,11 @@ class EmittedTileset:
     n_palettes: int
     stats: dict = field(default_factory=dict)
     effects: list[TilesetAnimEffect] = field(default_factory=list)
+    # Streamed format (field_stream.c): the whole pool is in PRIMARY's tiles.png and
+    # metatiles_wide.bin holds every metatile as u32 words. ``n_pinned`` = tile 0 plus
+    # the animated tiles, which keep fixed VRAM slots (the cache never moves them).
+    streamed: bool = False
+    n_pinned: int = 0
 
 
 @dataclass
@@ -385,6 +395,7 @@ def emit_tileset(
     max_palettes: int = NUM_PALS_TOTAL,
     quantizer: Callable[..., QuantizeResult] = build_quantized_tileset,
     enforce_caps: bool = True,
+    stream: bool = False,
 ) -> EmittedTileset:
     """Pack ``metatiles`` (metatile id = list index) into a PRIMARY+SECONDARY pair.
 
@@ -400,7 +411,14 @@ def emit_tileset(
     return a :class:`QuantizeResult`.  The metatile *ordering* is independent of the
     quantizer, so two emissions of the same ``metatiles`` with different packers
     produce interchangeable ``metatiles.bin`` (same ids) over different tile/palette
-    data — which is what lets a single layout drive several palette variants."""
+    data — which is what lets a single layout drive several palette variants.
+
+    ``stream=True`` emits the streamed format (reference/streaming_prototype_plan.md
+    §3.2): the tile cap rises to ``STREAM_MAX_TILES``, PRIMARY's ``tiles.png`` holds
+    the whole pool (SECONDARY's is one blank tile), and PRIMARY also gets
+    ``metatiles_wide.bin``: every metatile, unsplit, as 8 u32 words
+    ``(tile << 16) | flip/palette bits``. ``metatiles.bin`` is still written (index
+    bits truncated) for stock readers that never run on a streamed map."""
     # --- Steps 1+2: flip-canonical dedup + quantize (shared with analyzer). ---
     unique_canon, metatile_slots, res, canon_frames = _canonicalize_and_quantize(
         metatiles, max_palettes=max_palettes, quantizer=quantizer
@@ -507,6 +525,7 @@ def emit_tileset(
             + ", ".join(f"{eff.name}={eff.n_tiles} tiles x {eff.n_frames} frames"
                         for eff in effects)
         )
+    n_pinned = next_idx  # tile 0 + the animated block
     for m in static_merged:
         merged_gba_list[m] = next_idx
         next_idx += 1
@@ -522,18 +541,21 @@ def emit_tileset(
 
     # --- Step 5: metatile tile-entries (8 u16/metatile). ----------------------
     metatile_entries: list[list[int]] = []
+    wide_entries: list[list[int]] = []
     for slots in metatile_slots:
         entries: list[int] = []
+        wide: list[int] = []
         for canon_idx, h, v in slots:
             m = merged_of[canon_idx]
             if m == -1:
                 gba_tile, palnum = 0, 0
             else:
                 gba_tile, palnum = merged_gba_list[m], merged_palette[m]
-            entries.append(
-                (gba_tile & 0x3FF) | (h << 10) | (v << 11) | ((palnum & 0xF) << 12)
-            )
+            attrs = (h << 10) | (v << 11) | ((palnum & 0xF) << 12)
+            entries.append((gba_tile & 0x3FF) | attrs)
+            wide.append((gba_tile << 16) | attrs)
         metatile_entries.append(entries)
+        wide_entries.append(wide)
 
     # --- Step 6: metatile attributes (1 u16/metatile). ------------------------
     metatile_attrs = [
@@ -544,10 +566,12 @@ def emit_tileset(
     # Fail loud on a budget overrun BEFORE writing any artifact (column-keying can
     # multiply tiles/metatiles past the hardware limits — don't leave a malformed
     # tiles.png in the fork on the way to raising).
-    if enforce_caps and n_gba_tiles > NUM_TILES_TOTAL:
+    tile_cap = STREAM_MAX_TILES if stream else NUM_TILES_TOTAL
+    if enforce_caps and n_gba_tiles > tile_cap:
         raise ValueError(
-            f"{primary_name}: {n_gba_tiles} GBA tiles exceeds the {NUM_TILES_TOTAL} "
-            f"hardware limit (primary+secondary)"
+            f"{primary_name}: {n_gba_tiles} GBA tiles exceeds the {tile_cap} "
+            + ("streamed tile-pool limit (field_stream.h FIELD_STREAM_MAX_TILES)"
+               if stream else "hardware limit (primary+secondary)")
         )
     if enforce_caps and n_metatiles > NUM_METATILES_TOTAL:
         raise ValueError(
@@ -564,9 +588,13 @@ def emit_tileset(
         pix_list = [tile_pixels.get(g, np.zeros((8, 8), dtype=np.uint8)) for g in gba_indices]
         _tiles_to_indexed_image(pix_list).save(str(path))
 
-    primary_gba = list(range(min(n_gba_tiles, NUM_TILES_IN_PRIMARY))) or [0]
+    if stream:
+        primary_gba = list(range(n_gba_tiles))
+        secondary_gba = [0]
+    else:
+        primary_gba = list(range(min(n_gba_tiles, NUM_TILES_IN_PRIMARY))) or [0]
+        secondary_gba = list(range(NUM_TILES_IN_PRIMARY, n_gba_tiles)) or [0]
     _write_tiles_png(primary_dir / "tiles.png", primary_gba)
-    secondary_gba = list(range(NUM_TILES_IN_PRIMARY, n_gba_tiles)) or [0]
     _write_tiles_png(secondary_dir / "tiles.png", secondary_gba)
 
     # --- Step 7.5: animated-effect frame PNGs (frame 0's PNG == the tiles.png
@@ -600,6 +628,16 @@ def emit_tileset(
     (primary_dir / "metatile_attributes.bin").write_bytes(_pack(prim_at))
     (secondary_dir / "metatiles.bin").write_bytes(_pack(sec_mt))
     (secondary_dir / "metatile_attributes.bin").write_bytes(_pack(sec_at))
+    wide_path = primary_dir / "metatiles_wide.bin"
+    info_path = primary_dir / STREAM_INFO_NAME
+    if stream:
+        wide_path.write_bytes(
+            b"".join(struct.pack("<I", w) for row in wide_entries for w in row)
+        )
+        write_stream_info(primary_dir, n_gba_tiles, n_pinned)
+    else:
+        wide_path.unlink(missing_ok=True)
+        info_path.unlink(missing_ok=True)
 
     def _pal_text(colors: np.ndarray | None) -> str:
         lines = [_JASC_HEADER, "0 0 0\n"]
@@ -639,4 +677,6 @@ def emit_tileset(
         n_palettes=n_palettes,
         stats=stats,
         effects=effects,
+        streamed=stream,
+        n_pinned=n_pinned,
     )

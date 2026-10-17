@@ -349,6 +349,101 @@ final layout, with imported neighbour strips, which only exists at layout
 conversion. The scratch census answers stage 0's question with the same
 numbers.
 
+### Stage 2 progress (2026-10-17)
+
+**Built** (fenced `RPG2GBA STREAMING`):
+- `engine/src/field_stream.c` + `include/field_stream.h`: the cache.
+- `struct Tileset` gains `streamMetatiles`/`numStreamTiles`/`numPinnedTiles`.
+- `field_camera.c` streamed draw path; `fieldmap.c` tileset-load hooks; `shop.c` buy-menu view.
+- Pipeline: `reference/streamed_maps.json` (source of truth),
+  `tileset_converter/streaming.py`, `emit_tileset(stream=True)`, merge exemption,
+  build-time window check at both layout write sites.
+- `playtest/screen_check.py` and a harness warp in the Map Walker.
+
+**Where the build differs from §3.3 as drafted:**
+- **Uploads are synchronous CPU copies, not VBlank-queued.** That is safe
+  outside VBlank because a slot is only written while no tilemap cell
+  references it. A slot freed this frame is not handed out again until the next
+  frame (a per-slot generation stamp), so the old word's tilemap copy reaches VRAM
+  first. Unless the pool is otherwise full; then any free slot is taken rather
+  than fail. This removes the VBlank budget question; the hardware risk becomes
+  plain CPU time per step.
+- **No shadow array.** The tilemap words themselves record each cell's slot.
+  Each cell acquires its new tile before releasing the old word.
+- **Reset point = the whole-tileset copy functions.** `CopyPrimaryTilesetToVram`,
+  `CopyMapTilesetsToVram` and the connection-crossing primary reload start the
+  cache for a streamed layout (pinned upload, tilemap buffers cleared) and turn
+  it off for any other. Every VRAM-wiping path (`ResetScreenForMapLoad`, Flash's
+  `CB2_DoChangeMap`, battle/menu returns) reloads through them, so no separate
+  hooks were needed.
+- **The engine keeps 15×15 of the 16×16 ring buffer current.** The
+  `RedrawMapSlice*` functions draw buffer rows/columns 0–29, so tiles 30–31 on
+  each axis hold whatever scrolled out. They stay refcounted, so the 16×16
+  budget is still the right (slightly conservative) bound. The screen check
+  checks the maintained 30×30 tiles only.
+- **NORMAL-layer metatiles draw tile 0 on BG3,** not the stock `0x3014`
+  "garbage" word, because slot 0x14 is a streamed slot.
+- **Shop buy menu** acquires slots for its map view and never releases them;
+  leaving the menu reloads the field, which resets the cache.
+- **The build-time window check** covers the map's own grid with the border
+  pattern around it, not a connected neighbour's strip (resolved at runtime).
+  The screen check measures strips on the real backup layout.
+
+**Map Walker.** The walker recipe had rotted. A chapter-era engine line set a
+story flag the walker build doesn't generate (`FLAG_STARTING_OVER` in
+`DoWhiteOut`, now `#if URANIUM_MAP_WALKER == FALSE`). The chapter's generated
+tables also name chapter maps, so a walker over a chapter build needs the
+chapter's maps in its list. The `full` corpus now keeps streamed maps instead
+of excluding them as overflow.
+
+**A second size limit: the map-data buffer.** The engine copies the current map
+plus a 7-cell margin into a fixed buffer, `sBackupMapData[MAX_MAP_DATA_SIZE]`
+(10240 cells, `fieldmap.c:184`). A map with `(w+15)*(h+14)` over that silently
+loads **nothing but its border**, in every build, streamed or not. Found when the
+screen check on 094 failed: its checker read past the buffer. 15 maps are over
+(`output/scratch/map_data_size.py`). The largest are 094 (150×150, 27060 cells),
+187 (22022), 143, 117, 106, and 184/133/008 (100×100). So 094 and 187 left the
+streamed set; streaming fixes tiles, not this. Unsplit **040 needs 8272 cells
+and fits**, as do 101 (8170) and 122 (9880).
+- Raising the buffer costs 2 bytes a cell of EWRAM. 094 would need about 33 KB
+  more, which is more than is free (about 18 KB after the cache).
+- So the over-buffer maps need either splitting or a different backup-grid
+  design. That is a rollout question, not stage 2.
+- The build now fails loud for a streamed map over the buffer. The Map Walker
+  `full` corpus still builds the other 13 silently border-only; that's filed
+  separately.
+
+**Map 040** exists only as split pieces in phase-3 output, so it can't be
+streamed until stage 3 retires the split. Its screen check moves to stage 3.
+
+**Results** (Walker ROM with CH01–CH08 maps + 094, 101, 122, 187;
+`output/streaming/map_walker_stage2.gba`):
+
+| Map | Pool tiles | Pinned | Worst window (build check) | Cache slots | Slack |
+|---|---|---|---|---|---|
+| 101 | 1717 | 172 | 565 | 836 | 271 |
+| 122 | 1641 | 90 | 575 | 918 | 343 |
+| (094, over the map-data buffer) | 1753 | 83 | 470 | 925 | 455 |
+| (187, over the map-data buffer) | 1520 | 81 | 551 | 927 | 376 |
+
+**Screen check, full serpentine** (stride 2, 8 churn crossings;
+`output/screen_check_stage2.json`):
+
+| Map | Kind | Size | Steps | Mismatches | Errors / overflows / drift | Peak live slots |
+|---|---|---|---|---|---|---|
+| 101 | streamed | 80×72 | 1656 | **0** | 0 / 0 / 0 | 525 of 836 |
+| 122 | streamed | 80×90 | 2051 | **0** | 0 / 0 / 0 | 526 of 918 |
+| 032 | stock (checker control) | 72×64 | 1621 | **0** | — | — |
+
+The walker moves about two tiles per held step, so checks land on every second
+position. A stale slot persists into later checks, so a missed one would still
+show. On map 32 the walk stalled at one tile (15,44), and the follow-on harness
+warp to 035 never landed. That's a Walker/harness quirk on a scripted
+chapter map, not the cache.
+
+Screen-check sensitivity was proven by corrupting one resident tile in VRAM:
+exactly one `pixels` mismatch at that cell. A bumped refcount shows as drift.
+
 ## 6. Risks
 
 | Risk | Mitigation |

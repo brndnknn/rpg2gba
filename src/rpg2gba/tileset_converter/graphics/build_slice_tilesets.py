@@ -74,6 +74,7 @@ from .emit import (
 from . import rom_quantize
 from .rom_quantize import make_rom_quantizer
 from .tile_merge import MergeTable, merge_and_dedup_metatiles, rom_merge_table
+from rpg2gba.tileset_converter.streaming import is_streamed_tileset
 from rpg2gba.tileset_converter.connection_remap import (
     NUM_METATILES_TOTAL,
     RemapDirection,
@@ -796,7 +797,7 @@ def build_slice_tilesets(
         rom_q = make_rom_quantizer()
         emit = emit_tileset(
             st["metatiles"], primary_dir, secondary_dir, primary_name, secondary_name,
-            quantizer=rom_q,
+            quantizer=rom_q, stream=is_streamed_tileset(st["maps"]),
         )
         if getattr(rom_q, "info", None):
             logger.info("  tileset %d shared palettes: %s", ts, dict(rom_q.info))
@@ -996,6 +997,12 @@ def _write_fragments(
                 f'const u16 gMetatileAttributes_{stem}[] = '
                 f'INCBIN_U16("{ddir}/metatile_attributes.bin");'
             )
+            streamed = is_secondary == "FALSE" and results[ts].streamed
+            if streamed:
+                metatiles.append(
+                    f'const u32 gMetatilesWide_{stem}[] = '
+                    f'INCBIN_U32("{ddir}/metatiles_wide.bin");'
+                )
 
             # Only PRIMARY gets the animation callback — animated tiles are always
             # assigned into the primary tile block (emit.py Step 3); secondary
@@ -1011,7 +1018,13 @@ def _write_fragments(
                 f"    .metatiles = gMetatiles_{stem},\n"
                 f"    .metatileAttributes = gMetatileAttributes_{stem},\n"
                 f"    .callback = {callback},\n"
-                f"}};"
+                + (
+                    f"    .streamMetatiles = gMetatilesWide_{stem},\n"
+                    f"    .numStreamTiles = {results[ts].n_tiles},\n"
+                    f"    .numPinnedTiles = {results[ts].n_pinned},\n"
+                    if streamed else ""
+                )
+                + f"}};"
             )
             externs.append(f"extern const struct Tileset {name};")
 

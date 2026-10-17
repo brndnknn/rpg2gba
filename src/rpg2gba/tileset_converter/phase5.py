@@ -167,6 +167,7 @@ def convert_all(
         build_slice_tilesets,
     )
     from rpg2gba.tileset_converter.layout import append_layouts, convert_layout
+    from rpg2gba.tileset_converter.streaming import check_streamed_layout
     from rpg2gba.tileset_converter.tile_map import load_tile_map
 
     map_ids = list(map_ids)
@@ -258,6 +259,7 @@ def convert_all(
         entries.append(layout.to_layouts_entry())
         if not dry_run:
             layout.write(staging)
+            check_streamed_layout(layout, fork)
         logger.info("  Map%03d (%s): %d blocks", mid, consts.dir_name, len(layout.blocks))
 
     if not dry_run:

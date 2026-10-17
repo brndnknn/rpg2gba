@@ -150,6 +150,22 @@ instead of the playable slice — useful for spot-checking art/warps across the
 whole corpus. Flip the flag back to `FALSE` and re-run steps 2–5 to get back to
 the playable slice.
 
+`--maps` also takes an id list. On top of a chapter build, pass the chapter's maps
+plus the ones you want, because the chapter's generated tables (rematches, wild
+encounters, heal locations) still name its maps.
+
+**Screen check (streamed maps).** Maps listed in `reference/streamed_maps.json` use
+the streaming tile engine (`reference/streaming_prototype_plan.md`). On a Map Walker
+ROM, this walks each map in a serpentine and, after every step, compares every BG
+tilemap cell in VRAM with what the map grid and the ROM's tileset data say it should
+be:
+
+```
+.venv/bin/python -m rpg2gba.playtest.screen_check --map 101 --map 32 --stride 2
+```
+
+It exits non-zero on any mismatch, cache error, overflow or refcount drift.
+
 ### Verifying the result
 
 `pytest` exercises the converters this recipe drives (some tests skip without

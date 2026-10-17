@@ -191,7 +191,7 @@ def test_run_layout_pass_uses_matching_synthetic_tileset_key(
 
     monkeypatch.setattr(layout_mod, "convert_layout", fake_convert_layout)
 
-    entries = ap.run_layout_pass(out, consts, tmp_path / "staging", dry_run=True)
+    entries = ap.run_layout_pass(out, consts, tmp_path / "staging", dry_run=True, fork=tmp_path)
 
     assert captured_keys["LAYOUT_MOKITOWN"] == synth_tileset_id(32)
     assert captured_keys["LAYOUT_ROUTE01"] == synth_tileset_id(33)

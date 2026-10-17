@@ -163,6 +163,27 @@ _PROBE_ENTRIES: dict[str, str] = {
     "off_maplayout_secondarytileset": "offsetof(struct MapLayout, secondaryTileset)",
     "off_maplayout_isfrlg": "offsetof(struct MapLayout, isFrlg)",
     "off_tileset_metatileattributes": "offsetof(struct Tileset, metatileAttributes)",
+    # -- the streaming tile cache (playtest/screen_check.py) -------------------
+    # What the screen check needs to rebuild, from ROM and the map grid, the
+    # tilemap the engine should be showing; field_stream.h's `gFieldStream`.
+    "off_maplayout_border": "offsetof(struct MapLayout, border)",
+    "off_tileset_tiles": "offsetof(struct Tileset, tiles)",
+    "off_tileset_metatiles": "offsetof(struct Tileset, metatiles)",
+    "off_tileset_streammetatiles": "offsetof(struct Tileset, streamMetatiles)",
+    "off_tileset_numstreamtiles": "offsetof(struct Tileset, numStreamTiles)",
+    "off_tileset_numpinnedtiles": "offsetof(struct Tileset, numPinnedTiles)",
+    "off_fs_source": "offsetof(struct FieldStream, source)",
+    "off_fs_numtiles": "offsetof(struct FieldStream, numTiles)",
+    "off_fs_numpinned": "offsetof(struct FieldStream, numPinned)",
+    "off_fs_camtilex": "offsetof(struct FieldStream, camTileX)",
+    "off_fs_camtiley": "offsetof(struct FieldStream, camTileY)",
+    "off_fs_uploads": "offsetof(struct FieldStream, uploads)",
+    "off_fs_overflows": "offsetof(struct FieldStream, overflows)",
+    "off_fs_errors": "offsetof(struct FieldStream, errors)",
+    "off_fs_tiletoslot": "offsetof(struct FieldStream, tileToSlot)",
+    "off_fs_slottile": "offsetof(struct FieldStream, slotTile)",
+    "off_fs_slotrefs": "offsetof(struct FieldStream, slotRefs)",
+    "val_fs_first_door_slot": "FIELD_STREAM_FIRST_DOOR_SLOT",
     # gMapHeader.events -> warps: tiles a route must not step onto, or the
     # walk silently relocates the scenario to another map.
     "off_mapheader_events": "offsetof(struct MapHeader, events)",
@@ -301,6 +322,7 @@ _PROBE_TEMPLATE = """\
 #include "pokemon.h"
 #include "main.h"
 #include "fieldmap.h"
+#include "field_stream.h"
 #include "text.h"
 #include "task.h"
 #include "item.h"

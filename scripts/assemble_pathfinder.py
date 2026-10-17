@@ -305,6 +305,7 @@ def run_layout_pass(
     consts: dict,
     staging: Path,
     dry_run: bool,
+    fork: Path,
 ) -> list[dict]:
     """Returns this batch's layout entries (`Layout.to_layouts_entry()` dicts) so
     `run_fork_pass` can append exactly this batch to the fork overlay, rather than
@@ -320,6 +321,7 @@ def run_layout_pass(
         load_seam_warps,
         seams_for_slice,
     )
+    from rpg2gba.tileset_converter.streaming import check_streamed_layout
     from rpg2gba.tileset_converter.tile_map import load_tile_map
 
     tile_map = load_tile_map(
@@ -368,6 +370,7 @@ def run_layout_pass(
 
         if not dry_run:
             layout.write(staging)
+            check_streamed_layout(layout, fork)
             logger.info(
                 "  Map%03d (%s): wrote map.bin (%d blocks) + border.bin",
                 map_id, entry["dir_name"], len(layout.blocks),
@@ -1560,7 +1563,7 @@ def main() -> int:
 
     batch_layouts: list[dict] | None = None
     if not args.skip_layout:
-        batch_layouts = run_layout_pass(out, consts, staging, args.dry_run)
+        batch_layouts = run_layout_pass(out, consts, staging, args.dry_run, fork)
 
     if not args.skip_species or not args.skip_trainers:
         uranium_src_path = os.environ.get("RPG2GBA_URANIUM_SRC")
