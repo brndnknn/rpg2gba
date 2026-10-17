@@ -48,6 +48,10 @@ no `code 122` and only the `FLAG_MENU_ON_EVENT` bracket (CH04 §3).
 north seam now lands on **14000**, the main piece of map 40 after the 2026-10-09 split
 (CH04 doc still says 40; its dispositions row is `map035/seam/N/map14000`). Entry
 boundary: the N seam from map 14000 (CH06 end state; the chapter's first crossing).
+*(Corrected 2026-10-17: map 40 is unsplit and streamed (`reference/streamed_maps.json`),
+so every 14000 in this doc now reads 40. The seam row is `[35,'N',0,40,'S',15]` and the
+dispositions key is `map035/seam/N/map040`. The x-coordinates quoted for 14000 shift by
++20, the piece's rect origin (offset -5 -> 15).)*
 Exit boundary: the S seam to Map031 (Kevlar), which is CH07A's entry leg (CH07A notes:
 walk `35 -> 31 -> 33 -> 32`). The cave warp id 1 (20,33) -> Map036 is still the map's
 only `code 201`; not chapter-relevant on this visit (§4.4).

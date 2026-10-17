@@ -183,7 +183,7 @@ ELSEWHERE: dict[str, str] = {
     'map035/ev016/p0': 'later: CH06',
     'map035/ev018/p0': 'later',
     'map035/ev023/p1': 'unreachable',
-    'map035/seam/N/map14000': 'later: CH06',
+    'map035/seam/N/map040': 'later: CH06',
 }
 
 REFUSED: dict[str, str] = {

@@ -20,8 +20,8 @@ from rpg2gba.beat_gen.plan import PlannedBeat
 from rpg2gba.traversal.graph import MapGraph
 
 CAVE_1F, CAVE_2F = "MAP_PASSAGE_CAVE_1F", "MAP_PASSAGE_CAVE_2F"
-# 14002: map 40's park piece (rpg2gba.map_split), where 37's exit lands.
-MAP_CONSTANTS = {35: "MAP_ROUTE_02", 36: CAVE_1F, 37: CAVE_2F, 14002: "MAP_FORTY"}
+# 40: Nowtoch City, where 37's exit lands (unsplit and streamed since 2026-10-17).
+MAP_CONSTANTS = {35: "MAP_ROUTE_02", 36: CAVE_1F, 37: CAVE_2F, 40: "MAP_FORTY"}
 
 
 def _trainer(const: str, event_id: int, map_const: str = CAVE_1F, map_id: int = 36) -> dict:

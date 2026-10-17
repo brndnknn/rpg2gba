@@ -152,7 +152,8 @@ def test_milestone_check_is_scoped_to_the_real_tracked_file(tmp_path: Path) -> N
 def test_real_chapters_json_reconciles_with_documented_milestones() -> None:
     """The actual claim in REDERIVATION_PLAN.md / map_set.py's comments:
     cumulative maps after CH01..CH05 are 8, 10, 15, 16, 18; CH06 adds maps
-    41-43, 46, 47 and map 40's seven split pieces (14000-14006) -> 30. This is the
+    40-43, 46, 47 -> 24 (map 40 was seven split pieces, 30 total, until it was
+    unsplit and streamed 2026-10-17). This is the
     fail-loud check `gated_chapter_slices` runs by default; here it is
     asserted directly so a drift is attributed to the milestone check, not
     buried inside some other test's failure."""
@@ -160,7 +161,7 @@ def test_real_chapters_json_reconciles_with_documented_milestones() -> None:
 
     slices = gated_chapter_slices(current_slice_ids=SLICE_MAP_IDS)
     sizes = {s.chapter_id: len(s.authoring_slice) for s in slices}
-    assert sizes == {"CH01": 8, "CH02": 10, "CH03": 15, "CH04": 16, "CH05": 18, "CH06": 30}
+    assert sizes == {"CH01": 8, "CH02": 10, "CH03": 15, "CH04": 16, "CH05": 18, "CH06": 24}
 
 
 def test_no_built_chapters_fails_loud(tmp_path: Path) -> None:

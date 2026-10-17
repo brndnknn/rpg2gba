@@ -3610,10 +3610,10 @@
     "parent_row_id": null
   },
   {
-    "row_id": "map035/seam/N/map14000",
+    "row_id": "map035/seam/N/map040",
     "kind": "seam",
     "map_id": 35,
-    "content_hash": "01673bb2d9ae187c",
+    "content_hash": "d93b684022ff4828",
     "effects": [
       "warp"
     ],
@@ -3634,9 +3634,9 @@
       "map_id": 35,
       "direction": "N",
       "offset": 0,
-      "other_map_id": 14000,
+      "other_map_id": 40,
       "other_direction": "S",
-      "other_offset": -5
+      "other_offset": 15
     },
     "terrain": null,
     "reachability_consulted": true,

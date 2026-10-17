@@ -1,7 +1,815 @@
 {
+  "map040/ev001/p0": {
+    "disposition": "beat:m040e001",
+    "derived_hash": "c53b737f43b6f20e"
+  },
+  "map040/ev003/p0": {
+    "disposition": "beat:m040e003",
+    "derived_hash": "9e10f62b04e91d85"
+  },
+  "map040/ev004/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "789fb81e89f0496f"
+  },
+  "map040/ev004/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "257f5ca8390dff4f"
+  },
+  "map040/ev005/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "789fb81e89f0496f"
+  },
+  "map040/ev005/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "257f5ca8390dff4f"
+  },
+  "map040/ev006/p0": {
+    "disposition": "beat:m040e006",
+    "derived_hash": "69ee8e4464a1c994"
+  },
+  "map040/ev006/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "5a7553f2a426382a"
+  },
+  "map040/ev007/p0": {
+    "disposition": "beat:m040e007",
+    "derived_hash": "1cb2390d9a4885b9"
+  },
+  "map040/ev007/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "5a7553f2a426382a"
+  },
+  "map040/ev008/p0": {
+    "disposition": "beat:m040e008",
+    "derived_hash": "0938fee56cecc093"
+  },
+  "map040/ev008/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "257f5ca8390dff4f"
+  },
+  "map040/ev009/p0": {
+    "disposition": "beat:m040e009",
+    "derived_hash": "94e1419b605a6bd5"
+  },
+  "map040/ev009/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "257f5ca8390dff4f"
+  },
+  "map040/ev011/p0": {
+    "disposition": "beat:m040e011p0",
+    "derived_hash": "08bb858ee40179bc"
+  },
+  "map040/ev011/p0/b0": {
+    "disposition": "beat:m040e011p0",
+    "derived_hash": "5e6dc6b14b85ed61"
+  },
+  "map040/ev011/p0/b1": {
+    "disposition": "beat:m040e011p0",
+    "derived_hash": "8e2984ea767d1975"
+  },
+  "map040/ev012/p0": {
+    "disposition": "beat:m040e012",
+    "derived_hash": "f7744f3c382db736"
+  },
+  "map040/ev013/p0": {
+    "disposition": "beat:m040e013",
+    "derived_hash": "4cf8411185a79a4f"
+  },
+  "map040/ev013/p1": {
+    "disposition": "beat:m040e013",
+    "derived_hash": "dd9f034e6ea44b7b"
+  },
+  "map040/ev013/p1/b0": {
+    "disposition": "beat:m040e013",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map040/ev013/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev014/p0": {
+    "disposition": "elsewhere:never_fires: map040/ev014/p0 is worked only from a clearing actor's tile, and the route could not put it after any of its clearing writers ['map040/ev141/p0', 'map042/ev003/p0/b1'] -- its page is dead by then; it never fires",
+    "derived_hash": "8490f0ed38ea0f4d"
+  },
+  "map040/ev014/p1": {
+    "disposition": "beat:m040e014",
+    "derived_hash": "ef7bfe34c7505d54"
+  },
+  "map040/ev014/p2": {
+    "disposition": "beat:m040e014",
+    "derived_hash": "84fa6552e3ff3adb"
+  },
+  "map040/ev014/p2/b0": {
+    "disposition": "beat:m040e014",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map040/ev014/p2/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev015/p0": {
+    "disposition": "beat:m040e015",
+    "derived_hash": "b774b8e193f2f848"
+  },
+  "map040/ev015/p1": {
+    "disposition": "beat:m040e015",
+    "derived_hash": "dd9f034e6ea44b7b"
+  },
+  "map040/ev015/p1/b0": {
+    "disposition": "beat:m040e015",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map040/ev015/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev016/p0": {
+    "disposition": "beat:m040e016",
+    "derived_hash": "aa9641370f28a99b"
+  },
+  "map040/ev016/p1": {
+    "disposition": "beat:m040e016",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map040/ev016/p1/b0": {
+    "disposition": "beat:m040e016",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map040/ev016/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev017/p0": {
+    "disposition": "beat:m040e017p0",
+    "derived_hash": "c4742371f9283fb2"
+  },
+  "map040/ev017/p0/b0": {
+    "disposition": "beat:m040e017p0",
+    "derived_hash": "e9494cad0b31a664"
+  },
+  "map040/ev017/p0/b1": {
+    "disposition": "elsewhere:unselected_arm: not taken on the walk: needs BagHas(item='MARIAKEY') == False, and here BagHas(item='MARIAKEY') is [True] (ruling 19)",
+    "derived_hash": "f517a40be266fb11"
+  },
+  "map040/ev017/p1": {
+    "disposition": "beat:m040e017p1",
+    "derived_hash": "3e207b1de1360ce8"
+  },
+  "map040/ev017/p2": {
+    "disposition": "beat:m040e017",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map040/ev017/p2/b0": {
+    "disposition": "beat:m040e017",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map040/ev017/p2/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev018/p0": {
+    "disposition": "beat:m040e018p0",
+    "derived_hash": "3c01a34f449a37bc"
+  },
+  "map040/ev018/p0/b0": {
+    "disposition": "beat:m040e018p0",
+    "derived_hash": "8266147802e37e15"
+  },
+  "map040/ev018/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "ed125894226650b4"
+  },
+  "map040/ev018/p1": {
+    "disposition": "beat:m040e018",
+    "derived_hash": "f74d64986230d5a0"
+  },
+  "map040/ev018/p2": {
+    "disposition": "beat:m040e018p2",
+    "derived_hash": "77c4ee9fa596fdc7"
+  },
+  "map040/ev018/p3": {
+    "disposition": "beat:m040e018p3",
+    "derived_hash": "080d04a66c07f04c"
+  },
+  "map040/ev019/p0": {
+    "disposition": "beat:m040e019p0",
+    "derived_hash": "ac644e97b00479c2"
+  },
+  "map040/ev019/p1": {
+    "disposition": "beat:m040e019p1",
+    "derived_hash": "604225e235b9c01c"
+  },
+  "map040/ev019/p2": {
+    "disposition": "beat:m040e019p2",
+    "derived_hash": "187a4169eb3094db"
+  },
+  "map040/ev019/p3": {
+    "disposition": "beat:m040e019",
+    "derived_hash": "3e65f307d15ca82b"
+  },
+  "map040/ev019/p3/b0": {
+    "disposition": "beat:m040e019",
+    "derived_hash": "744e1fb92a7097bb"
+  },
+  "map040/ev019/p3/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev022/p0": {
+    "disposition": "beat:m040e022",
+    "derived_hash": "7a85d5fe59f914f8"
+  },
+  "map040/ev023/p0": {
+    "disposition": "beat:m040e023",
+    "derived_hash": "898f564d888ef89f"
+  },
+  "map040/ev024/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev025/p0": {
+    "disposition": "beat:m040e025p0",
+    "derived_hash": "fcd435807c9d7d69"
+  },
+  "map040/ev025/p1": {
+    "disposition": "beat:m040e025p1",
+    "derived_hash": "6da1f96d6323917c"
+  },
+  "map040/ev026/p0": {
+    "disposition": "beat:m040e026",
+    "derived_hash": "52a92801d2442f35"
+  },
+  "map040/ev026/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "5a7553f2a426382a"
+  },
+  "map040/ev027/p0": {
+    "disposition": "beat:m040e027",
+    "derived_hash": "4442148cf4ce0460"
+  },
+  "map040/ev027/p1": {
+    "disposition": "beat:m040e027",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map040/ev027/p1/b0": {
+    "disposition": "beat:m040e027",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map040/ev027/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev028/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev029/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev030/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev031/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev032/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev033/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev034/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev035/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev036/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev037/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev038/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev039/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev040/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev041/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev042/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev043/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev044/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev045/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev046/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev047/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev048/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "cde053ab9ac7cc5f"
+  },
+  "map040/ev049/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "92d44bacbb1c0528"
+  },
+  "map040/ev050/p0": {
+    "disposition": "beat:m040e050",
+    "derived_hash": "81a1e738410912f5"
+  },
+  "map040/ev051/p0": {
+    "disposition": "beat:m040e051",
+    "derived_hash": "63ff447577709643"
+  },
+  "map040/ev052/p0": {
+    "disposition": "elsewhere:later",
+    "derived_hash": "64e23c473d473967"
+  },
+  "map040/ev052/p1": {
+    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "5539cd09d8efee80"
+  },
+  "map040/ev052/p1/b0": {
+    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "483613f75931ffe6"
+  },
+  "map040/ev052/p1/b1": {
+    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev053/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev054/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev055/p0": {
+    "disposition": "beat:m040e055",
+    "derived_hash": "4442148cf4ce0460"
+  },
+  "map040/ev055/p1": {
+    "disposition": "elsewhere:never_fires: archetype_kwargs: map040/ev055/p1: no warp lands on this arrival autorun's cell (62,23) on map 40 -- it never fires",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map040/ev055/p1/b0": {
+    "disposition": "cosmetic",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map040/ev055/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev056/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev057/p0": {
+    "disposition": "elsewhere:later",
+    "derived_hash": "64e23c473d473967"
+  },
+  "map040/ev057/p1": {
+    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "5539cd09d8efee80"
+  },
+  "map040/ev057/p1/b0": {
+    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "483613f75931ffe6"
+  },
+  "map040/ev057/p1/b1": {
+    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev058/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev059/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev060/p0": {
+    "disposition": "beat:m040e060",
+    "derived_hash": "f0d304ed632949ef"
+  },
+  "map040/ev060/p0/b0": {
+    "disposition": "beat:m040e060",
+    "derived_hash": "23bfc5f7849d02ac"
+  },
+  "map040/ev060/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "995cb983b16737d7"
+  },
+  "map040/ev060/p1": {
+    "disposition": "beat:m040e060",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map040/ev061/p0": {
+    "disposition": "beat:m040e061",
+    "derived_hash": "e661e6f87a865d4b"
+  },
+  "map040/ev062/p0": {
+    "disposition": "beat:m040e062",
+    "derived_hash": "403497bc675e76ed"
+  },
+  "map040/ev063/p0": {
+    "disposition": "beat:m040e063p0",
+    "derived_hash": "4677c08cd7f47696"
+  },
+  "map040/ev063/p1": {
+    "disposition": "beat:m040e063p1",
+    "derived_hash": "9081d6f6bdf1b0b9"
+  },
+  "map040/ev064/p0": {
+    "disposition": "beat:m040e064",
+    "derived_hash": "482aebbf8fc07eef"
+  },
+  "map040/ev064/p1": {
+    "disposition": "beat:m040e064",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map040/ev064/p1/b0": {
+    "disposition": "beat:m040e064",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map040/ev064/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev065/p0": {
+    "disposition": "beat:m040e065",
+    "derived_hash": "e5fb1aa6227add31"
+  },
+  "map040/ev065/p1": {
+    "disposition": "beat:m040e065",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map040/ev065/p1/b0": {
+    "disposition": "beat:m040e065",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map040/ev065/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev066/p0": {
+    "disposition": "beat:m040e066",
+    "derived_hash": "6287a507d72a5418"
+  },
+  "map040/ev066/p1": {
+    "disposition": "beat:m040e066",
+    "derived_hash": "eb1e6284df7d10d1"
+  },
+  "map040/ev066/p1/b0": {
+    "disposition": "beat:m040e066",
+    "derived_hash": "11b1d4354edcd009"
+  },
+  "map040/ev066/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map040/ev077/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "aeba39d94ae2174e"
+  },
+  "map040/ev078/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "1efc04cf3b35e209"
+  },
+  "map040/ev078/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "3b0f54d852fee40d"
+  },
+  "map040/ev079/p0": {
+    "disposition": "beat:m040e079p0",
+    "derived_hash": "d573e27c9ba94f43"
+  },
+  "map040/ev079/p0/b0": {
+    "disposition": "beat:m040e079p0",
+    "derived_hash": "3898b7969fdbed80"
+  },
+  "map040/ev079/p0/b1": {
+    "disposition": "beat:m040e079p0",
+    "derived_hash": "5adf971c72bc885a"
+  },
+  "map040/ev079/p0/b2": {
+    "disposition": "beat:m040e079p0",
+    "derived_hash": "157a77ad4f0bedcc"
+  },
+  "map040/ev079/p0/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "c376c2ce48a4daa9"
+  },
+  "map040/ev079/p0/b4": {
+    "disposition": "beat:m040e079p0",
+    "derived_hash": "7e51fb3551773002"
+  },
+  "map040/ev079/p0/b5": {
+    "disposition": "elsewhere:unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)",
+    "derived_hash": "1cec44fe1a4de397"
+  },
+  "map040/ev079/p0/b6": {
+    "disposition": "beat:m040e079p0",
+    "derived_hash": "dcf8aae7555fb39a"
+  },
+  "map040/ev079/p0/b7": {
+    "disposition": "cosmetic",
+    "derived_hash": "90c38cad95af8eb1"
+  },
+  "map040/ev079/p1": {
+    "disposition": "beat:m040e079p1",
+    "derived_hash": "3b0f54d852fee40d"
+  },
+  "map040/ev081/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev082/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev083/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev084/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev085/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev086/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev087/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev088/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev089/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev090/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev091/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev092/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev093/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev094/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev095/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev096/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev097/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev098/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev099/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev100/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev101/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev102/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev103/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev104/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev105/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev106/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev107/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev108/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev109/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev110/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev111/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev112/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev113/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev114/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev115/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev116/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev117/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev118/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev119/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev120/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev121/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev122/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev123/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev124/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev125/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev126/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "50631292062e4dc9"
+  },
+  "map040/ev135/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "f24087cf01c12837"
+  },
+  "map040/ev139/p0": {
+    "disposition": "beat:m040e139",
+    "derived_hash": "006be845387dfbf5"
+  },
+  "map040/ev140/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "cdcb0040b52fe446"
+  },
+  "map040/ev140/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map040/ev140/p2": {
+    "disposition": "cosmetic",
+    "derived_hash": "080d04a66c07f04c"
+  },
+  "map040/ev141/p0": {
+    "disposition": "beat:m040e141p0",
+    "derived_hash": "07a6f72b0e0f8c4d"
+  },
+  "map040/ev141/p0/b0": {
+    "disposition": "beat:m040e141p0",
+    "derived_hash": "e8b895979b850c82"
+  },
+  "map040/ev141/p0/b1": {
+    "disposition": "beat:m040e141p0",
+    "derived_hash": "96ee372c11c33edd"
+  },
+  "map040/ev141/p0/b2": {
+    "disposition": "beat:m040e141p0",
+    "derived_hash": "e73065d87c239f81"
+  },
+  "map040/ev141/p0/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "c686d2e47edffbe2"
+  },
+  "map040/ev141/p1": {
+    "disposition": "beat:m040e141p1",
+    "derived_hash": "e6cb672cdb953653"
+  },
+  "map040/ev141/p2": {
+    "disposition": "beat:m040e141p2",
+    "derived_hash": "080d04a66c07f04c"
+  },
+  "map040/seam/S/map035": {
+    "disposition": "beat:m040seamS035",
+    "derived_hash": "d93b684022ff4828"
+  },
+  "map040/terrain/stairs/57,43": {
+    "disposition": "beat:m040stair57x43",
+    "derived_hash": "4a781ed5d396aee1"
+  },
+  "map040/terrain/stairs/57,44": {
+    "disposition": "beat:m040stair57x43",
+    "derived_hash": "6e93d34adef3f0b9"
+  },
+  "map040/terrain/stairs/58,45": {
+    "disposition": "beat:m040stair57x43",
+    "derived_hash": "7aa71e8011af5908"
+  },
+  "map040/terrain/stairs/58,46": {
+    "disposition": "beat:m040stair57x43",
+    "derived_hash": "7502f0fc981057cc"
+  },
   "map041/ev001/p0": {
     "disposition": "beat:m041e001",
-    "derived_hash": "baf1e629b33d9cf6"
+    "derived_hash": "2522cac594ff8c04"
   },
   "map041/ev002/p0": {
     "disposition": "beat:m041e002p0",
@@ -113,7 +921,7 @@
   },
   "map042/ev005/p0": {
     "disposition": "beat:m042e005",
-    "derived_hash": "ae90886d26f4a0c2"
+    "derived_hash": "bd7975386f5afe0f"
   },
   "map043/ev001/p0": {
     "disposition": "beat:m043e001p0",
@@ -141,7 +949,7 @@
   },
   "map043/ev002/p0": {
     "disposition": "beat:m043e002",
-    "derived_hash": "d14ec6dc641b585a"
+    "derived_hash": "a2ee1863c0ed747e"
   },
   "map043/ev003/p0": {
     "disposition": "beat:m043e003p0",
@@ -265,7 +1073,7 @@
   },
   "map043/ev009/p0": {
     "disposition": "beat:m043e009",
-    "derived_hash": "d14ec6dc641b585a"
+    "derived_hash": "a2ee1863c0ed747e"
   },
   "map043/ev010/p0": {
     "disposition": "beat:m043e010p0",
@@ -297,7 +1105,7 @@
   },
   "map046/ev001/p0": {
     "disposition": "beat:m046e001",
-    "derived_hash": "998ca40c168c03d0"
+    "derived_hash": "caa4b540886f30be"
   },
   "map046/ev002/p0": {
     "disposition": "beat:m046e002p0",
@@ -633,7 +1441,7 @@
   },
   "map046/ev004/p0": {
     "disposition": "beat:m046e004",
-    "derived_hash": "76afdcc081b68127"
+    "derived_hash": "b48cccbf0ebcdb10"
   },
   "map046/ev005/p0": {
     "disposition": "beat:m046e005",
@@ -737,7 +1545,7 @@
   },
   "map046/ev018/p0": {
     "disposition": "beat:m046e018",
-    "derived_hash": "c9d91964dbab8721"
+    "derived_hash": "51ff90da6de879f5"
   },
   "map046/ev019/p0": {
     "disposition": "beat:m046e019p0",
@@ -765,7 +1573,7 @@
   },
   "map046/ev023/p0": {
     "disposition": "beat:m046e023",
-    "derived_hash": "b9ee7f85dc81b9ca"
+    "derived_hash": "8d6c7989eda323fb"
   },
   "map046/ev024/p0": {
     "disposition": "beat:m046e024p0",
@@ -845,7 +1653,7 @@
   },
   "map047/ev001/p0": {
     "disposition": "beat:m047e001",
-    "derived_hash": "9fd36ea5557aa507"
+    "derived_hash": "cf06ca310827efca"
   },
   "map047/ev002/p0": {
     "disposition": "cosmetic",
@@ -857,7 +1665,7 @@
   },
   "map047/ev003/p0": {
     "disposition": "beat:m047e003",
-    "derived_hash": "b0562768b0fd399f"
+    "derived_hash": "fdcb4841550f0b7c"
   },
   "map047/ev005/p0": {
     "disposition": "beat:m047e005p0",
@@ -914,813 +1722,5 @@
   "map047/ev018/p0": {
     "disposition": "beat:m047e018",
     "derived_hash": "9dd1d6453443bdfa"
-  },
-  "map14000/ev004/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "789fb81e89f0496f"
-  },
-  "map14000/ev004/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "257f5ca8390dff4f"
-  },
-  "map14000/ev005/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "789fb81e89f0496f"
-  },
-  "map14000/ev005/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "257f5ca8390dff4f"
-  },
-  "map14000/ev006/p0": {
-    "disposition": "beat:m14000e006",
-    "derived_hash": "69ee8e4464a1c994"
-  },
-  "map14000/ev006/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "5a7553f2a426382a"
-  },
-  "map14000/ev007/p0": {
-    "disposition": "beat:m14000e007",
-    "derived_hash": "1cb2390d9a4885b9"
-  },
-  "map14000/ev007/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "5a7553f2a426382a"
-  },
-  "map14000/ev008/p0": {
-    "disposition": "beat:m14000e008",
-    "derived_hash": "0938fee56cecc093"
-  },
-  "map14000/ev008/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "257f5ca8390dff4f"
-  },
-  "map14000/ev009/p0": {
-    "disposition": "beat:m14000e009",
-    "derived_hash": "94e1419b605a6bd5"
-  },
-  "map14000/ev009/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "257f5ca8390dff4f"
-  },
-  "map14000/ev022/p0": {
-    "disposition": "beat:m14000e022",
-    "derived_hash": "7a85d5fe59f914f8"
-  },
-  "map14000/ev026/p0": {
-    "disposition": "beat:m14000e026",
-    "derived_hash": "52a92801d2442f35"
-  },
-  "map14000/ev026/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "5a7553f2a426382a"
-  },
-  "map14000/ev028/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev029/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev030/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev036/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev037/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev038/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev039/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev040/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev041/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev042/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev043/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev052/p0": {
-    "disposition": "elsewhere:later",
-    "derived_hash": "64e23c473d473967"
-  },
-  "map14000/ev052/p1": {
-    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
-    "derived_hash": "5539cd09d8efee80"
-  },
-  "map14000/ev052/p1/b0": {
-    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
-    "derived_hash": "483613f75931ffe6"
-  },
-  "map14000/ev052/p1/b1": {
-    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14000/ev057/p0": {
-    "disposition": "elsewhere:later",
-    "derived_hash": "64e23c473d473967"
-  },
-  "map14000/ev057/p1": {
-    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
-    "derived_hash": "5539cd09d8efee80"
-  },
-  "map14000/ev057/p1/b0": {
-    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
-    "derived_hash": "483613f75931ffe6"
-  },
-  "map14000/ev057/p1/b1": {
-    "disposition": "elsewhere:later: CH07: its event crosses out of the chapter's map chain (to map(s) [44]); the rest of the event belongs to the chapter that builds the far side",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14000/ev059/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev061/p0": {
-    "disposition": "beat:m14000e061",
-    "derived_hash": "e661e6f87a865d4b"
-  },
-  "map14000/ev062/p0": {
-    "disposition": "beat:m14000e062",
-    "derived_hash": "403497bc675e76ed"
-  },
-  "map14000/ev063/p0": {
-    "disposition": "beat:m14000e063p0",
-    "derived_hash": "4677c08cd7f47696"
-  },
-  "map14000/ev063/p1": {
-    "disposition": "beat:m14000e063p1",
-    "derived_hash": "9081d6f6bdf1b0b9"
-  },
-  "map14000/ev077/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "aeba39d94ae2174e"
-  },
-  "map14000/ev078/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "1efc04cf3b35e209"
-  },
-  "map14000/ev078/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "3b0f54d852fee40d"
-  },
-  "map14000/ev079/p0": {
-    "disposition": "beat:m14000e079p0",
-    "derived_hash": "5ce77ec47fcbfb82"
-  },
-  "map14000/ev079/p0/b0": {
-    "disposition": "beat:m14000e079p0",
-    "derived_hash": "a5a64931845b8cc2"
-  },
-  "map14000/ev079/p0/b1": {
-    "disposition": "beat:m14000e079p0",
-    "derived_hash": "257855c504a5627a"
-  },
-  "map14000/ev079/p0/b2": {
-    "disposition": "beat:m14000e079p0",
-    "derived_hash": "31f78bc9bc97a348"
-  },
-  "map14000/ev079/p0/b3": {
-    "disposition": "cosmetic",
-    "derived_hash": "9fcda1916ca34c03"
-  },
-  "map14000/ev079/p0/b4": {
-    "disposition": "beat:m14000e079p0",
-    "derived_hash": "7e51fb3551773002"
-  },
-  "map14000/ev079/p0/b5": {
-    "disposition": "elsewhere:unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)",
-    "derived_hash": "1cec44fe1a4de397"
-  },
-  "map14000/ev079/p0/b6": {
-    "disposition": "beat:m14000e079p0",
-    "derived_hash": "dcf8aae7555fb39a"
-  },
-  "map14000/ev079/p0/b7": {
-    "disposition": "cosmetic",
-    "derived_hash": "90c38cad95af8eb1"
-  },
-  "map14000/ev079/p1": {
-    "disposition": "beat:m14000e079p1",
-    "derived_hash": "3b0f54d852fee40d"
-  },
-  "map14000/ev081/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev100/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev101/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev102/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev103/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14000/ev135/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "f24087cf01c12837"
-  },
-  "map14000/ev139/p0": {
-    "disposition": "beat:m14000e139",
-    "derived_hash": "006be845387dfbf5"
-  },
-  "map14000/seam/S/map035": {
-    "disposition": "beat:m14000seamS035",
-    "derived_hash": "01673bb2d9ae187c"
-  },
-  "map14001/ev012/p0": {
-    "disposition": "beat:m14001e012",
-    "derived_hash": "f7744f3c382db736"
-  },
-  "map14001/ev014/p0": {
-    "disposition": "elsewhere:never_fires: map14001/ev014/p0 is worked only from a clearing actor's tile, and the route could not put it after any of its clearing writers ['map042/ev003/p0/b1', 'map14001/ev141/p0'] -- its page is dead by then; it never fires",
-    "derived_hash": "8490f0ed38ea0f4d"
-  },
-  "map14001/ev014/p1": {
-    "disposition": "beat:m14001e014",
-    "derived_hash": "ef7bfe34c7505d54"
-  },
-  "map14001/ev014/p2": {
-    "disposition": "beat:m14001e014",
-    "derived_hash": "84fa6552e3ff3adb"
-  },
-  "map14001/ev014/p2/b0": {
-    "disposition": "beat:m14001e014",
-    "derived_hash": "11b1d4354edcd009"
-  },
-  "map14001/ev014/p2/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14001/ev018/p0": {
-    "disposition": "beat:m14001e018p0",
-    "derived_hash": "3c01a34f449a37bc"
-  },
-  "map14001/ev018/p0/b0": {
-    "disposition": "beat:m14001e018p0",
-    "derived_hash": "8266147802e37e15"
-  },
-  "map14001/ev018/p0/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "ed125894226650b4"
-  },
-  "map14001/ev018/p1": {
-    "disposition": "beat:m14001e018",
-    "derived_hash": "f74d64986230d5a0"
-  },
-  "map14001/ev018/p2": {
-    "disposition": "beat:m14001e018p2",
-    "derived_hash": "77c4ee9fa596fdc7"
-  },
-  "map14001/ev018/p3": {
-    "disposition": "beat:m14001e018p3",
-    "derived_hash": "080d04a66c07f04c"
-  },
-  "map14001/ev027/p0": {
-    "disposition": "beat:m14001e027",
-    "derived_hash": "4442148cf4ce0460"
-  },
-  "map14001/ev027/p1": {
-    "disposition": "beat:m14001e027",
-    "derived_hash": "eb1e6284df7d10d1"
-  },
-  "map14001/ev027/p1/b0": {
-    "disposition": "beat:m14001e027",
-    "derived_hash": "11b1d4354edcd009"
-  },
-  "map14001/ev027/p1/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14001/ev031/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev032/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev033/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev044/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev045/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev046/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev047/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev053/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev054/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev055/p0": {
-    "disposition": "beat:m14001e055",
-    "derived_hash": "4442148cf4ce0460"
-  },
-  "map14001/ev055/p1": {
-    "disposition": "elsewhere:never_fires: archetype_kwargs: map14001/ev055/p1: no warp lands on this arrival autorun's cell (26,14) on map 14001 -- it never fires",
-    "derived_hash": "eb1e6284df7d10d1"
-  },
-  "map14001/ev055/p1/b0": {
-    "disposition": "cosmetic",
-    "derived_hash": "11b1d4354edcd009"
-  },
-  "map14001/ev055/p1/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14001/ev056/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev058/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev125/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev126/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14001/ev140/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "cdcb0040b52fe446"
-  },
-  "map14001/ev140/p1": {
-    "disposition": "cosmetic",
-    "derived_hash": "6c2d90d22489cb2a"
-  },
-  "map14001/ev140/p2": {
-    "disposition": "cosmetic",
-    "derived_hash": "080d04a66c07f04c"
-  },
-  "map14001/ev141/p0": {
-    "disposition": "beat:m14001e141p0",
-    "derived_hash": "6ad1c89559c1e355"
-  },
-  "map14001/ev141/p0/b0": {
-    "disposition": "beat:m14001e141p0",
-    "derived_hash": "a5a64931845b8cc2"
-  },
-  "map14001/ev141/p0/b1": {
-    "disposition": "beat:m14001e141p0",
-    "derived_hash": "257855c504a5627a"
-  },
-  "map14001/ev141/p0/b2": {
-    "disposition": "beat:m14001e141p0",
-    "derived_hash": "31f78bc9bc97a348"
-  },
-  "map14001/ev141/p0/b3": {
-    "disposition": "cosmetic",
-    "derived_hash": "9fcda1916ca34c03"
-  },
-  "map14001/ev141/p1": {
-    "disposition": "beat:m14001e141p1",
-    "derived_hash": "e6cb672cdb953653"
-  },
-  "map14001/ev141/p2": {
-    "disposition": "beat:m14001e141p2",
-    "derived_hash": "080d04a66c07f04c"
-  },
-  "map14002/ev001/p0": {
-    "disposition": "beat:m14002e001",
-    "derived_hash": "c53b737f43b6f20e"
-  },
-  "map14002/ev003/p0": {
-    "disposition": "beat:m14002e003",
-    "derived_hash": "9e10f62b04e91d85"
-  },
-  "map14002/ev019/p0": {
-    "disposition": "beat:m14002e019p0",
-    "derived_hash": "ac644e97b00479c2"
-  },
-  "map14002/ev019/p1": {
-    "disposition": "beat:m14002e019p1",
-    "derived_hash": "604225e235b9c01c"
-  },
-  "map14002/ev019/p2": {
-    "disposition": "beat:m14002e019p2",
-    "derived_hash": "187a4169eb3094db"
-  },
-  "map14002/ev019/p3": {
-    "disposition": "beat:m14002e019",
-    "derived_hash": "3e65f307d15ca82b"
-  },
-  "map14002/ev019/p3/b0": {
-    "disposition": "beat:m14002e019",
-    "derived_hash": "744e1fb92a7097bb"
-  },
-  "map14002/ev019/p3/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14002/ev025/p0": {
-    "disposition": "beat:m14002e025p0",
-    "derived_hash": "fcd435807c9d7d69"
-  },
-  "map14002/ev025/p1": {
-    "disposition": "beat:m14002e025p1",
-    "derived_hash": "6da1f96d6323917c"
-  },
-  "map14002/ev034/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14002/ev035/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14002/ev051/p0": {
-    "disposition": "beat:m14002e051",
-    "derived_hash": "63ff447577709643"
-  },
-  "map14002/ev108/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14002/ev109/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14002/ev110/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14002/ev111/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14002/ev112/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14002/ev113/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14002/ev114/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14002/terrain/stairs/24,17": {
-    "disposition": "beat:m14002stair24x17",
-    "derived_hash": "a2a70edc1f3fb71f"
-  },
-  "map14002/terrain/stairs/24,18": {
-    "disposition": "beat:m14002stair24x17",
-    "derived_hash": "a2e3ea49112b9087"
-  },
-  "map14002/terrain/stairs/25,19": {
-    "disposition": "beat:m14002stair24x17",
-    "derived_hash": "e1cba7824ed81f46"
-  },
-  "map14002/terrain/stairs/25,20": {
-    "disposition": "beat:m14002stair24x17",
-    "derived_hash": "0c80846da3c888c0"
-  },
-  "map14003/ev011/p0": {
-    "disposition": "beat:m14003e011p0",
-    "derived_hash": "08bb858ee40179bc"
-  },
-  "map14003/ev011/p0/b0": {
-    "disposition": "beat:m14003e011p0",
-    "derived_hash": "5e6dc6b14b85ed61"
-  },
-  "map14003/ev011/p0/b1": {
-    "disposition": "beat:m14003e011p0",
-    "derived_hash": "8e2984ea767d1975"
-  },
-  "map14003/ev015/p0": {
-    "disposition": "beat:m14003e015",
-    "derived_hash": "b774b8e193f2f848"
-  },
-  "map14003/ev015/p1": {
-    "disposition": "beat:m14003e015",
-    "derived_hash": "dd9f034e6ea44b7b"
-  },
-  "map14003/ev015/p1/b0": {
-    "disposition": "beat:m14003e015",
-    "derived_hash": "11b1d4354edcd009"
-  },
-  "map14003/ev015/p1/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14003/ev016/p0": {
-    "disposition": "beat:m14003e016",
-    "derived_hash": "aa9641370f28a99b"
-  },
-  "map14003/ev016/p1": {
-    "disposition": "beat:m14003e016",
-    "derived_hash": "eb1e6284df7d10d1"
-  },
-  "map14003/ev016/p1/b0": {
-    "disposition": "beat:m14003e016",
-    "derived_hash": "11b1d4354edcd009"
-  },
-  "map14003/ev016/p1/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14003/ev048/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "63efd46e48eabc50"
-  },
-  "map14003/ev049/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "9a4b8b1cbfe594f1"
-  },
-  "map14003/ev065/p0": {
-    "disposition": "beat:m14003e065",
-    "derived_hash": "e5fb1aa6227add31"
-  },
-  "map14003/ev065/p1": {
-    "disposition": "beat:m14003e065",
-    "derived_hash": "eb1e6284df7d10d1"
-  },
-  "map14003/ev065/p1/b0": {
-    "disposition": "beat:m14003e065",
-    "derived_hash": "11b1d4354edcd009"
-  },
-  "map14003/ev065/p1/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14003/ev084/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14003/ev085/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14003/ev086/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14003/ev087/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14003/ev088/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14003/ev089/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14003/ev090/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev013/p0": {
-    "disposition": "beat:m14004e013",
-    "derived_hash": "4cf8411185a79a4f"
-  },
-  "map14004/ev013/p1": {
-    "disposition": "beat:m14004e013",
-    "derived_hash": "dd9f034e6ea44b7b"
-  },
-  "map14004/ev013/p1/b0": {
-    "disposition": "beat:m14004e013",
-    "derived_hash": "11b1d4354edcd009"
-  },
-  "map14004/ev013/p1/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14004/ev024/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev066/p0": {
-    "disposition": "beat:m14004e066",
-    "derived_hash": "6287a507d72a5418"
-  },
-  "map14004/ev066/p1": {
-    "disposition": "beat:m14004e066",
-    "derived_hash": "eb1e6284df7d10d1"
-  },
-  "map14004/ev066/p1/b0": {
-    "disposition": "beat:m14004e066",
-    "derived_hash": "11b1d4354edcd009"
-  },
-  "map14004/ev066/p1/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14004/ev091/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev092/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev093/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev094/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev095/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev096/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev097/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev098/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev099/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev104/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev105/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev106/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14004/ev107/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14005/ev023/p0": {
-    "disposition": "beat:m14005e023",
-    "derived_hash": "898f564d888ef89f"
-  },
-  "map14005/ev050/p0": {
-    "disposition": "beat:m14005e050",
-    "derived_hash": "81a1e738410912f5"
-  },
-  "map14005/ev060/p0": {
-    "disposition": "beat:m14005e060",
-    "derived_hash": "f0d304ed632949ef"
-  },
-  "map14005/ev060/p0/b0": {
-    "disposition": "beat:m14005e060",
-    "derived_hash": "23bfc5f7849d02ac"
-  },
-  "map14005/ev060/p0/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "995cb983b16737d7"
-  },
-  "map14005/ev060/p1": {
-    "disposition": "beat:m14005e060",
-    "derived_hash": "6c2d90d22489cb2a"
-  },
-  "map14005/ev082/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14005/ev083/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14006/ev017/p0": {
-    "disposition": "beat:m14006e017p0",
-    "derived_hash": "c4742371f9283fb2"
-  },
-  "map14006/ev017/p0/b0": {
-    "disposition": "beat:m14006e017p0",
-    "derived_hash": "e9494cad0b31a664"
-  },
-  "map14006/ev017/p0/b1": {
-    "disposition": "elsewhere:unselected_arm: not taken on the walk: needs BagHas(item='MARIAKEY') == False, and here BagHas(item='MARIAKEY') is [True] (ruling 19)",
-    "derived_hash": "f517a40be266fb11"
-  },
-  "map14006/ev017/p1": {
-    "disposition": "beat:m14006e017p1",
-    "derived_hash": "3e207b1de1360ce8"
-  },
-  "map14006/ev017/p2": {
-    "disposition": "beat:m14006e017",
-    "derived_hash": "eb1e6284df7d10d1"
-  },
-  "map14006/ev017/p2/b0": {
-    "disposition": "beat:m14006e017",
-    "derived_hash": "11b1d4354edcd009"
-  },
-  "map14006/ev017/p2/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14006/ev064/p0": {
-    "disposition": "beat:m14006e064",
-    "derived_hash": "482aebbf8fc07eef"
-  },
-  "map14006/ev064/p1": {
-    "disposition": "beat:m14006e064",
-    "derived_hash": "eb1e6284df7d10d1"
-  },
-  "map14006/ev064/p1/b0": {
-    "disposition": "beat:m14006e064",
-    "derived_hash": "11b1d4354edcd009"
-  },
-  "map14006/ev064/p1/b1": {
-    "disposition": "cosmetic",
-    "derived_hash": "4f8217c3e24208a2"
-  },
-  "map14006/ev115/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14006/ev116/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14006/ev117/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14006/ev118/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14006/ev119/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14006/ev120/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14006/ev121/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14006/ev122/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14006/ev123/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
-  },
-  "map14006/ev124/p0": {
-    "disposition": "cosmetic",
-    "derived_hash": "50631292062e4dc9"
   }
 }

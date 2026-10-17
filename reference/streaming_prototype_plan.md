@@ -444,6 +444,47 @@ chapter map, not the cache.
 Screen-check sensitivity was proven by corrupting one resident tile in VRAM:
 exactly one `pixels` mismatch at that cell. A bumped refcount shows as drift.
 
+**Operator walk (2026-10-17): passed.** "The graphics look pretty good." There
+are small glitches at the edges of trees and similar objects, which the operator
+reads as a Map Walker issue. The screen check found zero VRAM mismatches on those
+maps, so whatever it is, VRAM matches the build's tile data (a source-art or
+quantize edge, not the cache). Kevlar is as far as a walk can go in that ROM.
+
+### Stage 3 progress (2026-10-17)
+
+- **The split is retired.** `split_maps.json` is `{}`. `rpg2gba split-maps`
+  restored `Map040.json` and the original transfers and connections.
+- **One fix was needed:** `build_map_constants` now retires persisted piece
+  constants whose split is gone. Without it, 40's re-mint of `MAP_NOWTOCH_CITY`
+  collides with piece 14000, which held that name. The transpiler's gate reads the
+  minted constants before staging, so the first build after un-splitting has to mint
+  first (`output/scratch/mint_map_consts.py`; staging does the same afterwards).
+- **The build:** tileset 1040 has 1323 metatiles and 1579 tiles (merge off). The
+  worst window is 612 of 981 cache slots (slack 369). The map-data buffer needs
+  8272 cells, under the 10240 cap. The 35↔40 seam is a remapped seam: 36 strip
+  metatiles imported into 1040.
+- **Suites:** CH04–CH08 were regenerated.
+  - CH04, CH05 and CH07 changed only by rename: 14000→40, with coordinates
+    shifted by the piece origin (+20, +12).
+  - CH06 lost its 13 cross-piece transit beats (169→156). Its stair beat moved to
+    whole-map coordinates, and the solver reordered the city route.
+  - CH08's module is unchanged.
+  - The operator approved them on the summary.
+  - CH04's seam disposition was re-affirmed (same ruling, new content hash).
+- **Tests:** 9 tests asserted split-era facts (piece ids, `MAP_NOWTOCH_CITY_PARK`,
+  CH06's 30-map slice). They were updated to 40 and 24.
+- **Screen check** (Walker ROM over the chapter maps + 101, 122,
+  `output/streaming/map_walker_stage3.gba`; `output/screen_check_stage3.json`):
+
+  | Map | Kind | Size | Steps | Mismatches | Errors / overflows / drift | Peak live slots |
+  |---|---|---|---|---|---|---|
+  | 040 | streamed | 79×74 | 3144 | **0** | 0 / 0 / 0 | 569 of 981 |
+  | 035 | stock (control) | 42×57 | 64 | 0 | — | — |
+
+  The 035 walk stalled at (20,2), the same Walker quirk as 032 in stage 2. The
+  seam strip into 040 is covered by 040's own walk along its south edge.
+- **Left for the exit:** the CH08 suite from boot, then the operator's CH08 walk.
+
 ## 6. Risks
 
 | Risk | Mitigation |

@@ -518,6 +518,15 @@ def build_map_constants(
         if origin in registry._by_id:
             logger.info("map %d is split; retiring %s", origin, registry._by_id[origin].map_const)
             del registry._by_id[origin]
+    # The reverse: a split removed from split_maps.json (map 40, 2026-10-17, now
+    # streamed). Its pieces no longer exist, and the main piece holds the origin's
+    # name, so the origin's re-mint would collide with it.
+    from rpg2gba.map_split.spec import split_specs
+
+    live_pieces = {u for spec in split_specs().values() for u in spec.uids()}
+    for uid in sorted(u for u in registry._by_id if is_piece(u) and u not in live_pieces):
+        logger.info("split piece %d is gone; retiring %s", uid, registry._by_id[uid].map_const)
+        del registry._by_id[uid]
     for uid in sorted(map_ids):
         if uid not in names:
             raise KeyError(f"map {uid} has no name in map_infos/overrides")

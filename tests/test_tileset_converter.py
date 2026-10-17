@@ -1058,6 +1058,25 @@ def test_build_slice_constants(tmp_path: Path) -> None:
     assert again.get(48) == reg.get(48)
 
 
+@pytest.mark.skipif(not _MAP_INFOS.exists(), reason="map_infos.json not generated")
+def test_build_constants_retires_pieces_of_a_removed_split(tmp_path: Path, monkeypatch) -> None:
+    """Un-splitting (map 40, streamed since 2026-10-17): persisted piece entries
+    whose split is gone are retired, so the origin re-mints its old name instead
+    of colliding with the main piece that held it."""
+    import rpg2gba.map_split.spec as split_spec
+
+    state = tmp_path / "map_constants.json"
+    seed = mc.MapConstantRegistry(state)
+    seed.mint(14000, "Nowtoch City")
+    seed.mint(14001, "Nowtoch City Gym Plaza")
+    seed.save()
+    monkeypatch.setattr(split_spec, "split_specs", lambda: {})
+    reg = mc.build_map_constants(
+        [40], map_infos_path=_MAP_INFOS, overrides_path=_OVERRIDES, state_path=state)
+    assert reg.get(40).map_const == "MAP_NOWTOCH_CITY"
+    assert reg.minted_ids() == [40]
+
+
 def test_walker_maps_header_golden(tmp_path: Path) -> None:
     """write_walker_maps_header emits URANIUM_WALKER_MAP_COUNT + URANIUM_WALKER_MAP_LIST(X)
     with correct count, MAP_* constants in slice_map_ids order, \\-continuation on every

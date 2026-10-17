@@ -1,6 +1,10 @@
 # Map-split stage — design
 
 **Status: APPROVED 2026-10-09 (operator).** First user: map 40 (Nowtoch City, CH06).
+**2026-10-17: no map is split.** Map 40 was unsplit and moved to the streaming tile
+engine (`reference/streaming_prototype_plan.md` stage 3), and `split_maps.json` is now
+empty. The stage stays as a working tool, and removing a split is idempotent: the stage
+restores the originals, and `build_map_constants` retires the gone pieces' constants.
 Rulings on §10:
 1. The approach, `reference/split_maps.json` and the id scheme are approved.
 2. The build agent picks the piece names.

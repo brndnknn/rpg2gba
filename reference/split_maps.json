@@ -1,26 +1,4 @@
 {
-  "_doc": "Map split decisions (CLAUDE.md §4.3 source of truth; design reference/guides/map_split_stage.md). Per origin map: `cuts` are source cells that become walls (a cut with walkable pieces on two opposite sides becomes an arrow-warp pair); each piece is named by seed cells whose walkable components (after the cuts) it owns. Piece uid = 10000 + origin*100 + k.",
-  "splits": {
-    "40": {
-      "decided": "2026-10-09, operator: base cuts + A (x=42), R3+R5 joined, gym-front cut removed; (61,23) (27,60) dropped; (41,42) kept as a wall (a one-cell dead end reachable only through the (41,43) cut)",
-      "cuts": [
-        [28, 23], [28, 24], [28, 25], [28, 26],
-        [44, 30], [45, 30], [46, 30], [47, 30], [48, 30],
-        [26, 42], [26, 43], [26, 44], [26, 45], [26, 46],
-        [41, 42], [41, 43], [41, 44], [41, 45],
-        [27, 56], [27, 57], [27, 58], [27, 59],
-        [40, 62], [40, 63], [40, 64],
-        [42, 22], [42, 23], [42, 24], [42, 25], [42, 26], [42, 27], [42, 28], [42, 29], [42, 30]
-      ],
-      "pieces": [
-        {"k": 0, "name": "Nowtoch City", "seeds": [[34, 43]]},
-        {"k": 1, "name": "Nowtoch City Gym Plaza", "seeds": [[53, 25]]},
-        {"k": 2, "name": "Nowtoch City Park", "seeds": [[47, 39], [64, 46]]},
-        {"k": 3, "name": "Nowtoch City West", "seeds": [[21, 40]]},
-        {"k": 4, "name": "Nowtoch City Southwest", "seeds": [[19, 57]]},
-        {"k": 5, "name": "Nowtoch City Garden", "seeds": [[22, 21]]},
-        {"k": 6, "name": "Nowtoch City Southeast", "seeds": [[47, 63]]}
-      ]
-    }
-  }
+  "_doc": "Map split decisions (CLAUDE.md \u00a74.3 source of truth; design reference/guides/map_split_stage.md). Per origin map: `cuts` are source cells that become walls (a cut with walkable pieces on two opposite sides becomes an arrow-warp pair); each piece is named by seed cells whose walkable components (after the cuts) it owns. Piece uid = 10000 + origin*100 + k. Map 40's split (2026-10-09, base cuts + A, pieces 14000-14006) was retired 2026-10-17: 40 is a streamed map (reference/streamed_maps.json, streaming_prototype_plan.md stage 3). Its cut list is in git history (ec62cdbb).",
+  "splits": {}
 }

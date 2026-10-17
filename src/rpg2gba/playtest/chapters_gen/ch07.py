@@ -15,17 +15,17 @@ ch07 = ChapterBuilder('CH07', doc='beat_gen-generated module for CH07', predeces
 transit_beat(
     ch07,
     chapter_id='CH07',
-    beat_name='m035seamN14000_transit',
-    group='m035seamN14000',
-    hops=(('MAP_NOWTOCH_CITY', 11, 61, 'DOWN', 'MAP_ROUTE_02'),),
+    beat_name='m035seamN040_transit',
+    group='m035seamN040',
+    hops=(('MAP_NOWTOCH_CITY', 31, 73, 'DOWN', 'MAP_ROUTE_02'),),
 )
 
 seam_beat(
     ch07,
     chapter_id='CH07',
-    beat_name='m035seamN14000',
-    group='m035seamN14000',
-    rows=('map035/seam/N/map14000',),
+    beat_name='m035seamN040',
+    group='m035seamN040',
+    rows=('map035/seam/N/map040',),
     approach_prefer='UP@(17,0)',
 )
 
