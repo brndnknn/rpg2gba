@@ -14,7 +14,9 @@
 #include "bg.h"
 #include "fieldmap.h"
 #include "field_stream.h"
+#include "gpu_regs.h"
 #include "overworld.h"
+#include "palette.h"
 
 EWRAM_DATA struct FieldStream gFieldStream = {0};
 
@@ -31,8 +33,31 @@ bool32 FieldStream_IsActive(void)
     return gFieldStream.source != NULL;
 }
 
+static bool32 SeamVisible(u32 slot)
+{
+    return (gFieldStream.seamVisible[slot >> 5] >> (slot & 31)) & 1;
+}
+
+static void SeamQueue(const u32 *src, u32 slot)
+{
+    if (gFieldStream.seamListCount < NUM_TILES_TOTAL)
+    {
+        gFieldStream.seamListSrc[gFieldStream.seamListCount] = src;
+        gFieldStream.seamListSlot[gFieldStream.seamListCount] = slot;
+        gFieldStream.seamListCount++;
+    }
+}
+
 static void UploadTile(u32 tile, u32 slot)
 {
+    // During a seam swap a slot the displayed frame shows is written by SeamCommit:
+    // SeamReady queues every such slot; one written after that queues itself.
+    if (gFieldStream.seamState != FIELD_SEAM_IDLE && SeamVisible(slot))
+    {
+        if (gFieldStream.seamState == FIELD_SEAM_READY)
+            SeamQueue(&gFieldStream.source->tiles[tile * (TILE_SIZE_4BPP / 4)], slot);
+        return;
+    }
     CpuFastCopy(&gFieldStream.source->tiles[tile * (TILE_SIZE_4BPP / 4)], sCharBase + slot * TILE_SIZE_4BPP, TILE_SIZE_4BPP);
     gFieldStream.uploads++;
 }
@@ -64,6 +89,8 @@ static void Reset(const struct Tileset *tileset)
         CpuFill16(0, gOverworldTilemapBuffer_Bg3, BG_SCREEN_SIZE);
 
     sCharBase = (u8 *)BG_CHAR_ADDR(GetBgAttribute(2, BG_ATTR_CHARBASEINDEX));
+    if (gFieldStream.seamState != FIELD_SEAM_IDLE)
+        gFieldStream.seamStreamed = TRUE;
     for (i = 0; i < gFieldStream.numPinned; i++)
     {
         UploadTile(i, i);
@@ -90,20 +117,26 @@ void FieldStream_NewFrame(void)
 }
 
 // Clock allocator over the managed slots. The first sweep skips slots freed this
-// frame; the second takes any free slot rather than fail.
+// frame; the second takes any free slot rather than fail. During a seam swap the
+// sweeps also avoid slots the displayed frame shows (their upload waits for the
+// VBlank), and a last sweep takes one of those rather than fail.
 static u32 AllocSlot(void)
 {
     u32 pass, n, slot;
     u32 first = gFieldStream.numPinned;
     u32 count = FIELD_STREAM_FIRST_DOOR_SLOT - first;
+    bool32 seam = gFieldStream.seamState != FIELD_SEAM_IDLE;
 
-    for (pass = 0; pass < 2; pass++)
+    for (pass = 0; pass < 3; pass++)
     {
+        if (pass == 2 && !seam)
+            break;
         slot = gFieldStream.hand;
         for (n = 0; n < count; n++)
         {
             if (gFieldStream.slotRefs[slot] == 0
-             && (pass == 1 || gFieldStream.slotFreedGen[slot] != gFieldStream.gen))
+             && (pass == 2 || !seam || !SeamVisible(slot))
+             && (pass >= 1 || gFieldStream.slotFreedGen[slot] != gFieldStream.gen))
             {
                 gFieldStream.hand = slot + 1 >= FIELD_STREAM_FIRST_DOOR_SLOT ? first : slot + 1;
                 return slot;
@@ -162,5 +195,118 @@ void FieldStream_Release(u16 tilemapWord)
     }
     if (--gFieldStream.slotRefs[slot] == 0)
         gFieldStream.slotFreedGen[slot] = gFieldStream.gen;
+}
+// Seam swap (field_stream.h). Slots are visible if any of BG1-3's on-screen cells
+// (31x21 from the current scroll, wrapping the 32x32 map) uses them.
+void FieldStream_SeamBegin(void)
+{
+    u32 bg, r, c, x0, y0, slot;
+    const u16 *map;
+
+    CpuFill32(0, gFieldStream.seamVisible, sizeof(gFieldStream.seamVisible));
+    x0 = (GetGpuReg(REG_OFFSET_BG1HOFS) >> 3) & 31;
+    y0 = (GetGpuReg(REG_OFFSET_BG1VOFS) >> 3) & 31;
+    for (bg = 1; bg <= 3; bg++)
+    {
+        map = (const u16 *)BG_SCREEN_ADDR(GetBgAttribute(bg, BG_ATTR_MAPBASEINDEX));
+        for (r = 0; r < 21; r++)
+        {
+            for (c = 0; c < 31; c++)
+            {
+                slot = map[((y0 + r) & 31) * 32 + ((x0 + c) & 31)] & 0x3FF;
+                gFieldStream.seamVisible[slot >> 5] |= 1u << (slot & 31);
+            }
+        }
+    }
+    sCharBase = (u8 *)BG_CHAR_ADDR(GetBgAttribute(2, BG_ATTR_CHARBASEINDEX));
+    gFieldStream.seamCount[0] = 0;
+    gFieldStream.seamCount[1] = 0;
+    gFieldStream.seamStreamed = FALSE;
+    gFieldStream.seamSavedPltDisabled = gPaletteFade.bufferTransferDisabled;
+    gPaletteFade.bufferTransferDisabled = TRUE;
+    gFieldStream.seamState = FIELD_SEAM_ARMED;
+}
+
+bool32 FieldStream_SeamCopyTiles(const struct Tileset *tileset, u32 numTiles, u32 offset)
+{
+    u32 i, slot, range;
+
+    if (gFieldStream.seamState == FIELD_SEAM_IDLE || tileset == NULL || tileset->isCompressed)
+        return FALSE;
+    for (i = 0; i < numTiles; i++)
+    {
+        slot = offset + i;
+        if (slot >= NUM_TILES_TOTAL)
+            break;
+        if (!SeamVisible(slot))
+            CpuFastCopy(&tileset->tiles[i * (TILE_SIZE_4BPP / 4)], sCharBase + slot * TILE_SIZE_4BPP, TILE_SIZE_4BPP);
+    }
+    range = gFieldStream.seamCount[0] == 0 ? 0 : 1;
+    gFieldStream.seamSrc[range] = tileset->tiles;
+    gFieldStream.seamFirst[range] = offset;
+    gFieldStream.seamCount[range] = numTiles;
+    return TRUE;
+}
+
+// Builds the copy list for the swap VBlank here, in main-loop time, so the VBlank
+// does nothing but copy: each visible slot the new view uses, from its source.
+void FieldStream_SeamReady(void)
+{
+    u32 w, bits, slot, range, tile;
+
+    if (gFieldStream.seamState != FIELD_SEAM_ARMED)
+        return;
+    gFieldStream.seamListCount = 0;
+    for (w = 0; w < NUM_TILES_TOTAL / 32; w++)
+    {
+        bits = gFieldStream.seamVisible[w];
+        while (bits != 0)
+        {
+            slot = w * 32 + __builtin_ctz(bits);
+            bits &= bits - 1;
+            if (gFieldStream.seamStreamed && gFieldStream.source != NULL)
+            {
+                if (slot < gFieldStream.numPinned)
+                    tile = slot;
+                else if (slot < FIELD_STREAM_FIRST_DOOR_SLOT && gFieldStream.slotRefs[slot] != 0)
+                    tile = gFieldStream.slotTile[slot];
+                else
+                    tile = FIELD_STREAM_NO_TILE;
+                if (tile != FIELD_STREAM_NO_TILE)
+                    SeamQueue(&gFieldStream.source->tiles[tile * (TILE_SIZE_4BPP / 4)], slot);
+            }
+            for (range = 0; range < 2; range++)
+            {
+                if (slot >= gFieldStream.seamFirst[range]
+                 && slot < gFieldStream.seamFirst[range] + gFieldStream.seamCount[range])
+                    SeamQueue(&gFieldStream.seamSrc[range][(slot - gFieldStream.seamFirst[range]) * (TILE_SIZE_4BPP / 4)], slot);
+            }
+        }
+    }
+    gFieldStream.seamState = FIELD_SEAM_READY;
+}
+
+bool32 FieldStream_SeamHeld(void)
+{
+    return gFieldStream.seamState != FIELD_SEAM_IDLE;
+}
+
+void FieldStream_SeamCommit(void)
+{
+    u32 i;
+    u8 *charBase = sCharBase;
+
+    if (gFieldStream.seamState != FIELD_SEAM_READY)
+        return;
+    gFieldStream.seamVcountStart = REG_VCOUNT;
+    for (i = 0; i < gFieldStream.seamListCount; i++)
+        DmaCopy32(3, gFieldStream.seamListSrc[i], charBase + gFieldStream.seamListSlot[i] * TILE_SIZE_4BPP, TILE_SIZE_4BPP);
+    DmaCopy32(3, gOverworldTilemapBuffer_Bg1, BG_SCREEN_ADDR(GetBgAttribute(1, BG_ATTR_MAPBASEINDEX)), BG_SCREEN_SIZE);
+    DmaCopy32(3, gOverworldTilemapBuffer_Bg2, BG_SCREEN_ADDR(GetBgAttribute(2, BG_ATTR_MAPBASEINDEX)), BG_SCREEN_SIZE);
+    DmaCopy32(3, gOverworldTilemapBuffer_Bg3, BG_SCREEN_ADDR(GetBgAttribute(3, BG_ATTR_MAPBASEINDEX)), BG_SCREEN_SIZE);
+    gPaletteFade.bufferTransferDisabled = gFieldStream.seamSavedPltDisabled;
+    gFieldStream.seamTiles = gFieldStream.seamListCount;
+    gFieldStream.seamState = FIELD_SEAM_IDLE;
+    gFieldStream.seamVcountEnd = REG_VCOUNT;
 }
 // END RPG2GBA STREAMING

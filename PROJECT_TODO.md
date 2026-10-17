@@ -17,6 +17,19 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 150. Remapped seams import one row too few: a black band while the camera is mid-step
+
+Found 2026-10-17 (streaming stage 3, Nowtoch ↔ Route 2). A remapped seam imports the
+neighbour's edge `STRIP_DEPTH_NS = 5` rows deep (`EW = 7` columns,
+`tileset_converter/connection_remap.py:45`). Five metatile rows is what a resting camera shows
+beyond the player. While the camera is mid-step, a sixth row is partly on screen, and it has no
+art (tilemap word 0, so the backdrop shows). Measured on the 40→35 crossing: BG rows 0–5 of the
+ring buffer are empty, and VOFS 41–47 puts up to 7 px of them at the top of the screen for the
+rest of that step. It's identical in the pre-seam-swap build, where the garbage frames hid it
+(`output/scratch/seam_rows_probe.py`). The fix is probably depth 6 / 8. That costs imported
+metatiles and tiles on stock maps (tight caps), and nothing on streamed maps. Check the EW
+case the same way.
+
 ### 149. Tests tied to the engine's build state break on any rebuild or Walker build
 
 `tests/test_playtest_teach_hm.py` boots `output/playtest-gen/walk/CH07-m035seamN14000_transit.gba`,

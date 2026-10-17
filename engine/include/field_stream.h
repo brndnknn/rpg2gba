@@ -30,7 +30,25 @@ struct FieldStream
              u16 slotTile[NUM_TILES_TOTAL];          // FIELD_STREAM_NO_TILE = empty
              u16 slotRefs[NUM_TILES_TOTAL];          // tilemap cells using the slot
              u8 slotFreedGen[NUM_TILES_TOTAL];
+             // Seam swap (a connection crossing that changes tileset): see field_stream.c.
+             u32 seamVisible[NUM_TILES_TOTAL / 32]; // slots the displayed frame shows
+             const u32 *seamSrc[2];                 // stock tile ranges deferred to VBlank
+             u16 seamFirst[2];
+             u16 seamCount[2];
+             u16 seamTiles;                         // tiles the last swap copied in VBlank
+             u8 seamState;                          // FIELD_SEAM_*
+             u8 seamStreamed;                       // the new layout is streamed
+             u8 seamSavedPltDisabled;
+             u8 seamVcountStart;                    // VCOUNT at the last swap's start/end
+             u8 seamVcountEnd;
+             u16 seamListCount;                     // tiles queued for the swap VBlank
+             u16 seamListSlot[NUM_TILES_TOTAL];
+             const u32 *seamListSrc[NUM_TILES_TOTAL];
 };
+
+#define FIELD_SEAM_IDLE  0
+#define FIELD_SEAM_ARMED 1 // tilesets changing; the displayed frame is held
+#define FIELD_SEAM_READY 2 // new view drawn; swap at the next VBlank
 
 extern struct FieldStream gFieldStream;
 
@@ -46,6 +64,22 @@ void FieldStream_NewFrame(void);
 u16 FieldStream_Acquire(u32 wideWord);
 // Drops the use a tilemap word held (no-op for pinned, door and unmanaged slots).
 void FieldStream_Release(u16 tilemapWord);
+
+// Seam swap. A connection crossing that changes tileset rewrites tiles, palettes and
+// the tilemap; done piecemeal, the frames in between show the old tilemap over new
+// tiles (a flash). Instead: SeamBegin (before the tileset loads) records which slots
+// the displayed frame shows; tiles for every other slot are written at once, the
+// visible ones are deferred; SeamReady (end of CameraUpdate) marks the new view
+// complete; SeamCommit (start of the field VBlank) writes the deferred tiles and the
+// tilemaps, and releases the held palette transfer, all in that one VBlank.
+void FieldStream_SeamBegin(void);
+// Stock-tileset copy during a seam swap. Returns FALSE (caller copies as usual) when
+// no swap is armed or the tileset is compressed.
+bool32 FieldStream_SeamCopyTiles(const struct Tileset *tileset, u32 numTiles, u32 offset);
+void FieldStream_SeamReady(void);
+void FieldStream_SeamCommit(void);
+// TRUE while the displayed frame is held (skip scroll and tile-animation transfers).
+bool32 FieldStream_SeamHeld(void);
 
 #endif // GUARD_FIELD_STREAM_H
 // END RPG2GBA STREAMING

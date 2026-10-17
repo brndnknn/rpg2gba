@@ -488,6 +488,39 @@ quantize edge, not the cache). Kevlar is as far as a walk can go in that ROM.
 - **Left for the exit:** the operator's real-game walk from CH06's end in Nowtoch
   (`output/playtest-gen/walk/nowtoch-streamed-walk.gba`, Nowtoch (32,73)).
 
+### Seam swap (2026-10-17)
+
+**Operator:** crossing Nowtoch → Route 2, "everything flashes". It's the same at any
+connection where the tileset changes, and stage 4 prefers exactly those seams (§3.5).
+- **Cause:** `LoadMapFromCameraTransition` rewrote the tiles (synchronous for streamed, a
+  DMA queue for stock) and the palettes. The tilemap reached VRAM at a later VBlank, so the
+  displayed frames in between showed the old tilemap over the new tiles. The probe saw two
+  garbage frames going down and several wrong-tile frames going up
+  (`output/scratch/seam_flash_probe.py`, strips in `output/scratch/seam_flash/`).
+- **Operator's choice:** a one-VBlank swap, not a fade ("I'd rather keep the current
+  glitch than have the dip"). It's a separate commit, so `git revert` undoes it.
+- **How it works** (`field_stream.h`, "Seam swap"):
+  - `SeamBegin` (on a primary-tileset change) records which slots the displayed frame
+    shows, from the VRAM tilemaps and scroll. It also holds the palette transfer.
+  - **Stock tileset loads** write every other slot at once and defer the visible ones.
+  - **The streaming allocator** prefers non-visible slots, and its uploads to visible
+    slots wait.
+  - `SeamReady` (end of `CameraUpdate`) builds the copy list in main-loop time.
+  - `SeamCommit` runs first in `VBlankCB_Field`. It DMAs the listed tiles and the three
+    tilemaps and releases the palettes, all in that one VBlank.
+  - Until then the field VBlank skips the scroll and tile-animation transfers. A transition
+    frame that runs long just shows the old frame for longer.
+- **Result:**
+  - Zero jump frames in both directions; checked by eye on the strips.
+  - The commit copies 144 tiles in 21 scanlines (VCOUNT 160→181) going down, and 2 tiles
+    in 10 going up, out of 67 VBlank lines. The first version did the per-slot decisions
+    inside VBlank and finished at line 226; the list moved that work out.
+  - The pre-existing load stall (about 4–5 frames) now shows as a still frame instead of
+    garbage.
+  - Cost: 6 KB EWRAM for the copy list (now 93.5% used).
+- **Not the swap:** a thin black band at the screen edge for the rest of the step after a
+  crossing is the seam strip depth (#150), and it was there before.
+
 ## 6. Risks
 
 | Risk | Mitigation |

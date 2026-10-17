@@ -10,6 +10,9 @@
 // BEGIN URANIUM PATHFINDER SLICE — split-map popup
 #include "uranium_split_maps.h"
 // END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA STREAMING — seam swap (LoadMapFromCameraTransition, VBlankCB_Field)
+#include "field_stream.h"
+// END RPG2GBA STREAMING
 // BEGIN URANIUM PATHFINDER SLICE — pulls FLAG_STARTING_OVER (the flag registry's
 // generated dump, keyed off config/rpg2gba.h's range bases), set in DoWhiteOut()
 // below. "../" for the same reason as new_game.c's uranium_berry_trees.h include.
@@ -943,6 +946,11 @@ void LoadMapFromCameraTransition(u8 mapGroup, u8 mapNum)
     // only ever reloaded the secondary); Uranium cross-tileset connections do.
     // The whole-view redraw happens in CameraMove after MoveMapViewToBackup.
     primaryChanged = (gMapHeader.mapLayout->primaryTileset != oldPrimaryTileset);
+    // BEGIN RPG2GBA STREAMING — hold the displayed frame until the new view swaps in
+    // whole at one VBlank (field_stream.h, seam swap); piecemeal it flashes.
+    if (primaryChanged)
+        FieldStream_SeamBegin();
+    // END RPG2GBA STREAMING
     if (primaryChanged)
     {
         UraniumCopyPrimaryTilesetToVramUsingHeap(gMapHeader.mapLayout);
@@ -2262,12 +2270,21 @@ static void SetFieldVBlankCallback(void)
 
 static void VBlankCB_Field(void)
 {
+    // BEGIN RPG2GBA STREAMING — seam swap: commit first (it is the big copy), and
+    // while the old frame is held, keep its scroll and tiles as they are.
+    bool32 held;
+
+    FieldStream_SeamCommit();
+    held = FieldStream_SeamHeld();
     LoadOam();
     ProcessSpriteCopyRequests();
     ScanlineEffect_InitHBlankDmaTransfer();
-    FieldUpdateBgTilemapScroll();
+    if (!held)
+        FieldUpdateBgTilemapScroll();
     TransferPlttBuffer();
-    TransferTilesetAnimsBuffer();
+    if (!held)
+        TransferTilesetAnimsBuffer();
+    // END RPG2GBA STREAMING
 }
 
 static void InitCurrentFlashLevelScanlineEffect(void)

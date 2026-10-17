@@ -510,6 +510,9 @@ void CameraUpdateNoObjectRefresh(void)
     }
 
     AddCameraPixelOffset(&sFieldCameraOffset, movementSpeedX, movementSpeedY);
+    // BEGIN RPG2GBA STREAMING
+    FieldStream_SeamReady();
+    // END RPG2GBA STREAMING
 }
 
 void CameraUpdate(void)
@@ -585,6 +588,7 @@ void CameraUpdate(void)
     // BEGIN RPG2GBA STREAMING
     gFieldStream.camTileX = sFieldCameraOffset.xTileOffset;
     gFieldStream.camTileY = sFieldCameraOffset.yTileOffset;
+    FieldStream_SeamReady(); // a crossing this frame has drawn its whole new view
     // END RPG2GBA STREAMING
 }
 

@@ -1128,6 +1128,8 @@ void CopySecondaryTilesetToVramUsingHeap(struct MapLayout const *mapLayout)
     // BEGIN RPG2GBA STREAMING
     if (StreamSecondaryLoad(mapLayout))
         return;
+    if (FieldStream_SeamCopyTiles(mapLayout->secondaryTileset, NUM_TILES_TOTAL - GetNumTilesInPrimary(mapLayout), GetNumTilesInPrimary(mapLayout)))
+        return;
     // END RPG2GBA STREAMING
     CopyTilesetToVramUsingHeap(mapLayout->secondaryTileset, NUM_TILES_TOTAL - GetNumTilesInPrimary(mapLayout), GetNumTilesInPrimary(mapLayout));
 }
@@ -1149,6 +1151,8 @@ void UraniumCopyPrimaryTilesetToVramUsingHeap(struct MapLayout const *mapLayout)
 {
     // BEGIN RPG2GBA STREAMING
     if (StreamPrimaryLoad(mapLayout))
+        return;
+    if (FieldStream_SeamCopyTiles(mapLayout->primaryTileset, GetNumTilesInPrimary(mapLayout), 0))
         return;
     // END RPG2GBA STREAMING
     CopyTilesetToVramUsingHeap(mapLayout->primaryTileset, GetNumTilesInPrimary(mapLayout), 0);
