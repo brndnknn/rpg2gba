@@ -39,6 +39,10 @@ whose seed blob is keyed to one ROM build. Any engine rebuild breaks it until
 (flag header, map constants, NPC gfx) and fail whenever `engine/` holds a Map Walker build
 instead of the chapter build (2026-10-17). Either skip with a clear reason when the engine state
 doesn't match, or document "restore the chapter build before pytest".
+*(2026-10-18: hit again by the windowed backup grid (`gBigMap` shifted EWRAM). The test now
+boots `CH08-CH07:m035seamN040_transit.gba` (the split-era 14000 ROM is gone with the split),
+and its `.sav` is optional because stamped walk ROMs embed the seed. Regenerate with
+`playtest walk --chapter CH08 --at-beat CH07:m035seamN040_transit` after the next engine change.)*
 
 ### 147. One-shot page arms are recorded as `unselected_arm` though they ran
 

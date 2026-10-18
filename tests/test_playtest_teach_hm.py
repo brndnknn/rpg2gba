@@ -11,13 +11,12 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "engine"
-WALK_ROM = ROOT / "output/playtest-gen/walk/CH07-m035seamN14000_transit.gba"
+WALK_ROM = ROOT / "output/playtest-gen/walk/CH08-CH07:m035seamN040_transit.gba"
 
 pytestmark = [
     pytest.mark.skipif(importlib.util.find_spec("mgba") is None,
                        reason="needs the mgba python bindings"),
-    pytest.mark.skipif(not WALK_ROM.exists() or not WALK_ROM.with_suffix(".sav").exists(),
-                       reason="walk ROM/.sav not built"),
+    pytest.mark.skipif(not WALK_ROM.exists(), reason="walk ROM not built"),
     pytest.mark.skipif(not (ENGINE / "pokeemerald.elf").exists(),
                        reason="engine build (pokeemerald.elf) absent"),
 ]
@@ -28,7 +27,9 @@ def _boot(tmp_path: Path):
 
     rom = tmp_path / "walk.gba"
     shutil.copy(WALK_ROM, rom)
-    shutil.copy(WALK_ROM.with_suffix(".sav"), rom.with_suffix(".sav"))
+    # A stamped walk ROM boots its embedded seed save; an older one may ship a .sav.
+    if WALK_ROM.with_suffix(".sav").exists():
+        shutil.copy(WALK_ROM.with_suffix(".sav"), rom.with_suffix(".sav"))
     emu = Emulator(rom, ENGINE, screenshot_dir=tmp_path)
     emu.run(600)
     return emu
