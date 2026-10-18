@@ -40,6 +40,13 @@ EWRAM_DATA struct Camera gCamera = {0};
 EWRAM_DATA static struct ConnectionFlags sMapConnectionFlags = {0};
 
 COMMON_DATA struct BackupMapLayout gBackupMapLayout = {0};
+// BEGIN RPG2GBA STREAMING — windowed backup grid (fieldmap.h)
+EWRAM_DATA struct BigMap gBigMap = {0};
+STATIC_ASSERT(BIGMAP_WIN_W * BIGMAP_WIN_H <= MAX_MAP_DATA_SIZE, BigMapWindowFitsBackupBuffer);
+static void BigMapInit(struct MapHeader *mapHeader);
+static u16 BigMapGetBlock(int x, int y);
+static void BigMapSetBlock(int x, int y, u16 block);
+// END RPG2GBA STREAMING
 
 static const struct ConnectionFlags sDummyConnectionFlags = {0};
 
@@ -85,7 +92,9 @@ static inline u16 GetBorderBlockAt(int x, int y)
 
 #define AreCoordsWithinMapGridBounds(x, y) (x >= 0 && x < gBackupMapLayout.width && y >= 0 && y < gBackupMapLayout.height)
 
-#define GetMapGridBlockAt(x, y) (AreCoordsWithinMapGridBounds(x, y) ? gBackupMapLayout.map[x + gBackupMapLayout.width * y] : GetBorderBlockAt(x, y))
+// RPG2GBA STREAMING: windowed backup grid — an oversized map reads through BigMapGetBlock
+#define GetMapGridBlockAt(x, y) (AreCoordsWithinMapGridBounds(x, y) ? (gBigMap.active ? BigMapGetBlock(x, y) : gBackupMapLayout.map[x + gBackupMapLayout.width * y]) : GetBorderBlockAt(x, y))
+// END RPG2GBA STREAMING
 
 // Masks/shifts for metatile attributes
 // This is the format of the data stored in each data/tilesets/*/*/metatile_attributes.bin file
@@ -159,12 +168,14 @@ void InitMapFromSavedGame(void)
 
 void InitBattlePyramidMap(bool8 setPlayerPosition)
 {
+    gBigMap.active = FALSE; // RPG2GBA STREAMING: the floor generator writes the grid directly
     CpuFastFill16(MAPGRID_UNDEFINED, sBackupMapData, sizeof(sBackupMapData));
     GenerateBattlePyramidFloorLayout(sBackupMapData, setPlayerPosition);
 }
 
 void InitTrainerHillMap(void)
 {
+    gBigMap.active = FALSE; // RPG2GBA STREAMING: the floor generator writes the grid directly
     CpuFastFill16(MAPGRID_UNDEFINED, sBackupMapData, sizeof(sBackupMapData));
     GenerateTrainerHillFloorLayout(sBackupMapData);
 }
@@ -181,12 +192,216 @@ static void InitMapLayoutData(struct MapHeader *mapHeader)
     gBackupMapLayout.width = width;
     height = mapLayout->height + MAP_OFFSET_H;
     gBackupMapLayout.height = height;
+    gBigMap.active = FALSE; // RPG2GBA STREAMING: windowed backup grid
     if (width * height <= MAX_MAP_DATA_SIZE)
     {
         InitBackupMapLayoutData(mapLayout->map, mapLayout->width, mapLayout->height);
         InitBackupMapLayoutConnections(mapHeader);
     }
+    // BEGIN RPG2GBA STREAMING — windowed backup grid: stock skipped the oversized map,
+    // leaving only its border
+    else
+    {
+        BigMapInit(mapHeader);
+    }
+    // END RPG2GBA STREAMING
 }
+
+// BEGIN RPG2GBA STREAMING — windowed backup grid (fieldmap.h)
+static void BigMapAddRect(const u16 *src, u16 srcWidth, const u16 *remap, int x, int y, int w, int h)
+{
+    struct BigMapRect *rect;
+
+    if (w <= 0 || h <= 0)
+        return;
+    assertf(gBigMap.rectCount < BIGMAP_RECT_MAX, "big map: more than %d grid rectangles", BIGMAP_RECT_MAX)
+    {
+        return;
+    }
+    rect = &gBigMap.rects[gBigMap.rectCount++];
+    rect->src = src;
+    rect->srcWidth = srcWidth;
+    rect->remap = remap;
+    rect->x = x;
+    rect->y = y;
+    rect->w = w;
+    rect->h = h;
+}
+
+// The cell the stock loader would have put at (x, y): the last rectangle covering it wins,
+// as the last FillConnection to write it would have.
+static u16 BigMapBaseBlock(int x, int y)
+{
+    int i;
+
+    for (i = gBigMap.rectCount - 1; i >= 0; i--)
+    {
+        const struct BigMapRect *rect = &gBigMap.rects[i];
+        u32 dx = x - rect->x;
+        u32 dy = y - rect->y;
+        if (dx < (u32)rect->w && dy < (u32)rect->h)
+        {
+            u16 block = rect->src[dy * rect->srcWidth + dx];
+            if (rect->remap != NULL)
+                UraniumApplyConnectionRemap(&block, 1, rect->remap);
+            return block;
+        }
+    }
+    return MAPGRID_UNDEFINED;
+}
+
+static struct BigMapCell *BigMapFindEdit(int x, int y)
+{
+    u32 i;
+
+    for (i = 0; i < gBigMap.overlayCount; i++)
+    {
+        if (gBigMap.overlay[i].x == x && gBigMap.overlay[i].y == y)
+            return &gBigMap.overlay[i];
+    }
+    return NULL;
+}
+
+static inline bool32 BigMapInWindow(int x, int y)
+{
+    return (u32)(x - gBigMap.ox) < BIGMAP_WIN_W && (u32)(y - gBigMap.oy) < BIGMAP_WIN_H;
+}
+
+// (x, y) must be within the grid bounds.
+static u16 BigMapGetBlock(int x, int y)
+{
+    struct BigMapCell *edit;
+
+    if (BigMapInWindow(x, y))
+        return sBackupMapData[BIGMAP_INDEX(x, y)];
+    edit = BigMapFindEdit(x, y);
+    if (edit != NULL)
+        return edit->block;
+    return BigMapBaseBlock(x, y);
+}
+
+// (x, y) must be within the grid bounds. The overlay keeps only cells that differ from the
+// layout, so a door that opens and closes again leaves nothing behind.
+static void BigMapSetBlock(int x, int y, u16 block)
+{
+    struct BigMapCell *edit;
+
+    if (BigMapInWindow(x, y))
+        sBackupMapData[BIGMAP_INDEX(x, y)] = block;
+    edit = BigMapFindEdit(x, y);
+    if (block == BigMapBaseBlock(x, y))
+    {
+        if (edit != NULL)
+            *edit = gBigMap.overlay[--gBigMap.overlayCount];
+        return;
+    }
+    if (edit != NULL)
+    {
+        edit->block = block;
+        return;
+    }
+    assertf(gBigMap.overlayCount < BIGMAP_OVERLAY_MAX, "big map: more than %d edited cells", BIGMAP_OVERLAY_MAX)
+    {
+        return;
+    }
+    edit = &gBigMap.overlay[gBigMap.overlayCount++];
+    edit->x = x;
+    edit->y = y;
+    edit->block = block;
+}
+
+// Rebuilds the ring cells of grid rows [y0, y1) x columns [x0, x1).
+static void BigMapFill(int x0, int y0, int x1, int y1)
+{
+    int x, y;
+    u32 i;
+
+    if (x0 < 0)
+        x0 = 0;
+    if (y0 < 0)
+        y0 = 0;
+    if (x1 > gBackupMapLayout.width)
+        x1 = gBackupMapLayout.width;
+    if (y1 > gBackupMapLayout.height)
+        y1 = gBackupMapLayout.height;
+    for (y = y0; y < y1; y++)
+    {
+        for (x = x0; x < x1; x++)
+            sBackupMapData[BIGMAP_INDEX(x, y)] = BigMapBaseBlock(x, y);
+    }
+    for (i = 0; i < gBigMap.overlayCount; i++)
+    {
+        const struct BigMapCell *edit = &gBigMap.overlay[i];
+        if (edit->x >= x0 && edit->x < x1 && edit->y >= y0 && edit->y < y1)
+            sBackupMapData[BIGMAP_INDEX(edit->x, edit->y)] = edit->block;
+    }
+}
+
+static void BigMapMoveWindow(int ox, int oy, bool32 full)
+{
+    int dx = ox - gBigMap.ox;
+    int dy = oy - gBigMap.oy;
+
+    if (full || dx >= BIGMAP_WIN_W || dx <= -BIGMAP_WIN_W || dy >= BIGMAP_WIN_H || dy <= -BIGMAP_WIN_H)
+    {
+        gBigMap.ox = ox;
+        gBigMap.oy = oy;
+        BigMapFill(ox, oy, ox + BIGMAP_WIN_W, oy + BIGMAP_WIN_H);
+        return;
+    }
+    // Columns first at the old rows, then rows at the new columns; each strip overwrites
+    // exactly the ring cells that left the window.
+    if (dx > 0)
+        BigMapFill(gBigMap.ox + BIGMAP_WIN_W, gBigMap.oy, ox + BIGMAP_WIN_W, gBigMap.oy + BIGMAP_WIN_H);
+    else if (dx < 0)
+        BigMapFill(ox, gBigMap.oy, gBigMap.ox, gBigMap.oy + BIGMAP_WIN_H);
+    gBigMap.ox = ox;
+    if (dy > 0)
+        BigMapFill(ox, gBigMap.oy + BIGMAP_WIN_H, ox + BIGMAP_WIN_W, oy + BIGMAP_WIN_H);
+    else if (dy < 0)
+        BigMapFill(ox, oy, ox + BIGMAP_WIN_W, gBigMap.oy);
+    gBigMap.oy = oy;
+}
+
+static int BigMapOrigin(int focus, int win, int size)
+{
+    int origin = focus - win / 2;
+
+    if (origin > size - win)
+        origin = size - win;
+    if (origin < 0)
+        origin = 0;
+    return origin;
+}
+
+static void BigMapCentre(bool32 full)
+{
+    BigMapMoveWindow(BigMapOrigin(gSaveBlock1Ptr->pos.x + MAP_OFFSET, BIGMAP_WIN_W, gBackupMapLayout.width),
+                     BigMapOrigin(gSaveBlock1Ptr->pos.y + MAP_OFFSET, BIGMAP_WIN_H, gBackupMapLayout.height),
+                     full);
+}
+
+// Keeps the window centred on the camera. Only speed depends on this: reads outside the
+// window are rebuilt, just more slowly.
+void BigMap_Track(void)
+{
+    if (gBigMap.active)
+        BigMapCentre(FALSE);
+}
+
+static void BigMapInit(struct MapHeader *mapHeader)
+{
+    struct MapLayout const *mapLayout = mapHeader->mapLayout;
+
+    gBigMap.active = TRUE;
+    gBigMap.rectCount = 0;
+    gBigMap.overlayCount = 0;
+    BigMapAddRect(mapLayout->map, mapLayout->width, NULL, MAP_OFFSET, MAP_OFFSET, mapLayout->width, mapLayout->height);
+    // FillConnection records each connection's rectangle instead of copying it.
+    InitBackupMapLayoutConnections(mapHeader);
+    BigMapCentre(TRUE);
+}
+// END RPG2GBA STREAMING
 
 static void InitBackupMapLayoutData(const u16 *map, u16 width, u16 height)
 {
@@ -253,6 +468,13 @@ static void FillConnection(int x, int y, struct MapHeader const *connectedMapHea
 
     mapWidth = connectedMapHeader->mapLayout->width;
     src = &connectedMapHeader->mapLayout->map[mapWidth * y2 + x2];
+    // BEGIN RPG2GBA STREAMING — windowed backup grid: record the rectangle, don't copy
+    if (gBigMap.active)
+    {
+        BigMapAddRect(src, mapWidth, remap, x, y, width, height);
+        return;
+    }
+    // END RPG2GBA STREAMING
     dest = &gBackupMapLayout.map[gBackupMapLayout.width * y + x];
 
     for (i = 0; i < height; i++)
@@ -488,6 +710,13 @@ void MapGridSetMetatileIdAt(int x, int y, u16 metatile)
     int i;
     if (AreCoordsWithinMapGridBounds(x, y))
     {
+        // BEGIN RPG2GBA STREAMING — windowed backup grid
+        if (gBigMap.active)
+        {
+            BigMapSetBlock(x, y, (BigMapGetBlock(x, y) & MAPGRID_ELEVATION_MASK) | (metatile & ~MAPGRID_ELEVATION_MASK));
+            return;
+        }
+        // END RPG2GBA STREAMING
         i = x + y * gBackupMapLayout.width;
 
         // Elevation is ignored in the argument, but copy metatile ID and collision
@@ -500,6 +729,13 @@ void MapGridSetMetatileEntryAt(int x, int y, u16 metatile)
     int i;
     if (AreCoordsWithinMapGridBounds(x, y))
     {
+        // BEGIN RPG2GBA STREAMING — windowed backup grid
+        if (gBigMap.active)
+        {
+            BigMapSetBlock(x, y, metatile);
+            return;
+        }
+        // END RPG2GBA STREAMING
         i = x + gBackupMapLayout.width * y;
         gBackupMapLayout.map[i] = metatile;
     }
@@ -574,6 +810,17 @@ void SaveMapView(void)
     width = gBackupMapLayout.width;
     x = gSaveBlock1Ptr->pos.x;
     y = gSaveBlock1Ptr->pos.y;
+    // BEGIN RPG2GBA STREAMING — windowed backup grid
+    if (gBigMap.active)
+    {
+        for (i = y; i < y + MAP_OFFSET_H; i++)
+        {
+            for (j = x; j < x + MAP_OFFSET_W; j++)
+                *mapView++ = GetMapGridBlockAt(j, i);
+        }
+        return;
+    }
+    // END RPG2GBA STREAMING
     for (i = y; i < y + MAP_OFFSET_H; i++)
     {
         for (j = x; j < x + MAP_OFFSET_W; j++)
@@ -632,6 +879,16 @@ static void LoadSavedMapView(void)
 
             for (j = x; j < x + MAP_OFFSET_W; j++)
             {
+                // BEGIN RPG2GBA STREAMING — windowed backup grid
+                if (gBigMap.active)
+                {
+                    if (AreCoordsWithinMapGridBounds(j, i)
+                     && (yMode == 0xFF || !IsLargeBreakableDecoration(UNPACK_METATILE(GetMapGridBlockAt(j, yMode == 0 ? i - 1 : i + 1)), yMode)))
+                        BigMapSetBlock(j, i, *mapView);
+                    mapView++;
+                    continue;
+                }
+                // END RPG2GBA STREAMING
                 if (!SkipCopyingMetatileFromSavedMap(&sBackupMapData[j + width * i], width, yMode))
                     sBackupMapData[j + width * i] = *mapView;
                 mapView++;
@@ -699,6 +956,16 @@ static void MoveMapViewToBackup(enum Connection direction)
             desti = width * (y + y0);
             srci = (y + r8) * MAP_OFFSET_W + r9;
             src = &mapView[srci + i];
+            // BEGIN RPG2GBA STREAMING — windowed backup grid
+            if (gBigMap.active)
+            {
+                if (AreCoordsWithinMapGridBounds(x0 + j, y + y0))
+                    BigMapSetBlock(x0 + j, y + y0, *src);
+                i++;
+                j++;
+                continue;
+            }
+            // END RPG2GBA STREAMING
             dest = &sBackupMapData[x0 + desti + j];
             *dest = *src;
             i++;
@@ -859,6 +1126,7 @@ bool8 CameraMove(int x, int y)
         // END URANIUM PATHFINDER SLICE
     }
 
+    BigMap_Track(); // RPG2GBA STREAMING: windowed backup grid follows the camera
     return gCamera.active;
 }
 
@@ -1003,6 +1271,14 @@ void MapGridSetMetatileImpassabilityAt(int x, int y, bool32 impassable)
 {
     if (AreCoordsWithinMapGridBounds(x, y))
     {
+        // BEGIN RPG2GBA STREAMING — windowed backup grid
+        if (gBigMap.active)
+        {
+            u16 block = BigMapGetBlock(x, y);
+            BigMapSetBlock(x, y, impassable ? (block | MAPGRID_COLLISION_MASK) : (block & ~MAPGRID_COLLISION_MASK));
+            return;
+        }
+        // END RPG2GBA STREAMING
         if (impassable)
             gBackupMapLayout.map[x + gBackupMapLayout.width * y] |= MAPGRID_COLLISION_MASK;
         else

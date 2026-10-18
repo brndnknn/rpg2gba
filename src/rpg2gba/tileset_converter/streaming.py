@@ -26,9 +26,6 @@ STREAMED_MAPS_PATH = Path(__file__).resolve().parents[3] / "reference" / "stream
 STREAM_MAX_TILES: int = 3072
 # field_stream.h FIELD_STREAM_FIRST_DOOR_SLOT: slots from here up hold door frames.
 STREAM_FIRST_DOOR_SLOT: int = 1024 - 16
-# fieldmap.h MAX_MAP_DATA_SIZE: the backup grid (map + a 7-cell margin, 15 wider and
-# 14 taller) must fit, or InitMapLayoutData silently loads nothing but border.
-MAX_MAP_DATA_SIZE: int = 10240
 
 
 def streamed_map_ids(path: Path = STREAMED_MAPS_PATH) -> frozenset[int]:
@@ -128,14 +125,7 @@ def check_streamed_layout(layout: "Layout", fork: Path) -> WindowBudget | None:
     if not info_path.is_file():
         return None
     info = json.loads(info_path.read_text(encoding="utf-8"))
-    cells = (layout.width + 15) * (layout.height + 14)
-    if cells > MAX_MAP_DATA_SIZE:
-        raise ValueError(
-            f"{layout.name}: {layout.width}x{layout.height} needs {cells} backup-grid cells, "
-            f"over MAX_MAP_DATA_SIZE {MAX_MAP_DATA_SIZE}; the engine would load only its "
-            "border. Streaming does not lift this limit; split the map instead"
-        )
-    raw = (tdir / "metatiles_wide.bin").read_bytes()
+    raw =(tdir / "metatiles_wide.bin").read_bytes()
     wide = list(struct.unpack(f"<{len(raw) // 4}I", raw))
     budget = worst_window(layout.blocks, layout.width, layout.height, layout.border,
                           wide, int(info["n_pinned"]))

@@ -635,6 +635,7 @@ void SetObjEventTemplateMovementType(u8 localId, u8 movementType)
 
 static void InitMapView(void)
 {
+    BigMap_Track(); // RPG2GBA STREAMING: windowed backup grid around the settled player position
     ResetFieldCamera();
     CopyMapTilesetsToVram(gMapHeader.mapLayout);
     LoadMapTilesetPalettes(gMapHeader.mapLayout);

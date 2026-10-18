@@ -268,7 +268,7 @@ story progress to test it.
 | **1. 11-bit metatile ids** | §3.1, engine + pipeline + harness readers | Full pytest green; CH08 suite green from boot; no visual change |
 | **2. Streaming core** | §3.2–3.4, behind the per-map flag; the screen check (§4.3); Map Walker build including the over-cap maps | Zero screen-check mismatches on 040, 094, 101, 122, 187; your Map Walker walk, including the flash cart |
 | **3. Map 040 unsplit** | Retire `split_maps.json`'s map-40 entry, keep 035↔040 as a remapped seam (§3.5), regenerate CH06–CH08 suites (§9 review), merge off for streamed maps | CH08 suite green from boot; your CH08 walk passes |
-| **4. Rollout (later)** | Other maps opt in as their chapters arrive; viewer/oracle learn the streamed format; I2b's palette tuning on merge-off art; #27 as a remapped seam |
+| **4. Rollout (later)** | Other maps opt in as their chapters arrive; maps over the map-data buffer load whole (windowed backup grid, built 2026-10-18); viewer/oracle learn the streamed format; I2b's palette tuning on merge-off art; #27 as a remapped seam |
 | **P. Palettes (separate, optional)** | Python-only first: a location-aware quantizer (more than 13 palettes per map, at most 13 per 16×16 window), rendered and judged by eye on 040 and a seam. Only if the art wins: the engine's palette cache (§3.6) | Your by-eye verdict before any engine work | Per chapter, as usual |
 
 **Stop rule.** Stop and keep Stage 1 plus splitting if either happens:
@@ -522,6 +522,38 @@ connection where the tileset changes, and stage 4 prefers exactly those seams (�
   exit. That walk was in an emulator; the flash-cart check of the swap is still open.
 - **Not the swap:** a thin black band at the screen edge for the rest of the step after a
   crossing is the seam strip depth (#150), and it was there before.
+
+### Stage 4: maps over the map-data buffer (2026-10-18)
+
+**Operator:** "I don't want to break up maps with arrow warps, let's do the engine work".
+Fifteen maps have a backup grid `(w+15)*(h+14)` over `MAX_MAP_DATA_SIZE` (10240), so stock
+loads only their border (#148). The first is Route 3 (59, 130×66), in CH09. This limit is
+separate from the tile cache.
+- **How it works** (`fieldmap.h`, "windowed backup grid"):
+  - A map that fits takes the stock path unchanged.
+  - An oversized map keeps a 128×64 window of its grid in `sBackupMapData`, as a ring
+    (`BIGMAP_INDEX`).
+  - `BigMap_Track` recentres the window on the camera. It's called at the end of
+    `CameraMove`, and in `InitMapView`. Each step refills one 64- or 128-cell strip.
+  - At load, the layout and each connection are recorded as source rectangles
+    (`FillConnection` records instead of copying). A read outside the window rebuilds the
+    cell from them, so every read is correct wherever the window sits; only speed depends
+    on tracking.
+  - Runtime edits (setmetatile, doors, collision, the saved map view) also go to an
+    overlay of up to 256 cells. It keeps only cells that differ from the layout, and
+    re-applies them when the window slides back.
+  - `assertf` fires on more than 8 rectangles or 256 edits.
+  - Cost: 1.7 KB EWRAM (now 94.35%). The window reuses the existing buffer.
+- **Pipeline:** `check_streamed_layout` no longer rejects oversized streamed maps.
+  `screen_check` reads the ring when `gBigMap.active`, and fails if an on-screen cell is
+  outside the window.
+- **Result on Route 3** (Map Walker build with CH08's maps plus CH09's 59, 1, 54, 177):
+  - The screen check gave 0 mismatches over 4581 positions (stock tileset, tile-merged).
+  - `output/scratch/bigmap_ring_probe.py` compares every in-window cell with the ROM layout
+    after a 70×35 loop. It found 0 mismatches, and the view stayed inside the window
+    throughout.
+  - Not yet exercised: the overlay (no scripted edits on a Walker build), and an oversized
+    map that is also streamed.
 
 ## 6. Risks
 

@@ -45,7 +45,10 @@ NUM_PRIMARY_METATILES = 512  # NUM_METATILES_IN_PRIMARY (non-FRLG)
 METATILE_ID_MASK = 0x07FF    # MAPGRID_METATILE_ID_MASK (RPG2GBA STREAMING 11-bit ids)
 MAPGRID_UNDEFINED = METATILE_ID_MASK
 NUM_METATILES_TOTAL = 2048
-MAX_MAP_DATA_SIZE = 10240  # fieldmap.h
+# fieldmap.h windowed backup grid: a map over MAX_MAP_DATA_SIZE keeps a BIGMAP_WIN_W x BIGMAP_WIN_H ring
+# window of its grid; gBigMap holds active (+0), ox (+2), oy (+4).
+BIGMAP_WIN_W, BIGMAP_WIN_H = 128, 64
+OFF_BIGMAP_ACTIVE, OFF_BIGMAP_OX, OFF_BIGMAP_OY = 0, 2, 4
 
 LAYER_NORMAL, LAYER_COVERED, LAYER_SPLIT = 0, 1, 2
 STOCK_NORMAL_BG3_WORD = 0x3014  # DrawMetatile's "garbage" for the NORMAL layer's BG3
@@ -264,12 +267,15 @@ class ScreenChecker:
         bw = _s32(self.u32(bk + o["off_backup_width"]))
         bh = _s32(self.u32(bk + o["off_backup_height"]))
         grid_ptr = self.u32(bk + o["off_backup_map"])
-        if bw * bh > MAX_MAP_DATA_SIZE:
-            raise click.ClickException(
-                f"map {map_id}: backup grid {bw}x{bh} exceeds MAX_MAP_DATA_SIZE; the engine "
-                "loaded only its border, so there is nothing to check"
-            )
-        grid = struct.unpack(f"<{bw * bh}H", self.read(grid_ptr, bw * bh * 2))
+        bm = self.sym["gBigMap"]
+        windowed = self.u8(bm + OFF_BIGMAP_ACTIVE) != 0
+        if windowed:
+            ox = _s16(self.u16(bm + OFF_BIGMAP_OX))
+            oy = _s16(self.u16(bm + OFF_BIGMAP_OY))
+            ring = struct.unpack(f"<{BIGMAP_WIN_W * BIGMAP_WIN_H}H",
+                                 self.read(grid_ptr, BIGMAP_WIN_W * BIGMAP_WIN_H * 2))
+        else:
+            grid = struct.unpack(f"<{bw * bh}H", self.read(grid_ptr, bw * bh * 2))
         border_blocks = struct.unpack("<4H", self.rom(border, 8))
 
         fs = self.sym["gFieldStream"]
@@ -282,7 +288,14 @@ class ScreenChecker:
         charblock = self.read(CHARBLOCK0, 1024 * TILE_BYTES) if streamed else b""
 
         def metatile_at(x: int, y: int) -> int:
-            if 0 <= x < bw and 0 <= y < bh:
+            if 0 <= x < bw and 0 <= y < bh and windowed:
+                if not (0 <= x - ox < BIGMAP_WIN_W and 0 <= y - oy < BIGMAP_WIN_H):
+                    raise click.ClickException(
+                        f"map {map_id}: on-screen cell ({x},{y}) is outside the backup-grid "
+                        f"window at ({ox},{oy}); BigMap_Track did not follow the camera"
+                    )
+                block = ring[(y % BIGMAP_WIN_H) * BIGMAP_WIN_W + (x % BIGMAP_WIN_W)]
+            elif 0 <= x < bw and 0 <= y < bh:
                 block = grid[x + bw * y]
             else:
                 block = border_blocks[((x + 1) & 1) + ((y + 1) & 1) * 2]

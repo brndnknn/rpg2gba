@@ -31,6 +31,46 @@
 extern struct BackupMapLayout gBackupMapLayout;
 extern u16 ALIGNED(4) sBackupMapData[MAX_MAP_DATA_SIZE];
 
+// BEGIN RPG2GBA STREAMING — windowed backup grid for maps over MAX_MAP_DATA_SIZE
+// A map whose backup grid (width+15)*(height+14) won't fit keeps only a 128x64 window of
+// it in sBackupMapData, as a ring indexed by BIGMAP_INDEX and recentred on the camera each
+// step. Cells outside the window are rebuilt on demand from the layout and connection
+// rectangles recorded at load, plus an overlay of runtime edits (setmetatile, doors,
+// collision), so every grid read is correct wherever the window sits.
+#define BIGMAP_WIN_W 128
+#define BIGMAP_WIN_H 64
+#define BIGMAP_INDEX(x, y) ((((y) & (BIGMAP_WIN_H - 1)) * BIGMAP_WIN_W) + ((x) & (BIGMAP_WIN_W - 1)))
+#define BIGMAP_RECT_MAX 8
+#define BIGMAP_OVERLAY_MAX 256
+
+struct BigMapRect
+{
+    const u16 *src;     // the rectangle's top-left cell in the source layout
+    const u16 *remap;   // connection id remap, NULL = none
+    s16 x, y, w, h;     // destination, in backup-grid coordinates
+    u16 srcWidth;
+};
+
+struct BigMapCell
+{
+    u16 x, y, block;
+};
+
+// screen_check.py reads active (+0), ox (+2) and oy (+4).
+struct BigMap
+{
+    bool8 active;
+    u8 rectCount;
+    s16 ox, oy;         // window origin, in backup-grid coordinates
+    u16 overlayCount;
+    struct BigMapRect rects[BIGMAP_RECT_MAX];
+    struct BigMapCell overlay[BIGMAP_OVERLAY_MAX];
+};
+
+extern struct BigMap gBigMap;
+void BigMap_Track(void);
+// END RPG2GBA STREAMING
+
 u32 GetNumTilesInPrimary(struct MapLayout const *mapLayout);
 u32 GetNumMetatilesInPrimary(struct MapLayout const *mapLayout);
 u32 GetNumPalsInPrimary(struct MapLayout const *mapLayout);

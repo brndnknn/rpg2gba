@@ -40,19 +40,6 @@ whose seed blob is keyed to one ROM build. Any engine rebuild breaks it until
 instead of the chapter build (2026-10-17). Either skip with a clear reason when the engine state
 doesn't match, or document "restore the chapter build before pytest".
 
-### 148. 15 maps exceed the engine's map-data buffer and load as border only
-
-Found 2026-10-17 (streaming stage 2, `reference/streaming_prototype_plan.md` "Stage 2 progress").
-`InitMapLayoutData` (`engine/src/fieldmap.c:184`) silently skips loading a map whose backup grid
-`(w+15)*(h+14)` exceeds `MAX_MAP_DATA_SIZE` (10240); the player sees only the border pattern.
-Over: 094 (27060), 187, 143, 117, 106, 184, 133, 008, 132, 193, 074, 059, 213, 127, 121, 022
-(`output/scratch/map_data_size.py`). `map_split.derive` already respects the limit for split
-pieces, and `streaming.check_streamed_layout` now fails loud for streamed maps. Nothing guards
-the Map Walker `full` corpus or a future chapter map. The fixes are splitting, or raising the
-buffer (2 bytes/cell of EWRAM; 094 needs about 33 KB more, which isn't free). Due before the
-first chapter that reaches one of these maps. A general fail-loud check at layout emit should
-come first.
-
 ### 147. One-shot page arms are recorded as `unselected_arm` though they ran
 
 Ruled 2026-10-15 (CH08): `beat_gen` folds the arms of a one-shot page whose trunk another beat
@@ -2228,6 +2215,25 @@ maintainer. Evidence is recorded in
 `reference/frozen/ch05_surf_expectations.json`'s `granting_chapter` block.
 
 ## Done
+
+### 148. DONE 2026-10-18 — 15 maps exceed the engine's map-data buffer and load as border only
+
+Found 2026-10-17 (streaming stage 2, `reference/streaming_prototype_plan.md` "Stage 2 progress").
+`InitMapLayoutData` (`engine/src/fieldmap.c:184`) silently skips loading a map whose backup grid
+`(w+15)*(h+14)` exceeds `MAX_MAP_DATA_SIZE` (10240); the player sees only the border pattern.
+Over: 094 (27060), 187, 143, 117, 106, 184, 133, 008, 132, 193, 074, 059, 213, 127, 121, 022
+(`output/scratch/map_data_size.py`). `map_split.derive` already respects the limit for split
+pieces, and `streaming.check_streamed_layout` now fails loud for streamed maps. Nothing guards
+the Map Walker `full` corpus or a future chapter map. The fixes are splitting, or raising the
+buffer (2 bytes/cell of EWRAM; 094 needs about 33 KB more, which isn't free). Due before the
+first chapter that reaches one of these maps. A general fail-loud check at layout emit should
+come first.
+
+**Resolved 2026-10-18** (operator: no splitting): the engine keeps a 128x64 window of an
+oversized map's grid and rebuilds cells outside it on demand (`fieldmap.h` "windowed backup
+grid"; `reference/streaming_prototype_plan.md` "Stage 4: maps over the map-data buffer"). Route 3
+(59): 0 screen-check mismatches, 0 window-vs-layout mismatches. The `streaming` check that
+rejected oversized maps is gone.
 
 ### 44. DONE 2026-10-16 — CH01/CH03 flavor interiors shipped untested — DEFERRED to the end of Act 1
 
