@@ -812,3 +812,24 @@ nothing in §1 touches.
     - hand-typed Uranium facts become generated;
     - the intro and truck skips go behind the harness switch.
   - Still open: canon-species art, and when the work runs relative to CH09.
+- **2026-10-19, I3 build-out scope (operator):**
+  - **When:** this intermission, before CH09.
+  - **Species keep-list:** computed from the whole game's data (the 15 canon
+    families), not from the built chapters.
+  - **Renames:** mechanisms, fences and generated file names become
+    `RPG2GBA_*`. Content prefixes such as `OBJ_EVENT_GFX_URANIUM_*` and
+    `HEAL_LOCATION_URANIUM_START` stay, so the committed suites are untouched.
+  - **Generators this intermission:** items (#41), the other hand-typed facts
+    (HM gates, spawn, starter menu, white-out flag, census sizes), **plus
+    Uranium-original moves (#35) and abilities**.
+    - The Nuclear type is not in scope.
+    - Moves that need the Nuclear type stay queued, fail-loud.
+  - **Canon species art:** use **Uranium's sprites** with the **stock cries**.
+    - Their families stay enabled.
+    - The generator overrides their graphics.
+  - **Defaults accepted:**
+    - stubbing is the species profile plus stock layouts only;
+    - the debug build stays;
+    - branch `intermission-engine-layers`;
+    - done means CH08 from boot, pytest, no hand-typed facts left, a kept/dropped
+      report, and an operator walk.
