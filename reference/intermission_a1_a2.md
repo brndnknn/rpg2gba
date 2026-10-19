@@ -755,3 +755,18 @@ nothing in §1 touches.
   answers the "how do we test map 101" concern: prototype on map 040, plus
   the Map Walker ROM and an automatic VRAM-vs-oracle screen check for the
   unreached maps.
+- **2026-10-18, I4 CLOSED (operator):** streaming is done for the intermission,
+  and `intermission-streaming` is merged to `main`. What was built:
+  - 11-bit metatile ids;
+  - the tile cache, so map 40 is one unsplit streamed map and `split_maps.json`
+    is `{}`;
+  - the one-VBlank seam swap;
+  - the windowed backup grid, so the 15 maps over `MAX_MAP_DATA_SIZE` load whole
+    (#148 done).
+
+  Detail is in `reference/streaming_prototype_plan.md` §5. Left as backlog:
+  - the flash-cart check of the seam swap (the operator walked it in an emulator only);
+  - #150 (seam band);
+  - #151 (viewer/oracle streamed format);
+  - opting other maps in per chapter;
+  - putting 187 back in the streamed set when CH52 nears.

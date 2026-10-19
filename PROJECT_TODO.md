@@ -17,6 +17,15 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 151. Map viewer / oracle don't read the streamed tileset format or the windowed grid
+
+Filed 2026-10-18 when I4 closed (operator: backlog it). Streamed tilesets (`reference/streamed_maps.json`:
+40, 101, 122) emit `metatiles_wide.bin` and a merge-off tile pool. The viewer and oracle still
+render from the stock per-tileset pool (see also the 10-04 viewer note: they pool by real
+tileset id, and stitched mode can't show ROM seams). So the viewer is wrong for Nowtoch, and the
+ROM is right (`playtest.screen_check` proves VRAM against the ROM data). Do it when the viewer is
+next needed on a streamed map.
+
 ### 150. Remapped seams import one row too few: a black band while the camera is mid-step
 
 Found 2026-10-17 (streaming stage 3, Nowtoch ↔ Route 2). A remapped seam imports the

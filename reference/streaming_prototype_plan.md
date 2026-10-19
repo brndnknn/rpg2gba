@@ -523,6 +523,16 @@ connection where the tileset changes, and stage 4 prefers exactly those seams (Â
 - **Not the swap:** a thin black band at the screen edge for the rest of the step after a
   crossing is the seam strip depth (#150), and it was there before.
 
+### Closed (2026-10-18)
+
+The operator closed I4 after the windowed-grid work below; the branch is merged to `main`.
+The rest of stage 4 continues as per-chapter work. Open:
+- each chapter's maps opt in as they arrive;
+- 187 goes back in the streamed set before CH52 (it is both over the tile cap and over the
+  buffer);
+- #150, #151;
+- the seam swap's flash-cart check.
+
 ### Stage 4: maps over the map-data buffer (2026-10-18)
 
 **Operator:** "I don't want to break up maps with arrow warps, let's do the engine work".
