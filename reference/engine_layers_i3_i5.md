@@ -41,7 +41,11 @@ The operator asked:
      and others: a generated copy of a stock table is built in place of the
      original and the original is left untouched.
 
-   Neither form needs anyone to edit stock files.
+   Each form costs one small fenced hook in a stock file, the same pattern as
+   the 49 hooks we already have. Neither needs stock *content* edited.
+   *(Corrected 2026-10-19: this used to say "neither needs anyone to edit stock
+   files". We already have ~104 edited stock files, and a profile adds one more
+   hook, in `species_enabled.h`.)*
 3. **So I recommend Option B below:** keep the stock engine untouched, and let
    the pipeline write a per-game *profile* that switches off and stubs
    whatever that game doesn't use, alongside the game content it already
@@ -130,7 +134,8 @@ Commit the result, and have the pipeline fill it.
 
 ### Option B — stock engine, plus a generated per-game profile (recommended)
 
-Layer 0 stays as vendored. The pipeline computes, from the game's own data,
+Layer 0 stays as vendored, apart from fenced include hooks: 49 today, plus one
+for the species profile. The pipeline computes, from the game's own data,
 which stock content the game uses, and writes a profile that drops the rest:
 
 | Stock content | How the profile drops it | ≈ Saved | New work |
