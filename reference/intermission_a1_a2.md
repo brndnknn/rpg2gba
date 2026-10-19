@@ -233,7 +233,10 @@ The operator expects this to need a longer conversation. It is a big change
 from how the project has been working, which is why it is being raised
 between acts.
 
-**Status:** researched 2026-10-16 (below); not yet discussed.
+**Status:** researched 2026-10-16 (below). Deep-dive 2026-10-19, together with
+I5: options, layering and open questions are in
+`reference/engine_layers_i3_i5.md`, with evidence in
+`reference/findings/rom_ledger_2026-10-19.md`. Not yet decided.
 
 #### Research (2026-10-16)
 
@@ -531,7 +534,12 @@ operator plays mostly in emulators. On real hardware they would use an SD-card
 flash cartridge, which already stores hundreds of games, so a standard
 cartridge's capacity may not be the real ceiling. Where is the limit, really?
 
-**Status:** researched 2026-10-16 (below); not yet discussed.
+**Status:** researched 2026-10-16 (below). Deep-dive 2026-10-19 with I3:
+`reference/engine_layers_i3_i5.md`. **Correction (2026-10-19):** the table
+below calls `sound_data.o` "stock music". About 9.5 of its 10.05 MiB is
+Pokémon cries, and all stock music together is ≈ 1.7 MB. Stock species data
+is ≈ 15.4 MB, and the expansion's `P_FAMILY_*` switches could drop ≈ 14 MB of
+it (`reference/findings/rom_ledger_2026-10-19.md` §1, §4).
 
 #### Research (2026-10-16)
 
