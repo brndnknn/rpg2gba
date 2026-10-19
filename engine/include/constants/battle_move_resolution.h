@@ -115,6 +115,7 @@ enum MoveEndState
     MOVEEND_COLOR_CHANGE, // Color Change / Berserk / Anger Shell
     MOVEEND_KEE_MARANGA_HP_THRESHOLD_ITEM_TARGET,
     MOVEEND_CARD_BUTTON, // Red Card / Eject Button
+    MOVEEND_RPG2GBA_ABILITY_HEAL, // RPG2GBA ENGINE — game abilities healing off the damage dealt
     MOVEEND_LIFE_ORB_SHELL_BELL,
     MOVEEND_FORM_CHANGE,
     MOVEEND_EMERGENCY_EXIT,

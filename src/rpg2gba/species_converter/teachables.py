@@ -40,6 +40,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from rpg2gba.battle_converter.catalog import generated_constants as generated_battle_constants
 from rpg2gba.pbs_converter._id_map import IdMap
 from rpg2gba.pbs_converter._naming import load_fork_constants
 
@@ -177,7 +178,10 @@ def generate(*, out: Path, fork: Path, reference_dir: Path) -> TeachablesOverlay
         species_ids=dict(id_map.by_category["species"]),
         needs_engine_species=set(id_map.needs_engine["species"]),
         staged=staged,
-        fork_moves=load_fork_constants(fork / "include/constants/moves.h", "MOVE"),
+        # Stock moves plus the game's own the battle pass generates (I3 S3);
+        # blocked ones stay needs_engine and are dropped.
+        fork_moves=(load_fork_constants(fork / "include/constants/moves.h", "MOVE")
+                    | {c for c in generated_battle_constants() if c.startswith("MOVE_")}),
         needs_engine_moves=set(id_map.needs_engine["moves"]),
     )
 

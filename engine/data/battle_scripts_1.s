@@ -5967,6 +5967,16 @@ BattleScript_MoveEffectPayDay::
 	waitmessage B_WAIT_TIME_LONG
 	return
 
+@ BEGIN RPG2GBA ENGINE — MOVE_EFFECT_RPG2GBA_FOCUS_ENERGY (the user is pumped)
+BattleScript_Rpg2gbaGettingPumped::
+	savetarget
+	copybyte gBattlerTarget, gEffectBattler     @ the string names the target
+	printstring STRINGID_PKMNGETTINGPUMPED
+	waitmessage B_WAIT_TIME_LONG
+	restoretarget
+	return
+@ END RPG2GBA ENGINE
+
 BattleScript_MoveEffectWrap::
 	printfromtable gWrappedStringIds
 	waitmessage B_WAIT_TIME_LONG
@@ -6126,6 +6136,61 @@ BattleScript_AbilityHpHeal:
 BattleScript_RainDishActivates::
 	call BattleScript_AbilityHpHeal
 	end2
+
+@ BEGIN RPG2GBA ENGINE / GAME PROFILE — scripts for converted games' abilities
+BattleScript_Rpg2gbaAbilityHpHealRet::
+	call BattleScript_AbilityHpHeal
+	return
+
+BattleScript_Rpg2gbaLazyActivates::
+	call BattleScript_AbilityPopUpScripting
+	statusanimation BS_EFFECT_BATTLER
+	printstring STRINGID_PKMNFELLASLEEP
+	waitmessage B_WAIT_TIME_LONG
+	updatestatusicon BS_EFFECT_BATTLER
+	waitstate
+	return
+
+BattleScript_Rpg2gbaNightTerrorActivates::
+	printfromtable gWokeUpStringIds
+	waitmessage B_WAIT_TIME_LONG
+	updatestatusicon BS_ATTACKER
+	call BattleScript_AbilityPopUp
+	statusanimation BS_EFFECT_BATTLER
+	printstring STRINGID_PKMNWASPARALYZED
+	waitmessage B_WAIT_TIME_LONG
+	updatestatusicon BS_EFFECT_BATTLER
+	waitstate
+	return
+
+BattleScript_Rpg2gbaPetrifyActivates::
+	savetarget
+	call BattleScript_AbilityPopUp
+	setbyte gBattlerTarget, 0
+BattleScript_Rpg2gbaPetrifyLoop:
+	jumpiftargetally BattleScript_Rpg2gbaPetrifyLoopIncrement
+	jumpifabsent BS_TARGET, BattleScript_Rpg2gbaPetrifyLoopIncrement
+	jumpifvolatile BS_TARGET, VOLATILE_SUBSTITUTE, BattleScript_Rpg2gbaPetrifyLoopIncrement
+	copybyte sBATTLER, gBattlerAttacker
+	setstatchanger STAT_SPEED, 1, TRUE
+	statbuffchange BS_TARGET, STAT_CHANGE_NOT_PROTECT_AFFECTED | STAT_CHANGE_ALLOW_PTR, BattleScript_Rpg2gbaPetrifyLoopIncrement
+	jumpifbyte CMP_EQUAL, cMULTISTRING_CHOOSER, B_MSG_STAT_WONT_CHANGE, BattleScript_Rpg2gbaPetrifyWontDecrease
+	printfromtable gStatDownStringIds
+BattleScript_Rpg2gbaPetrifyWaitString:
+	waitmessage B_WAIT_TIME_LONG
+BattleScript_Rpg2gbaPetrifyLoopIncrement:
+	addbyte gBattlerTarget, 1
+	jumpifbytenotequal gBattlerTarget, gBattlersCount, BattleScript_Rpg2gbaPetrifyLoop
+	copybyte sBATTLER, gBattlerAttacker
+	destroyabilitypopup
+	restoretarget
+	restoreattacker
+	pause B_WAIT_TIME_MED
+	return
+BattleScript_Rpg2gbaPetrifyWontDecrease:
+	printstring STRINGID_STATSWONTDECREASE
+	goto BattleScript_Rpg2gbaPetrifyWaitString
+@ END RPG2GBA ENGINE / GAME PROFILE
 
 BattleScript_CheekPouchActivates::
 	copybyte sSAVED_BATTLER, gBattlerAttacker

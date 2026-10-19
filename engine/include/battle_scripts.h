@@ -157,6 +157,7 @@ extern const u8 BattleScript_MoveEffectParalysis[];
 extern const u8 BattleScript_MoveEffectUproar[];
 extern const u8 BattleScript_MoveEffectToxic[];
 extern const u8 BattleScript_MoveEffectPayDay[];
+extern const u8 BattleScript_Rpg2gbaGettingPumped[]; // RPG2GBA ENGINE
 extern const u8 BattleScript_MoveEffectWrap[];
 extern const u8 BattleScript_MoveEffectConfusion[];
 extern const u8 BattleScript_MoveEffectRecoil[];
@@ -166,6 +167,12 @@ extern const u8 BattleScript_ItemSteal[];
 extern const u8 BattleScript_WeatherAbilityActivates[];
 extern const u8 BattleScript_TraceActivates[];
 extern const u8 BattleScript_RainDishActivates[];
+// BEGIN RPG2GBA ENGINE / GAME PROFILE
+extern const u8 BattleScript_Rpg2gbaAbilityHpHealRet[];
+extern const u8 BattleScript_Rpg2gbaLazyActivates[];
+extern const u8 BattleScript_Rpg2gbaNightTerrorActivates[];
+extern const u8 BattleScript_Rpg2gbaPetrifyActivates[];
+// END RPG2GBA ENGINE / GAME PROFILE
 extern const u8 BattleScript_ShedSkinActivates[];
 extern const u8 BattleScript_IntimidateActivates[];
 extern const u8 BattleScript_IntimidatePrevented[];

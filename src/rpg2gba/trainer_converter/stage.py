@@ -134,6 +134,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from rpg2gba.item_converter.catalog import generated_constants as generated_item_constants
+from rpg2gba.battle_converter.catalog import generated_constants as generated_battle_constants
 from rpg2gba.pbs_converter._c_emit import generated_banner
 from rpg2gba.pbs_converter._naming import load_fork_constants
 from rpg2gba.trainer_converter import battles as battles_mod
@@ -709,7 +710,9 @@ def stage_battles(
         fork_species=load_fork_constants(
             engine_dir / "include" / "constants" / "species.h", "SPECIES"
         ),
-        fork_moves=load_fork_constants(engine_dir / "include" / "constants" / "moves.h", "MOVE"),
+        # Stock moves plus the game's own the battle pass generates (I3 S3).
+        fork_moves=(load_fork_constants(engine_dir / "include" / "constants" / "moves.h", "MOVE")
+                    | generated_battle_constants()),
         # Stock items plus the game's own, which item_converter generates into
         # the engine (gitignored, so not in the tracked header).
         fork_items=(load_fork_constants(engine_dir / "include" / "constants" / "items.h", "ITEM")

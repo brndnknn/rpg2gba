@@ -2614,6 +2614,24 @@ void SetMoveEffect(enum BattlerId battlerAtk, enum BattlerId effectBattler, enum
             gBattlescriptCurrInstr = battleScript;
         }
         break;
+    // BEGIN RPG2GBA ENGINE — as Focus Energy: no effect if already pumped
+    case MOVE_EFFECT_RPG2GBA_FOCUS_ENERGY:
+        if (gBattleMons[gEffectBattler].volatiles.focusEnergy
+         || gBattleMons[gEffectBattler].volatiles.dragonCheer)
+        {
+            gBattlescriptCurrInstr = battleScript;
+        }
+        else
+        {
+            if (GetConfig(B_FOCUS_ENERGY_CRIT_RATIO) >= GEN_3 || GetConfig(B_CRIT_CHANCE) == GEN_1)
+                gBattleMons[gEffectBattler].volatiles.focusEnergy = TRUE;
+            else
+                gBattleMons[gEffectBattler].volatiles.dragonCheer = TRUE;
+            BattleScriptPush(battleScript);
+            gBattlescriptCurrInstr = BattleScript_Rpg2gbaGettingPumped;
+        }
+        break;
+    // END RPG2GBA ENGINE
     case MOVE_EFFECT_PAYDAY:
         // Don't scatter coins on the second hit of Parental Bond
         if (IsOnPlayerSide(gBattlerAttacker) && gSpecialStatuses[gBattlerAttacker].parentalBondState!= PARENTAL_BOND_2ND_HIT)

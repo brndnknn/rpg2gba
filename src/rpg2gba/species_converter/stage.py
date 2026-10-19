@@ -236,13 +236,22 @@ def read_pristine_species_egg(engine_dir: Path) -> tuple[int, str]:
     return pristine_egg, resolved
 
 
-def assert_fork_constants_exist(engine_dir: Path, constants: set[str], header_rel: str, prefix: str) -> None:
-    """Fail loud if any of `constants` is absent from a fork header's constant set.
+def generated_battle_constants() -> frozenset[str]:
+    """The game's own `MOVE_*` / `ABILITY_*` the battle pass generates (I3 S3)."""
+    from rpg2gba.battle_converter.catalog import generated_constants
+
+    return generated_constants()
+
+
+def assert_fork_constants_exist(engine_dir: Path, constants: set[str], header_rel: str, prefix: str,
+                                generated: frozenset[str] = frozenset()) -> None:
+    """Fail loud if any of `constants` is absent from a fork header's constant set
+    (plus `generated`, constants a pipeline pass generates into the engine).
 
     Used to verify the six starters' vanilla ability constants are real,
     rather than assuming it (CLAUDE.md §4.7).
     """
-    known = load_fork_constants(engine_dir / header_rel, prefix)
+    known = load_fork_constants(engine_dir / header_rel, prefix) | generated
     if not known:
         raise ValueError(f"{engine_dir / header_rel}: no {prefix}_* constants found — fork missing/unreadable")
     missing = sorted(c for c in constants if c not in known)
@@ -397,7 +406,7 @@ def build_staged_species(
                         "requires a resolver to look up the MOVE_* constant"
                     )
                 move_constant = resolver.move_constant(param)
-                if move_constant not in resolver.fork_moves:
+                if move_constant not in resolver.fork_moves | generated_battle_constants():
                     raise ValueError(
                         f"{spec.internal_name}: evolution move resolves to {move_constant}, which "
                         "the fork does not define -- refusing to substitute"
@@ -484,15 +493,18 @@ def emit_pokedex_ids(staged: list[StagedSpecies], anchor: str) -> str:
 
 
 def load_fork_moves(engine_dir: Path) -> set[str]:
-    """Real `MOVE_*` constants the fork defines (CLAUDE.md §4.7, forward direction).
+    """`MOVE_*` constants the engine will define (CLAUDE.md §4.7, forward direction):
+    stock's, plus the game's own moves the battle pass generates.
 
-    Uranium's level-up learnsets reference Uranium-original signature moves
-    (e.g. `MOVE_METAL_WHIP`) that the fork has never had staged — staging
-    Uranium's move set is out of scope here. `emit_learnsets` gates every
-    emitted move against this set and drops (loudly) any that don't resolve,
-    rather than emitting an undefined symbol.
+    `emit_learnsets` gates every emitted move against this set and drops
+    (loudly) any that don't resolve -- the blocked ones in
+    reference/battle_rulings.json (Nuclear-type, deferred) -- rather than
+    emitting an undefined symbol.
     """
-    return load_fork_constants(engine_dir / "include" / "constants" / "moves.h", "MOVE")
+    from rpg2gba.battle_converter.catalog import generated_constants
+
+    stock = load_fork_constants(engine_dir / "include" / "constants" / "moves.h", "MOVE")
+    return stock | {c for c in generated_constants() if c.startswith("MOVE_")}
 
 
 # --- Engine charset (charmap.txt) --------------------------------------------
@@ -579,28 +591,19 @@ def _learnset_symbol(spec: SpeciesSpec) -> str:
     return f"sUraniumLevelUpLearnset_{spec.internal_name}"
 
 
-# Uranium signature moves (by move_id, from attacksRS.dat/moves.dat) in the
-# six starter learnsets that have no vanilla pokeemerald-expansion analog
-# (fork ships no custom move data — out of STARTER_SPECIES_PLAN.md scope,
-# §7). Substituted with the closest existing fork move rather than dropped
-# or invented; a real conversion is Phase-7 debt. User-approved substitution
-# (2026-07-19): move 568 = FLAMEIMPACT (Raptorch/Archilles signature, power
-# 65/physical/Fire/priority+2) -> MOVE_FIRE_FANG (power 65/physical/Fire,
-# closest mechanical match modulo the priority clause).
-_MOVE_SUBSTITUTIONS: dict[int, str] = {
-    568: "MOVE_FIRE_FANG",  # FLAMEIMPACT
-}
+# Uranium-original moves substituted with a stock move, keyed by Uranium move
+# id. Empty since I3 S3 (2026-10-19): the game's own moves are generated into
+# the engine (battle_converter, reference/battle_rulings.json), which retired
+# the one entry (568 FLAMEIMPACT -> MOVE_FIRE_FANG, approved 2026-07-19).
+# Blocked moves (Nuclear-type, deferred) are dropped loudly by emit_learnsets.
+_MOVE_SUBSTITUTIONS: dict[int, str] = {}
 
-# Uranium-original abilities (`uranium_id_map.json` `needs_engine.abilities`)
-# on a staged species, substituted with the closest fork ability until the
-# real one is engine work — same pattern as `_MOVE_SUBSTITUTIONS`. Keyed by
-# the resolved constant. User-approved substitution (2026-10-09): LAZY
-# (Feliger, top of the Feleng line staged for CH06; Uranium text "Lazy made
-# {1} sleep!") -> ABILITY_TRUANT, the fork's native "lazy" ability. Anything
-# else the fork lacks fails loud in `write_all` (`assert_fork_constants_exist`).
-_ABILITY_SUBSTITUTIONS: dict[str, str] = {
-    "ABILITY_LAZY": "ABILITY_TRUANT",
-}
+# Uranium-original abilities substituted with a stock ability, keyed by the
+# resolved constant -- same pattern as `_MOVE_SUBSTITUTIONS`. Empty since I3 S3
+# (2026-10-19): every Uranium ability is generated (battle_converter), which
+# retired LAZY -> ABILITY_TRUANT (approved 2026-10-09). Anything the engine
+# lacks fails loud in `write_all` (`assert_fork_constants_exist`).
+_ABILITY_SUBSTITUTIONS: dict[str, str] = {}
 
 
 def _ability_constant(r: pokemon._Resolver, ability: int) -> str:
@@ -1048,6 +1051,7 @@ def write_all(
         assert_fork_constants_exist(
             engine_dir, staged_ability_constants(staged, resolver),
             "include/constants/abilities.h", "ABILITY",
+            generated=generated_battle_constants(),
         )
     else:
         resolver = None

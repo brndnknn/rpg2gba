@@ -612,15 +612,17 @@ def registry_extra_symbols(
     species_manifest_path: Path | None = None,
     npc_gfx_map_path: Path | None = None,
     trainer_manifest_path: Path | None = None,
-    game_items: bool = False,
+    game_content: bool = False,
 ) -> set[str]:
     """Collect Uranium-minted symbols the gate should accept beyond the index.
 
-    - `game_items`: the `ITEM_*` constants `item_converter` generates into
-      gitignored engine headers (`item_converter.catalog.generated_constants`,
-      derived from `uranium_id_map.json` + `reference/item_rulings.json`). Every
-      real gate passes True: since the hand-typed Uranium items left the tracked
-      engine (2026-10-19), every game item reaches the engine this way.
+    - `game_content`: the game's own constants the pipeline generates into
+      gitignored engine headers -- `ITEM_*` (`item_converter.catalog.
+      generated_constants`, from `uranium_id_map.json` + `reference/
+      item_rulings.json`) and `MOVE_*`/`ABILITY_*` (`battle_converter.catalog.
+      generated_constants`, from the id map + `reference/battle_rulings.json`).
+      Every real gate passes True: since 2026-10-19 the game's items, moves and
+      abilities reach the engine only this way.
 
     - `flag_state_path`: the flag registry's persistent state
       (`output/uranium-build/flag_state.json`) — all minted FLAG_*/VAR_* names.
@@ -663,10 +665,11 @@ def registry_extra_symbols(
     """
     extras: set[str] = set()
 
-    if game_items:
-        from rpg2gba.item_converter.catalog import generated_constants
+    if game_content:
+        from rpg2gba.battle_converter.catalog import generated_constants as battle
+        from rpg2gba.item_converter.catalog import generated_constants as items
 
-        extras |= generated_constants()
+        extras |= items() | battle()
 
     if flag_state_path is not None:
         state = json.loads(flag_state_path.read_text(encoding="utf-8"))
@@ -787,7 +790,7 @@ def check(
     """Run verify_script over one or more .pory files."""
     index = load_or_build()
     extra_symbols = registry_extra_symbols(flag_state, map_constants, species_manifest,
-                                           game_items=True)
+                                           game_content=True)
     if allow_flags_file is not None:
         extra_symbols |= set(json.loads(allow_flags_file.read_text(encoding="utf-8")))
 

@@ -866,6 +866,35 @@ nothing in §1 touches.
       - Coconut Milk and Carrot Wine heal 50 and 100 HP respectively, plus a
         full status cure, built from engine item-effect data.
       - The 4 berries clone Cheri, Chesto, Rawst and Aspear.
+  - **S3 moves and abilities (operator direction, 2026-10-19):** anything tied
+    to the Nuclear type is deferred; anything else with no stock equivalent is
+    implemented if it is straightforward, and deferred and reported if it would
+    need a large engine change. The per-move and per-ability calls made under
+    that direction are in `reference/battle_rulings.json`, for operator review:
+    - 17 moves generated, each on an engine effect: 15 map onto stock effects
+      through their Essentials function code; Laser Pulse (random Fire /
+      Electric / Ice) and Get Lucky (Focus Energy on hit) needed one small
+      generic engine effect each.
+    - Smoke Screen is stock Smokescreen spelled differently, so it is a
+      `#define`, not a new move.
+    - Blocked, fail-loud: the 12 Nuclear-type moves, plus Thunderstorm (a new
+      weather) and Sticky Terrain (a new field effect) as large engine changes.
+    - All 19 abilities are generated so species show their real ability.
+      13 have behaviour (each with an engine battle test); Atomizate, Lead
+      Skin, Geiger Sense, Chernobyl (Nuclear) and Stormbringer (needs
+      Thunderstorm) are named but inert; Deep Freeze is inert in Uranium itself.
+    - Behaviour follows Uranium's scripts where its descriptions disagree:
+      Infuriate absorbs physical moves (Sap Sipper-style); Shuffle heals like
+      Roost and deals no damage; Elementalist is STAB for three types.
+    - Uranium's own descriptions mostly overflow the engine's boxes (moves two
+      lines, abilities one). Each overflowing one gets a short rewrite in
+      Uranium's wording, listed in the ruling and in
+      `output/uranium-build/battle_manifest.json` beside the original.
+    - The TM/HM list is generated from Uranium's machine items: stock stopped
+      at TM50, so TM51-TM100 taught nothing before. HM05 (unobtainable; a
+      duplicate of HM01's Cut) teaches Struggle as a placeholder.
+    - The id map's `needs_engine.abilities` lists four abilities the engine has
+      (Speed Boost, Filter, Moxie, Pixilate); the generator skips them, logged.
   - **Defaults accepted:**
     - stubbing is the species profile plus stock layouts only;
     - the debug build stays;

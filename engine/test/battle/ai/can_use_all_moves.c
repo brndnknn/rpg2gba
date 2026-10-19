@@ -668,6 +668,10 @@ AI_DOUBLE_BATTLE_TEST("AI can use all moves, 801-900")
 
         // tests exist elsewhere
         case EFFECT_DRAGON_CHEER:
+        // BEGIN RPG2GBA GAME PROFILE — a converted game's own moves land past 847
+        // (moves.h custom slot); Roost's effect is an AI TODO in the 301-400 batch too
+        case EFFECT_ROOST:
+        // END RPG2GBA GAME PROFILE
             break;
         case EFFECT_WEATHER:
             if (GetMoveWeatherType(j) == BATTLE_WEATHER_SNOW)

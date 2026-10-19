@@ -242,6 +242,9 @@ enum RandomTag
     RNG_FISHING_BITE,
     RNG_FISHING_GEN3_STICKY,
     RNG_WILD_MON_TARGET,
+    // BEGIN RPG2GBA ENGINE
+    RNG_RPG2GBA_TRI_TYPE,
+    // END RPG2GBA ENGINE
 };
 
 #define RandomWeighted(tag, ...) \

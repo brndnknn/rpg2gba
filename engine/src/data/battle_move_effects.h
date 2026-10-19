@@ -2242,4 +2242,11 @@ const struct BattleMoveEffect gBattleMoveEffects[NUM_BATTLE_MOVE_EFFECTS] =
         .battleScript = BattleScript_EffectHit,
         .battleTvScore = 0, // TODO: Assign points
     },
+    // BEGIN RPG2GBA ENGINE
+    [EFFECT_RPG2GBA_TRI_TYPE] =
+    {
+        .battleScript = BattleScript_EffectHit,
+        .battleTvScore = 0,
+    },
+    // END RPG2GBA ENGINE
 };

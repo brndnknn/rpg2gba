@@ -2455,6 +2455,20 @@ bool32 CanAbilityAbsorbMove(struct BattleContext *ctx)
         if (ctx->moveType == TYPE_GRASS)
             battleScript = AbsorbedByStatIncreaseAbility(ctx->battlerDef, ctx->abilityDef, STAT_ATK, 1);
         break;
+    // BEGIN RPG2GBA GAME PROFILE — game abilities that absorb moves
+#ifdef RPG2GBA_HAS_ABILITY_INFURIATE
+    case ABILITY_INFURIATE: // Sap Sipper for the physical category
+        if (IsBattleMovePhysical(ctx->move))
+            battleScript = AbsorbedByStatIncreaseAbility(ctx->battlerDef, ctx->abilityDef, STAT_ATK, 1);
+        break;
+#endif
+#ifdef RPG2GBA_HAS_ABILITY_DISENCHANT
+    case ABILITY_DISENCHANT: // immune to Fairy-type moves
+        if (ctx->moveType == TYPE_FAIRY)
+            battleScript = BattleScript_MonMadeMoveUseless;
+        break;
+#endif
+    // END RPG2GBA GAME PROFILE
     case ABILITY_WELL_BAKED_BODY:
         if (ctx->moveType == TYPE_FIRE)
             battleScript = AbsorbedByStatIncreaseAbility(ctx->battlerDef, ctx->abilityDef, STAT_DEF, 2);
@@ -3443,6 +3457,32 @@ u32 AbilityBattleEffects(enum AbilityEffect caseID, enum BattlerId battler, enum
                 effect++;
             }
             break;
+        // BEGIN RPG2GBA GAME PROFILE — game abilities acting on entry
+#ifdef RPG2GBA_HAS_ABILITY_LAZY
+        case ABILITY_LAZY: // falls asleep for Rest's three turns
+            if (shouldAbilityTrigger && CanBeSlept(battler, battler, ABILITY_NONE, NOT_BLOCKED_BY_SLEEP_CLAUSE))
+            {
+                gBattleMons[battler].status1 = STATUS1_SLEEP_TURN(3);
+                BtlController_EmitSetMonData(battler, B_COMM_TO_CONTROLLER, REQUEST_STATUS_BATTLE, 0, sizeof(gBattleMons[battler].status1), &gBattleMons[battler].status1);
+                MarkBattlerForControllerExec(battler);
+                gEffectBattler = battler;
+                BattleScriptCall(BattleScript_Rpg2gbaLazyActivates);
+                effect++;
+            }
+            break;
+#endif
+#ifdef RPG2GBA_HAS_ABILITY_PETRIFY
+        case ABILITY_PETRIFY: // Intimidate for Speed
+            if (shouldAbilityTrigger && !IsOpposingSideEmpty(battler))
+            {
+                SaveBattlerAttacker(gBattlerAttacker);
+                gBattlerAttacker = battler;
+                BattleScriptCall(BattleScript_Rpg2gbaPetrifyActivates);
+                effect++;
+            }
+            break;
+#endif
+        // END RPG2GBA GAME PROFILE
         case ABILITY_SUPERSWEET_SYRUP:
             if (shouldAbilityTrigger
              && !GetBattlerPartyState(battler)->supersweetSyrup
@@ -3657,6 +3697,21 @@ u32 AbilityBattleEffects(enum AbilityEffect caseID, enum BattlerId battler, enum
                     effect++;
                 }
                 break;
+            // BEGIN RPG2GBA GAME PROFILE — game ability Rebuild: heals 1/8 if no move
+            // damaged it this turn (Uranium checks lastHPLost, which pbHeal ignores Heal Block for)
+#ifdef RPG2GBA_HAS_ABILITY_REBUILD
+            case ABILITY_REBUILD:
+                if (gProtectStructs[battler].physicalDmg == 0
+                 && gProtectStructs[battler].specialDmg == 0
+                 && !IsBattlerAtMaxHp(battler))
+                {
+                    SetHealAmount(battler, GetNonDynamaxMaxHP(battler) / 8);
+                    BattleScriptExecute(BattleScript_RainDishActivates);
+                    effect++;
+                }
+                break;
+#endif
+            // END RPG2GBA GAME PROFILE
             case ABILITY_ICE_BODY:
                 if (IsBattlerWeatherAffected(battler, B_WEATHER_ICY_ANY)
                  && !IsBattlerAtMaxHp(battler)
@@ -6673,6 +6728,41 @@ static inline u32 CalcMoveBasePowerAfterModifiers(struct BattleContext *ctx)
         if (IsPunchingMove(move))
            modifier = uq4_12_multiply(modifier, UQ_4_12(1.2));
         break;
+    // BEGIN RPG2GBA GAME PROFILE — game abilities boosting moves the game lists by id
+#ifdef RPG2GBA_HAS_ABILITY_ACCELERATION
+    case ABILITY_ACCELERATION:
+        if (move == MOVE_EXTREME_SPEED || move == MOVE_FAKE_OUT || move == MOVE_QUICK_ATTACK
+         || move == MOVE_AQUA_JET
+#ifdef RPG2GBA_HAS_MOVE_FLAME_IMPACT
+         || move == MOVE_FLAME_IMPACT
+#endif
+         )
+           modifier = uq4_12_multiply(modifier, UQ_4_12(1.5));
+        break;
+#endif
+#ifdef RPG2GBA_HAS_ABILITY_SOUND_BOOST
+    case ABILITY_SOUND_BOOST:
+        switch (move)
+        {
+        case MOVE_BUG_BUZZ:
+        case MOVE_SNARL:
+        case MOVE_CHATTER:
+        case MOVE_HYPER_VOICE:
+        case MOVE_UPROAR:
+        case MOVE_RELIC_SONG:
+        case MOVE_ROUND:
+        case MOVE_ECHOED_VOICE:
+        case MOVE_SNORE:
+        case MOVE_BOOMBURST:
+        case MOVE_DISARMING_VOICE:
+            modifier = uq4_12_multiply(modifier, UQ_4_12(1.3));
+            break;
+        default:
+            break;
+        }
+        break;
+#endif
+    // END RPG2GBA GAME PROFILE
     case ABILITY_SHEER_FORCE:
         if (MoveIsAffectedBySheerForce(move))
            modifier = uq4_12_multiply(modifier, UQ_4_12(1.3));
@@ -6716,6 +6806,11 @@ static inline u32 CalcMoveBasePowerAfterModifiers(struct BattleContext *ctx)
         if (moveType == TYPE_FAIRY && gBattleStruct->battlerState[battlerAtk].ateBoost)
             modifier = uq4_12_multiply(modifier, UQ_4_12(GetConfig(B_ATE_MULTIPLIER) >= GEN_7 ? 1.2 : 1.3));
         break;
+    // BEGIN RPG2GBA GAME PROFILE — game ability Energizate: Galvanize by another name
+#ifdef RPG2GBA_HAS_ABILITY_ENERGIZATE
+    case ABILITY_ENERGIZATE:
+#endif
+    // END RPG2GBA GAME PROFILE
     case ABILITY_GALVANIZE:
         if (moveType == TYPE_ELECTRIC && gBattleStruct->battlerState[battlerAtk].ateBoost)
             modifier = uq4_12_multiply(modifier, UQ_4_12(GetConfig(B_ATE_MULTIPLIER) >= GEN_7 ? 1.2 : 1.3));
@@ -6983,6 +7078,13 @@ static inline u32 CalcAttackStat(struct BattleContext *ctx)
         if (IsBattleMovePhysical(move))
             modifier = uq4_12_multiply_half_down(modifier, UQ_4_12(2.0));
         break;
+    // BEGIN RPG2GBA GAME PROFILE — game ability Sharp Coral: doubles both attacking stats
+#ifdef RPG2GBA_HAS_ABILITY_SHARP_CORAL
+    case ABILITY_SHARP_CORAL:
+        modifier = uq4_12_multiply_half_down(modifier, UQ_4_12(2.0));
+        break;
+#endif
+    // END RPG2GBA GAME PROFILE
     case ABILITY_SLOW_START:
         if (gBattleMons[battlerAtk].volatiles.slowStartTimer > 0 && IsBattleMovePhysical(move))
             modifier = uq4_12_multiply_half_down(modifier, UQ_4_12(0.5));
@@ -7268,6 +7370,15 @@ static inline u32 CalcDefenseStat(struct BattleContext *ctx)
     // target's abilities
     switch (ctx->abilityDef)
     {
+    // BEGIN RPG2GBA GAME PROFILE — game ability Sharp Coral: halves both defending stats
+#ifdef RPG2GBA_HAS_ABILITY_SHARP_CORAL
+    case ABILITY_SHARP_CORAL:
+        modifier = uq4_12_multiply_half_down(modifier, UQ_4_12(0.5));
+        if (ctx->updateFlags)
+            RecordAbilityBattle(battlerDef, ABILITY_SHARP_CORAL);
+        break;
+#endif
+    // END RPG2GBA GAME PROFILE
     case ABILITY_MARVEL_SCALE:
         if (gBattleMons[battlerDef].status1 & STATUS1_ANY && usesDefStat)
         {
@@ -7417,6 +7528,13 @@ static inline uq4_12_t GetSameTypeAttackBonusModifier(struct BattleContext *ctx)
         return UQ_4_12(1.0);
     else if (gBattleStruct->pledgeMove && IS_BATTLER_OF_TYPE(BATTLE_PARTNER(ctx->battlerAtk), ctx->moveType))
         return (ctx->abilityAtk == ABILITY_ADAPTABILITY) ? UQ_4_12(2.0) : UQ_4_12(1.5);
+    // BEGIN RPG2GBA GAME PROFILE — game ability Elementalist: STAB for Fire, Electric, Water
+#ifdef RPG2GBA_HAS_ABILITY_ELEMENTALIST
+    else if (ctx->abilityAtk == ABILITY_ELEMENTALIST && ctx->move != MOVE_STRUGGLE && ctx->move != MOVE_NONE
+          && (ctx->moveType == TYPE_FIRE || ctx->moveType == TYPE_ELECTRIC || ctx->moveType == TYPE_WATER))
+        return UQ_4_12(1.5);
+#endif
+    // END RPG2GBA GAME PROFILE
     else if (!IS_BATTLER_OF_TYPE(ctx->battlerAtk, ctx->moveType) || ctx->move == MOVE_STRUGGLE || ctx->move == MOVE_NONE)
         return UQ_4_12(1.0);
     return (ctx->abilityAtk == ABILITY_ADAPTABILITY) ? UQ_4_12(2.0) : UQ_4_12(1.5);

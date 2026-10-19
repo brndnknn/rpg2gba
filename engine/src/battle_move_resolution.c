@@ -158,6 +158,21 @@ static enum CancelerResult CancelerAsleepOrFrozen(struct BattleContext *ctx)
                 gBattleCommunication[MULTISTRING_CHOOSER] = B_MSG_WOKE_UP;
                 result = CANCELER_RESULT_BREAK;
                 BattleScriptCall(BattleScript_MoveUsedWokeUp);
+                // BEGIN RPG2GBA GAME PROFILE — game ability Night Terror: a foe holding
+                // it paralyses the battler that just woke (the wake message comes first)
+#ifdef RPG2GBA_HAS_ABILITY_NIGHT_TERROR
+                {
+                    u32 terror = IsAbilityOnOpposingSide(ctx->battlerAtk, ABILITY_NIGHT_TERROR);
+                    if (terror && CanBeParalyzed(terror - 1, ctx->battlerAtk, ctx->abilityAtk))
+                    {
+                        gBattleMons[ctx->battlerAtk].status1 |= STATUS1_PARALYSIS;
+                        gBattlerAbility = terror - 1;
+                        gEffectBattler = ctx->battlerAtk;
+                        gBattlescriptCurrInstr = BattleScript_Rpg2gbaNightTerrorActivates;
+                    }
+                }
+#endif
+                // END RPG2GBA GAME PROFILE
             }
         }
         RequestNonVolatileChange(ctx->battlerAtk);
@@ -3383,6 +3398,31 @@ static enum MoveEndResult MoveEndCardButton(void)
     return result;
 }
 
+// BEGIN RPG2GBA ENGINE — Shell Bell's timing, for game abilities healing off the
+// damage the attacker just dealt; its own step so a held Shell Bell still fires
+static enum MoveEndResult MoveEndRpg2gbaAbilityHeal(void)
+{
+    enum MoveEndResult result = MOVEEND_RESULT_CONTINUE;
+#ifdef RPG2GBA_HAS_ABILITY_BLOOD_LUST
+    enum BattlerId battler = gBattlerAttacker;
+
+    if (GetBattlerAbility(battler) == ABILITY_BLOOD_LUST // heals 1/6 of the damage dealt
+     && gBattleScripting.savedDmg > 0
+     && !gBattleStruct->unableToUseMove
+     && IsBattlerAlive(battler)
+     && !IsBattlerAtMaxHp(battler))
+    {
+        SetHealAmount(battler, gBattleScripting.savedDmg / 6 ? gBattleScripting.savedDmg / 6 : 1);
+        gBattlerAbility = battler;
+        BattleScriptCall(BattleScript_Rpg2gbaAbilityHpHealRet);
+        result = MOVEEND_RESULT_RUN_SCRIPT;
+    }
+#endif
+    gBattleScripting.moveendState++;
+    return result;
+}
+// END RPG2GBA ENGINE
+
 static enum MoveEndResult MoveEndLifeOrbShellBell(void)
 {
     enum MoveEndResult result = MOVEEND_RESULT_CONTINUE;
@@ -3903,6 +3943,7 @@ static enum MoveEndResult (*const sMoveEndHandlers[])(void) =
     [MOVEEND_COLOR_CHANGE] = MoveEndColorChange,
     [MOVEEND_KEE_MARANGA_HP_THRESHOLD_ITEM_TARGET] = MoveEndKeeMarangaHpThresholdItemTarget,
     [MOVEEND_CARD_BUTTON] = MoveEndCardButton,
+    [MOVEEND_RPG2GBA_ABILITY_HEAL] = MoveEndRpg2gbaAbilityHeal, // RPG2GBA ENGINE
     [MOVEEND_LIFE_ORB_SHELL_BELL] = MoveEndLifeOrbShellBell,
     [MOVEEND_FORM_CHANGE] = MoveEndFormChange,
     [MOVEEND_EMERGENCY_EXIT] = MoveEndEmergencyExit,

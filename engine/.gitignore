@@ -80,6 +80,10 @@ include/rpg2gba/
 src/data/rpg2gba/
 graphics/items/rpg2gba/
 graphics/berries/rpg2gba/
+include/constants/rpg2gba_moves.gen.h
+include/constants/rpg2gba_abilities.gen.h
+include/constants/rpg2gba_machines.gen.h
+src/data/rpg2gba_battle/
 # BEGIN URANIUM PATHFINDER SLICE — learnables overlay (upstream + Uranium TM/HM/tutor compatibility), written by the rpg2gba pipeline
 src/data/pokemon/all_learnables.gen.json
 # END URANIUM PATHFINDER SLICE

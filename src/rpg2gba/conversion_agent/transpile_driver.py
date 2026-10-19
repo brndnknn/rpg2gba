@@ -650,7 +650,7 @@ def transpile_corpus(
             # constants live in generated, gitignored headers the index can't see.
             _gfx_path if _gfx_path.is_file() else None,
             trainer_manifest_path if trainer_manifest_path.is_file() else None,
-            game_items=True,  # generated into gitignored headers (item_converter)
+            game_content=True,  # generated into gitignored headers (item_converter, battle_converter)
         )
         extras |= _registry_minted_names(registry)
         # HEAL_LOCATION_* for staged pbSetPokemonCenter sites: minted by
@@ -701,7 +701,7 @@ def transpile_corpus(
             # constants live in generated, gitignored headers the index can't see.
             _gfx_path if _gfx_path.is_file() else None,
             trainer_manifest_path if trainer_manifest_path.is_file() else None,
-            game_items=True,  # generated into gitignored headers (item_converter)
+            game_content=True,  # generated into gitignored headers (item_converter, battle_converter)
         )
         extras |= _registry_minted_names(registry)
         violations = fork_index.verify_script(ce_text, index, extra_symbols=extras)

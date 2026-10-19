@@ -577,21 +577,23 @@ def test_unsupported_evolution_method_still_fails_loud() -> None:
         stage.build_staged_species((pre, post), [pre_rec, post_rec], pristine_species_egg=100)
 
 
-def test_uranium_original_ability_is_substituted_and_listed_for_the_fork_gate() -> None:
-    """LAZY (Feliger) -> ABILITY_TRUANT, operator-approved 2026-10-09; the set
-    `write_all` gates against the fork reflects the substitution."""
+def test_uranium_original_ability_is_kept_and_passes_the_gate_as_generated(engine_dir: Path) -> None:
+    """LAZY (Feliger) is no longer substituted (it was ABILITY_TRUANT until I3 S3,
+    2026-10-19): the battle pass generates it, and the fork gate accepts it."""
     from types import SimpleNamespace
 
     from rpg2gba.species_converter import stage as st
 
     names = {1: "ABILITY_LAZY", 2: "ABILITY_NONE", 3: "ABILITY_INTIMIDATE"}
     r = SimpleNamespace(ability_constant=names.__getitem__)
-    assert st._ability_constant(r, 1) == "ABILITY_TRUANT"
-    assert st._ability_constant(r, 3) == "ABILITY_INTIMIDATE"
+    assert st._ability_constant(r, 1) == "ABILITY_LAZY"
     rec = SimpleNamespace(abilities=[1, 2], hidden_abilities=[3])
     staged = [SimpleNamespace(record=rec)]
-    assert st.staged_ability_constants(staged, r) == {
-        "ABILITY_TRUANT", "ABILITY_NONE", "ABILITY_INTIMIDATE"}
+    wanted = st.staged_ability_constants(staged, r)
+    assert wanted == {"ABILITY_LAZY", "ABILITY_NONE", "ABILITY_INTIMIDATE"}
+    assert "ABILITY_LAZY" in st.generated_battle_constants()
+    st.assert_fork_constants_exist(engine_dir, wanted, "include/constants/abilities.h", "ABILITY",
+                                   generated=st.generated_battle_constants())
 
 
 def test_ability_gate_fails_loud_on_an_undefined_ability(tmp_path) -> None:

@@ -23019,4 +23019,10 @@ const struct MoveInfo gMovesInfo[MOVES_COUNT_ALL] =
         .ignoresProtect = TRUE,
         .battleAnimScript = gBattleAnimMove_GMaxRapidFlow,
     },
+
+// BEGIN RPG2GBA GAME PROFILE — the converted game's generated moves
+#if __has_include("rpg2gba_battle/moves_info.gen.h")
+#include "rpg2gba_battle/moves_info.gen.h"
+#endif
+// END RPG2GBA GAME PROFILE
 };

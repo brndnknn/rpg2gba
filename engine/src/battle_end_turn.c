@@ -371,6 +371,11 @@ static bool32 HandleEndTurnFirstEventBlock(enum BattlerId battler)
         case ABILITY_HEALER:
         case ABILITY_HYDRATION:
         case ABILITY_SHED_SKIN:
+        // BEGIN RPG2GBA GAME PROFILE — game ability Rebuild (end-of-turn heal)
+#ifdef RPG2GBA_HAS_ABILITY_REBUILD
+        case ABILITY_REBUILD:
+#endif
+        // END RPG2GBA GAME PROFILE
             if (AbilityBattleEffects(ABILITYEFFECT_ENDTURN, battler, ability, MOVE_NONE, TRUE))
                 effect = TRUE;
             break;

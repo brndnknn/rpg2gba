@@ -541,6 +541,10 @@ enum __attribute__((packed)) MoveEffect
     MOVE_EFFECT_LIGHT_SCREEN,
     MOVE_EFFECT_SALT_CURE,
     MOVE_EFFECT_EERIE_SPELL,
+    // BEGIN RPG2GBA ENGINE — Focus Energy as a damaging move's additional effect
+    // (Essentials function code 023 on a move with power)
+    MOVE_EFFECT_RPG2GBA_FOCUS_ENERGY,
+    // END RPG2GBA ENGINE
 
     // Max move effects happen earlier in the execution chain.
     // For example stealth rock from G-Max Stonesurge is set up before abilities but from Stone Axe after.

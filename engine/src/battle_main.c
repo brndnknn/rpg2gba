@@ -4855,6 +4855,15 @@ s32 GetBattleMovePriority(enum BattlerId battler, enum Ability ability, enum Mov
     {
         priority += 3;
     }
+    // BEGIN RPG2GBA GAME PROFILE — game ability Quick Charge: +4 on the first turn
+    // after entering, the same first turn Fake Out works on
+#ifdef RPG2GBA_HAS_ABILITY_QUICK_CHARGE
+    else if (ability == ABILITY_QUICK_CHARGE && gBattleStruct->battlerState[battler].isFirstTurn)
+    {
+        priority += 4;
+    }
+#endif
+    // END RPG2GBA GAME PROFILE
 
     return priority;
 }
@@ -5848,6 +5857,11 @@ enum Type TrySetAteType(enum Move move, enum BattlerId battlerAtk, enum Ability 
     case ABILITY_AERILATE:
         ateType = TYPE_FLYING;
         break;
+    // BEGIN RPG2GBA GAME PROFILE — game ability Energizate: Galvanize by another name
+#ifdef RPG2GBA_HAS_ABILITY_ENERGIZATE
+    case ABILITY_ENERGIZATE:
+#endif
+    // END RPG2GBA GAME PROFILE
     case ABILITY_GALVANIZE:
         ateType = TYPE_ELECTRIC;
         break;
@@ -6062,6 +6076,15 @@ enum Type GetDynamicMoveType(struct Pokemon *mon, enum Move move, enum BattlerId
         if (state == MON_IN_BATTLE)
             return GetMoveType(GetNaturePowerMove());
         break;
+    // BEGIN RPG2GBA ENGINE — rolled once per use: SetTypeBeforeUsingMove caches it
+    case EFFECT_RPG2GBA_TRI_TYPE:
+        if (state == MON_IN_BATTLE)
+        {
+            static const u8 sTriTypes[] = {TYPE_FIRE, TYPE_ELECTRIC, TYPE_ICE};
+            return RandomElement(RNG_RPG2GBA_TRI_TYPE, sTriTypes);
+        }
+        break;
+    // END RPG2GBA ENGINE
     default:
         break;
     }

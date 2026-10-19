@@ -2432,4 +2432,10 @@ const struct AbilityInfo gAbilitiesInfo[ABILITIES_COUNT] =
         .cantBeSwapped = TRUE,
         .cantBeTraced = TRUE,
     },
+
+// BEGIN RPG2GBA GAME PROFILE — the converted game's generated abilities
+#if __has_include("rpg2gba_battle/abilities_info.gen.h")
+#include "rpg2gba_battle/abilities_info.gen.h"
+#endif
+// END RPG2GBA GAME PROFILE
 };

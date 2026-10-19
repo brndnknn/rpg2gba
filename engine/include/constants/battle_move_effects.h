@@ -335,6 +335,9 @@ enum __attribute__((packed)) BattleMoveEffects
     EFFECT_STONE_AXE, // Not to be confused with MOVE_EFFECT_STEALTH_ROCK. They have two different activation timings.
     EFFECT_CEASELESS_EDGE, // Same applies to spikes
     EFFECT_SPECIES_POWER_OVERRIDE, // Uses argument field to for the species, power and (number of hits, used only for multi hit moves)
+    // BEGIN RPG2GBA ENGINE — move effects converted games need (Essentials function codes)
+    EFFECT_RPG2GBA_TRI_TYPE, // A hit whose type is rolled each use from Fire, Electric and Ice
+    // END RPG2GBA ENGINE
     NUM_BATTLE_MOVE_EFFECTS,
 };
 

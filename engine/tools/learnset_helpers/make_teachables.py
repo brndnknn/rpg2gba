@@ -50,7 +50,13 @@ def extract_repo_tms() -> typing.Generator[str, None, None]:
     """
     Yield MOVE constants assigned to a TM or HM in the user's repo.
     """
-    with open("./include/constants/tms_hms.h", "r") as tmshms_fp:
+    # BEGIN RPG2GBA GAME PROFILE — a generated TM/HM list replaces stock's
+    # (include/constants/tms_hms.h includes it when present), so read that.
+    tmshms_path = "./include/constants/tms_hms.h"
+    if pathlib.Path("./include/constants/rpg2gba_machines.gen.h").exists():
+        tmshms_path = "./include/constants/rpg2gba_machines.gen.h"
+    # END RPG2GBA GAME PROFILE
+    with open(tmshms_path, "r") as tmshms_fp:
         tmshms = tmshms_fp.read()
         match_it = TMHM_MACRO_PAT.finditer(tmshms)
         if not match_it:

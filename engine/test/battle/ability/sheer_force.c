@@ -400,6 +400,11 @@ static inline bool32 IgnoreMoveForSheerForceBoost(enum Move move)
 
 static inline bool32 IsMoveSheerForceBoosted(enum Move move)
 {
+    // BEGIN RPG2GBA GAME PROFILE — a converted game's own moves (generated past
+    // MOVES_COUNT_GEN9) aren't in the list below; their additional effects decide
+    if (move >= MOVES_COUNT_GEN9 && move < MOVES_COUNT)
+        return MoveIsAffectedBySheerForce(move);
+    // END RPG2GBA GAME PROFILE
     switch (move) {
         case MOVE_AIR_SLASH:
         case MOVE_ANCIENT_POWER:

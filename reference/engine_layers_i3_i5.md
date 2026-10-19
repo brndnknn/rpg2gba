@@ -262,6 +262,25 @@ says so.
   - Paging long bag descriptions on R was checked on the walk ROM by
     screenshot.
   - CH08 passed 498/498.
+- **S3 DONE 2026-10-19** (rulings `reference/battle_rulings.json`;
+  `battle_converter`, assembler pass S8b10):
+  - 17 moves generated after `MOVES_COUNT_GEN9` (the expansion's custom-move
+    slot; stock ids unchanged), Smoke Screen aliased to Smokescreen, 14 blocked
+    (12 Nuclear-type, Thunderstorm, Sticky Terrain).
+  - All 19 abilities generated after `ABILITIES_COUNT_GEN9`; 13 have behaviour.
+    That C is fenced `RPG2GBA GAME PROFILE` and keyed on generated
+    `RPG2GBA_HAS_<CONSTANT>` macros, so a stock build still compiles.
+  - Two generic engine effects (`RPG2GBA ENGINE`): `EFFECT_RPG2GBA_TRI_TYPE`
+    (Laser Pulse) and `MOVE_EFFECT_RPG2GBA_FOCUS_ENERGY` (Get Lucky); plus a
+    move-end step for abilities that heal off damage dealt (Blood Lust).
+  - The TM/HM list is generated (`tms_hms.h` hook; `make_teachables.py` reads
+    the generated list). Stock move-named machine ids the list no longer mints
+    are aliased to their number (`ITEM_HM_FLASH` -> `ITEM_HM05`).
+  - Engine battle tests: `engine/test/battle/rpg2gba/game_moves_abilities.c`
+    (22, pass). Full `make check`: 5163 tests, the only failure left is
+    `SaveBlock1 is backwards compatible`, which predates S3 (save sizes are
+    unchanged by it). Two stock sweep tests learned about game moves past 847.
+  - Saves unchanged; ROM 12,784,324 B.
 - **S2 side effect:** fork-index enum parsing was fixed, so the parse is now per
   line, not one identifier per comma segment.
   - The old parse missed every enum member that followed an `#if` or a macro

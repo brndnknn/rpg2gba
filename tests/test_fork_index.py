@@ -555,8 +555,10 @@ def test_enum_member_after_a_member_list_macro_is_indexed() -> None:
     assert "RECURSIVELY" not in names  # a macro call, not a member
 
 
-def test_game_items_reach_the_gate_when_asked() -> None:
-    extras = fi.registry_extra_symbols(game_items=True)
+def test_game_content_reaches_the_gate_when_asked() -> None:
+    extras = fi.registry_extra_symbols(game_content=True)
     assert "ITEM_MARIAS_KEY" in extras
     assert "ITEM_HAFLI_BERRY" not in extras  # blocked in item_rulings.json
+    assert {"MOVE_METAL_WHIP", "MOVE_SMOKE_SCREEN", "ABILITY_LAZY", "ABILITY_CHERNOBYL"} <= extras
+    assert "MOVE_GAMMA_RAY" not in extras  # Nuclear-type: blocked in battle_rulings.json
     assert "ITEM_MARIAS_KEY" not in fi.registry_extra_symbols()

@@ -549,6 +549,9 @@ TEACHABLE_DEPS := $(ALL_LEARNABLES_JSON) $(INCLUDE_DIRS)/constants/tms_hms.h $(I
 # learnables overlay changes (make_teachables.py itself picks it over all_learnables.json).
 TEACHABLE_DEPS += $(wildcard $(DATA_SRC_SUBDIR)/pokemon/all_learnables.gen.json)
 # END URANIUM PATHFINDER SLICE
+# BEGIN RPG2GBA GAME PROFILE — and when the generated TM/HM list changes
+TEACHABLE_DEPS += $(wildcard $(INCLUDE_DIRS)/constants/rpg2gba_machines.gen.h)
+# END RPG2GBA GAME PROFILE
 
 $(LEARNSET_HELPERS_BUILD_DIR):
 	@mkdir -p $@

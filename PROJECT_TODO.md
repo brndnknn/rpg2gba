@@ -1163,6 +1163,18 @@ move id 562): BAREWL @29, DEAREWL @29, GARAREWL @31. Nothing invented, nothing
 silent — those three Pokémon are simply missing a level-up move until Uranium's
 move set is staged into the engine, a much larger unit than any chapter needs.
 
+**2026-10-19: resolved by I3 S3 on `intermission-engine-layers`, apart from the
+blocked moves** (`reference/engine_layers_i3_i5.md` §8, `reference/battle_rulings.json`).
+- `battle_converter` generates 17 of Uranium's 32 own moves, Smoke Screen as an
+  alias of Smokescreen, all 19 of its abilities (13 with behaviour), and the
+  game's TM/HM list (stock's stopped at TM50, so TM51-TM100 taught nothing).
+- The CH02 drops are gone: the staged learnsets now drop nothing. Flame Impact
+  is the real move again (it was substituted with Fire Fang), and Lazy no longer
+  stands in as Truant.
+- **Still open:** the 14 blocked moves (12 Nuclear-type, Thunderstorm, Sticky
+  Terrain) drop loudly from any learnset that names them; a trainer party naming
+  one fails staging.
+
 ### 36. Map033 EV028 "Luz" stripped — revisit if an additive-glow path exists
 
 *Migrated from `CH02_TODO.md` #12 on the CH02 gate pass 2026-08-12; user-ruled
