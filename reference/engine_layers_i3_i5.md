@@ -18,6 +18,11 @@ The operator asked:
 
 ## 2. Short answer
 
+> **Measured 2026-10-19:** the species profile plus stubbed stock layouts took
+> the CH08 ROM from 26.55 MiB to **12.15 MiB**. It compiled first time, CH08
+> passed 498/498 from boot, and the save layout was unchanged. Details are in
+> ledger §4a. The estimates below hold.
+
 1. **The ROM limit (I5) is mostly solved by one switch the expansion already
    has.**
    - 55% of today's ROM (≈ 15.4 MB) is stock species data, and 9.5 MB of

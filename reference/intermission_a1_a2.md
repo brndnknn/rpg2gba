@@ -788,3 +788,13 @@ nothing in §1 touches.
       discuss it more first.
     - **The species-switch experiment:** not yet.
     - **Canon-species art:** decide later.
+- **2026-10-19, I3+I5 experiment run (operator approved):** species profile +
+  stubbed stock layouts took the ROM from 26.55 MiB to 12.15 MiB, saving 15.1 MB.
+  - It compiled first time.
+  - CH08 passed 498/498 from boot.
+  - The save layout was unchanged.
+  - The canon families are only ≈ 0.49 MB.
+
+  Reverted afterwards. Results are in
+  `reference/findings/rom_ledger_2026-10-19.md` §4a. The direction decision is
+  still open.

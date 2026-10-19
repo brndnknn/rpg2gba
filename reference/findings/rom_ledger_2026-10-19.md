@@ -130,6 +130,40 @@ reuses.
 - **Result.** The full game fits with room for real audio, and nothing else has
   to be stripped.
 
+### 4a. Measured (experiment, 2026-10-19)
+
+**Setup.** One throwaway build on the CH01–CH08 chapter assembly, reverted
+afterwards (the engine is back to 27,844,048 B and the tree is clean).
+- **Species:** in `species_enabled.h`, all `P_GEN_n_POKEMON` were set FALSE,
+  then the 15 families of Uranium's 35 canon species were set back to TRUE:
+  Ekans, Mankey, Gastly, Magikarp, Eevee, Mareep, Misdreavus, Dunsparce,
+  Gligar, Corsola, Lotad, Sableye, Buizel, Cottonee, Spritzee.
+- **Layouts:** the chapter assembler called `_stub_stock_layout_bins` instead
+  of `repack_stock_layouts`.
+- Scripts: `output/scratch/i3/snap.py`, snapshots `snap_*.json`.
+
+| Build | ROM used | Change |
+|---|---|---|
+| Baseline (CH08 chapter ROM) | 27,844,048 B (26.55 MiB) | — |
+| + species profile | 13,391,968 B | **−14,452,080 B** (`sound_data.o` −9.08 MB, `pokemon.o` −5.37 MB) |
+| + stock layouts stubbed | **12,744,356 B (12.15 MiB, 38%)** | −647,612 B (`maps.o`) |
+| + the 15 canon families off too (build only) | 12,256,912 B | −487,444 B |
+
+What the experiment showed:
+- **It compiled first time**, with Uranium's appended species. No errors.
+- **CH08 gen suite 498/498 from boot** on the species + layout build, the same
+  as the full ROM (`output/playtest-i3exp/`).
+- **Save structures unchanged:** `gSaveblock1` 0x3cb0, `gSaveblock2` 0xfac,
+  `gPokemonStorage` 0x85e0. Old saves still load.
+- **`gSpeciesInfo` keeps its full size**, 0x66224 B. Slots stay, data goes.
+- **Spot-checked symbols:** the Uranium species, `Cry_Eevee`, `Cry_Sylveon`
+  (a cross-generation evolution) and `Cry_Gliscor` are present. Pikachu and
+  Treecko are gone.
+- **The canon families cost ≈ 0.49 MB.** Whose art they use is a fidelity
+  question, not a space one.
+- **Not exercised:** the national-dex UI scrolling over disabled species. The
+  suite checks dex counts, not the dex screen.
+
 ## 5. How the pipeline writes into the engine today
 
 **Every write is additive and gitignored.** No build step edits a tracked
