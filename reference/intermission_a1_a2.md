@@ -798,3 +798,17 @@ nothing in §1 touches.
   Reverted afterwards. Results are in
   `reference/findings/rom_ledger_2026-10-19.md` §4a. The direction decision is
   still open.
+- **2026-10-19, I3 direction DECIDED (operator): generated per-game profile**
+  (`reference/engine_layers_i3_i5.md` Option B).
+  - The stock engine stays as vendored, apart from fenced include hooks.
+  - The pipeline generates a per-game profile: species family switches, plus
+    stubs for stock content the game doesn't use. It also generates the game
+    content and a per-build report of what was kept and dropped.
+  - A committed blank base is rejected. Ids are positional, every game needs a
+    different cut, re-vendoring would be harder, and the space is no longer
+    needed (§4a).
+  - Existing edits:
+    - hooks and generic features stay; Uranium names become `RPG2GBA_*`;
+    - hand-typed Uranium facts become generated;
+    - the intro and truck skips go behind the harness switch.
+  - Still open: canon-species art, and when the work runs relative to CH09.

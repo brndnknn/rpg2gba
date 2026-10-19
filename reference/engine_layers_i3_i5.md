@@ -1,6 +1,9 @@
 # I3 + I5: what the engine should be, and how the game gets into it
 
-**Status:** research and options (2026-10-19). Nothing decided. The decisions
+**Status:** **Option B (generated per-game profile) chosen by the operator
+2026-10-19.** Items move to the end of the item list and are generated before
+I6. Canon-species art and timing are still open. *(Was: research and options,
+nothing decided.)* The decisions
 go in `reference/intermission_a1_a2.md` §3. All measurements, with method, are
 in `reference/findings/rom_ledger_2026-10-19.md`, cited below as "ledger §n".
 
