@@ -73,8 +73,13 @@ src/data/uranium_split_siblings.gen.h
 # URANIUM PATHFINDER SLICE — NPC in-game trade enum members + rows, written by the rpg2gba pipeline
 include/constants/uranium_ingame_trades.gen.h
 src/data/uranium_ingame_trade_table.gen.h
-# RPG2GBA GAME PROFILE — per-game species profile, written by the rpg2gba pipeline
+# RPG2GBA GAME PROFILE — per-game profile and generated game content, written by the rpg2gba pipeline
 include/config/rpg2gba_species_profile.gen.h
+include/constants/rpg2gba_items.gen.h
+include/rpg2gba/
+src/data/rpg2gba/
+graphics/items/rpg2gba/
+graphics/berries/rpg2gba/
 # BEGIN URANIUM PATHFINDER SLICE — learnables overlay (upstream + Uranium TM/HM/tutor compatibility), written by the rpg2gba pipeline
 src/data/pokemon/all_learnables.gen.json
 # END URANIUM PATHFINDER SLICE

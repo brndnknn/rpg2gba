@@ -83,7 +83,11 @@ _BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 _DEFINE_RE = re.compile(r"^\s*#\s*define\s+([A-Za-z_]\w*)(\()?")
 _GUARD_RE = re.compile(r"^GUARD_")
 _ENUM_BLOCK_RE = re.compile(r"\benum\b[^{;]*\{([^{}]*)\}", re.DOTALL)
-_ENUM_MEMBER_RE = re.compile(r"^\s*([A-Za-z_]\w*)")
+# An enum member is an identifier starting a line, then `=` or end of line. Read
+# per line, not per comma segment: a member-list macro on its own line (e.g. the
+# generated RPG2GBA_BERRY_ITEMS in constants/items.h) carries no comma, so the
+# member after it shares its segment.
+_ENUM_MEMBER_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*(?:=|$)", re.MULTILINE)
 
 # ---------------------------------------------------------------------------
 # Poryscript builtin/keyword surface (reference/guides/poryscript_cheatsheet.md).
@@ -219,9 +223,7 @@ def _extract_constants_from_header(text: str) -> set[str]:
 
     for block in _ENUM_BLOCK_RE.findall(text):
         for segment in block.split(","):
-            m = _ENUM_MEMBER_RE.match(segment)
-            if m:
-                names.add(m.group(1))
+            names.update(_ENUM_MEMBER_RE.findall(segment))
 
     return names
 
@@ -610,8 +612,15 @@ def registry_extra_symbols(
     species_manifest_path: Path | None = None,
     npc_gfx_map_path: Path | None = None,
     trainer_manifest_path: Path | None = None,
+    game_items: bool = False,
 ) -> set[str]:
     """Collect Uranium-minted symbols the gate should accept beyond the index.
+
+    - `game_items`: the `ITEM_*` constants `item_converter` generates into
+      gitignored engine headers (`item_converter.catalog.generated_constants`,
+      derived from `uranium_id_map.json` + `reference/item_rulings.json`). Every
+      real gate passes True: since the hand-typed Uranium items left the tracked
+      engine (2026-10-19), every game item reaches the engine this way.
 
     - `flag_state_path`: the flag registry's persistent state
       (`output/uranium-build/flag_state.json`) — all minted FLAG_*/VAR_* names.
@@ -653,6 +662,11 @@ def registry_extra_symbols(
     error.
     """
     extras: set[str] = set()
+
+    if game_items:
+        from rpg2gba.item_converter.catalog import generated_constants
+
+        extras |= generated_constants()
 
     if flag_state_path is not None:
         state = json.loads(flag_state_path.read_text(encoding="utf-8"))
@@ -772,7 +786,8 @@ def check(
 ) -> None:  # pragma: no cover
     """Run verify_script over one or more .pory files."""
     index = load_or_build()
-    extra_symbols = registry_extra_symbols(flag_state, map_constants, species_manifest)
+    extra_symbols = registry_extra_symbols(flag_state, map_constants, species_manifest,
+                                           game_items=True)
     if allow_flags_file is not None:
         extra_symbols |= set(json.loads(allow_flags_file.read_text(encoding="utf-8")))
 

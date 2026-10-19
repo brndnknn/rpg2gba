@@ -140,6 +140,7 @@ Every converter must be safely re-runnable from scratch. If running it twice pro
 | Act / chapter chain, tiers, map membership | `reference/chapters.json` (prose half: `reference/chapters/00-atlas.md`) |
 | Seam warp pairs (arrow-warp substitution for a connection whose maps can't share a tileset) | `reference/seam_warps.json` |
 | Which maps use the streaming tile engine (past 1024 tiles, no tile merge) | `reference/streamed_maps.json` |
+| How each game item the engine lacks is generated (kind, stock analog, blocked) | `reference/item_rulings.json` |
 
 Anything else that *uses* these reads from the source of truth. Nothing else *creates* them.
 
@@ -220,13 +221,14 @@ def find_by_name(name: str) -> Optional[Species]: ...
 
 ### C
 
-- C code lives in the **vendored engine** (`engine/`, pokeemerald-expansion) — in-repo now, not an external fork. Mark custom edits with sentinel fences so they're locatable against pristine upstream. The vocabulary is **six** strings, not one (corrected 2026-09-07; fifth added 2026-10-16, sixth 2026-10-19); pick the one matching the feature area:
+- C code lives in the **vendored engine** (`engine/`, pokeemerald-expansion) — in-repo now, not an external fork. Mark custom edits with sentinel fences so they're locatable against pristine upstream. The vocabulary is **seven** strings, not one (corrected 2026-09-07; fifth added 2026-10-16, sixth and seventh 2026-10-19); pick the one matching the feature area:
   - `URANIUM PATHFINDER SLICE` — the original slice work and most generated-content include-hooks
   - `URANIUM MAP WALKER` — the map-walker harness (NPC suppression, free movement)
   - `URANIUM EMBEDDED SAVE` — boot-continue instead of always-new-game
   - `RPG2GBA EVENT RANGE EXPANSION` — the expanded flag/var ranges
   - `RPG2GBA STREAMING` — the A1→A2 intermission's map-engine work: 11-bit metatile ids, and the streaming tile cache (`reference/streaming_prototype_plan.md`)
-  - `RPG2GBA GAME PROFILE` — hooks for the generated per-game profile that compiles out stock content the game doesn't use (`reference/engine_layers_i3_i5.md`; added 2026-10-19)
+  - `RPG2GBA GAME PROFILE` — hooks for generated per-game content and the profile that compiles out stock content the game doesn't use (`reference/engine_layers_i3_i5.md`; added 2026-10-19)
+  - `RPG2GBA ENGINE` — generic engine features any converted RPG Maker game wants, e.g. paging long bag descriptions (added 2026-10-19; the older generic features still carry `URANIUM PATHFINDER SLICE` until the I3 S6 relabel)
 
   Normal form is a `// BEGIN <sentinel> — why` / `// END <sentinel>` pair; a bare `// <sentinel>: …` opener with a matching `// END <sentinel>` also occurs in older edits. **A fence is a locator, not a revert script** — grep for the sentinels to find edits, but use `git diff 80cdfce2 HEAD -- engine/` (§3) as the authority on what is actually custom. Fenced-only reverts have historically missed unfenced one-line edits.
 - Follow the conventions of pokeemerald-expansion for any new code there: tabs, K&R-ish brace style, `g`-prefixed globals, `s`-prefixed statics

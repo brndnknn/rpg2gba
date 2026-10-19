@@ -439,3 +439,9 @@ const u8 gItemEffect_TamatoBerry[10] = {
     [6] = ITEM6_SUBTRACT_EV,
     EV_BERRY_FRIENDSHIP_CHANGE,
 };
+
+// BEGIN RPG2GBA GAME PROFILE — item effects composed for the converted game's items
+#if __has_include("../rpg2gba/item_effects.gen.h")
+#include "../rpg2gba/item_effects.gen.h"
+#endif
+// END RPG2GBA GAME PROFILE

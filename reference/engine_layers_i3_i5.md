@@ -256,6 +256,21 @@ Stages land in order. Each stage ends unit-green, and the CH08 suite runs from
 boot at the marked checkpoints. A stage that changes ids or the save layout
 says so.
 
+**Progress.**
+- **S1 DONE 2026-10-19** (`8daf81ad`): 12.15 MiB; CH08 passed 498/498.
+- **S2 DONE 2026-10-19:** 105 items generated, 5 blocked.
+  - Paging long bag descriptions on R was checked on the walk ROM by
+    screenshot.
+  - CH08 passed 498/498.
+- **S2 side effect:** fork-index enum parsing was fixed, so the parse is now per
+  line, not one identifier per comma segment.
+  - The old parse missed every enum member that followed an `#if` or a macro
+    line: hundreds of `CRY_*`, regional dex ids, and `ITEM_OVAL_CHARM`.
+  - Map050's reward rung 9 now emits a `giveitem` instead of an UNHANDLED
+    marker.
+  - The CH01 and CH08 manifests were regenerated; only the unhandled counts on
+    those rows changed.
+
 | Stage | What | Checkpoint |
 |---|---|---|
 | **S1** Species profile + layout stub + report | `species_converter/profile.py` maps every species to its family by parsing `species_info/gen_*_families.h`. The keep-list is the stock species in `uranium_id_map.json` (whole game), and every family outside it gets `#undef`/`#define FALSE` in the generated `include/config/rpg2gba_species_profile.gen.h`. One fenced `__has_include` hook goes at the end of `species_enabled.h`. The chapter assembler stubs stock layouts by default (`--keep-stock-maps` repacks them). A per-build report lists kept and dropped content plus ROM use. | CH08 from boot |

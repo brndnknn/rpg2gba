@@ -1505,16 +1505,6 @@ extern const u32 gItemIcon_KeeBerry[];
 extern const u16 gItemIconPalette_KeeBerry[];
 extern const u32 gItemIcon_MarangaBerry[];
 extern const u16 gItemIconPalette_MarangaBerry[];
-// URANIUM PATHFINDER SLICE: Uranium-original berries
-extern const u32 gItemIcon_AcaiBerry[];
-extern const u16 gItemIconPalette_AcaiBerry[];
-extern const u32 gItemIcon_BacuBerry[];
-extern const u16 gItemIconPalette_BacuBerry[];
-extern const u32 gItemIcon_CupuBerry[];
-extern const u16 gItemIconPalette_CupuBerry[];
-extern const u32 gItemIcon_GuaraBerry[];
-extern const u16 gItemIconPalette_GuaraBerry[];
-// END URANIUM PATHFINDER SLICE
 // TMs/HMs
 extern const u32 gItemIcon_TM[];
 extern const u32 gItemIcon_HM[];
@@ -1591,10 +1581,6 @@ extern const u32 gItemIcon_TownMap[];
 extern const u16 gItemIconPalette_TownMap[];
 extern const u32 gItemIcon_VsSeeker[];
 extern const u16 gItemIconPalette_VsSeeker[];
-// URANIUM PATHFINDER SLICE: Uranium-original key item
-extern const u32 gItemIcon_Sprinklotad[];
-extern const u16 gItemIconPalette_Sprinklotad[];
-// END URANIUM PATHFINDER SLICE
 extern const u32 gItemIcon_TMCase[];
 extern const u16 gItemIconPalette_TMCase[];
 extern const u32 gItemIcon_BerryPouch[];
@@ -1919,12 +1905,6 @@ extern const u32 gBerryPic_Jaboca[];
 extern const u32 gBerryPic_Rowap[];
 extern const u32 gBerryPic_Kee[];
 extern const u32 gBerryPic_Maranga[];
-// URANIUM PATHFINDER SLICE: Uranium-original berries
-extern const u32 gBerryPic_Acai[];
-extern const u32 gBerryPic_Bacu[];
-extern const u32 gBerryPic_Cupu[];
-extern const u32 gBerryPic_Guara[];
-// END URANIUM PATHFINDER SLICE
 extern const u16 gBerryPalette_Cheri[];
 extern const u16 gBerryPalette_Chesto[];
 extern const u16 gBerryPalette_Pecha[];
@@ -1992,12 +1972,6 @@ extern const u16 gBerryPalette_Jaboca[];
 extern const u16 gBerryPalette_Rowap[];
 extern const u16 gBerryPalette_Kee[];
 extern const u16 gBerryPalette_Maranga[];
-// URANIUM PATHFINDER SLICE: Uranium-original berries
-extern const u16 gBerryPalette_Acai[];
-extern const u16 gBerryPalette_Bacu[];
-extern const u16 gBerryPalette_Cupu[];
-extern const u16 gBerryPalette_Guara[];
-// END URANIUM PATHFINDER SLICE
 
 //PokéNav
 extern const u16 gPokenavCondition_Pal[];
@@ -3462,5 +3436,11 @@ extern const u16 gBattleIcons_Pal2[];
 
 extern const u32 gGhostFrontPic[];
 extern const u16 gGhostPalette[];
+
+// BEGIN RPG2GBA GAME PROFILE — icons and berry pics of the converted game's items
+#if __has_include("rpg2gba/item_graphics_externs.gen.h")
+#include "rpg2gba/item_graphics_externs.gen.h"
+#endif
+// END RPG2GBA GAME PROFILE
 
 #endif //GUARD_GRAPHICS_H

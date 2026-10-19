@@ -1621,106 +1621,11 @@ const struct Berry gBerries[] =
         .weedsBonus = 0,
         .pestsBonus = 0,
     },
-
-    // URANIUM PATHFINDER SLICE: Uranium-original berries. Growth values are
-    // from Uranium's own PField_BerryPlants growth table (3 hours/stage,
-    // 15 drying/hour, min yield 2, max yield 5) which matches the standard
-    // common-berry curve already used above by Cheri/Chesto/Rawst/Aspear
-    // (growthDuration 12h @ GEN_3 == 4 stages * 3h; drainRate 15;
-    // minYield/maxYield YIELD_RATE(2,2,4,4)/YIELD_RATE(3,5,15,20)), so the
-    // macro arguments are copied unchanged from those twins.
-    [ITEM_ACAI_BERRY - FIRST_BERRY_INDEX] =
-    {
-        .name = _("Acai"),
-        .firmness = BERRY_FIRMNESS_SOFT,
-        .color = BERRY_COLOR_PURPLE,
-        .size = 20,
-        .maxYield = YIELD_RATE(3, 5, 15, 20),
-        .minYield = YIELD_RATE(2, 2, 4, 4),
-        .description1 = COMPOUND_STRING("A Berry from the Tandor region."),
-        .description2 = COMPOUND_STRING("The deep purple Berry is very spicy."),
-        .growthDuration = GROWTH_DURATION(12, 12, 18, 24, 16, 24),
-        .spicy = 10,
-        .dry = 0,
-        .sweet = 0,
-        .bitter = 0,
-        .sour = 0,
-        .smoothness = 25,
-        .drainRate = 15,
-        .waterBonus = 10,
-        .weedsBonus = 2,
-        .pestsBonus = 6,
-    },
-
-    [ITEM_BACU_BERRY - FIRST_BERRY_INDEX] =
-    {
-        .name = _("Bacu"),
-        .firmness = BERRY_FIRMNESS_SUPER_HARD,
-        .color = BERRY_COLOR_GREEN,
-        .size = 80,
-        .maxYield = YIELD_RATE(3, 5, 15, 20),
-        .minYield = YIELD_RATE(2, 2, 4, 4),
-        .description1 = COMPOUND_STRING("A Berry from the Tandor region."),
-        .description2 = COMPOUND_STRING("The pale green Berry is very dry."),
-        .growthDuration = GROWTH_DURATION(12, 12, 18, 24, 16, 24),
-        .spicy = 0,
-        .dry = 10,
-        .sweet = 0,
-        .bitter = 0,
-        .sour = 0,
-        .smoothness = 25,
-        .drainRate = 15,
-        .waterBonus = 10,
-        .weedsBonus = 2,
-        .pestsBonus = 6,
-    },
-
-    [ITEM_CUPU_BERRY - FIRST_BERRY_INDEX] =
-    {
-        .name = _("Cupu"),
-        .firmness = BERRY_FIRMNESS_HARD,
-        .color = BERRY_COLOR_GREEN,
-        .size = 32,
-        .maxYield = YIELD_RATE(3, 5, 15, 20),
-        .minYield = YIELD_RATE(2, 2, 4, 4),
-        .description1 = COMPOUND_STRING("A Berry from the Tandor region."),
-        .description2 = COMPOUND_STRING("The green Berry is quite bitter."),
-        .growthDuration = GROWTH_DURATION(12, 12, 18, 24, 16, 24),
-        .spicy = 0,
-        .dry = 0,
-        .sweet = 0,
-        .bitter = 10,
-        .sour = 0,
-        .smoothness = 25,
-        .drainRate = 15,
-        .waterBonus = 10,
-        .weedsBonus = 2,
-        .pestsBonus = 6,
-    },
-
-    [ITEM_GUARA_BERRY - FIRST_BERRY_INDEX] =
-    {
-        .name = _("Guara"),
-        .firmness = BERRY_FIRMNESS_SUPER_HARD,
-        .color = BERRY_COLOR_RED,
-        .size = 50,
-        .maxYield = YIELD_RATE(3, 5, 15, 20),
-        .minYield = YIELD_RATE(2, 2, 4, 4),
-        .description1 = COMPOUND_STRING("A Berry from the Tandor region."),
-        .description2 = COMPOUND_STRING("The dark red Berry is very sour."),
-        .growthDuration = GROWTH_DURATION(12, 12, 18, 24, 16, 24),
-        .spicy = 0,
-        .dry = 0,
-        .sweet = 0,
-        .bitter = 0,
-        .sour = 10,
-        .smoothness = 25,
-        .drainRate = 15,
-        .waterBonus = 10,
-        .weedsBonus = 2,
-        .pestsBonus = 6,
-    },
-    // END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA GAME PROFILE — the converted game's generated berries
+#if __has_include("data/rpg2gba/berries.gen.h")
+#include "data/rpg2gba/berries.gen.h"
+#endif
+// END RPG2GBA GAME PROFILE
 };
 
 const struct BerryCrushBerryData gBerryCrush_BerryData[] = {
@@ -1792,14 +1697,11 @@ const struct BerryCrushBerryData gBerryCrush_BerryData[] = {
     [ITEM_KEE_BERRY - FIRST_BERRY_INDEX]             = {.difficulty = 160, .powder = 500},
     [ITEM_MARANGA_BERRY - FIRST_BERRY_INDEX]         = {.difficulty = 160, .powder = 500},
     [ITEM_ENIGMA_BERRY_E_READER - FIRST_BERRY_INDEX] = {.difficulty = 150, .powder = 200},
-
-    // URANIUM PATHFINDER SLICE: Uranium-original berries; same tier as their
-    // vanilla status-cure twins (Cheri/Chesto/Rawst/Aspear).
-    [ITEM_ACAI_BERRY - FIRST_BERRY_INDEX]            = {.difficulty =  50, .powder =  20},
-    [ITEM_BACU_BERRY - FIRST_BERRY_INDEX]            = {.difficulty =  50, .powder =  20},
-    [ITEM_CUPU_BERRY - FIRST_BERRY_INDEX]            = {.difficulty =  50, .powder =  20},
-    [ITEM_GUARA_BERRY - FIRST_BERRY_INDEX]           = {.difficulty =  50, .powder =  20},
-    // END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA GAME PROFILE — the converted game's generated berries
+#if __has_include("data/rpg2gba/berry_crush.gen.h")
+#include "data/rpg2gba/berry_crush.gen.h"
+#endif
+// END RPG2GBA GAME PROFILE
 };
 
 const struct BerryTree gBlankBerryTree = {};

@@ -1781,6 +1781,11 @@ const u32 gPokeblockFeedBg_Tilemap[] = INCBIN_U32("graphics/pokeblock/feeding_bg
 #include "data/graphics/berries.h"
 #include "data/graphics/rayquaza_scene.h"
 #include "data/graphics/items.h"
+// BEGIN RPG2GBA GAME PROFILE — icons and berry pics of the converted game's items
+#if __has_include("data/rpg2gba/item_graphics.gen.h")
+#include "data/rpg2gba/item_graphics.gen.h"
+#endif
+// END RPG2GBA GAME PROFILE
 #include "data/graphics/decorations.h"
 
 const u16 gBattleAnimSpritePal_Shock3[] = INCGFX_U16("graphics/battle_anims/sprites/shock_3.png", ".gbapal");

@@ -621,8 +621,12 @@ def transpile_corpus(
     # Forward check (CLAUDE.md §4.7) for resolve_native_object_template: the
     # id map is known to name ITEM_*_BERRY constants the fork doesn't
     # define (ACAI/HAFLI/GUARA/CUPU/BACU) — reuse the same ForkIndex the
-    # gate below builds rather than a second symbol-resolution pass.
-    ctx.fork_item_constants = frozenset(index.constants)
+    # gate below builds rather than a second symbol-resolution pass. The
+    # game's own items are generated into gitignored engine headers by the
+    # assembler (item_converter), so the git-tracked index can't see them.
+    from rpg2gba.item_converter.catalog import generated_constants
+
+    ctx.fork_item_constants = frozenset(index.constants) | generated_constants()
     overrides = hand_overrides.load_hand_overrides(overrides_dir)
 
     map_texts: dict[int, str] = {}
@@ -646,6 +650,7 @@ def transpile_corpus(
             # constants live in generated, gitignored headers the index can't see.
             _gfx_path if _gfx_path.is_file() else None,
             trainer_manifest_path if trainer_manifest_path.is_file() else None,
+            game_items=True,  # generated into gitignored headers (item_converter)
         )
         extras |= _registry_minted_names(registry)
         # HEAL_LOCATION_* for staged pbSetPokemonCenter sites: minted by
@@ -696,6 +701,7 @@ def transpile_corpus(
             # constants live in generated, gitignored headers the index can't see.
             _gfx_path if _gfx_path.is_file() else None,
             trainer_manifest_path if trainer_manifest_path.is_file() else None,
+            game_items=True,  # generated into gitignored headers (item_converter)
         )
         extras |= _registry_minted_names(registry)
         violations = fork_index.verify_script(ce_text, index, extra_symbols=extras)

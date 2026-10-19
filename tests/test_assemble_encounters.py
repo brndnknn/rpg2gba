@@ -226,6 +226,7 @@ def _stub_out_other_passes(monkeypatch) -> None:
     monkeypatch.setattr(ap, "run_ingame_trade_pass", lambda *a, **kw: None)
     monkeypatch.setattr(ap, "run_teachables_pass", lambda *a, **kw: None)
     monkeypatch.setattr(ap, "run_species_profile_pass", lambda *a, **kw: None)
+    monkeypatch.setattr(ap, "run_items_pass", lambda *a, **kw: None)
 
 
 def _prep_main_env(tmp_path: Path, monkeypatch) -> None:
@@ -248,7 +249,7 @@ def test_skip_encounters_flag_prevents_dispatch(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setattr(
         sys, "argv",
         ["assemble_pathfinder.py", "--dry-run", "--skip-graphics", "--skip-layout",
-         "--skip-species", "--skip-trainers", "--skip-encounters"],
+         "--skip-species", "--skip-trainers", "--skip-encounters", "--skip-items"],
     )
 
     rc = ap.main()
@@ -268,7 +269,7 @@ def test_encounters_pass_dispatched_by_default(tmp_path: Path, monkeypatch) -> N
     monkeypatch.setattr(
         sys, "argv",
         ["assemble_pathfinder.py", "--dry-run", "--skip-graphics", "--skip-layout",
-         "--skip-species", "--skip-trainers"],
+         "--skip-species", "--skip-trainers", "--skip-items"],
     )
 
     rc = ap.main()

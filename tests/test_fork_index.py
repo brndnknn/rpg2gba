@@ -536,3 +536,27 @@ def test_charmap_single_characters_are_not_indexed(index: fi.ForkIndex) -> None:
     typo'd single-letter symbol pass the gate."""
     for name in ("A", "B", "Z"):
         assert name not in index.constants
+
+
+def test_enum_member_after_a_member_list_macro_is_indexed() -> None:
+    """A member-list macro on its own line (the generated RPG2GBA_BERRY_ITEMS in
+    constants/items.h) carries no comma; the member after it must still count."""
+    names = fi._extract_constants_from_header(
+        "enum Item {\n"
+        "    ITEM_A = 1,\n"
+        "    RPG2GBA_BERRY_ITEMS\n"
+        "    LAST_BERRY_INDEX = ITEM_A + RPG2GBA_EXTRA_BERRIES,\n"
+        "    RPG2GBA_TAIL_ITEMS\n"
+        "    ITEMS_COUNT,\n"
+        "    RECURSIVELY(R_ZIP(ENUM_TM, X))\n"
+        "};\n"
+    )
+    assert {"ITEM_A", "LAST_BERRY_INDEX", "ITEMS_COUNT"} <= names
+    assert "RECURSIVELY" not in names  # a macro call, not a member
+
+
+def test_game_items_reach_the_gate_when_asked() -> None:
+    extras = fi.registry_extra_symbols(game_items=True)
+    assert "ITEM_MARIAS_KEY" in extras
+    assert "ITEM_HAFLI_BERRY" not in extras  # blocked in item_rulings.json
+    assert "ITEM_MARIAS_KEY" not in fi.registry_extra_symbols()

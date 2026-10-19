@@ -1,0 +1,52 @@
+{
+  "_doc": [
+    "How each Uranium item the engine lacks is generated (item_converter). Operator rulings, 2026-10-19 (reference/intermission_a1_a2.md section 3, 'S2 items rulings').",
+    "Keys are Uranium internal names. An item in Essentials pocket 8 with no entry here is a 'key' item; every other missing item must be listed, or generation fails loud.",
+    "kind: key = key item with no use; inert = bag item with no use; held = holdable item with no hold effect; berry = clone of `analog` in every berry table; heal = clone of `analog` with a composed HP-heal/status-cure effect; blocked = not generated (a script that grants it fails loud at conversion).",
+    "Behaviour follows Uranium's scripts, not its descriptions: items Uranium's battle code never checks are generated without effects."
+  ],
+  "version": 1,
+  "items": {
+    "LABKEY": {"kind": "key", "note": "Essentials pocket 5 but described as a key item"},
+    "ATOMBALL": {"kind": "blocked", "reason": "needs TYPE_NUCLEAR and a new ball"},
+    "NUCLEARBALL": {"kind": "blocked", "reason": "needs TYPE_NUCLEAR and a new ball"},
+    "HAFLIBERRY": {"kind": "blocked", "reason": "resists the Nuclear type; needs TYPE_NUCLEAR"},
+    "AIRMAIL": {"kind": "blocked", "reason": "mail ids are a fixed contiguous run (ITEM_TO_MAIL)"},
+    "URANIUMCORE": {"kind": "blocked", "reason": "toggles a species form; not built yet"},
+
+    "ACAIBERRY": {"kind": "berry", "analog": "ITEM_CHERI_BERRY"},
+    "BACUBERRY": {"kind": "berry", "analog": "ITEM_CHESTO_BERRY"},
+    "CUPUBERRY": {"kind": "berry", "analog": "ITEM_RAWST_BERRY"},
+    "GUARABERRY": {"kind": "berry", "analog": "ITEM_ASPEAR_BERRY"},
+
+    "COCONUTMILK": {"kind": "heal", "analog": "ITEM_FULL_RESTORE", "heal_hp": 50, "cure_status": true},
+    "CARROTWINE": {"kind": "heal", "analog": "ITEM_FULL_RESTORE", "heal_hp": 100, "cure_status": true},
+
+    "HAIRFOSSIL": {"kind": "inert"},
+    "TUSKFOSSIL": {"kind": "inert"},
+    "GOLDFOSSIL": {"kind": "inert"},
+
+    "JUNGLECROWN": {"kind": "held", "note": "described as a Fighting boost; Uranium's battle code never checks it"},
+    "MOSSSHARD": {"kind": "held", "note": "described as a Grass boost; never checked"},
+    "ICESHARD": {"kind": "held", "note": "described as an Ice boost; never checked"},
+    "PRETTYRIBBON": {"kind": "held", "note": "described as a Fairy boost; never checked"},
+    "AROMATICHERB": {"kind": "held", "note": "no script reference"},
+    "ROYALJELLY": {"kind": "held", "note": "species-specific evolution block deferred"},
+
+    "METALYNXITE": {"kind": "held", "note": "mega stone; inert until Uranium mega forms exist"},
+    "ARCHILLESITE": {"kind": "held", "note": "mega stone"},
+    "ELECTRUXOLITE": {"kind": "held", "note": "mega stone"},
+    "BAARIETTITE": {"kind": "held", "note": "mega stone"},
+    "DRILGANNITE": {"kind": "held", "note": "mega stone"},
+    "INFLAGETITE": {"kind": "held", "note": "mega stone"},
+    "DRAMSAMAITE": {"kind": "held", "note": "mega stone"},
+    "DARKDRAMSAMAITE": {"kind": "held", "note": "mega stone"},
+    "DAIKATUNAITE": {"kind": "held", "note": "mega stone"},
+    "SYRENTIDEITE": {"kind": "held", "note": "mega stone"},
+    "UNIDENTIFIEDFALLENOBJECT": {"kind": "held", "display_name": "Fallen Object", "note": "mega stone; one trainer's Pokemon holds it; name over the 20-char limit"},
+    "WHIMSICOTTITE": {"kind": "held", "note": "mega stone"},
+    "ARBOKITE": {"kind": "held", "note": "mega stone"},
+    "KIRICORNITE": {"kind": "held", "note": "mega stone"},
+    "OBLIVICORNITE": {"kind": "held", "note": "mega stone"}
+  }
+}

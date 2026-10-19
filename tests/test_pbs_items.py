@@ -106,8 +106,12 @@ def test_edge_uranium_item_needs_engine(
 def test_edge_bike_wheel_resolves_against_fork(
     uranium_data: Path, reference_dir: Path, fork_path: Path | None
 ) -> None:
-    """BIKEWHEEL (id 523) -> ITEM_BIKE_WHEEL, now staged in the fork (map 73
-    bike-wheel-for-Bicycle trade, section 4.7 forward gate)."""
+    """BIKEWHEEL (id 523) -> ITEM_BIKE_WHEEL (map 73 bike-wheel-for-Bicycle
+    trade). The tracked engine header no longer defines it (the hand-typed
+    Uranium items left it 2026-10-19); it stays in needs_engine and reaches the
+    engine through item_converter instead."""
+    from rpg2gba.item_converter.catalog import generated_constants
+
     if fork_path is None:
         pytest.skip("RPG2GBA_POKEEMERALD not set; can't validate against the fork")
     parsed, resolver = _build(uranium_data, reference_dir)
@@ -115,9 +119,8 @@ def test_edge_bike_wheel_resolves_against_fork(
     assert resolver.constant(bike_wheel.id) == "ITEM_BIKE_WHEEL"
     assert bike_wheel.pocket == items._KEY_ITEMS_POCKET
     assert bike_wheel.price == 0
-    assert "ITEM_BIKE_WHEEL" not in resolver.id_map.needs_engine["items"], (
-        "ITEM_BIKE_WHEEL should now be defined in the fork's constants/items.h"
-    )
+    assert "ITEM_BIKE_WHEEL" in resolver.id_map.needs_engine["items"]
+    assert "ITEM_BIKE_WHEEL" in generated_constants()
 
     c_text = items.emit_items_info(parsed, resolver)
     entry = _entry(c_text, "ITEM_BIKE_WHEEL")

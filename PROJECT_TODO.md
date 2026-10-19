@@ -1873,6 +1873,20 @@ checking then whether any other page-3-style postgame page hides the same shape.
 
 *(2026-10-04: still open. Moved back from the Done section, where it sat by position only.)*
 
+**2026-10-19: resolved by I3 S2 on `intermission-engine-layers`, apart from 5
+blocked items** (`reference/engine_layers_i3_i5.md` §8).
+- **How:** `item_converter` generates every missing item into gitignored engine
+  headers.
+  - Berries continue the berry run.
+  - Everything else follows the last stock item.
+  - Behaviour comes from `reference/item_rulings.json`.
+- **Hand edits removed:** the hand-typed berries and key items are gone from the
+  tracked engine, along with their 14 Uranium-art files.
+- **Still blocked:** Hafli Berry, Atom Ball, Nuclear Ball (all need the Nuclear
+  type), Air Mail (the mail id run) and Uranium Core (the form toggle).
+- **Behaviour deferred:** the field-use gadgets (#143, Boxing Gloves and the
+  others), mega forms and the Royal Jelly evolution block are inert for now.
+
 *Filed 2026-08-19 out of `CH03_TODO.md` #27, where it was surfaced by CH03's
 item-grant fix. Not chapter-blocking; it will keep surfacing one chapter at a
 time until it is done properly.*
@@ -1914,7 +1928,9 @@ is the success path. 152 sites / 56 maps corpus-wide.
 `43aa482e` handles the common case — an **empty** then-body, i.e. a pure
 side-effect wrapper — by emitting `giveitem`. **60 sites with a non-empty
 then-body still queue**, most of them on items the fork does not define (#41),
-which is why the two want planning together.
+which is why the two want planning together. *(2026-10-19: #41's items now exist
+in the engine, generated, so this count should drop at the next corpus
+transpile. Re-measure before planning.)*
 
 Do **not** approximate the success path. Emerald's `giveitem` already sets
 `VAR_RESULT`, so the faithful mapping is plausible and cheap to verify against

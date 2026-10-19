@@ -351,7 +351,11 @@ def _regenerate_map_json(
     # separate legacy pointer used elsewhere for the pre-cutover external
     # clone, see CLAUDE.md §3 "The vendored engine"). Same index every other
     # forward-check call site in this codebase builds on.
-    fork_constants = fork_index.load_or_build().constants
+    # Plus the game's own items, generated into gitignored engine headers by
+    # the assembler (item_converter) and so absent from the tracked index.
+    from rpg2gba.item_converter.catalog import generated_constants
+
+    fork_constants = set(fork_index.load_or_build().constants) | generated_constants()
     # Overland seams (§5.4). The frontier rule lives inside
     # build_slice_connections: a seam emits only when BOTH endpoints are in the
     # build set, so a seam pointing at an unstaged map (Route 2's north edge to

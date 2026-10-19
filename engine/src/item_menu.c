@@ -580,6 +580,7 @@ static EWRAM_DATA struct ListBuffer1 *sListBuffer1 = 0;
 static EWRAM_DATA struct ListBuffer2 *sListBuffer2 = 0;
 EWRAM_DATA u16 gSpecialVar_ItemId = 0;
 static EWRAM_DATA struct TempWallyBag *sTempWallyBag = 0;
+static EWRAM_DATA u8 sDescriptionPage = 0; // RPG2GBA ENGINE: page of a long item description
 
 void ResetBagScrollPositions(void)
 {
@@ -979,6 +980,7 @@ static void BagMenu_MoveCursorCallback(s32 itemIndex, bool8 onInit, struct ListM
         else
            AddBagItemIconSprite(ITEM_LIST_END, gBagMenu->itemIconSlot);
         gBagMenu->itemIconSlot ^= 1;
+        sDescriptionPage = 0; // RPG2GBA ENGINE: a new item starts on its first page
         if (!gBagMenu->inhibitItemDescriptionPrint)
             PrintItemDescription(itemIndex);
     }
@@ -1022,12 +1024,71 @@ static void BagMenu_ItemPrintCallback(u8 windowId, u32 itemIndex, u8 y)
     }
 }
 
+// BEGIN RPG2GBA ENGINE — page item descriptions longer than the 3-line box.
+// Converted games (RPG Maker / Essentials) write longer item text than Emerald;
+// R shows the next 3 lines, wrapping back to the first page. A description of
+// 3 lines or fewer (every stock one) prints exactly as before.
+#define DESCRIPTION_PAGE_LINES 3
+static const u8 sText_DescriptionMorePages[] = _("{R_BUTTON}");
+
+static u8 CountDescriptionPages(const u8 *str)
+{
+    u32 lines = 1;
+
+    for (; *str != EOS; str++)
+    {
+        if (*str == CHAR_NEWLINE)
+            lines++;
+    }
+    return (lines + DESCRIPTION_PAGE_LINES - 1) / DESCRIPTION_PAGE_LINES;
+}
+
+static void CopyDescriptionPage(u8 *dest, const u8 *str, u8 page)
+{
+    u32 line = 0;
+    u32 first = page * DESCRIPTION_PAGE_LINES;
+
+    for (; *str != EOS; str++)
+    {
+        if (*str == CHAR_NEWLINE)
+        {
+            line++;
+            if (line == first + DESCRIPTION_PAGE_LINES)
+                break;
+            if (line <= first)
+                continue;
+        }
+        if (line >= first)
+            *dest++ = *str;
+    }
+    *dest = EOS;
+}
+
+static bool8 ItemDescriptionHasPages(int itemIndex)
+{
+    if (itemIndex >= gBagMenu->numItemStacks[gBagPosition.pocket] - 1)
+        return FALSE; // the Cancel row
+    return CountDescriptionPages(GetItemDescription(GetBagItemId(gBagPosition.pocket, itemIndex))) > 1;
+}
+// END RPG2GBA ENGINE
+
 static void PrintItemDescription(int itemIndex)
 {
     const u8 *str;
+    u8 pages = 1; // RPG2GBA ENGINE
     if (itemIndex != LIST_CANCEL)
     {
         str = GetItemDescription(GetBagItemId(gBagPosition.pocket, itemIndex));
+        // BEGIN RPG2GBA ENGINE — print one page of a long description
+        pages = CountDescriptionPages(str);
+        if (pages > 1)
+        {
+            if (sDescriptionPage >= pages)
+                sDescriptionPage = 0;
+            CopyDescriptionPage(gStringVar4, str, sDescriptionPage);
+            str = gStringVar4;
+        }
+        // END RPG2GBA ENGINE
     }
     else
     {
@@ -1038,6 +1099,10 @@ static void PrintItemDescription(int itemIndex)
     }
     FillWindowPixelBuffer(WIN_DESCRIPTION, PIXEL_FILL(0));
     BagMenu_Print(WIN_DESCRIPTION, FONT_NORMAL, str, 3, 1, 0, 0, 0, COLORID_NORMAL);
+    // BEGIN RPG2GBA ENGINE — "press R" mark in the corner the paged wrap leaves free
+    if (pages > 1)
+        BagMenu_Print(WIN_DESCRIPTION, FONT_NORMAL, sText_DescriptionMorePages, 96, 33, 0, 0, 0, COLORID_NORMAL);
+    // END RPG2GBA ENGINE
 }
 
 static void BagMenu_PrintCursor(u8 listTaskId, u8 colorIndex)
@@ -1313,6 +1378,16 @@ static void Task_BagMenu_HandleInput(u8 taskId)
                     return;
                 }
             }
+            // BEGIN RPG2GBA ENGINE — R pages a long description (in the LR button
+            // mode R already switched pocket above, as in stock)
+            else if (JOY_NEW(R_BUTTON) && ItemDescriptionHasPages(GetItemListPosition(gBagPosition.pocket)))
+            {
+                PlaySE(SE_SELECT);
+                sDescriptionPage++;
+                PrintItemDescription(GetItemListPosition(gBagPosition.pocket));
+                return;
+            }
+            // END RPG2GBA ENGINE
             break;
         }
 

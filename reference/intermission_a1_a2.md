@@ -827,6 +827,45 @@ nothing in §1 touches.
   - **Canon species art:** use **Uranium's sprites** with the **stock cries**.
     - Their families stay enabled.
     - The generator overrides their graphics.
+  - **S2 items rulings (operator, 2026-10-19):**
+    - Uranium's berries are generated **at the end of the berry run**, through a
+      fenced hook in the item enum. Every other generated item goes at the end
+      of the list. This amends "items at the end", because the engine indexes
+      berries by id arithmetic.
+    - Stock items carry explicit numbers from TM01 to the end of the list, so
+      ids do *not* shift by themselves. The ruling (A1) is a one-time
+      mechanical edit: those ~290 values get `+ RPG2GBA_EXTRA_BERRIES`, which is
+      0 on a stock build and set by the generated header. A compile-time check
+      that `ITEM_TM01 == LAST_BERRY_INDEX + 1` guards upgrades.
+    - The 14 Uranium-derived art files committed in `67fd0435` are removed
+      from the tracked tree and generated from the Uranium source instead.
+      History is not rewritten.
+    - Hafli Berry, Atom Ball, Nuclear Ball (all need the Nuclear type), Air
+      Mail (mail id run) and Uranium Core (form toggle) are left out, and fail
+      loud if a script grants them.
+    - **Long descriptions.** 77 of the 110 don't fit the bag's 3-line box. The
+      bag gets a generic engine change: **R pages** a description that runs
+      past 3 lines, wrapping back to the first page, with an indicator when
+      there is more.
+      - Stock descriptions are all 3 lines or fewer, so stock behaviour is
+        unchanged.
+      - Stock never paged descriptions at all; `PrintItemDescription` draws
+        once.
+    - **"Unidentified Fallen Object"** (26 characters, over the 20-character
+      limit) is displayed as **"Fallen Object"**. It must exist because one
+      Uranium trainer's Pokémon holds it (`trainers.json`), and Uranium's
+      scripts treat it as a mega stone.
+    - **Behaviour follows Uranium's own scripts, not its descriptions.**
+      - Jungle's Crown, Moss Shard, Ice Shard, Pretty Ribbon and Aromatic Herb
+        are never checked by Uranium's battle code, so they're generated as
+        inert held items.
+      - The Mega Bracelet is a key item; Uranium gates Mega Evolution on a
+        global flag.
+      - The mega stones are inert until Uranium's mega forms exist.
+      - Royal Jelly's species-specific evolution block is deferred.
+      - Coconut Milk and Carrot Wine heal 50 and 100 HP respectively, plus a
+        full status cure, built from engine item-effect data.
+      - The 4 berries clone Cheri, Chesto, Rawst and Aspear.
   - **Defaults accepted:**
     - stubbing is the species profile plus stock layouts only;
     - the debug build stays;
