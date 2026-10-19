@@ -1053,6 +1053,29 @@ def _resolve_batch_layout_entries(
     return [by_layout_const[lid] for lid in expected_ids]
 
 
+# ---------------------------------------------------------------------------
+# S8b8: Per-game species profile (reference/engine_layers_i3_i5.md §8 S1)
+# ---------------------------------------------------------------------------
+
+def run_species_profile_pass(out: Path, fork: Path, dry_run: bool) -> None:
+    """Compile out every stock species family the game never uses.
+
+    `species_converter.profile` derives the keep-list from the whole game's
+    `uranium_id_map.json` (not the built chapters), writes
+    `out/species/rpg2gba_species_profile.gen.h`, and this pass copies it into
+    `fork/include/config/` (gitignored), where the fenced hook at the end of
+    `species_enabled.h` picks it up. Cheap and independent of the species
+    staging pass, so it always runs."""
+    logger.info("=== S8b8: species profile ===")
+    from rpg2gba.species_converter import common as species_common
+    from rpg2gba.species_converter import profile as species_profile
+
+    species_dir = out / species_common.SPECIES_OUT_SUBDIR
+    species_profile.write_profile(fork, species_dir)
+    name = species_profile.PROFILE_HEADER
+    _copy(species_dir / name, fork / species_profile.PROFILE_DEST / name, name, dry_run)
+
+
 def prune_stale_map_dirs(fork: Path, built_dirs: frozenset[str], dry_run: bool) -> list[str]:
     """Remove generated `data/maps/<Dir>/` left by an earlier build whose map
     has since left the slice. `map_data_rules.mk` discovers every per-map
@@ -1088,8 +1111,12 @@ def run_fork_pass(
     staging: Path,
     dry_run: bool,
     batch_layouts: list[dict] | None = None,
+    keep_stock_maps: bool = False,
 ) -> None:
-    """`batch_layouts` is THIS batch's layout entries, normally threaded straight
+    """`keep_stock_maps` repacks the stock Emerald layouts into the ROM instead
+    of stubbing them (the default drops them, ~0.65 MB).
+
+    `batch_layouts` is THIS batch's layout entries, normally threaded straight
     from `run_layout_pass`'s return value. When None (S8b was skipped via
     --skip-layout, so this run never produced its own batch), the cumulative
     `staging/layouts/layouts.json` is filtered down to just the current
@@ -1242,9 +1269,16 @@ def run_fork_pass(
     )
 
     from rpg2gba.tileset_converter.layout import append_layouts, repack_stock_layouts
+    from rpg2gba.tileset_converter.phase5 import _stub_stock_layout_bins
     if not dry_run:
         shutil.copy2(pristine_layouts_json, gen_layouts_json)  # full upstream manifest
-        repack_stock_layouts(fork, gen_layouts_json)          # stock bins -> 11-bit ids
+        if keep_stock_maps:
+            repack_stock_layouts(fork, gen_layouts_json)      # stock bins -> 11-bit ids
+        else:
+            # Stock maps are never loaded in a converted game: point every stock
+            # layout at a 2-byte stub, keeping each MAP_*/LAYOUT_* constant and
+            # gMapLayouts[] slot (reference/engine_layers_i3_i5.md §8 S1).
+            _stub_stock_layout_bins(fork, gen_layouts_json)
         append_layouts(entries, gen_layouts_json)             # + slice layouts
         logger.info("  wrote %s (+%d slice layouts)", _GEN_LAYOUTS, len(entries))
     else:
@@ -1538,6 +1572,8 @@ def main() -> int:
                     help="Skip S8b5b (NPC in-game trade rows already staged).")
     ap.add_argument("--skip-teachables", action="store_true",
                     help="Skip S8b7 (teachable-learnset overlay already staged).")
+    ap.add_argument("--keep-stock-maps", action="store_true",
+                    help="Ship the stock Emerald map layouts (repacked) instead of stubbing them.")
     args = ap.parse_args()
 
     repo_root = Path(__file__).parent.parent
@@ -1596,7 +1632,10 @@ def main() -> int:
     if not args.skip_teachables:
         run_teachables_pass(out, fork, args.dry_run)
 
-    run_fork_pass(out, fork, consts, staging, args.dry_run, batch_layouts=batch_layouts)
+    run_species_profile_pass(out, fork, args.dry_run)
+
+    run_fork_pass(out, fork, consts, staging, args.dry_run, batch_layouts=batch_layouts,
+                  keep_stock_maps=args.keep_stock_maps)
     run_berry_tree_pass(out, fork, args.dry_run)
 
     # Split-map sibling table for the map-name popup check (rpg2gba.map_split).

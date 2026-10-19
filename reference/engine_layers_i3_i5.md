@@ -241,3 +241,27 @@ Making the *pipeline* game-agnostic is its own question.
    after CH09 opens?
 6. **Release ROM:** should a shipped Uranium ROM show a title screen, and its
    own intro? That decides how the intro skip is gated.
+
+*Answers (2026-10-19, `intermission_a1_a2.md` §3):*
+1. B.
+2. Uranium's sprites, stock cries.
+3. Leave them linked (the default; not raised).
+4. Yes.
+5. Ran 2026-10-19 (ledger §4a).
+6. Still open; for now the intro skip goes behind the harness switch.
+
+## 8. Build-out plan (branch `intermission-engine-layers`)
+
+Stages land in order. Each stage ends unit-green, and the CH08 suite runs from
+boot at the marked checkpoints. A stage that changes ids or the save layout
+says so.
+
+| Stage | What | Checkpoint |
+|---|---|---|
+| **S1** Species profile + layout stub + report | `species_converter/profile.py` maps every species to its family by parsing `species_info/gen_*_families.h`. The keep-list is the stock species in `uranium_id_map.json` (whole game), and every family outside it gets `#undef`/`#define FALSE` in the generated `include/config/rpg2gba_species_profile.gen.h`. One fenced `__has_include` hook goes at the end of `species_enabled.h`. The chapter assembler stubs stock layouts by default (`--keep-stock-maps` repacks them). A per-build report lists kept and dropped content plus ROM use. | CH08 from boot |
+| **S2** Items (#41) | Revert the mid-enum insertion in `constants/items.h` and the hand-typed item, berry and art edits. A generator emits every Uranium item the engine lacks, appended after stock: constants, `gItemsInfo` rows, icons, berry data. Effects take the closest stock effect, and novel effects fail loud to an operator list. **Item ids change.** | CH08 from boot |
+| **S3** Moves (#35) + abilities | The generator appends Uranium-original moves and abilities. Moves needing the Nuclear type stay queued, fail-loud. | pytest + CH08 |
+| **S4** Other hand facts | HM badge gates, new-game spawn, heal point and name, starter multichoice, white-out flag, census-derived sizes (flag/var regions, trainer capacity). Each becomes a hook plus generated data. **Save layout may change.** | CH08 from boot |
+| **S5** Canon species sprites | Uranium's battler and icon art for the 35 canon species, overriding stock graphics. Stock cries stay. | by-eye check + CH08 |
+| **S6** Relabel | Mechanism, fence and generated-file names become `RPG2GBA_*`. The intro and truck skips go behind the harness switch. `RPG2GBA_VENDOR.md` gets corrected. | pytest + CH08 |
+| **S7** Gate | Full pytest; CH08 from boot; no hand-typed facts left; kept/dropped report; operator walk | operator |

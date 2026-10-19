@@ -220,12 +220,13 @@ def find_by_name(name: str) -> Optional[Species]: ...
 
 ### C
 
-- C code lives in the **vendored engine** (`engine/`, pokeemerald-expansion) — in-repo now, not an external fork. Mark custom edits with sentinel fences so they're locatable against pristine upstream. The vocabulary is **five** strings, not one (corrected 2026-09-07; fifth added 2026-10-16); pick the one matching the feature area:
+- C code lives in the **vendored engine** (`engine/`, pokeemerald-expansion) — in-repo now, not an external fork. Mark custom edits with sentinel fences so they're locatable against pristine upstream. The vocabulary is **six** strings, not one (corrected 2026-09-07; fifth added 2026-10-16, sixth 2026-10-19); pick the one matching the feature area:
   - `URANIUM PATHFINDER SLICE` — the original slice work and most generated-content include-hooks
   - `URANIUM MAP WALKER` — the map-walker harness (NPC suppression, free movement)
   - `URANIUM EMBEDDED SAVE` — boot-continue instead of always-new-game
   - `RPG2GBA EVENT RANGE EXPANSION` — the expanded flag/var ranges
   - `RPG2GBA STREAMING` — the A1→A2 intermission's map-engine work: 11-bit metatile ids, and the streaming tile cache (`reference/streaming_prototype_plan.md`)
+  - `RPG2GBA GAME PROFILE` — hooks for the generated per-game profile that compiles out stock content the game doesn't use (`reference/engine_layers_i3_i5.md`; added 2026-10-19)
 
   Normal form is a `// BEGIN <sentinel> — why` / `// END <sentinel>` pair; a bare `// <sentinel>: …` opener with a matching `// END <sentinel>` also occurs in older edits. **A fence is a locator, not a revert script** — grep for the sentinels to find edits, but use `git diff 80cdfce2 HEAD -- engine/` (§3) as the authority on what is actually custom. Fenced-only reverts have historically missed unfenced one-line edits.
 - Follow the conventions of pokeemerald-expansion for any new code there: tabs, K&R-ish brace style, `g`-prefixed globals, `s`-prefixed statics

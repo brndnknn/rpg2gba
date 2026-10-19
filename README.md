@@ -24,7 +24,11 @@ python -m rpg2gba.chapter_manifest check    --chapter CHnn
 generate` after `beat_gen generate`, then `check` — `PROJECT_TODO.md` #124, done 2026-10-04.)*
 
 Then the build/assembly steps (transpile, stage, art, assemble, `make modern`) as named in
-`BUILD_PLAN.md` §2 steps 2–6 — not repeated here. Then generate the playtest suite and boot:
+`BUILD_PLAN.md` §2 steps 2–6 — not repeated here. The assembler compiles out every stock
+species family the game never uses and stubs the stock map layouts (`--keep-stock-maps` keeps
+them). After `make modern`, `python -m rpg2gba.build_report` writes
+`output/uranium-build/rom_report.md`: ROM use and what stock content was kept or dropped.
+Then generate the playtest suite and boot:
 
 ```
 python -m rpg2gba.beat_gen generate --chapter CHnn
