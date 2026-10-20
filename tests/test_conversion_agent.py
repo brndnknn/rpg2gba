@@ -400,17 +400,54 @@ def test_load_rpg2gba_capacities_happy_path_parses_hex(tmp_path: Path) -> None:
     }
 
 
+_FALLBACK_CAPS = {
+    "flags": 0x180,
+    "vars": 0x100,
+    "selfswitches": 0x500,
+    "tempswitches": 0x180,
+}
+
+
+def test_load_rpg2gba_capacities_generated_sizes_win(tmp_path: Path) -> None:
+    cfg = tmp_path / "include" / "config"
+    cfg.mkdir(parents=True)
+    (cfg / "rpg2gba.h").write_text(
+        "#define RPG2GBA_EXPAND_EVENT_RANGES TRUE\n"
+        "#ifndef RPG2GBA_TEMP_FLAGS_COUNT\n#define RPG2GBA_TEMP_FLAGS_COUNT 0x180\n#endif\n"
+        "#ifndef RPG2GBA_GLOBAL_FLAGS_COUNT\n#define RPG2GBA_GLOBAL_FLAGS_COUNT 0x180\n#endif\n"
+        "#ifndef RPG2GBA_SELFSWITCH_FLAGS_COUNT\n#define RPG2GBA_SELFSWITCH_FLAGS_COUNT 0x500\n#endif\n"
+        "#ifndef RPG2GBA_VARS_COUNT\n#define RPG2GBA_VARS_COUNT 0x100\n#endif\n",
+        encoding="utf-8",
+    )
+    # Without the generated header: the fallbacks.
+    assert assemble_pathfinder._load_rpg2gba_capacities(tmp_path) == _FALLBACK_CAPS
+    (cfg / "rpg2gba_sizes.gen.h").write_text(
+        "#define RPG2GBA_TEMP_FLAGS_COUNT       352\n"
+        "#define RPG2GBA_GLOBAL_FLAGS_COUNT     208\n"
+        "#define RPG2GBA_SELFSWITCH_FLAGS_COUNT 1432\n"
+        "#define RPG2GBA_VARS_COUNT             120\n",
+        encoding="utf-8",
+    )
+    assert assemble_pathfinder._load_rpg2gba_capacities(tmp_path) == {
+        "flags": 208,
+        "vars": 120,
+        "selfswitches": 1432,
+        "tempswitches": 352,
+    }
+
+
 def test_load_rpg2gba_capacities_real_vendored_header() -> None:
     header = REPO_ROOT / "engine" / "include" / "config" / "rpg2gba.h"
     if not header.is_file():
         pytest.skip("engine/include/config/rpg2gba.h not present (partial clone)")
     caps = assemble_pathfinder._load_rpg2gba_capacities(REPO_ROOT / "engine")
-    assert caps == {
-        "flags": 0x180,
-        "vars": 0x100,
-        "selfswitches": 0x500,
-        "tempswitches": 0x180,
-    }
+    gen = REPO_ROOT / "engine" / "include" / "config" / "rpg2gba_sizes.gen.h"
+    if gen.is_file():
+        # A census has been installed: the generated values win, byte-aligned.
+        assert set(caps) == set(_FALLBACK_CAPS)
+        assert all(v > 0 and (v % 8 == 0) for v in caps.values())
+    else:
+        assert caps == _FALLBACK_CAPS
 
 
 # ----------------------------------------------------------------------------

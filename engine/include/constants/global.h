@@ -1,6 +1,13 @@
 #ifndef GUARD_CONSTANTS_GLOBAL_H
 #define GUARD_CONSTANTS_GLOBAL_H
 
+// BEGIN RPG2GBA GAME PROFILE — generated bag/secret-base sizes (plain #defines only,
+// so safe this early). Absent on a stock build.
+#if __has_include("constants/rpg2gba_bag.gen.h")
+#include "constants/rpg2gba_bag.gen.h"
+#endif
+// END RPG2GBA GAME PROFILE
+
 // You can use the ENABLED_ON_RELEASE and DISABLED_ON_RELEASE macros to
 // control whether a feature is enabled or disabled when making a release build.
 //
@@ -92,7 +99,14 @@ enum Language
 #define POKEBLOCKS_COUNT 40
 #define OBJECT_EVENTS_COUNT 16
 #define MAIL_COUNT (10 + PARTY_SIZE)
+// BEGIN RPG2GBA GAME PROFILE — secret-base capacity is a per-game profile value
+// (a game with no secret bases frees 160 bytes per entry in SaveBlock1).
+#ifdef RPG2GBA_SECRET_BASES_COUNT
+#define SECRET_BASES_COUNT RPG2GBA_SECRET_BASES_COUNT
+#else
 #define SECRET_BASES_COUNT 20
+#endif
+// END RPG2GBA GAME PROFILE
 #define POKE_NEWS_COUNT 16
 #define PC_ITEMS_COUNT 50
 #define OBJECT_EVENT_TEMPLATES_COUNT 64
@@ -110,9 +124,20 @@ enum Language
 
 // Bag constants
 #define BAG_ITEMS_COUNT 30
+// BEGIN RPG2GBA GAME PROFILE — key-item and TM/HM pockets sized to the game's own
+// item kinds (generated; never below stock).
+#ifdef RPG2GBA_BAG_KEYITEMS_COUNT
+#define BAG_KEYITEMS_COUNT RPG2GBA_BAG_KEYITEMS_COUNT
+#else
 #define BAG_KEYITEMS_COUNT 30
+#endif
 #define BAG_POKEBALLS_COUNT 16
+#ifdef RPG2GBA_BAG_TMHM_COUNT
+#define BAG_TMHM_COUNT RPG2GBA_BAG_TMHM_COUNT
+#else
 #define BAG_TMHM_COUNT 64
+#endif
+// END RPG2GBA GAME PROFILE
 #define BAG_BERRIES_COUNT 46
 
 // Number of facilities for Ranking Hall.

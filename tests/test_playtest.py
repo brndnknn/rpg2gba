@@ -557,6 +557,10 @@ class _FakeWalkEmu:
         from rpg2gba.playtest.emulator import Emulator
         return Emulator._require_same_map(self, *args, **kwargs)
 
+    def _battle_init_owns_main_loop(self) -> bool:
+        from rpg2gba.playtest.emulator import Emulator
+        return Emulator._battle_init_owns_main_loop(self)
+
 
 needs_mgba = pytest.mark.skipif(
     importlib.util.find_spec("mgba") is None,

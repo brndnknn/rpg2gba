@@ -185,6 +185,14 @@ loud when mints exceed a region. Flag-region counts must stay multiples of 8
 (byte-aligned memset). Sizing census 2026-07-10: 345 temp switches, 235 global
 switches, 1132 self-switches, 119 vars corpus-wide.
 
+*(Corrected 2026-10-20, I3 S4: the capacities are now **generated** by
+`rpg2gba.game_profile.census` into `include/config/rpg2gba_sizes.gen.h`, which
+`config/rpg2gba.h` includes first; its literals are stock-build fallbacks.
+`_load_rpg2gba_capacities` and `rematch.load_fork_facts` read the generated
+header first. The census also sizes trainer capacity in `constants/opponents.h`.
+The 2026-07-10 "235 global switches" counted 34 `s:` script switches the
+registry never mints; real demand is 201.)*
+
 ---
 
 ## 3. Tier 3 — Sentinel fence ledger

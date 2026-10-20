@@ -168,10 +168,6 @@
 #define MULTI_EGGS_VICTORIES_QUIT                        157
 #define MULTI_HOF_EGGS_VICTORIES_QUIT                    158
 
-// BEGIN URANIUM PATHFINDER SLICE — rpg2gba custom multichoice (see engine/RPG2GBA_VENDOR.md).
-#define MULTI_URANIUM_STARTER_PICK                       159
-// END URANIUM PATHFINDER SLICE
-
 #define MULTI_NONE 255
 
 // Lilycove SS Tidal Multichoice Selections

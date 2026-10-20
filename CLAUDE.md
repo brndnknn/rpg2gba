@@ -142,6 +142,7 @@ Every converter must be safely re-runnable from scratch. If running it twice pro
 | Which maps use the streaming tile engine (past 1024 tiles, no tile merge) | `reference/streamed_maps.json` |
 | How each game item the engine lacks is generated (kind, stock analog, blocked) | `reference/item_rulings.json` |
 | How each game move / ability the engine lacks is generated (effect, animation, blocked, inert), and machine placeholders | `reference/battle_rulings.json` |
+| Engine flag/var region sizes and trainer capacity (save layout) | `src/rpg2gba/game_profile/census.py` (whole-corpus census → `rpg2gba_sizes.gen.h`; the literals in `config/rpg2gba.h` are stock-build fallbacks only) |
 
 Anything else that *uses* these reads from the source of truth. Nothing else *creates* them.
 

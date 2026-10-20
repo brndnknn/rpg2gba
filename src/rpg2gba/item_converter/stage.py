@@ -13,7 +13,7 @@ from pathlib import Path
 from rpg2gba.species_converter.stage import load_charmap_chars
 from rpg2gba.text_validator.engine_metrics import load_charmap
 
-from . import art, emit
+from . import art, bag, emit
 from .catalog import Catalog, build_catalog
 
 logger = logging.getLogger(__name__)
@@ -63,6 +63,7 @@ def write_all(uranium_src: Path, fork: Path, out_dir: Path) -> Catalog:
 
     externs, definitions = emit.render_graphics(cat, has_icon)
     _write(root, CONSTANTS_H, emit.render_constants(cat))
+    _write(root, bag.BAG_H, bag.render_for_game(uranium_src))
     _write(root, EXTERNS_H, externs)
     _write(root, GEN_SRC / "item_graphics.gen.h", definitions)
     _write(root, GEN_SRC / "items_info.gen.h",

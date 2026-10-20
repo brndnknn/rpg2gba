@@ -123,6 +123,7 @@ from typing import Literal
 
 from rpg2gba.chapter_manifest.schema import page_row_id
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
+from rpg2gba.game_profile.settings import BADGE_CONSTANTS, badge_requirements, parse_settings
 from rpg2gba.map_split.spec import expand_split_ids
 
 logger = logging.getLogger(__name__)
@@ -139,22 +140,22 @@ SCRIPT_CONTINUATION_CODE = 655
 CONDITIONAL_CODE = 111
 _CONDITION_SCRIPT = 12  # code 111 parameters[0]: a Ruby script condition
 
+def _field_capability_badge_count() -> dict[str, int]:
+    """BADGEFOR* from Settings.rb (the engine's generated gate reads the same parser)."""
+    badges = badge_requirements(parse_settings())
+    missing = set(BADGE_CONSTANTS.values()) - badges.keys()
+    if missing:
+        raise ValueError(f"Settings.rb lacks BADGEFOR* for {sorted(missing)}")
+    return {k: badges[k] for k in BADGE_CONSTANTS.values()}
+
+
 # Badge-count requirement for each Uranium field capability
 # (`reference/scripts_dump/002__Settings.rb:144-151`, `HIDDENMOVESCOUNTBADGES
 # = true`). This models ONLY the badge-count conjunct of Uranium's real gate
 # (`badge AND (move OR item)`) -- the badge is NECESSARY, NOT SUFFICIENT. The
 # `move OR item` conjunct is deferred to CH06
 # (`REDERIVATION_PLAN.md` §15.2 item 4); see the module docstring.
-FIELD_CAPABILITY_BADGE_COUNT: dict[str, int] = {
-    "cut": 3,          # BADGEFORCUT
-    "flash": 0,        # BADGEFORFLASH
-    "rock_smash": 1,   # BADGEFORROCKSMASH
-    "strength": 4,     # BADGEFORSTRENGTH
-    "surf": 5,         # BADGEFORSURF
-    "dive": 7,         # BADGEFORDIVE
-    "fly": 8,          # BADGEFORFLY
-    "waterfall": 8,    # BADGEFORWATERFALL
-}
+FIELD_CAPABILITY_BADGE_COUNT: dict[str, int] = _field_capability_badge_count()
 
 # The `move OR item` conjunct's ITEM half, per field capability: the bag
 # items whose literal grant makes the capability obtainable (CH08 §9, operator

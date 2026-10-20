@@ -39,7 +39,20 @@ SENTINELS: tuple[str, ...] = (
     "URANIUM MAP WALKER",
     "URANIUM EMBEDDED SAVE",
     "RPG2GBA EVENT RANGE EXPANSION",
+    "RPG2GBA GAME PROFILE",
+    "RPG2GBA ENGINE",
 )
+
+
+def _game_profile_aliases() -> dict[str, str]:
+    """Generated game-profile macros a fenced write may name, mapped to the
+    registry constant they expand to (I3 S4: `DoWhiteOut` writes
+    `RPG2GBA_WHITEOUT_FLAG`, which `game_profile.header` defines as the
+    `STARTING_OVER_SWITCH` flag). Computed from the same source the header is
+    generated from, so the audit doesn't depend on an assembled engine."""
+    from rpg2gba.game_profile.header import whiteout_flag
+
+    return {"RPG2GBA_WHITEOUT_FLAG": whiteout_flag()}
 
 _SENTINEL_ALT = "|".join(re.escape(s) for s in SENTINELS)
 _BEGIN_RE = re.compile(rf"^\s*//\s*BEGIN\s+({_SENTINEL_ALT})\b")
@@ -292,12 +305,14 @@ def fenced_state_writes(regions: list[FencedRegion]) -> list[FoundWrite]:
     for r in regions:
         by_path.setdefault(r.path, []).append(r)
 
+    aliases = _game_profile_aliases()
     found: list[FoundWrite] = []
     for path, path_regions in by_path.items():
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         for i, line in enumerate(lines, start=1):
             for m in _WRITE_CALL_RE.finditer(line):
                 call, constant, value = m.group(1), m.group(2), m.group(3)
+                constant = aliases.get(constant, constant)
                 # Innermost enclosing region wins (narrowest span containing i).
                 enclosing = [r for r in path_regions if r.start_line <= i <= r.end_line]
                 if not enclosing:

@@ -884,9 +884,20 @@
 // Raising MAX shifts SYSTEM_FLAGS and everything after it, which grows SaveBlock1.flags[] and
 // moves every saveblock member past it — EXISTING SAVES DO NOT SURVIVE THIS. That cost is the
 // same for +9 as for +400, which is why it is paid once here.
+// END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA GAME PROFILE — the trainer count comes from the generated census when present
+// (config/rpg2gba_sizes.gen.h): generated ids chain from TRAINER_MAY_PLACEHOLDER (854) by +1, so
+// the last id is 854 + N and the count is 855 + N. MAX rounds that up to a multiple of 8 so the
+// trainer-defeated flag block stays byte-aligned. A stock build keeps the literals below.
+#include "config/rpg2gba.h"
+#ifdef RPG2GBA_GAME_TRAINERS_COUNT
+#define TRAINERS_COUNT_EMERALD     (TRAINER_MAY_PLACEHOLDER + 1 + RPG2GBA_GAME_TRAINERS_COUNT)
+#define MAX_TRAINERS_COUNT_EMERALD (((TRAINERS_COUNT_EMERALD) + 7) / 8 * 8)
+#else
 #define TRAINERS_COUNT_EMERALD     1189
 #define MAX_TRAINERS_COUNT_EMERALD 1280
-// END URANIUM PATHFINDER SLICE
+#endif
+// END RPG2GBA GAME PROFILE
 
 #if IS_FRLG
 #define TRAINERS_COUNT                      TRAINERS_COUNT_FRLG

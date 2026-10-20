@@ -86,6 +86,10 @@ _BLANK_DOMINANCE = 0.98  # ...and one of them covers nearly every pixel
 _DARK_LUMA = 24  # mean luma (0-255) below which a frame shows nothing usable
 _SETTLE_BUDGET = 240  # 4s: longer than any fade, short enough to give up on
 _SETTLE_STEP = 4
+# `struct Main` (include/main.h): callback1 at +0, callback2 at +4.
+_GMAIN_CALLBACK2_OFFSET = 4
+# Battle init through the intro transition to `BattleMainCB2`; generous.
+_BATTLE_INIT_SETTLE_FRAMES = 900
 
 # How many times walk_to re-plans its route after a leg gets locally stuck
 # (a randomly-walking NPC parked in a doorway is the normal cause, and it
@@ -2693,6 +2697,15 @@ class Emulator:
             f"walk_to({tx},{ty}) was still getting interrupted after "
             f"{_MAX_INTERRUPTION_RESOLUTIONS} resolve_interruption() attempts")
 
+    def _battle_init_owns_main_loop(self) -> bool:
+        """Whether `gMain.callback2` is `CB2_InitBattle` (battle setup, before
+        `BattleMainCB2` takes over), while the save blocks may be moving."""
+        symbols = getattr(self, "symbols", None)  # test fakes carry none
+        if symbols is None or "CB2_InitBattle" not in symbols:
+            return False
+        cb2 = self.u32(self.symbols["gMain"] + _GMAIN_CALLBACK2_OFFSET) & ~1
+        return cb2 == self.symbols["CB2_InitBattle"]
+
     def _in_battle(self) -> bool:
         """Whether a battle is currently running (`battle.in_battle`).
 
@@ -3089,6 +3102,26 @@ class Emulator:
         map — so it's checked after every move, not only after sidesteps.
         """
         here_map = self.map_location()
+        if here_map != start_map and self._battle_init_owns_main_loop():
+            # A wild encounter rolled by this step is starting. Battle init
+            # (`battle_main.c` -> `MoveSaveBlocks_ResetHeap`) relocates the
+            # save blocks through the heap over several frames, so
+            # `gSaveBlock1Ptr->location` reads garbage until it finishes
+            # (I3 S4: a smaller SaveBlock1 moved that window onto a frame
+            # this check samples). That is an interruption, not a warp:
+            # settle until the battle itself runs (the interruption handlers
+            # query it) and raise it as one.
+            for _ in range(_BATTLE_INIT_SETTLE_FRAMES):
+                if self._in_battle():
+                    break
+                self.run(1)
+            else:
+                shot = self.screenshot("walk_battle_init_stalled")
+                raise ScenarioError(
+                    f"walk_to({tx},{ty}) {how}: a battle began initialising but "
+                    f"never reached BattleMainCB2 in {_BATTLE_INIT_SETTLE_FRAMES} "
+                    f"frames ({shot})")
+            raise WalkInterrupted((tx, ty), self.player_pos(), True)
         if here_map != start_map:
             shot = self.screenshot("walk_map_changed")
             raise ScenarioError(

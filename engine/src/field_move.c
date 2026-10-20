@@ -7,29 +7,43 @@
 #include "constants/field_move.h"
 #include "constants/moves.h"
 #include "constants/party_menu.h"
+#include "config/rpg2gba.h"
 
-// BEGIN URANIUM PATHFINDER SLICE — Uranium's hidden-move gates (002__Settings.rb).
-// HIDDENMOVESCOUNTBADGES = true: each HM needs at least N badges of any kind,
-// not one specific badge. BADGEFOR*: Cut 3, Flash 0, Rock Smash 1, Strength 4,
-// Surf 5, Dive 7, Fly 8, Waterfall 8.
-static bool32 HasAtLeastBadges(u32 count)
+// BEGIN RPG2GBA ENGINE — per-game hidden-move badge gates (config/rpg2gba_game.gen.h).
+// COUNT_MODE TRUE: the move needs at least n badges of any kind; FALSE: it needs badge
+// number n specifically. n == 0 needs no badge in either mode.
+#ifdef RPG2GBA_FIELD_MOVE_BADGES_COUNT_MODE
+static bool32 Rpg2gbaFieldMoveBadgeGate(u32 n)
 {
-    u32 flag, owned = 0;
-
-    for (flag = FLAG_BADGE01_GET; flag < FLAG_BADGE01_GET + NUM_BADGES; flag++)
+    if (n == 0)
+        return TRUE;
+    if (n > NUM_BADGES)
+        return FALSE;
+#if RPG2GBA_FIELD_MOVE_BADGES_COUNT_MODE == TRUE
     {
-        if (FlagGet(flag))
-            owned++;
+        u32 flag, owned = 0;
+
+        for (flag = FLAG_BADGE01_GET; flag < FLAG_BADGE01_GET + NUM_BADGES; flag++)
+        {
+            if (FlagGet(flag))
+                owned++;
+        }
+        return owned >= n;
     }
-    return owned >= count;
+#else
+    return FlagGet(FLAG_BADGE01_GET + n - 1);
+#endif
 }
-// END URANIUM PATHFINDER SLICE
+#endif
+// END RPG2GBA ENGINE
 
 static bool32 IsFieldMoveUnlocked_Cut(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE
-    return HasAtLeastBadges(3);
-    // END URANIUM PATHFINDER SLICE
+    // BEGIN RPG2GBA GAME PROFILE — the game's badge gate for this move
+#ifdef RPG2GBA_FIELD_MOVE_BADGE_CUT
+    return Rpg2gbaFieldMoveBadgeGate(RPG2GBA_FIELD_MOVE_BADGE_CUT);
+#endif
+    // END RPG2GBA GAME PROFILE
     if (IS_FRLG)
         return FlagGet(FLAG_BADGE02_GET);
 
@@ -38,9 +52,11 @@ static bool32 IsFieldMoveUnlocked_Cut(void)
 
 static bool32 IsFieldMoveUnlocked_Flash(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE — BADGEFORFLASH = 0: Flash needs no badge.
-    return TRUE;
-    // END URANIUM PATHFINDER SLICE
+    // BEGIN RPG2GBA GAME PROFILE — the game's badge gate for this move
+#ifdef RPG2GBA_FIELD_MOVE_BADGE_FLASH
+    return Rpg2gbaFieldMoveBadgeGate(RPG2GBA_FIELD_MOVE_BADGE_FLASH);
+#endif
+    // END RPG2GBA GAME PROFILE
     if (IS_FRLG)
         return FlagGet(FLAG_BADGE01_GET);
 
@@ -49,9 +65,11 @@ static bool32 IsFieldMoveUnlocked_Flash(void)
 
 static bool32 IsFieldMoveUnlocked_RockSmash(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE
-    return HasAtLeastBadges(1);
-    // END URANIUM PATHFINDER SLICE
+    // BEGIN RPG2GBA GAME PROFILE — the game's badge gate for this move
+#ifdef RPG2GBA_FIELD_MOVE_BADGE_ROCK_SMASH
+    return Rpg2gbaFieldMoveBadgeGate(RPG2GBA_FIELD_MOVE_BADGE_ROCK_SMASH);
+#endif
+    // END RPG2GBA GAME PROFILE
     if (IS_FRLG)
         return FlagGet(FLAG_BADGE06_GET);
 
@@ -60,25 +78,31 @@ static bool32 IsFieldMoveUnlocked_RockSmash(void)
 
 static bool32 IsFieldMoveUnlocked_Strength(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE
-    return HasAtLeastBadges(4);
-    // END URANIUM PATHFINDER SLICE
+    // BEGIN RPG2GBA GAME PROFILE — the game's badge gate for this move
+#ifdef RPG2GBA_FIELD_MOVE_BADGE_STRENGTH
+    return Rpg2gbaFieldMoveBadgeGate(RPG2GBA_FIELD_MOVE_BADGE_STRENGTH);
+#endif
+    // END RPG2GBA GAME PROFILE
     return FlagGet(FLAG_BADGE04_GET);
 }
 
 static bool32 IsFieldMoveUnlocked_Surf(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE
-    return HasAtLeastBadges(5);
-    // END URANIUM PATHFINDER SLICE
+    // BEGIN RPG2GBA GAME PROFILE — the game's badge gate for this move
+#ifdef RPG2GBA_FIELD_MOVE_BADGE_SURF
+    return Rpg2gbaFieldMoveBadgeGate(RPG2GBA_FIELD_MOVE_BADGE_SURF);
+#endif
+    // END RPG2GBA GAME PROFILE
     return FlagGet(FLAG_BADGE05_GET);
 }
 
 static bool32 IsFieldMoveUnlocked_Fly(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE
-    return HasAtLeastBadges(8);
-    // END URANIUM PATHFINDER SLICE
+    // BEGIN RPG2GBA GAME PROFILE — the game's badge gate for this move
+#ifdef RPG2GBA_FIELD_MOVE_BADGE_FLY
+    return Rpg2gbaFieldMoveBadgeGate(RPG2GBA_FIELD_MOVE_BADGE_FLY);
+#endif
+    // END RPG2GBA GAME PROFILE
     if (IS_FRLG)
         return FlagGet(FLAG_BADGE03_GET);
 
@@ -87,17 +111,21 @@ static bool32 IsFieldMoveUnlocked_Fly(void)
 
 static bool32 IsFieldMoveUnlocked_Dive(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE
-    return HasAtLeastBadges(7);
-    // END URANIUM PATHFINDER SLICE
+    // BEGIN RPG2GBA GAME PROFILE — the game's badge gate for this move
+#ifdef RPG2GBA_FIELD_MOVE_BADGE_DIVE
+    return Rpg2gbaFieldMoveBadgeGate(RPG2GBA_FIELD_MOVE_BADGE_DIVE);
+#endif
+    // END RPG2GBA GAME PROFILE
     return FlagGet(FLAG_BADGE07_GET);
 }
 
 static bool32 IsFieldMoveUnlocked_Waterfall(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE
-    return HasAtLeastBadges(8);
-    // END URANIUM PATHFINDER SLICE
+    // BEGIN RPG2GBA GAME PROFILE — the game's badge gate for this move
+#ifdef RPG2GBA_FIELD_MOVE_BADGE_WATERFALL
+    return Rpg2gbaFieldMoveBadgeGate(RPG2GBA_FIELD_MOVE_BADGE_WATERFALL);
+#endif
+    // END RPG2GBA GAME PROFILE
     if (IS_FRLG)
         return FlagGet(FLAG_BADGE07_GET);
 

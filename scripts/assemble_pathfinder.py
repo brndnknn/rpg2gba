@@ -1077,6 +1077,31 @@ def run_species_profile_pass(out: Path, fork: Path, dry_run: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# S8b11: Game profile facts and census sizes (reference/engine_layers_i3_i5.md §8 S4)
+# ---------------------------------------------------------------------------
+
+def run_game_profile_pass(out: Path, fork: Path, dry_run: bool) -> None:
+    """Write the game's own engine facts and corpus-sized capacities.
+
+    `game_profile.header` emits `include/config/rpg2gba_game.gen.h` (HM badge
+    gates, white-out flag, new-game spawn) from Settings.rb and the map
+    metadata; `game_profile.census` emits `include/config/rpg2gba_sizes.gen.h`
+    (flag/var region and trainer capacities) from a whole-corpus census, so the
+    save layout does not move between chapters. Both are read through fenced
+    hooks in `config/rpg2gba.h`. Runs before every pass that reads those
+    capacities back out of the engine headers (rematches, the flags header)."""
+    logger.info("=== S8b11: game profile + census sizes ===")
+    if dry_run:
+        logger.info("  (dry-run) skipping game profile headers")
+        return
+    from rpg2gba.game_profile import census as game_census
+    from rpg2gba.game_profile import header as game_header
+
+    logger.info("  wrote %s", game_header.install(fork))
+    logger.info("  wrote %s", game_census.install(fork, build_dir=out))
+
+
+# ---------------------------------------------------------------------------
 # S8b9: The game's own items (reference/engine_layers_i3_i5.md §8 S2)
 # ---------------------------------------------------------------------------
 
@@ -1388,7 +1413,8 @@ _RPG2GBA_GATE_RE = re.compile(r"#define\s+RPG2GBA_EXPAND_EVENT_RANGES\s+(\S+)")
 
 
 def _load_rpg2gba_capacities(fork: Path) -> dict[str, int]:
-    """Read include/config/rpg2gba.h and return the four region capacities.
+    """Read include/config/rpg2gba.h (and the generated rpg2gba_sizes.gen.h, which
+    wins when present) and return the four region capacities.
 
     Fails loud if the fork lacks the RPG2GBA event-range expansion (missing
     header, gate compiled out, or a missing count #define) — emitting
@@ -1414,9 +1440,16 @@ def _load_rpg2gba_capacities(fork: Path) -> dict[str, int]:
             "reference/guides/engine_extension_surface.md §2)."
         )
 
+    # Generated sizes (game_profile.census) win over the header's #ifndef-guarded
+    # stock-build fallbacks -- the same precedence the C preprocessor applies.
+    gen = fork / "include" / "config" / "rpg2gba_sizes.gen.h"
+    gen_text = gen.read_text(encoding="utf-8") if gen.is_file() else ""
+
     capacities: dict[str, int] = {}
     for key, define in _RPG2GBA_COUNT_DEFINES.items():
-        m = re.search(rf"#define\s+{define}\s+(\S+)", text)
+        m = re.search(rf"#define\s+{define}\s+(\S+)", gen_text) or re.search(
+            rf"#define\s+{define}\s+(\S+)", text
+        )
         if m is None:
             raise RuntimeError(f"{header}: missing #define {define}")
         capacities[key] = int(m.group(1), 0)
@@ -1658,6 +1691,8 @@ def main() -> int:
     batch_layouts: list[dict] | None = None
     if not args.skip_layout:
         batch_layouts = run_layout_pass(out, consts, staging, args.dry_run, fork)
+
+    run_game_profile_pass(out, fork, args.dry_run)
 
     if not args.skip_species or not args.skip_trainers:
         uranium_src_path = os.environ.get("RPG2GBA_URANIUM_SRC")

@@ -166,6 +166,7 @@ _EVENT_RANGE_BLOCK_RE = re.compile(
 #: Object-like `#define NAME <expr>` lines (function-like macros, i.e. a name
 #: immediately followed by `(`, are excluded).
 _DEFINE_LINE_RE = re.compile(r"^#define\s+([A-Za-z_]\w*)(?!\()\s+(.+)$")
+_IFDEF_RE = re.compile(r"^#\s*(ifdef|ifndef)\s+([A-Za-z_]\w*)")
 
 #: Binary operators the macro resolver understands. Anything else in a
 #: `#define` expression fails loud rather than silently mis-evaluating.
@@ -173,6 +174,9 @@ _ALLOWED_BINOPS: dict[type, object] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
     ast.Mod: operator.mod,
+    ast.Mult: operator.mul,
+    # C integer `/` (every operand in the headers we read is a non-negative int).
+    ast.Div: operator.floordiv,
 }
 
 
@@ -267,6 +271,42 @@ def _collect_defines(text: str) -> dict[str, str]:
     return defines
 
 
+def _resolve_ifdefs(text: str, defined: set[str]) -> str:
+    """Keep only the live branch of each `#ifdef/#ifndef NAME ... [#else ...] #endif`
+    block, judged against `defined`. Any other `#if` is passed through (with its
+    `#else`/`#endif` swallowed -- they carry no `#define`), so this is still not a
+    general preprocessor. It exists so that a `#ifndef X / #define X <fallback> /
+    #endif` default (config/rpg2gba.h) and an `#ifdef RPG2GBA_GAME_TRAINERS_COUNT`
+    branch (constants/opponents.h) resolve as the C preprocessor does once the
+    generated `config/rpg2gba_sizes.gen.h` is present. Names `#define`d on live
+    lines are added to `defined` as the scan proceeds.
+    """
+    out: list[str] = []
+    stack: list[tuple[bool, bool]] = []  # (is_ifdef_frame, branch_is_live)
+    for raw in text.splitlines():
+        line = raw.strip()
+        m = _IFDEF_RE.match(line)
+        if m is not None:
+            stack.append((True, (m.group(2) in defined) == (m.group(1) == "ifdef")))
+            continue
+        if re.match(r"#\s*if", line):
+            stack.append((False, True))
+            continue
+        if re.match(r"#\s*else", line) and stack:
+            is_ifdef, live_now = stack[-1]
+            stack[-1] = (is_ifdef, (not live_now) if is_ifdef else True)
+            continue
+        if re.match(r"#\s*endif", line) and stack:
+            stack.pop()
+            continue
+        if all(live_now for _, live_now in stack):
+            out.append(raw)
+            dm = _DEFINE_LINE_RE.match(line)
+            if dm is not None:
+                defined.add(dm.group(1))
+    return "\n".join(out)
+
+
 def _event_range_gate(config_text: str, config_path: Path) -> bool:
     m = _EVENT_RANGE_GATE_RE.search(config_text)
     if m is None:
@@ -312,6 +352,7 @@ def _collect_macro_defines(engine_dir: Path) -> dict[str, str]:
     """
     flags_path = engine_dir / "include" / "constants" / "flags.h"
     config_path = engine_dir / "include" / "config" / "rpg2gba.h"
+    sizes_path = engine_dir / "include" / "config" / "rpg2gba_sizes.gen.h"
     opponents_path = engine_dir / "include" / "constants" / "opponents.h"
     trainers_path = engine_dir / "include" / "constants" / "trainers.h"
     flags_text = flags_path.read_text(encoding="utf-8")
@@ -322,10 +363,18 @@ def _collect_macro_defines(engine_dir: Path) -> dict[str, str]:
     gate_true = _event_range_gate(config_text, config_path)
     effective_flags_text = _splice_event_range_block(flags_text, flags_path, gate_true)
 
-    defines = _collect_defines(config_text)
-    defines.update(_collect_defines(trainers_text))
-    defines.update(_collect_defines(opponents_text))
-    defines.update(_collect_defines(effective_flags_text))
+    # The generated sizes header (when present) is included by config/rpg2gba.h ahead
+    # of its own `#ifndef`-guarded fallbacks, so its names count as already defined
+    # when the remaining headers are resolved (generated wins, like the C build).
+    defined: set[str] = set()
+    defines: dict[str, str] = {}
+    if sizes_path.is_file():
+        sizes_text = _resolve_ifdefs(sizes_path.read_text(encoding="utf-8"), defined)
+        defines.update(_collect_defines(sizes_text))
+    defines.update(_collect_defines(_resolve_ifdefs(config_text, defined)))
+    defines.update(_collect_defines(_resolve_ifdefs(trainers_text, defined)))
+    defines.update(_collect_defines(_resolve_ifdefs(opponents_text, defined)))
+    defines.update(_collect_defines(_resolve_ifdefs(effective_flags_text, defined)))
     return defines
 
 

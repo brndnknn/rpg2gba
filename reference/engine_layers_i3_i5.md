@@ -281,6 +281,37 @@ says so.
     `SaveBlock1 is backwards compatible`, which predates S3 (save sizes are
     unchanged by it). Two stock sweep tests learned about game moves past 847.
   - Saves unchanged; ROM 12,784,324 B.
+- **S4 DONE 2026-10-20** (`rpg2gba.game_profile`, assembler pass S8b11;
+  **save layout changed**):
+  - `include/config/rpg2gba_game.gen.h` from `Settings.rb` and MetadataHome:
+    HM badge gates (both Essentials modes; generic `Rpg2gbaFieldMoveBadgeGate`),
+    the white-out flag (`STARTING_OVER_SWITCH` through the registry's naming),
+    and the new-game spawn and heal point. Each hook falls back to stock.
+  - `include/config/rpg2gba_sizes.gen.h` from a whole-corpus census
+    (`game_profile/census.py`, 0.3 s over all 199 maps; every name the registry
+    has minted is in its sets): temp 345 → 352, global 201 → 208, self 1170 +
+    hide 257 (an overcount) → 1432, vars 119 → 120, trainers 331 →
+    `TRAINERS_COUNT` 1186 / `MAX_TRAINERS_COUNT` 1192. The manual 2026-07-10
+    census literals stay in `config/rpg2gba.h` as stock-build fallbacks. The
+    registered-flag floor (0x80) stays hand-set; it is tied to an engine
+    constant, not corpus data.
+  - Bag pockets (`item_converter/bag.py`, `constants/rpg2gba_bag.gen.h`): key
+    items 100, TM/HM 108; `SECRET_BASES_COUNT` 1 (Uranium has none), so
+    SaveBlock1 shrinks ≈ 2.6 KB net.
+  - Starter choice: the transpiler emits `dynmultichoice` with the event's own
+    labels; the hand-typed `MULTI_URANIUM_STARTER_PICK` left the engine
+    (`script_menu.h` files are stock again). Four other 3+-option Show Choices
+    in the unhandled queue could use the same path later.
+  - Harness: a wild encounter rolled by a walk step moves the save blocks
+    during battle init (`MoveSaveBlocks_ResetHeap`), and the smaller SaveBlock1
+    moved that window onto a sampled frame, so `_require_same_map` read garbage
+    as "changed map". The walker now settles battle init and raises an
+    interruption.
+  - Default player name "RED" stays: it is harness, not a game fact (S6).
+  - Results: CH08 498/498 from boot; pytest 5627 passed; `make check` 5163,
+    only `SaveBlock1 is backwards compatible` fails (pre-existing; SaveBlock1
+    is now 12,536 B of 15,872); CH08 manifest 0 errors; ROM 12,764,204 B; the
+    CH07-end walk ROM was regenerated for the teach-HM tests.
 - **S2 side effect:** fork-index enum parsing was fixed, so the parse is now per
   line, not one identifier per comma segment.
   - The old parse missed every enum member that followed an `#if` or a macro
@@ -295,7 +326,7 @@ says so.
 | **S1** Species profile + layout stub + report | `species_converter/profile.py` maps every species to its family by parsing `species_info/gen_*_families.h`. The keep-list is the stock species in `uranium_id_map.json` (whole game), and every family outside it gets `#undef`/`#define FALSE` in the generated `include/config/rpg2gba_species_profile.gen.h`. One fenced `__has_include` hook goes at the end of `species_enabled.h`. The chapter assembler stubs stock layouts by default (`--keep-stock-maps` repacks them). A per-build report lists kept and dropped content plus ROM use. | CH08 from boot |
 | **S2** Items (#41) | Revert the mid-enum insertion in `constants/items.h` and the hand-typed item, berry and art edits. A generator emits every Uranium item the engine lacks, appended after stock: constants, `gItemsInfo` rows, icons, berry data. Effects take the closest stock effect, and novel effects fail loud to an operator list. **Item ids change.** | CH08 from boot |
 | **S3** Moves (#35) + abilities | The generator appends Uranium-original moves and abilities. Moves needing the Nuclear type stay queued, fail-loud. | pytest + CH08 |
-| **S4** Other hand facts | HM badge gates, new-game spawn, heal point and name, starter multichoice, white-out flag, census-derived sizes (flag/var regions, trainer capacity). Each becomes a hook plus generated data. **Save layout may change.** | CH08 from boot |
+| **S4** Other hand facts | HM badge gates, new-game spawn, heal point and name, starter multichoice, white-out flag, census-derived sizes (flag/var regions, trainer capacity). Each becomes a hook plus generated data. **Save layout may change.** Bag pockets (ruled 2026-10-20, option B): pocket sizes are generated from the game's item data (Uranium: key items 100 vs stock 30, TM/HM 108 vs 64; Items/Balls/Berries overflow by kind count but not in play, so they stay stock). SaveBlock1 has ~336 B slack, too little, so the profile compiles out stock save data the game doesn't use (Secret Bases first, ~3.2 KB), behind a fail-loud save-size check. Seed saves and playtest save offsets are regenerated. | CH08 from boot |
 | **S5** Canon species sprites | Uranium's battler and icon art for the 35 canon species, overriding stock graphics. Stock cries stay. | by-eye check + CH08 |
 | **S6** Relabel | Mechanism, fence and generated-file names become `RPG2GBA_*`. The intro and truck skips go behind the harness switch. `RPG2GBA_VENDOR.md` gets corrected. | pytest + CH08 |
 | **S7** Gate | Full pytest; CH08 from boot; no hand-typed facts left; kept/dropped report; operator walk | operator |

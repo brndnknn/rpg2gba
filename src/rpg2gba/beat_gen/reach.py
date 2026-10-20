@@ -17,11 +17,8 @@ make it reachable.
 from __future__ import annotations
 
 import functools
-import os
-import re
 from collections import deque
 from collections.abc import Mapping
-from pathlib import Path
 
 from rpg2gba.routing.connections import connections_between, crossing_cells, load_connections
 from rpg2gba.routing.occupancy import MapOccupancy
@@ -38,27 +35,14 @@ def _connections():  # noqa: ANN202
     return load_connections()
 
 
-_SPAWN_RE = re.compile(
-    r"^\s*SetWarpDestination\(MAP_GROUP\((MAP_\w+)\),\s*MAP_NUM\(\1\),\s*WARP_ID_NONE,"
-    r"\s*(\d+),\s*(\d+)\);", re.MULTILINE)
-
-
 def engine_spawn() -> Site:
-    """The new-game spawn, read from the engine's `WarpToTruck` (A5: CH01's
-    start is "the engine spawn", a source fact -- `new_game.c`'s fenced
-    override). Exactly one uncommented `SetWarpDestination` must be there."""
-    from rpg2gba.playtest.archetypes import map_uranium_id
+    """The new-game spawn: Essentials `MetadataHome`, the same fact the generated
+    `config/rpg2gba_game.gen.h` hands to the engine's `WarpToTruck` hook
+    (`game_profile`), read through `heal_locations.initial_anchor`."""
+    from rpg2gba.pbs_converter.heal_locations import initial_anchor
 
-    root = Path(os.environ.get("RPG2GBA_POKEEMERALD", "engine"))
-    source = (root / "src" / "new_game.c").read_text(encoding="utf-8")
-    body = source[source.index("static void WarpToTruck(void)\n{"):]
-    body = body[:body.index("\n}\n")]
-    found = _SPAWN_RE.findall(body)
-    if len(found) != 1:
-        raise ValueError(f"new_game.c WarpToTruck: expected one SetWarpDestination, found "
-                         f"{len(found)}")
-    const, x, y = found[0]
-    return map_uranium_id(const), (int(x), int(y))
+    anchor = initial_anchor()
+    return anchor.map_id, (anchor.x, anchor.y)
 
 
 def chapter_entry_cells(

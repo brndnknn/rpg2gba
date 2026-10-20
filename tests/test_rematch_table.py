@@ -153,13 +153,16 @@ def test_fork_facts_match_the_pinned_engine(facts: rm.ForkRematchFacts) -> None:
     # the fourth converter-owned region. It resolves through the macro chain
     # (config/rpg2gba.h counts + SYSTEM_FLAGS, which itself rides on this
     # fork's bumped MAX_TRAINERS_COUNT) — pinned here against `cpp` output.
-    assert facts.registered_flags_start == 0x1300
-    assert facts.saveblock_headroom == 22
+    sizes_gen = ENGINE_DIR / "include" / "config" / "rpg2gba_sizes.gen.h"
+    if not sizes_gen.is_file():  # a census install moves the layout; pins are for the fallbacks
+        assert facts.registered_flags_start == 0x1300
+        assert facts.saveblock_headroom == 22
     # The block now owns a dedicated 128-flag region, so headroom is the
     # region's own capacity minus the vanilla entries — nothing else lives
     # there to collide with. The saveblock is the binding limit again.
     assert facts.registered_flag_headroom == 0x80 - 78  # 50
-    assert facts.capacity == 22
+    if not sizes_gen.is_file():
+        assert facts.capacity == 22
     assert rm.INSERT_BEFORE_MEMBER in facts.members
     assert rm.SENTINEL_MEMBER not in facts.members
 
@@ -234,8 +237,8 @@ def test_golden_flag_names_and_values(map033, trainers, map_consts, staged, fact
     entries = _entries(map033, trainers, map_consts, staged, facts)
     wally_index = facts.members.index(rm.INSERT_BEFORE_MEMBER)
     assert [(e.registered_flag_name, e.registered_flag_value) for e in entries] == [
-        ("FLAG_REGISTERED_URANIUM_BRANDON_16", 0x1300 + wally_index),
-        ("FLAG_REGISTERED_URANIUM_RICHEY_3", 0x1300 + wally_index + 1),
+        ("FLAG_REGISTERED_URANIUM_BRANDON_16", facts.registered_flags_start + wally_index),
+        ("FLAG_REGISTERED_URANIUM_RICHEY_3", facts.registered_flags_start + wally_index + 1),
     ]
     # Post-relocation the entries no longer squeeze into two stray FLAG_UNUSED
     # numbers before FLAG_DEFEATED_DEOXYS; they land inside the dedicated
@@ -462,3 +465,45 @@ def test_empty_batch_emits_no_op_fragments() -> None:
     # Still defines the macro -- the committed hook expands it unconditionally.
     assert f"#define {rm.MEMBERS_MACRO}\n" in empty_enum
     assert "no Uranium phone-rematch trainers" in rm.emit_rematch_table([])
+
+
+# ---------------------------------------------------------------------------
+# Generated sizes header (game_profile.census) vs the #ifndef fallbacks
+# ---------------------------------------------------------------------------
+
+def _mini_engine(tmp_path: Path, sizes: str | None) -> Path:
+    """Copy just the four headers `_collect_macro_defines` reads."""
+    for rel in ("config/rpg2gba.h", "constants/flags.h", "constants/opponents.h", "constants/trainers.h"):
+        dest = tmp_path / "include" / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text((ENGINE_DIR / "include" / rel).read_text(encoding="utf-8"), encoding="utf-8")
+    if sizes is not None:
+        (tmp_path / "include" / "config" / "rpg2gba_sizes.gen.h").write_text(sizes, encoding="utf-8")
+    return tmp_path
+
+
+def _resolved(engine: Path, name: str) -> int:
+    return rm._resolve_macro(name, rm._collect_macro_defines(engine), {})
+
+
+def test_macro_resolution_uses_fallbacks_without_generated_sizes(tmp_path: Path) -> None:
+    eng = _mini_engine(tmp_path, None)
+    assert _resolved(eng, "RPG2GBA_SELFSWITCH_FLAGS_COUNT") == 0x500
+    assert _resolved(eng, "MAX_TRAINERS_COUNT") == 1280
+
+
+def test_macro_resolution_generated_sizes_win(tmp_path: Path) -> None:
+    eng = _mini_engine(
+        tmp_path,
+        "#ifndef GUARD_X\n#define GUARD_X\n"
+        "#define RPG2GBA_TEMP_FLAGS_COUNT       352\n"
+        "#define RPG2GBA_GLOBAL_FLAGS_COUNT     208\n"
+        "#define RPG2GBA_SELFSWITCH_FLAGS_COUNT 1432\n"
+        "#define RPG2GBA_VARS_COUNT             120\n"
+        "#define RPG2GBA_GAME_TRAINERS_COUNT    331\n#endif\n",
+    )
+    assert _resolved(eng, "RPG2GBA_SELFSWITCH_FLAGS_COUNT") == 1432
+    assert _resolved(eng, "RPG2GBA_VARS_COUNT") == 120
+    # 854 vanilla ids + 331 generated = 1186 -> rounded up to a multiple of 8.
+    assert _resolved(eng, "TRAINERS_COUNT") == 855 + 331
+    assert _resolved(eng, "MAX_TRAINERS_COUNT") == 1192

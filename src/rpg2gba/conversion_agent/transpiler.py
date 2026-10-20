@@ -4316,25 +4316,20 @@ class _PageEmitter:
 
     def _emit_starter_pick_choice_idiom(self, node: ChoiceNode) -> list[str] | None:
         """The three-option starter-pick menu (Map068 EV003 page 1 cmd 3,
-        output/uranium-build/maps/Map068.json — ``['Orchynx', 'Raptorch',
+        output/uranium-build/maps/Map068.json -- ``['Orchynx', 'Raptorch',
         'Eletux']``, no cancel arm). ``_emit_choice`` below only natively
-        handles 2-way choices via ``yesnobox``; a 3+-option menu needs a
-        minted ``MULTI_*`` multichoice list, which is a per-menu engine-side
-        asset (``engine/include/constants/script_menu.h`` /
-        ``engine/src/data/script_menu.h``) — trusting an unminted constant
-        would compile-clean-but-wrong (CLAUDE.md §4.1). ``MULTI_URANIUM_STARTER_PICK``
-        is that minted list for exactly this menu (option order Orchynx/
-        Raptorch/Eletux at indices 0/1/2, per the concurrent engine-side
-        change) — deliberately keyed on the exact label tuple, not on "any
-        3-option choice," so no other 3+-option menu can silently pick up a
-        constant that was never minted for it.
+        handles 2-way choices via ``yesnobox``. This menu is emitted as the
+        engine's generic ``dynmultichoice`` (B press ignored), the same
+        emission the inline ``\\ch[...]`` escape uses, with the option strings
+        taken from the Show Choices command itself -- no game strings live in
+        engine C. Result values are the arm indices 0/1/2 in ``VAR_RESULT``.
+        Deliberately still keyed on the exact label tuple, not on "any
+        3-option choice" (generalising is a separate decision).
 
         Returns ``None`` (falls through to ``_emit_choice``'s generic
         2-way/queue handling) for: any label list other than exactly
-        ``['Orchynx', 'Raptorch', 'Eletux']``, a cancel arm present (this
-        menu has none — a cancel arm would mean a different shape we have not
-        verified against the minted list), or arm indices that are not
-        exactly ``{0, 1, 2}``."""
+        ``['Orchynx', 'Raptorch', 'Eletux']``, a cancel arm present, or arm
+        indices that are not exactly ``{0, 1, 2}``."""
         params = node.cmd.get("parameters", [])
         choices = params[0] if params else []
         if list(choices) != ["Orchynx", "Raptorch", "Eletux"]:
@@ -4342,12 +4337,20 @@ class _PageEmitter:
         arm_children: dict[int, list[Node]] = {}
         for choice_idx, _text, children in node.arms:
             if choice_idx is None:
-                return None  # cancel arm present — not this menu's verified shape
+                return None  # cancel arm present -- not this menu's verified shape
             arm_children[choice_idx] = children
         if set(arm_children) != {0, 1, 2}:
             return None
+        self._choice_count += 1
+        choice_no = self._choice_count
+        opt_labels: list[str] = []
+        for m, opt_text in enumerate(choices):
+            label = f"{self.page_label}_Choice{choice_no}_Opt{m}"
+            self.text_blocks.append((label, format_pory_dialogue(str(opt_text))))
+            opt_labels.append(label)
         lines = [
-            "multichoice(0, 0, MULTI_URANIUM_STARTER_PICK, TRUE)",
+            f"dynmultichoice(0, 0, TRUE, 6, 0, DYN_MULTICHOICE_CB_NONE, "
+            f"{', '.join(opt_labels)})",
             "switch (var(VAR_RESULT)) {",
         ]
         for i in range(3):

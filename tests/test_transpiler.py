@@ -1576,10 +1576,15 @@ def _starter_pick_commands() -> list[dict]:
     ]
 
 
-def test_starter_pick_choice_emits_multichoice_and_switch(ctx: T.TranspileContext) -> None:
+def test_starter_pick_choice_emits_dynmultichoice_and_switch(ctx: T.TranspileContext) -> None:
     res = run_event(ctx, [_starter_pick_commands()], map_id=68, event_id=3, trigger=0)
     assert res.unhandled == []
-    assert "multichoice(0, 0, MULTI_URANIUM_STARTER_PICK, TRUE)" in res.text
+    assert "MULTI_URANIUM_STARTER_PICK" not in res.text
+    assert "dynmultichoice(0, 0, TRUE, 6, 0, DYN_MULTICHOICE_CB_NONE, " in res.text
+    # option strings come from the command's own labels, as text blocks
+    for m, label in enumerate(["Orchynx", "Raptorch", "Eletux"]):
+        assert f"_Choice1_Opt{m}" in res.text
+        assert f'format("{label}")' in res.text
     assert "switch (var(VAR_RESULT)) {" in res.text
     assert "    case 0:" in res.text
     assert "    case 1:" in res.text

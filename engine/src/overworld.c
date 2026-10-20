@@ -415,15 +415,14 @@ static void (*const sMovementStatusHandler[])(struct LinkPlayerObjectEvent *, st
 void DoWhiteOut(void)
 {
     RunScriptImmediately(EventScript_WhiteOut);
-    // BEGIN URANIUM PATHFINDER SLICE — Uranium's "Starting Over" switch
-    // (PROJECT_TODO #108). Essentials' pbStartOver sets it on every white-out,
-    // and the respawn map's converted autorun (a home heal or a Center nurse
-    // scene) runs on arrival and clears it. Without this, those pages never
-    // run. Revert this line to restore the silent native respawn.
-#if URANIUM_MAP_WALKER == FALSE // the Map Walker build has no flag registry
-    FlagSet(FLAG_STARTING_OVER);
+    // BEGIN RPG2GBA GAME PROFILE — the game's "Starting Over" switch (config/rpg2gba_game.gen.h).
+    // Essentials' pbStartOver sets it on every white-out, and the respawn map's converted
+    // autorun (a home heal or a Center nurse scene) runs on arrival and clears it. Absent
+    // in a stock build, which keeps the silent native respawn.
+#if defined(RPG2GBA_WHITEOUT_FLAG) && URANIUM_MAP_WALKER == FALSE // the Map Walker build has no flag registry
+    FlagSet(RPG2GBA_WHITEOUT_FLAG);
 #endif
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA GAME PROFILE
     HealPlayerParty();
     Overworld_ResetStateAfterWhiteOut();
     SetWarpDestinationToLastHealLocation();

@@ -1,7 +1,7 @@
 """Focused tests for a handful of C6 part two helpers (CH01 end to end):
 
-- `beat_gen.reach.engine_spawn`: reads the new-game spawn off the real
-  vendored engine's `new_game.c`.
+- `beat_gen.reach.engine_spawn`: reads the new-game spawn (MetadataHome)
+  from the generated metadata header.
 - `beat_gen.group.plan_beats`: page-named beats when one event has two
   matches of the same archetype.
 - `beat_gen.plan.PlannedBeat`: empty rows are legal only for "transit".
@@ -19,11 +19,11 @@ from rpg2gba.chapter_manifest.schema import ManifestRow
 
 
 # ---------------------------------------------------------------------------
-# engine_spawn -- against the real vendored engine (no RPG2GBA_* set)
+# engine_spawn -- MetadataHome
 # ---------------------------------------------------------------------------
 
 
-def test_engine_spawn_reads_the_real_new_game_c():
+def test_engine_spawn_reads_metadata_home():
     assert engine_spawn() == (49, (7, 7))
 
 

@@ -176,54 +176,17 @@ static void ClearFrontierRecord(void)
 
 static void WarpToTruck(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE — new-game spawn override (S8.4).
-    // Redirect the new-game start to the Uranium player's-house ground floor
-    // (Map049 @ 7,7, URANIUM_START_MAP) so the slice is reachable on boot.
-    // Revert this block to restore vanilla new-game behavior.
-    //
-    // CAPTURE-TUTORIAL HARNESS — 2026-08-02: the
-    // destination MUST be set here, before DoMapLoadLoop() runs (called from
-    // CB2_NewGame(), which calls NewGameInitData(), which calls this
-    // function) — a second SetWarpDestination+WarpIntoMap() call AFTER
-    // CB2_NewGame() returns only patches gMapHeader/location, it does not
-    // redo the field task/camera/OAM setup DoMapLoadLoop already ran for the
-    // FIRST destination, so the player visually stays on the old map with
-    // mismatched collision data and locks up. To go back to the normal
-    // player's-house spawn, swap this back to the MOKI_TOWN_PLAYERS_HOUSE_1F
-    // call below (kept commented, not deleted).
-    SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), MAP_NUM(MAP_MOKI_TOWN_PLAYERS_HOUSE_1F), WARP_ID_NONE, 7, 7);
-    // Vanilla seeds the first respawn point via `setrespawn` in
-    // data/maps/InsideOfTruck/scripts.inc:25, run from the truck intro our
-    // boot-skip never plays — so ClearSav1 leaves lastHealLocation zeroed and
-    // a white-out lands in MAP_PETALBURG_CITY (mapGroup 0/mapNum 0,
-    // include/constants/map_groups.h:15), not anywhere in the slice. Uranium's
-    // own fallback (pbStartOver, reference/scripts_dump/101__PField_Field.rb:
-    // 1920-1948) is MetadataHome (map 49) at (7,7) when no Center has been
-    // visited yet, i.e. exactly this spawn point. Seed it explicitly so a
-    // whiteout before the first Center visit respawns here instead of
-    // Petalburg. See REDERIVATION_PLAN.md §14.7/§15.6.
-    SetLastHealLocationWarp(HEAL_LOCATION_URANIUM_START);
-    //
-    // Previous POST-QUIZ spawn, kept for the starter-grant repro: the lab at
-    // (14,8). (14,18) — just inside the entrance rug — crosses a row of "Hey,
-    // where are you going?" barrier triggers at y=16 (coord_events gated on
-    // VAR_TEMP_F==0, the fresh-boot default) that shove the player back south;
-    // (14,8) spawns past them, level with Theo (13,8), two rows below the
-    // professor's row (6).
-    // SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN_PROFESSOR_LAB), MAP_NUM(MAP_MOKI_TOWN_PROFESSOR_LAB), WARP_ID_NONE, 14, 8);
-    //
-    // Moki Town (20,44), four tiles east of the capture tutorial's coord_event
-    // column. The tutorial fires from (16,43)/(16,44)/(16,45) — do NOT spawn on
-    // those. It must be approached HORIZONTALLY: x=16 is solid at y=40/41/42
-    // (verified by decoding the collision bits of data/layouts/MokiTown/map.bin,
-    // 72x64), so the "spawn north of the trigger in the same column" idea walks
-    // you into a wall. Row y=44 is passable clear across x=11..22, and (20,44)
-    // is clear of every object event on that row (Bambo 15,44 / Chyinmunk 12,44
-    // / Orchynx 13,44 / Theo 16,45). Walk west to fire.
-    // DISABLED 2026-08-02 with the harness block below, to restore the chapter
-    // suite's fresh start. Uncomment (and the block below) to re-arm.
-    // SetWarpDestination(MAP_GROUP(MAP_MOKI_TOWN), MAP_NUM(MAP_MOKI_TOWN), WARP_ID_NONE, 20, 44);
-    // END URANIUM PATHFINDER SLICE
+    // BEGIN RPG2GBA GAME PROFILE — the game's new-game spawn (config/rpg2gba_game.gen.h).
+    // Must be set here, before DoMapLoadLoop() runs (CB2_NewGame -> NewGameInitData -> here);
+    // a later SetWarpDestination+WarpIntoMap only patches the header and locks the field up.
+    // The truck intro that seeds the first respawn point never plays, so seed it explicitly.
+#ifdef RPG2GBA_NEW_GAME_MAP
+    SetWarpDestination(MAP_GROUP(RPG2GBA_NEW_GAME_MAP), MAP_NUM(RPG2GBA_NEW_GAME_MAP), WARP_ID_NONE, RPG2GBA_NEW_GAME_X, RPG2GBA_NEW_GAME_Y);
+    SetLastHealLocationWarp(RPG2GBA_NEW_GAME_HEAL_LOCATION);
+#else
+    SetWarpDestination(MAP_GROUP(MAP_INSIDE_OF_TRUCK), MAP_NUM(MAP_INSIDE_OF_TRUCK), WARP_ID_NONE, -1, -1);
+#endif
+    // END RPG2GBA GAME PROFILE
     WarpIntoMap();
 }
 
