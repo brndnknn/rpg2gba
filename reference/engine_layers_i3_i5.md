@@ -244,7 +244,8 @@ Making the *pipeline* game-agnostic is its own question.
 
 *Answers (2026-10-19, `intermission_a1_a2.md` §3):*
 1. B.
-2. Uranium's sprites, stock cries.
+2. Uranium's sprites, stock cries. *Reversed 2026-10-20 (S5):* stock sprites. Side by
+   side, Uranium's art for the 35 canon species is mostly the same drawing as stock.
 3. Leave them linked (the default; not raised).
 4. Yes.
 5. Ran 2026-10-19 (ledger §4a).
@@ -312,6 +313,14 @@ says so.
     only `SaveBlock1 is backwards compatible` fails (pre-existing; SaveBlock1
     is now 12,536 B of 15,872); CH08 manifest 0 errors; ROM 12,764,204 B; the
     CH07-end walk ROM was regenerated for the teach-HM tests.
+- **S5 DONE 2026-10-20 (re-scoped):** canon species keep stock sprites (ruling
+  reversed, §7 answer 2). The stage instead fixed Uranium's own oversize art:
+  front battlers are drawn at 1x up to 81px and were halved to fit the 64px
+  canvas, so 16 final forms (e.g. METALYNX, FELIGER) showed smaller than their
+  own pre-evolutions and than stock sprites. `battlers._fit_to_canvas` now
+  undoes only the art's native scale (one 2x halving for backs, none for
+  fronts) and Lanczos-shrinks whatever is still over 64px to fit. In-range art
+  is byte-identical (ORCHYNX golden unchanged).
 - **S2 side effect:** fork-index enum parsing was fixed, so the parse is now per
   line, not one identifier per comma segment.
   - The old parse missed every enum member that followed an `#if` or a macro
@@ -327,6 +336,6 @@ says so.
 | **S2** Items (#41) | Revert the mid-enum insertion in `constants/items.h` and the hand-typed item, berry and art edits. A generator emits every Uranium item the engine lacks, appended after stock: constants, `gItemsInfo` rows, icons, berry data. Effects take the closest stock effect, and novel effects fail loud to an operator list. **Item ids change.** | CH08 from boot |
 | **S3** Moves (#35) + abilities | The generator appends Uranium-original moves and abilities. Moves needing the Nuclear type stay queued, fail-loud. | pytest + CH08 |
 | **S4** Other hand facts | HM badge gates, new-game spawn, heal point and name, starter multichoice, white-out flag, census-derived sizes (flag/var regions, trainer capacity). Each becomes a hook plus generated data. **Save layout may change.** Bag pockets (ruled 2026-10-20, option B): pocket sizes are generated from the game's item data (Uranium: key items 100 vs stock 30, TM/HM 108 vs 64; Items/Balls/Berries overflow by kind count but not in play, so they stay stock). SaveBlock1 has ~336 B slack, too little, so the profile compiles out stock save data the game doesn't use (Secret Bases first, ~3.2 KB), behind a fail-loud save-size check. Seed saves and playtest save offsets are regenerated. | CH08 from boot |
-| **S5** Canon species sprites | Uranium's battler and icon art for the 35 canon species, overriding stock graphics. Stock cries stay. | by-eye check + CH08 |
+| **S5** Battler sizing (re-scoped 2026-10-20) | Was: Uranium's art for the 35 canon species. Ruled: canon species keep stock art; instead oversize game art is shrunk to fit, not halved. | by-eye check + CH08 |
 | **S6** Relabel | Mechanism, fence and generated-file names become `RPG2GBA_*`. The intro and truck skips go behind the harness switch. `RPG2GBA_VENDOR.md` gets corrected. | pytest + CH08 |
 | **S7** Gate | Full pytest; CH08 from boot; no hand-typed facts left; kept/dropped report; operator walk | operator |

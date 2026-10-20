@@ -219,3 +219,46 @@ def test_contact_sheet_builds(tmp_path: Path, uranium_data: Path) -> None:
     with Image.open(sheet_path) as img:
         assert img.width > BATTLER_SIZE * 2
         assert img.height >= BATTLER_SIZE * battlers.CONTACT_SHEET_SCALE * len(results) * 2
+
+
+# --- Oversize art: shrink to fit, never halve a 1x front (I3 S5) ------------
+
+
+def _block(h: int, w: int, frame: int) -> np.ndarray:
+    arr = np.zeros((frame, frame, 4), dtype=np.uint8)
+    arr[frame - h - 2 : frame - 2, 3 : 3 + w] = (200, 40, 40, 255)
+    return arr
+
+
+def test_oversize_front_is_shrunk_to_fill_the_canvas_not_halved() -> None:
+    raw = _block(70, 81, 90)  # a big final form drawn at 1x, 81px wide
+    canvas, plan = battlers._fit_to_canvas(raw, BATTLER_SIZE, "big")
+    assert plan.downscale_rounds == 0
+    assert plan.resample_to == (64, 55)
+    ys, xs = np.where(canvas[..., 3] > 0)
+    assert xs.max() - xs.min() + 1 == 64
+    assert battlers._y_offset(plan, BATTLER_SIZE) == BATTLER_SIZE - (plan.top + 55)
+
+
+def test_in_range_front_is_placed_unscaled() -> None:
+    raw = _block(40, 30, 80)
+    canvas, plan = battlers._fit_to_canvas(raw, BATTLER_SIZE, "small")
+    assert plan.resample_to is None and plan.downscale_rounds == 0
+    assert np.count_nonzero(canvas[..., 3]) == 40 * 30
+
+
+def test_back_is_halved_once_then_shrunk_only_if_still_oversize() -> None:
+    raw = _block(150, 152, 160)  # 2x art: 76x75 at native scale, still over 64
+    _canvas, plan = battlers._fit_to_canvas(
+        raw, BATTLER_SIZE, "back", native_halvings=battlers.BACK_NATIVE_HALVINGS)
+    assert plan.downscale_rounds == 1
+    assert plan.resample_to is not None and max(plan.resample_to) == 64
+
+
+def test_shiny_replay_matches_resampled_normal_geometry() -> None:
+    raw = _block(70, 81, 90)
+    canvas, plan = battlers._fit_to_canvas(raw, BATTLER_SIZE, "big")
+    shiny = raw.copy()
+    shiny[..., :3] = (40, 40, 200)
+    replayed = battlers._apply_fit_plan(shiny, plan, BATTLER_SIZE, "big shiny")
+    assert np.array_equal(canvas[..., 3] > 0, replayed[..., 3] > 0)

@@ -29,9 +29,10 @@ Pipeline per species, ORCHYNX-first per the plan's sequencing (see
      (`_check_shiny_geometry`) -- a wrong shiny palette from bad
      correspondence is exactly the silent-wrong CLAUDE.md §4.5 exists to
      prevent.
-  3. Fit the NORMAL art onto the shared 64x64 canvas (crop-to-bbox + center,
-     integer 2x-majority-vote downscale first if the bbox doesn't fit) and
-     record the placement as a `FitPlan`.
+  3. Fit the NORMAL art onto the shared 64x64 canvas (one integer 2x
+     majority-vote downscale for the 2x backs, crop-to-bbox, a Lanczos
+     shrink-to-fit when the bbox is still over 64px, center) and record the
+     placement as a `FitPlan`.
   4. Jointly quantize normal front+back (union of their opaque pixels) to
      ONE shared <=15-colour palette -- the engine shares one `gMonPalette_X`
      between a species' front and back sprite, so they must be quantized
@@ -126,6 +127,9 @@ class FitPlan:
     bbox: tuple[int, int, int, int]  # x0, x1, y0, y1 (inclusive), post-downscale space
     top: int
     left: int
+    #: (w, h) the bbox content is resampled to when it is still larger than
+    #: the canvas after the native-scale halving; None when it fits as is.
+    resample_to: tuple[int, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -332,36 +336,58 @@ def _opaque_bbox(arr: np.ndarray, label: str) -> tuple[int, int, int, int]:
     return int(xs.min()), int(xs.max()), int(ys.min()), int(ys.max())
 
 
-def _fit_to_canvas(arr: np.ndarray, size: int, label: str) -> tuple[np.ndarray, FitPlan]:
-    """Crop to the opaque bbox and center it on a `size`x`size` canvas.
+#: Front battlers are drawn at 1x; back battlers (160px) at exactly 2x.
+FRONT_NATIVE_HALVINGS = 0
+BACK_NATIVE_HALVINGS = 1
 
-    If the bbox exceeds `size` in either dimension, integer 2x-majority-vote
-    downscale (`sprites._downscale_2x_majority` -- the repo's existing
-    precedent for this, reused rather than reimplemented) and retry; fails
-    loud if the art isn't evenly 2x-downscalable at that point. Returns the
-    canvas and the `FitPlan` recipe so the identical placement can be
-    replayed on shiny source art (`_apply_fit_plan`).
+
+def _resample(content: np.ndarray, target: tuple[int, int]) -> np.ndarray:
+    """Shrink RGBA `content` to `target` (w, h) with Lanczos (Pillow resizes
+    RGBA premultiplied, so transparent pixels don't bleed colour), then
+    re-binarize alpha. The joint quantizer brings the colours back to 15."""
+    img = Image.fromarray(content).resize(target, Image.LANCZOS)
+    return _binarize_alpha(np.asarray(img))
+
+
+def _fit_to_canvas(
+    arr: np.ndarray, size: int, label: str, native_halvings: int = FRONT_NATIVE_HALVINGS
+) -> tuple[np.ndarray, FitPlan]:
+    """Crop to the opaque bbox and center it on a
+    `size`x`size` canvas.
+
+    First undo the art's native scale: `native_halvings` integer 2x
+    majority-vote downscales (`sprites._downscale_2x_majority`), one for the
+    2x back battlers, none for the 1x fronts. If the bbox is still larger
+    than the canvas (the game's big final forms are drawn up to 81px), it is
+    resampled down just enough to fit, keeping its aspect ratio (operator
+    ruling 2026-10-20, I3 S5: halving again made them a fraction of the size
+    of their own pre-evolutions and of stock sprites). Returns the canvas and
+    the `FitPlan` recipe so the identical placement can be replayed on shiny
+    source art (`_apply_fit_plan`).
     """
-    rounds = 0
-    while True:
-        x0, x1, y0, y1 = _opaque_bbox(arr, label)
-        bw, bh = x1 - x0 + 1, y1 - y0 + 1
-        if bw <= size and bh <= size:
-            break
+    for _ in range(native_halvings):
         h, w = arr.shape[:2]
         if h % 2 or w % 2:
-            raise ValueError(
-                f"{label}: opaque bbox {bw}x{bh} exceeds the {size}x{size} "
-                f"canvas and the {w}x{h} source isn't evenly 2x-downscalable"
-            )
+            raise ValueError(f"{label}: {w}x{h} source isn't evenly 2x-downscalable")
         arr = _downscale_2x_majority(arr)
-        rounds += 1
+    x0, x1, y0, y1 = _opaque_bbox(arr, label)
+    content = arr[y0 : y1 + 1, x0 : x1 + 1]
+    bw, bh = x1 - x0 + 1, y1 - y0 + 1
+    resample_to: tuple[int, int] | None = None
+    if bw > size or bh > size:
+        k = size / max(bw, bh)
+        resample_to = (min(size, max(1, round(bw * k))), min(size, max(1, round(bh * k))))
+        content = _resample(content, resample_to)
+        bw, bh = resample_to
+        logger.info("%s: %dx%d art resampled to %dx%d to fit the canvas",
+                    label, x1 - x0 + 1, y1 - y0 + 1, bw, bh)
 
     left = (size - bw) // 2
     top = (size - bh) // 2
     canvas = np.zeros((size, size, 4), dtype=np.uint8)
-    canvas[top : top + bh, left : left + bw] = arr[y0 : y1 + 1, x0 : x1 + 1]
-    plan = FitPlan(downscale_rounds=rounds, bbox=(x0, x1, y0, y1), top=top, left=left)
+    canvas[top : top + bh, left : left + bw] = content
+    plan = FitPlan(downscale_rounds=native_halvings, bbox=(x0, x1, y0, y1), top=top,
+                   left=left, resample_to=resample_to)
     return canvas, plan
 
 
@@ -385,11 +411,12 @@ def _apply_fit_plan(arr: np.ndarray, plan: FitPlan, size: int, label: str) -> np
             f"{label}: shiny source too small ({w}x{h}) to sample at the "
             f"normal art's bbox {plan.bbox}"
         )
-    bw, bh = x1 - x0 + 1, y1 - y0 + 1
+    content = arr[y0 : y1 + 1, x0 : x1 + 1]
+    if plan.resample_to is not None:
+        content = _resample(content, plan.resample_to)
+    bh, bw = content.shape[:2]
     canvas = np.zeros((size, size, 4), dtype=np.uint8)
-    canvas[plan.top : plan.top + bh, plan.left : plan.left + bw] = arr[
-        y0 : y1 + 1, x0 : x1 + 1
-    ]
+    canvas[plan.top : plan.top + bh, plan.left : plan.left + bw] = content
     return canvas
 
 
@@ -399,7 +426,7 @@ def _y_offset(plan: FitPlan, size: int) -> int:
     (`engine/include/pokemon.h`: "the number of pixels between the drawn
     pixel area and the bottom edge")."""
     _x0, _x1, y0, y1 = plan.bbox
-    bh = y1 - y0 + 1
+    bh = plan.resample_to[1] if plan.resample_to is not None else y1 - y0 + 1
     return size - (plan.top + bh)
 
 
@@ -591,7 +618,8 @@ def convert_species_battler(
     )
 
     front_canvas, front_plan = _fit_to_canvas(normal_front_raw, BATTLER_SIZE, f"{label} front")
-    back_canvas, back_plan = _fit_to_canvas(normal_back_raw, BATTLER_SIZE, f"{label} back")
+    back_canvas, back_plan = _fit_to_canvas(normal_back_raw, BATTLER_SIZE, f"{label} back",
+                                            native_halvings=BACK_NATIVE_HALVINGS)
 
     q_front, q_back, palette = _joint_quantize(front_canvas, back_canvas, label)
     front_idx = _rgba_to_indices(q_front, palette)
