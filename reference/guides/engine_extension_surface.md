@@ -22,8 +22,9 @@ This is the spec for a **promotion ladder**, cheapest/most-reusable first:
    (stock vs. divergent) need to coexist in the tree, selectable at compile
    time.
 3. **Sentinel fences** — hand edits of last resort to tracked files, wrapped in
-   `// BEGIN URANIUM PATHFINDER SLICE` / `// END ...` (or `URANIUM MAP WALKER`)
-   comment pairs. Every fence is individually greppable, individually
+   `// BEGIN <sentinel>` / `// END <sentinel>` comment pairs, using the seven-sentinel
+   vocabulary in `engine/RPG2GBA_VENDOR.md` (`RPG2GBA GAME PROFILE`, `RPG2GBA ENGINE`,
+   `RPG2GBA HARNESS`, ...; the `URANIUM *` sentinels were retired 2026-10-20). Every fence is individually greppable, individually
    justified (§4 below), and individually dispositioned (KEEP /
    PROMOTE-to-config / REMOVE-when-X). This tier exists because some changes
    (a spawn-point override, a boot-sequence short-circuit) have no generated
@@ -51,18 +52,18 @@ the fork's own compilation order imposes.
 
 | Tracked file : line | Includes | Emitter | Positional constraint |
 |---|---|---|---|
-| `src/data/object_events/object_event_graphics.h:639-641` | `uranium_object_event_graphics.gen.h` | `sprite_emit.py` (`"graphics"`) | Hosts pic **data arrays** (`INCGFX_U16`) + palette DATA arrays; must come before anything referencing them. Same-directory quoted `#include` (see §5). |
-| `src/data/object_events/object_event_graphics_info.h:7229-7231` | `uranium_object_event_graphics_info.gen.h` | `sprite_emit.py` (`"graphics_info"`) | Struct defs; must follow `object_event_graphics.h`'s pic tables (uses `sPicTable_*` symbols) and `event_object_movement.c`'s anim-table symbols. |
-| `src/data/object_events/object_event_graphics_info_decls.gen.h` hooked at `object_event_graphics_info_pointers.h:404-406` | `uranium_object_event_graphics_info_decls.gen.h` | `sprite_emit.py` (`"graphics_info_decls"`) | Must sit **ABOVE** `gObjectEventGraphicsInfoPointers[]` (line 408) — `event_object_movement.c` includes this pointers file **before** `object_event_graphics_info.h`, so the array needs forward `extern` decls, not the real struct defs, in scope. |
-| `object_event_graphics_info_pointers.h:805-807` (inside the array, line 408-808) | `uranium_object_event_graphics_info_pointers.gen.h` | `sprite_emit.py` (`"graphics_info_pointers"`) | Designated-initializer entries (`[OBJ_EVENT_GFX_URANIUM_X] = &...`) INSIDE the array braces, after the `#endif // IS_FRLG` block, before the closing `};`. |
-| `src/data/object_events/object_event_pic_tables.h:3033-3035` | `uranium_object_event_pic_tables.gen.h` | `sprite_emit.py` (`"pic_tables"`) | Same-directory quoted include; must precede `object_event_graphics_info.h`'s struct defs (they reference `sPicTable_*`). |
-| `include/constants/event_objects.h:426-432` | `constants/uranium_event_objects.gen.h` | `sprite_emit.py` (`"constants"`) | Defines `OBJ_EVENT_GFX_URANIUM_*` / `OBJ_EVENT_PAL_TAG_URANIUM_*` (ids from 388 up) + `NUM_URANIUM_OBJ_EVENT_GFX`; line 431 extends `NUM_OBJ_EVENT_GFX` to `(388 + NUM_URANIUM_OBJ_EVENT_GFX)` — must be included before that `#define`. |
-| `src/event_object_movement.c:580-583` | `data/object_events/uranium_object_event_palettes.gen.h` | `sprite_emit.py` (`"palettes"`) | INSIDE `sObjectEventSpritePalettes[]`, must sit **BEFORE** the `OBJ_EVENT_PAL_TAG_NONE` terminator at line 585 (table is terminator-scanned; see §5). |
-| `src/data/tilesets/headers.h:1545-1549` | `uranium_tilesets.gen.h` | tileset `graphics/emit.py` / `build_slice_tilesets.py` | Comment notes: "Placed after graphics.h + metatiles.h in tilesets.c, so the symbols it references exist." |
-| `src/data/tilesets/graphics.h:3052-3055` | `uranium_graphics.gen.h` | tileset emitter | Tile/palette data arrays; must precede `headers.h`'s struct defs. |
-| `src/data/tilesets/metatiles.h:412-415` | `uranium_metatiles.gen.h` | tileset emitter | Metatile/attribute binaries; must precede `headers.h`'s struct defs. |
-| `include/tilesets.h:64-67` | `uranium_externs.gen.h` | tileset emitter | `extern const struct Tileset gTileset_Uranium*;` decls, inside the header guard, before `#endif`. |
-| `data/event_scripts.s:1739-1746` | `data/scripts/uranium_map_aliases.h`, `data/scripts/uranium_flags.h` (`#include`), `data/maps/uranium_includes.inc` (`.include`) | `assemble_pathfinder.py` (flag registry dump + map-alias + per-slice script-include list) | End of the std-scripts include chain; requires the assembler to have run first (generated files are gitignored). |
+| `src/data/object_events/object_event_graphics.h:639-641` | `rpg2gba_object_event_graphics.gen.h` | `sprite_emit.py` (`"graphics"`) | Hosts pic **data arrays** (`INCGFX_U16`) + palette DATA arrays; must come before anything referencing them. Same-directory quoted `#include` (see §5). |
+| `src/data/object_events/object_event_graphics_info.h:7229-7231` | `rpg2gba_object_event_graphics_info.gen.h` | `sprite_emit.py` (`"graphics_info"`) | Struct defs; must follow `object_event_graphics.h`'s pic tables (uses `sPicTable_*` symbols) and `event_object_movement.c`'s anim-table symbols. |
+| `src/data/object_events/object_event_graphics_info_decls.gen.h` hooked at `object_event_graphics_info_pointers.h:404-406` | `rpg2gba_object_event_graphics_info_decls.gen.h` | `sprite_emit.py` (`"graphics_info_decls"`) | Must sit **ABOVE** `gObjectEventGraphicsInfoPointers[]` (line 408) — `event_object_movement.c` includes this pointers file **before** `object_event_graphics_info.h`, so the array needs forward `extern` decls, not the real struct defs, in scope. |
+| `object_event_graphics_info_pointers.h:805-807` (inside the array, line 408-808) | `rpg2gba_object_event_graphics_info_pointers.gen.h` | `sprite_emit.py` (`"graphics_info_pointers"`) | Designated-initializer entries (`[OBJ_EVENT_GFX_URANIUM_X] = &...`) INSIDE the array braces, after the `#endif // IS_FRLG` block, before the closing `};`. |
+| `src/data/object_events/object_event_pic_tables.h:3033-3035` | `rpg2gba_object_event_pic_tables.gen.h` | `sprite_emit.py` (`"pic_tables"`) | Same-directory quoted include; must precede `object_event_graphics_info.h`'s struct defs (they reference `sPicTable_*`). |
+| `include/constants/event_objects.h:426-432` | `constants/rpg2gba_event_objects.gen.h` | `sprite_emit.py` (`"constants"`) | Defines `OBJ_EVENT_GFX_URANIUM_*` / `OBJ_EVENT_PAL_TAG_URANIUM_*` (ids from 388 up) + `NUM_RPG2GBA_OBJ_EVENT_GFX`; line 431 extends `NUM_OBJ_EVENT_GFX` to `(388 + NUM_RPG2GBA_OBJ_EVENT_GFX)` — must be included before that `#define`. |
+| `src/event_object_movement.c:580-583` | `data/object_events/rpg2gba_object_event_palettes.gen.h` | `sprite_emit.py` (`"palettes"`) | INSIDE `sObjectEventSpritePalettes[]`, must sit **BEFORE** the `OBJ_EVENT_PAL_TAG_NONE` terminator at line 585 (table is terminator-scanned; see §5). |
+| `src/data/tilesets/headers.h:1545-1549` | `rpg2gba_tilesets.gen.h` | tileset `graphics/emit.py` / `build_slice_tilesets.py` | Comment notes: "Placed after graphics.h + metatiles.h in tilesets.c, so the symbols it references exist." |
+| `src/data/tilesets/graphics.h:3052-3055` | `rpg2gba_graphics.gen.h` | tileset emitter | Tile/palette data arrays; must precede `headers.h`'s struct defs. |
+| `src/data/tilesets/metatiles.h:412-415` | `rpg2gba_metatiles.gen.h` | tileset emitter | Metatile/attribute binaries; must precede `headers.h`'s struct defs. |
+| `include/tilesets.h:64-67` | `rpg2gba_externs.gen.h` | tileset emitter | `extern const struct Tileset gTileset_Uranium*;` decls, inside the header guard, before `#endif`. |
+| `data/event_scripts.s:1739-1746` | `data/scripts/rpg2gba_map_aliases.h`, `data/scripts/rpg2gba_flags.h` (`#include`), `data/maps/rpg2gba_includes.inc` (`.include`) | `assemble_pathfinder.py` (flag registry dump + map-alias + per-slice script-include list) | End of the std-scripts include chain; requires the assembler to have run first (generated files are gitignored). |
 | `map_data_rules.mk:7-15` | `data/maps/map_groups.gen.json`, `data/layouts/layouts.gen.json` (wildcard-preferred) | `assemble_pathfinder.py` (S8a) | `$(wildcard ...)` resolves at `make` parse time; falls back to pristine upstream `map_groups.json`/`layouts.json` when no `.gen.json` is staged. Keeps the upstream JSON files byte-for-byte untouched. |
 
 **Sub-hook inside the pointers file — repoint, not a gen include (see Tier 3 C2):**
@@ -78,7 +79,7 @@ second entry for the same index; see §5).
 A fresh clone (or any build with zero sprites staged) must compile with **zero
 content**. `sprite_emit.write_stub_gen_files` (`src/rpg2gba/tileset_converter/graphics/sprite_emit.py:711-751`,
 `_GEN_RELPATHS` dict at :186-198) writes all 7 `.gen.h` fragments in empty form:
-`NUM_URANIUM_OBJ_EVENT_GFX 0`, empty bodies for graphics/pic_tables/graphics_info/
+`NUM_RPG2GBA_OBJ_EVENT_GFX 0`, empty bodies for graphics/pic_tables/graphics_info/
 palettes/pointers.
 
 The `graphics_info_decls` stub is special: because the two **tracked** pointer
@@ -102,22 +103,22 @@ instead, once a player is actually staged.
 
 ## 2. Tier 2 — Config-gated divergences
 
-### `URANIUM_MAP_WALKER` (`include/config/uranium_walker.h`, default `FALSE`)
+### `RPG2GBA_MAP_WALKER` (`include/config/rpg2gba_harness.h`, default `FALSE`)
 
 A single build flag that gates a self-contained debug ROM mode — a cursor-based
-map inspector, not normal gameplay. When `TRUE`, gates (all `#if URANIUM_MAP_WALKER == TRUE`):
+map inspector, not normal gameplay. When `TRUE`, gates (all `#if RPG2GBA_MAP_WALKER == TRUE`):
 
 - **NPC/script suppression:**
   - `src/event_object_movement.c:2898-2904` — `TrySpawnObjectEvents` returns
     early when the walker is active (also gates the in-view scroll-spawn path,
     not just initial spawn).
   - `src/field_control_avatar.c:214-222` — the walker owns A/B/R/L/START
-    (`Task_UraniumWalker`); every field button handler (interaction, door-warp,
+    (`Task_Rpg2gbaWalker`); every field button handler (interaction, door-warp,
     start menu, select, dexnav, debug) short-circuits to `FALSE` (no script
     consumed, cursor movement still proceeds).
   - `src/field_control_avatar.c:695-700` — `TryStartStepBasedScript` returns
     `FALSE` (suppresses coord/warp/misc step-based scripts).
-  - `src/overworld.c:2590-2597` — inverted gate (`#if URANIUM_MAP_WALKER != TRUE`):
+  - `src/overworld.c:2590-2597` — inverted gate (`#if RPG2GBA_MAP_WALKER != TRUE`):
     `TrySpawnObjectEvents`, `FollowerNPC_HandleSprite`, `UpdateFollowingPokemon`,
     `TryRunOnWarpIntoMapScript` only run when the walker is OFF.
 - **Bounds-clamp collision:** `src/event_object_movement.c:6526-6538` — free
@@ -126,16 +127,16 @@ map inspector, not normal gameplay. When `TRUE`, gates (all `#if URANIUM_MAP_WAL
 - **`OW_ENABLE_DNS` force-off:** `include/config/overworld.h:102-111` — raw
   display (no day/night tint) under the walker flag; normal slice builds keep
   vanilla `OW_ENABLE_DNS TRUE`.
-- **The whole `src/uranium_map_walker.c` feature set** (entirely wrapped
-  `#if URANIUM_MAP_WALKER == TRUE` at :10 through :760): ListMenu-based START
+- **The whole `src/rpg2gba_map_walker.c` feature set** (entirely wrapped
+  `#if RPG2GBA_MAP_WALKER == TRUE` at :10 through :760): ListMenu-based START
   jump-menu (scrollable list of every map), R-button warp-tile overlay,
   invisible-anchor boot, L-toggle coord/metatile HUD, warp-follow + back-stack.
-  Declared in `include/uranium_map_walker.h` (also `#include`s
-  `config/uranium_walker.h` and self-guards `#if URANIUM_MAP_WALKER == TRUE`
+  Declared in `include/rpg2gba_map_walker.h` (also `#include`s
+  `config/rpg2gba_harness.h` and self-guards `#if RPG2GBA_MAP_WALKER == TRUE`
   around its own prototypes).
-- Arming site: `src/new_game.c:265-275` (`CB2_StartUraniumSlice`, flips
-  `sWalkerActive` via `UraniumWalker_Begin()` before the map load) and
-  `src/overworld.c:1902-1909` (`gFieldCallback = UraniumWalker_FieldCB_MapLoad`
+- Arming site: `src/new_game.c:265-275` (`CB2_StartRpg2gbaHarness`, flips
+  `sWalkerActive` via `Rpg2gbaWalker_Begin()` before the map load) and
+  `src/overworld.c:1902-1909` (`gFieldCallback = Rpg2gbaWalker_FieldCB_MapLoad`
   instead of the truck-suppression fallback — same "callback consumed
   synchronously inside `DoMapLoadLoop`" timing constraint documented in §5).
 
@@ -177,7 +178,7 @@ When `TRUE` (all gated `#if RPG2GBA_EXPAND_EVENT_RANGES == TRUE`, markers
 
 **Single source of truth for capacities:** the four `RPG2GBA_*_COUNT` defines
 in `include/config/rpg2gba.h`. The registry dump
-(`data/scripts/uranium_flags.h`) keys its bases off the `RPG2GBA_*_START`
+(`data/scripts/rpg2gba_flags.h`) keys its bases off the `RPG2GBA_*_START`
 constants symbolically (resolved by cpp — `data/event_scripts.s` includes
 `constants/flags.h`/`vars.h` before the uranium hook), and
 `assemble_pathfinder.py` parses the `*_COUNT` values at assembly time to fail
@@ -204,13 +205,13 @@ flag), or REMOVE-when-X (tracked debt with an explicit trigger).
 | Location | What it changes | Why | Disposition |
 |---|---|---|---|
 | `src/new_game.c:141-150` (`WarpToTruck`) | Redirects new-game spawn to Map049 Player's House 1F @ (7,7) instead of the vanilla truck interior | Slice needs to be reachable on boot without the vanilla intro sequence | KEEP, candidate for config promotion |
-| `src/new_game.c:245-288` (`CB2_StartUraniumSlice`) | Stamps a default identity, skips Rayquaza intro/title/Birch, calls stock `CB2_NewGame()`, arms the walker (`UraniumWalker_Begin()`) before map load | Sole boot-gate entry point; must live here because `CB2_NewGame`'s `DoMapLoadLoop()` consumes `gFieldCallback` synchronously (arming after `CB2_NewGame()` returns is a no-op — documented in-line) | KEEP |
-| `src/new_game.c:277-286` (TEST HARNESS inside `CB2_StartUraniumSlice`) | `FlagSet(FLAG_BADGE03_GET)` + gives a Geodude knowing Rock Smash, unconditionally, on every boot | Makes rock smash testable from a fresh boot without real progression; must run AFTER `CB2_NewGame()` since `NewGameInitData()` zeroes the party inside it | **REMOVED 2026-10-13** (operator): `field_move.c` gates every HM on Uranium's badge counts (`HasAtLeastBadges`), so Rock Smash unlocks at the story's first badge; the rig had been showing badge 3 in every save (PROJECT_TODO #121) |
-| `src/intro.c:1051-1064` (`SetUpCopyrightScreen`) | Short-circuits: force-blanks display, jumps straight to `CB2_StartUraniumSlice`, returns 0 before the vanilla copyright/intro/multiboot logic runs | Sole slice-boot hook; no `SKIP_TITLESCREEN`-style config exists in this fork (verified — only unrelated `B_FAST_INTRO_*`) | KEEP, candidate for config promotion |
-| `src/overworld.c:1893-1910` (inside `CB2_NewGame`) | Suppresses `ExecuteTruckSequence` (truck metatile rewrite, camera shake, locked controls); arms `FieldCB_WarpExitFadeFromBlack` instead (or `UraniumWalker_FieldCB_MapLoad` when the walker is active) | The slice spawns into a normal map, not `InsideOfTruck`; must be swapped here specifically because the truck sequence runs synchronously inside `DoMapLoadLoop()` — this is the only point in the call chain where swapping the callback still works | KEEP (truck-suppression half) / walker-arm half already config-gated under `URANIUM_MAP_WALKER` |
+| `src/new_game.c:245-288` (`CB2_StartRpg2gbaHarness`) | Stamps a default identity, skips Rayquaza intro/title/Birch, calls stock `CB2_NewGame()`, arms the walker (`Rpg2gbaWalker_Begin()`) before map load | Sole boot-gate entry point; must live here because `CB2_NewGame`'s `DoMapLoadLoop()` consumes `gFieldCallback` synchronously (arming after `CB2_NewGame()` returns is a no-op — documented in-line) | KEEP |
+| `src/new_game.c:277-286` (TEST HARNESS inside `CB2_StartRpg2gbaHarness`) | `FlagSet(FLAG_BADGE03_GET)` + gives a Geodude knowing Rock Smash, unconditionally, on every boot | Makes rock smash testable from a fresh boot without real progression; must run AFTER `CB2_NewGame()` since `NewGameInitData()` zeroes the party inside it | **REMOVED 2026-10-13** (operator): `field_move.c` gates every HM on Uranium's badge counts (`HasAtLeastBadges`), so Rock Smash unlocks at the story's first badge; the rig had been showing badge 3 in every save (PROJECT_TODO #121) |
+| `src/intro.c:1051-1064` (`SetUpCopyrightScreen`) | Short-circuits: force-blanks display, jumps straight to `CB2_StartRpg2gbaHarness`, returns 0 before the vanilla copyright/intro/multiboot logic runs | Sole slice-boot hook; no `SKIP_TITLESCREEN`-style config exists in this fork (verified — only unrelated `B_FAST_INTRO_*`) | KEEP, candidate for config promotion |
+| `src/overworld.c:1893-1910` (inside `CB2_NewGame`) | Suppresses `ExecuteTruckSequence` (truck metatile rewrite, camera shake, locked controls); arms `FieldCB_WarpExitFadeFromBlack` instead (or `Rpg2gbaWalker_FieldCB_MapLoad` when the walker is active) | The slice spawns into a normal map, not `InsideOfTruck`; must be swapped here specifically because the truck sequence runs synchronously inside `DoMapLoadLoop()` — this is the only point in the call chain where swapping the callback still works | KEEP (truck-suppression half) / walker-arm half already config-gated under `RPG2GBA_MAP_WALKER` |
 | `src/data/object_events/object_event_graphics_info_pointers.h:409-412` | `[OBJ_EVENT_GFX_BRENDAN_NORMAL] = &gObjectEventGraphicsInfo_UraniumPlayerNormal` (repoints the vanilla Brendan-normal pointer entry) | Player walk/run art: swaps in the converted Uranium hero sheet in place of Brendan without touching `NUM_OBJ_EVENT_GFX`/adding a new id — vanilla struct falls back via the stub `#define` when unstaged | KEEP |
 | `src/data/object_events/object_event_graphics_info_pointers.h:415-419` | `[OBJ_EVENT_GFX_BRENDAN_FIELD_MOVE] = &gObjectEventGraphicsInfo_UraniumPlayerFieldMove` (repoints the vanilla Brendan-field-move pointer entry) | Rock-smash pose; needs a 1-tick terminating anim (Uranium has no field-move pose — a looping anim here would softlock the held movement) | KEEP |
-| `include/constants/event_object_movement.h` (`MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE 0x53` + `NUM_MOVEMENT_TYPES` bump to `0x54`); `src/event_object_movement.c` (`sMovementTypeCallbacks[]`/`gInitialMovementTypeFacingDirections[]` entries, the `MovementType_UraniumCustomRoute` FSM + `uranium_move_routes.gen.h` include) | New autonomous `MOVEMENT_TYPE_*` that plays a per-object route bytecode (`reference/guides/custom_route_interpreter.md`) | Permanent core-feature machinery — new engine movement type for autonomous custom-route playback; no better mechanism than a fence for a new enum value + dispatch entry | KEEP |
+| `include/constants/event_object_movement.h` (`MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE 0x53` + `NUM_MOVEMENT_TYPES` bump to `0x54`); `src/event_object_movement.c` (`sMovementTypeCallbacks[]`/`gInitialMovementTypeFacingDirections[]` entries, the `MovementType_Rpg2gbaCustomRoute` FSM + `rpg2gba_move_routes.gen.h` include) | New autonomous `MOVEMENT_TYPE_*` that plays a per-object route bytecode (`reference/guides/custom_route_interpreter.md`) | Permanent core-feature machinery — new engine movement type for autonomous custom-route playback; no better mechanism than a fence for a new enum value + dispatch entry | KEEP |
 
 **HISTORICAL (do not re-apply):** a narrow-scan edit to
 `ObjectEventGetNearbyReflectionType` in `src/event_object_movement.c` was applied
@@ -276,11 +277,11 @@ surfaces something not already listed.
    side effect of an unrelated task.
 2. **Tier 2 if it's a behavior switch.** Two coexisting behaviors selectable at
    compile time → a new `#define FOO TRUE/FALSE` in `include/config/*.h`,
-   gated with `#if`, following the fork's own idiom (see `uranium_walker.h` as
+   gated with `#if`, following the fork's own idiom (see `rpg2gba_harness.h` as
    the template).
 3. **Tier 3 only as last resort**, and only with:
-   - A `// BEGIN URANIUM PATHFINDER SLICE` / `// END ...` (or `URANIUM MAP
-     WALKER`) fence, so it's greppable.
+   - A `// BEGIN <sentinel>` / `// END <sentinel>` fence from the vocabulary in
+     `engine/RPG2GBA_VENDOR.md`, so it's greppable.
    - A row added to §4 of this document with a disposition.
    - A concrete removal/promotion trigger if the disposition isn't KEEP.
 4. **Every addition gets a row in this document.** No exceptions — an

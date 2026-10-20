@@ -1,10 +1,10 @@
 #include "global.h"
-// BEGIN URANIUM PATHFINDER SLICE — pulls RPG2GBA_BGM_TEMPO_SCALE (config/rpg2gba.h pacing
+// BEGIN RPG2GBA ENGINE — pulls RPG2GBA_BGM_TEMPO_SCALE (config/rpg2gba.h pacing
 // knob), used below to override map/script BGM tempo (PlayBGM only; fanfares, jingles, cries
 // and SEs keep their authored tempo). Removing this include breaks that override; the scale
 // is left at 256 (authored tempo, compiles away) so reverting is inert today regardless.
 #include "config/rpg2gba.h"
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA ENGINE
 #include "gba/m4a_internal.h"
 #include "sound.h"
 #include "battle.h"
@@ -567,7 +567,7 @@ void PlayBGM(u16 songNum)
     if (songNum == MUS_NONE)
         songNum = 0;
     m4aSongNumStart(songNum);
-    // BEGIN URANIUM PATHFINDER SLICE — BGM tempo scale (config/rpg2gba.h).
+    // BEGIN RPG2GBA ENGINE — BGM tempo scale (config/rpg2gba.h).
     // MPlayStart resets tempoU to 0x100, so the scale has to be re-applied on
     // every song start; the sequencer's own TEMPO events recompute tempoI from
     // tempoD * tempoU, so the scale survives tempo changes inside a track.
@@ -576,7 +576,7 @@ void PlayBGM(u16 songNum)
 #if RPG2GBA_BGM_TEMPO_SCALE != 256
     m4aMPlayTempoControl(&gMPlayInfo_BGM, RPG2GBA_BGM_TEMPO_SCALE);
 #endif
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
 }
 
 void PlaySE(u16 songNum)

@@ -284,13 +284,13 @@ string generate_map_events_text(Json map_data) {
         warps_label = mapName + "_MapWarps";
         text << warps_label << ":\n";
         for (auto &warp_event : map_data["warp_events"].array_items()) {
-            // BEGIN URANIUM PATHFINDER SLICE — optional per-warp arrival facing
+            // BEGIN RPG2GBA ENGINE — optional per-warp arrival facing
             // (0 = retain, else DIR_*); absent on stock maps, so default 0.
             string facing = json_to_string(warp_event, "facing", true);
             if (facing.empty()) {
                 facing = "0";
             }
-            // END URANIUM PATHFINDER SLICE
+            // END RPG2GBA ENGINE
             text << "\twarp_def "
                  << json_to_string(warp_event, "x") << ", "
                  << json_to_string(warp_event, "y") << ", "

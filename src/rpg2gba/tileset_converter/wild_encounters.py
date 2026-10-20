@@ -52,7 +52,7 @@ absolute). This mirrors the layouts/map_groups overlay pattern already used by
 `scripts/assemble_pathfinder.py`'s `run_fork_pass`
 (`data/layouts/layouts.gen.json`, `data/maps/map_groups.gen.json`).
 
-The engine's `engine/Makefile` (`URANIUM_WILD_ENCOUNTERS`, near line 253) is the
+The engine's `engine/Makefile` (`RPG2GBA_WILD_ENCOUNTERS`, near line 253) is the
 consumer: it prefers `src/data/wild_encounters.gen.json` when present, falling
 back to the committed `src/data/wild_encounters.json` when absent — so a repo
 with no overlay on disk builds pristine upstream behavior unchanged. The overlay
@@ -281,7 +281,7 @@ def build_encounter_entries(
 
 def overlay_path(fork_encounters_path: Path) -> Path:
     """The overlay sibling of `fork_encounters_path`: `wild_encounters.json` ->
-    `wild_encounters.gen.json`. Matches the `URANIUM_WILD_ENCOUNTERS` wildcard
+    `wild_encounters.gen.json`. Matches the `RPG2GBA_WILD_ENCOUNTERS` wildcard
     hook in `engine/Makefile` (near line 253) — derived, never hardcoded."""
     return fork_encounters_path.with_name(
         fork_encounters_path.stem + ".gen" + fork_encounters_path.suffix
@@ -296,7 +296,7 @@ def upsert_encounters(
 ) -> int:
     """Read the committed `fork_encounters_path` as the base and write the
     upserted result to `out_path` (default: `overlay_path(fork_encounters_path)`,
-    the `wild_encounters.gen.json` sibling `URANIUM_WILD_ENCOUNTERS` looks for).
+    the `wild_encounters.gen.json` sibling `RPG2GBA_WILD_ENCOUNTERS` looks for).
 
     The base is always re-read fresh from `fork_encounters_path` — never from a
     prior overlay — so N calls with the same `entries` produce a byte-identical

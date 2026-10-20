@@ -421,7 +421,7 @@ def test_movement_spec_for_allow_custom_route_false_skips_interpreter() -> None:
 def test_movement_spec_for_allow_custom_route_default_true_unchanged() -> None:
     """No keyword argument -> today's interpreter-first behavior, unchanged:
     the same route as above still encodes to
-    MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE when the caller doesn't opt out."""
+    MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE when the caller doesn't opt out."""
     route = _route([2, 2, 2, 3, 3, 3])
     spec = movement_spec_for(_move_page(3, route=route))
     assert spec.movement_type == MOVEMENT_TYPE_CUSTOM_ROUTE

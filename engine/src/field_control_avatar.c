@@ -1,14 +1,14 @@
 #include "global.h"
-// BEGIN URANIUM MAP WALKER — pulls UraniumWalker_IsActive, used at two input-gating
+// BEGIN RPG2GBA MAP WALKER — pulls Rpg2gbaWalker_IsActive, used at two input-gating
 // sites below (the walker owns A/B/R/L/Start while active). Removing this include breaks
 // those checks; reverting them too restores vanilla avatar input handling.
-#include "uranium_map_walker.h"
-// END URANIUM MAP WALKER
-// BEGIN URANIUM PATHFINDER SLICE — RPG2GBA_WARP_RETAIN_FACING, for SetupWarp's arrival
+#include "rpg2gba_map_walker.h"
+// END RPG2GBA MAP WALKER
+// BEGIN RPG2GBA ENGINE — RPG2GBA_WARP_RETAIN_FACING, for SetupWarp's arrival
 // facing below; the struct size pins the warp_def macro (asm/macros/map.inc) to the struct.
 #include "config/rpg2gba.h"
 STATIC_ASSERT(sizeof(struct WarpEvent) == 12, WarpEventSizeMatchesWarpDefMacro);
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA ENGINE
 #include "battle_setup.h"
 #include "bike.h"
 #include "coord_event_weather.h"
@@ -220,15 +220,15 @@ int ProcessPlayerFieldInput(struct FieldInput *input)
     if (input->heldDirection && (input->dpadDirection == playerDirection) && (TrySetUpWalkIntoSignpostScript(&position, metatileBehavior, playerDirection) == TRUE))
         return TRUE;
 
-    // BEGIN URANIUM MAP WALKER — the walker owns A/B/R/L/Start (Task_UraniumWalker);
+    // BEGIN RPG2GBA MAP WALKER — the walker owns A/B/R/L/Start (Task_Rpg2gbaWalker);
     // suppress every field button handler below (interaction, door-warp, start menu,
     // select, dexnav, debug) so they can't conflict. Returning FALSE = no script
     // consumed, so cursor movement still proceeds normally.
-#if URANIUM_MAP_WALKER == TRUE
-    if (UraniumWalker_IsActive())
+#if RPG2GBA_MAP_WALKER == TRUE
+    if (Rpg2gbaWalker_IsActive())
         return FALSE;
 #endif
-    // END URANIUM MAP WALKER
+    // END RPG2GBA MAP WALKER
 
     if (input->pressedAButton && TryStartInteractionScript(&position, metatileBehavior, playerDirection) == TRUE)
         return TRUE;
@@ -701,12 +701,12 @@ static bool32 TrySetupDiveEmergeScript(void)
 
 bool8 TryStartStepBasedScript(struct MapPosition *position, u16 metatileBehavior, enum Direction direction)
 {
-    // BEGIN URANIUM MAP WALKER — suppress all step-based scripts (coord, warp, misc)
-#if URANIUM_MAP_WALKER == TRUE
-    if (UraniumWalker_IsActive())
+    // BEGIN RPG2GBA MAP WALKER — suppress all step-based scripts (coord, warp, misc)
+#if RPG2GBA_MAP_WALKER == TRUE
+    if (Rpg2gbaWalker_IsActive())
         return FALSE;
 #endif
-    // END URANIUM MAP WALKER
+    // END RPG2GBA MAP WALKER
     if (TryStartCoordEventScript(position) == TRUE)
         return TRUE;
     if (TryStartWarpEventScript(position, metatileBehavior) == TRUE)
@@ -1088,13 +1088,13 @@ static void SetupWarp(struct MapHeader *unused, s8 warpEventId, struct MapPositi
         warpEvent = &gMapHeader.events->warps[warpEventId];
     }
 
-    // BEGIN URANIUM PATHFINDER SLICE — the departure warp's arrival facing overrides the
+    // BEGIN RPG2GBA ENGINE — the departure warp's arrival facing overrides the
     // facing StoreInitialPlayerAvatarState() just saved (0 = keep it). Stock maps carry 0.
 #if RPG2GBA_WARP_RETAIN_FACING
     if (warpEvent->facing != DIR_NONE)
         SetInitialPlayerAvatarDirection(warpEvent->facing);
 #endif
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
 
     if (warpEvent->mapNum == MAP_NUM(MAP_DYNAMIC))
     {

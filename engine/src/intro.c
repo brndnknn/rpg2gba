@@ -1050,18 +1050,21 @@ static void SerialCB_CopyrightScreen(void)
 
 static u8 SetUpCopyrightScreen(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE — skip the copyright screen (boot gate, test-only).
+    // BEGIN RPG2GBA HARNESS — skip the copyright screen (boot gate, test-only).
+    // Gated on RPG2GBA_HARNESS (config/rpg2gba_harness.h); FALSE keeps the stock boot.
+#if RPG2GBA_HARNESS == TRUE
     // Boot straight into the slice without loading/showing gIntroCopyright or running the
     // GameCube-multiboot handshake (both irrelevant for a standalone slice ROM). Returning 0
     // lets the CB2_InitCopyrightScreenAfterBootup wrapper still run the one-time save-block +
-    // heap init that CB2_StartUraniumSlice (-> CB2_NewGame) relies on; CB2_NewGame resets the
+    // heap init that CB2_StartRpg2gbaHarness (-> CB2_NewGame) relies on; CB2_NewGame resets the
     // GPU itself, so the COPYRIGHT_INITIALIZE clears below are not needed. Force-blank the
     // display so the single skipped frame is clean, not BIOS-boot leftover. This is the sole
     // slice-boot hook — delete this block to restore the vanilla copyright screen + intro.
     SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_FORCED_BLANK);
-    SetMainCallback2(CB2_StartUraniumSlice);
+    SetMainCallback2(CB2_StartRpg2gbaHarness);
     return 0;
-    // END URANIUM PATHFINDER SLICE
+#endif
+    // END RPG2GBA HARNESS
 
     if (IS_FRLG)
         return SetUpCopyrightScreenFrlg();

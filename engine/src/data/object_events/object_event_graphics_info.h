@@ -7226,6 +7226,6 @@ const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_SSAnne = {
 
 #endif // IS_FRLG
 
-// BEGIN URANIUM PATHFINDER SLICE — generated Uranium OW sprite graphics-info structs (rpg2gba; stub when none staged).
-#include "uranium_object_event_graphics_info.gen.h"
-// END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA GAME PROFILE — generated Uranium OW sprite graphics-info structs (rpg2gba; stub when none staged).
+#include "rpg2gba_object_event_graphics_info.gen.h"
+// END RPG2GBA GAME PROFILE

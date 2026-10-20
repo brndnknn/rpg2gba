@@ -72,10 +72,10 @@ def test_emitted_constants_match_manifest(tmp_path: Path) -> None:
     out_dir = tmp_path / "out"
     manifest = write_all(out_dir=out_dir, fronts=fronts, backs=backs)
 
-    front_ids = _read(out_dir / "uranium_trainer_front_pic_ids.h")
-    back_ids = _read(out_dir / "uranium_trainer_back_pic_ids.h")
-    sprites = _read(out_dir / "uranium_trainer_sprites.h")
-    backsprites = _read(out_dir / "uranium_trainer_backsprites.h")
+    front_ids = _read(out_dir / "rpg2gba_trainer_front_pic_ids.h")
+    back_ids = _read(out_dir / "rpg2gba_trainer_back_pic_ids.h")
+    sprites = _read(out_dir / "rpg2gba_trainer_sprites.h")
+    backsprites = _read(out_dir / "rpg2gba_trainer_backsprites.h")
 
     front_record = next(r for r in manifest["trainers"] if r["kind"] == "front")
     back_record = next(r for r in manifest["trainers"] if r["kind"] == "back")
@@ -113,11 +113,11 @@ def test_empty_selection_produces_valid_noop_files(tmp_path: Path) -> None:
     assert manifest["trainers"] == []
 
     for name in (
-        "uranium_trainer_front_pic_ids.h",
-        "uranium_trainer_back_pic_ids.h",
-        "uranium_trainer_graphics.h",
-        "uranium_trainer_sprites.h",
-        "uranium_trainer_backsprites.h",
+        "rpg2gba_trainer_front_pic_ids.h",
+        "rpg2gba_trainer_back_pic_ids.h",
+        "rpg2gba_trainer_graphics.h",
+        "rpg2gba_trainer_sprites.h",
+        "rpg2gba_trainer_backsprites.h",
     ):
         content = _read(out_dir / name)
         assert "no-op" in content
@@ -128,14 +128,14 @@ def test_empty_selection_produces_valid_noop_files(tmp_path: Path) -> None:
 
     # the chaining defines are still emitted with a zero count -- the back
     # header must have something valid to chain off even in a no-op run.
-    front_ids = _read(out_dir / "uranium_trainer_front_pic_ids.h")
-    back_ids = _read(out_dir / "uranium_trainer_back_pic_ids.h")
+    front_ids = _read(out_dir / "rpg2gba_trainer_front_pic_ids.h")
+    back_ids = _read(out_dir / "rpg2gba_trainer_back_pic_ids.h")
     assert "#define URANIUM_TRAINER_PIC_AFTER_FRONT" in front_ids
     assert "(TRAINER_PIC_COUNT + 0)" in front_ids
     assert "#define URANIUM_TRAINER_PIC_TOTAL" in back_ids
     assert "(URANIUM_TRAINER_PIC_AFTER_FRONT + 0)" in back_ids
-    assert "URANIUM_HAVE_PLAYER_BACK_PIC" not in back_ids
-    assert "URANIUM_HAVE_PLAYER_FEMALE_BACK_PIC" not in back_ids
+    assert "RPG2GBA_HAVE_PLAYER_BACK_PIC" not in back_ids
+    assert "RPG2GBA_HAVE_PLAYER_FEMALE_BACK_PIC" not in back_ids
 
 
 # --- 3. Idempotence ------------------------------------------------------------
@@ -171,9 +171,9 @@ def test_sprite_rows_reference_declared_incgfx_symbols(tmp_path: Path) -> None:
     out_dir = tmp_path / "out"
     write_all(out_dir=out_dir, fronts=fronts, backs=backs)
 
-    graphics = _read(out_dir / "uranium_trainer_graphics.h")
-    sprites = _read(out_dir / "uranium_trainer_sprites.h")
-    backsprites = _read(out_dir / "uranium_trainer_backsprites.h")
+    graphics = _read(out_dir / "rpg2gba_trainer_graphics.h")
+    sprites = _read(out_dir / "rpg2gba_trainer_sprites.h")
+    backsprites = _read(out_dir / "rpg2gba_trainer_backsprites.h")
 
     declared = set(re.findall(r"\bg\w+(?=\[\])", graphics))
 
@@ -198,7 +198,7 @@ def test_back_sprite_uses_yoffset_4_and_uranium_anim_table(tmp_path: Path) -> No
     out_dir = tmp_path / "out"
     write_all(out_dir=out_dir, fronts=fronts, backs=backs)
 
-    backsprites = _read(out_dir / "uranium_trainer_backsprites.h")
+    backsprites = _read(out_dir / "rpg2gba_trainer_backsprites.h")
     assert BACK_SPRITE_Y_OFFSET == 4
     assert BACK_SPRITE_ANIM_TABLE == "sBackAnims_Uranium"
 
@@ -221,7 +221,7 @@ def test_graphics_header_defines_uranium_anim_tables_when_back_pic_staged(
     out_dir = tmp_path / "out"
     write_all(out_dir=out_dir, fronts=fronts, backs=backs)
 
-    graphics = _read(out_dir / "uranium_trainer_graphics.h")
+    graphics = _read(out_dir / "rpg2gba_trainer_graphics.h")
     assert "sAnim_UraniumBackIdle" in graphics
     assert "sAnimCmd_UraniumBackThrow" in graphics
     assert "sBackAnims_Uranium" in graphics
@@ -234,7 +234,7 @@ def test_graphics_header_omits_uranium_anim_tables_when_no_back_pic_staged(
     fronts = [StagedFrontPic(spec=RIVAL_SPEC, result=_front_result(RIVAL_SPEC))]
     write_all(out_dir=out_dir, fronts=fronts, backs=())
 
-    graphics = _read(out_dir / "uranium_trainer_graphics.h")
+    graphics = _read(out_dir / "rpg2gba_trainer_graphics.h")
     assert "sAnim_UraniumBackIdle" not in graphics
     assert "sAnimCmd_UraniumBackThrow" not in graphics
     assert "sBackAnims_Uranium" not in graphics
@@ -245,7 +245,7 @@ def test_uranium_back_throw_table_frame_sequence_is_0123(tmp_path: Path) -> None
     out_dir = tmp_path / "out"
     write_all(out_dir=out_dir, fronts=fronts, backs=backs)
 
-    graphics = _read(out_dir / "uranium_trainer_graphics.h")
+    graphics = _read(out_dir / "rpg2gba_trainer_graphics.h")
     throw_block = graphics.split("sAnimCmd_UraniumBackThrow[] =")[1].split("};")[0]
     frames = re.findall(r"ANIMCMD_FRAME\((\d+),", throw_block)
     assert frames == ["0", "1", "2", "3"], frames
@@ -259,7 +259,7 @@ def test_incgfx_art_paths_match_manifest_art_files(tmp_path: Path) -> None:
     out_dir = tmp_path / "out"
     manifest = write_all(out_dir=out_dir, fronts=fronts, backs=backs)
 
-    graphics = _read(out_dir / "uranium_trainer_graphics.h")
+    graphics = _read(out_dir / "rpg2gba_trainer_graphics.h")
     for record in manifest["trainers"]:
         for art_path in record["art_files"].values():
             assert art_path in graphics, f"{art_path} not referenced in graphics header"
@@ -274,8 +274,8 @@ def test_pic_ids_are_defines_not_enum_members(tmp_path: Path) -> None:
     out_dir = tmp_path / "out"
     write_all(out_dir=out_dir, fronts=fronts, backs=backs)
 
-    front_ids = _read(out_dir / "uranium_trainer_front_pic_ids.h")
-    back_ids = _read(out_dir / "uranium_trainer_back_pic_ids.h")
+    front_ids = _read(out_dir / "rpg2gba_trainer_front_pic_ids.h")
+    back_ids = _read(out_dir / "rpg2gba_trainer_back_pic_ids.h")
 
     # no bare enumerator lines (e.g. "    TRAINER_PIC_FRONT_URANIUM_RIVAL,")
     # -- these must never be spliced into enum TrainerPicID's body again.
@@ -307,9 +307,9 @@ def test_player_male_back_pic_emits_have_guard(tmp_path: Path) -> None:
     out_dir = tmp_path / "out"
     write_all(out_dir=out_dir, fronts=fronts, backs=backs)
 
-    back_ids = _read(out_dir / "uranium_trainer_back_pic_ids.h")
-    assert "#define URANIUM_HAVE_PLAYER_BACK_PIC" in back_ids
-    assert "URANIUM_HAVE_PLAYER_FEMALE_BACK_PIC" not in back_ids
+    back_ids = _read(out_dir / "rpg2gba_trainer_back_pic_ids.h")
+    assert "#define RPG2GBA_HAVE_PLAYER_BACK_PIC" in back_ids
+    assert "RPG2GBA_HAVE_PLAYER_FEMALE_BACK_PIC" not in back_ids
 
 
 def test_no_player_back_pic_omits_have_guard(tmp_path: Path) -> None:
@@ -317,9 +317,9 @@ def test_no_player_back_pic_omits_have_guard(tmp_path: Path) -> None:
     fronts = [StagedFrontPic(spec=RIVAL_SPEC, result=_front_result(RIVAL_SPEC))]
     write_all(out_dir=out_dir, fronts=fronts, backs=())
 
-    back_ids = _read(out_dir / "uranium_trainer_back_pic_ids.h")
-    assert "URANIUM_HAVE_PLAYER_BACK_PIC" not in back_ids
-    assert "URANIUM_HAVE_PLAYER_FEMALE_BACK_PIC" not in back_ids
+    back_ids = _read(out_dir / "rpg2gba_trainer_back_pic_ids.h")
+    assert "RPG2GBA_HAVE_PLAYER_BACK_PIC" not in back_ids
+    assert "RPG2GBA_HAVE_PLAYER_FEMALE_BACK_PIC" not in back_ids
 
 
 # --- 9. Golden output ----------------------------------------------------------
@@ -331,11 +331,11 @@ def test_golden_output_for_slice_selection(tmp_path: Path) -> None:
     write_all(out_dir=out_dir, fronts=fronts, backs=backs)
 
     names = [
-        "uranium_trainer_front_pic_ids.h",
-        "uranium_trainer_back_pic_ids.h",
-        "uranium_trainer_graphics.h",
-        "uranium_trainer_sprites.h",
-        "uranium_trainer_backsprites.h",
+        "rpg2gba_trainer_front_pic_ids.h",
+        "rpg2gba_trainer_back_pic_ids.h",
+        "rpg2gba_trainer_graphics.h",
+        "rpg2gba_trainer_sprites.h",
+        "rpg2gba_trainer_backsprites.h",
     ]
     combined = "\n".join(f"// === {n} ===\n{_read(out_dir / n)}" for n in names)
 

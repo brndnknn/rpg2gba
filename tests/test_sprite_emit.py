@@ -321,7 +321,7 @@ def test_constants_file_golden(tmp_path: Path) -> None:
     idx_zzz = lines.index(f"#define OBJ_EVENT_GFX_URANIUM_ZZZ {FIRST_GFX_ID + 1}")
     assert idx_aaa < idx_zzz  # sorted by constant name, not sheet-name/insertion order
 
-    assert "#define NUM_URANIUM_OBJ_EVENT_GFX 2" in lines
+    assert "#define NUM_RPG2GBA_OBJ_EVENT_GFX 2" in lines
     assert "#define OBJ_EVENT_PAL_TAG_URANIUM_0 0x1134" in lines
     assert "OBJ_EVENT_PAL_TAG_URANIUM_1" not in text  # only 1 palette was needed
 
@@ -502,9 +502,9 @@ def test_multi_state_large_prop_emits_one_gfx_id_per_state(tmp_path: Path) -> No
     assert len(set(ids.values())) == 3
     for constant, gfx_id in ids.items():
         assert f"#define {constant} {gfx_id}\n" in constants
-    # NUM_URANIUM_OBJ_EVENT_GFX sizes the fork's id space, so it counts every
+    # NUM_RPG2GBA_OBJ_EVENT_GFX sizes the fork's id space, so it counts every
     # minted CONSTANT (3 here), not sheets (1).
-    assert "#define NUM_URANIUM_OBJ_EVENT_GFX 3\n" in constants
+    assert "#define NUM_RPG2GBA_OBJ_EVENT_GFX 3\n" in constants
 
 
 def test_multi_state_large_prop_states_share_one_strip_and_palette(tmp_path: Path) -> None:
@@ -694,7 +694,7 @@ def test_player_does_not_get_a_gfx_id_or_pointer_entry(tmp_path: Path) -> None:
     constants_text = (tmp_path / _GEN_RELPATHS["constants"]).read_text(encoding="utf-8")
     assert "OBJ_EVENT_GFX_URANIUM_PLAYER" not in constants_text
     # NPC gfx count is unaffected by the player being present.
-    assert "#define NUM_URANIUM_OBJ_EVENT_GFX 1" in constants_text
+    assert "#define NUM_RPG2GBA_OBJ_EVENT_GFX 1" in constants_text
 
 
 def test_player_field_move_graphics_info_struct_shape(tmp_path: Path) -> None:
@@ -936,7 +936,7 @@ def test_write_stub_gen_files_is_idempotent_and_minimal(tmp_path: Path) -> None:
     assert first == second
 
     constants_text = (tmp_path / _GEN_RELPATHS["constants"]).read_text(encoding="utf-8")
-    assert "#define NUM_URANIUM_OBJ_EVENT_GFX 0" in constants_text
+    assert "#define NUM_RPG2GBA_OBJ_EVENT_GFX 0" in constants_text
     assert "OBJ_EVENT_GFX_URANIUM_" not in constants_text
     assert "OBJ_EVENT_PAL_TAG_URANIUM_" not in constants_text
 
@@ -962,7 +962,7 @@ def test_stub_writer_pins_literal_content(tmp_path: Path) -> None:
         + "#ifndef GUARD_URANIUM_EVENT_OBJECTS_GEN_H\n"
         + "#define GUARD_URANIUM_EVENT_OBJECTS_GEN_H\n"
         + "\n"
-        + "#define NUM_URANIUM_OBJ_EVENT_GFX 0\n"
+        + "#define NUM_RPG2GBA_OBJ_EVENT_GFX 0\n"
         + "\n"
         + "#endif // GUARD_URANIUM_EVENT_OBJECTS_GEN_H\n"
     )

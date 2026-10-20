@@ -1,14 +1,14 @@
 #ifndef GUARD_REMATCHES_H
 #define GUARD_REMATCHES_H
 
-// BEGIN URANIUM PATHFINDER SLICE — generated PokePod rematch enum include-hook (rpg2gba; see engine/RPG2GBA_VENDOR.md).
-// The assembler always writes constants/uranium_rematches.gen.h (a no-op definition when no phone-rematch
-// trainers are staged); it defines URANIUM_REMATCH_MEMBERS, expanded below inside the enum. The include
+// BEGIN RPG2GBA GAME PROFILE — generated PokePod rematch enum include-hook (rpg2gba; see engine/RPG2GBA_VENDOR.md).
+// The assembler always writes constants/rpg2gba_rematches.gen.h (a no-op definition when no phone-rematch
+// trainers are staged); it defines RPG2GBA_REMATCH_MEMBERS, expanded below inside the enum. The include
 // MUST stay out here: .s files hit cpp before tools/preproc, and cpp's enter/leave-file line markers
 // (`# 1 "…" 1`) carry trailing flags AsmFile::ParseLineSkipInEnum can't parse — an in-enum #include kills
 // every assembly unit with "unterminated enum". A macro expands on its own invocation line, marker-free.
-#include "constants/uranium_rematches.gen.h"
-// END URANIUM PATHFINDER SLICE
+#include "constants/rpg2gba_rematches.gen.h"
+// END RPG2GBA GAME PROFILE
 
 enum {
     REMATCH_ROSE,
@@ -75,13 +75,13 @@ enum {
     REMATCH_TRENT,
     REMATCH_SAWYER,
     REMATCH_KIRA_AND_DAN,
-// BEGIN URANIUM PATHFINDER SLICE — generated PokePod rematch enum members (rpg2gba; see the include above).
+// BEGIN RPG2GBA GAME PROFILE — generated PokePod rematch enum members (rpg2gba; see the include above).
 // The REMATCH_URANIUM_* members MUST land above REMATCH_WALLY_VR: IsRematchForbidden (src/battle_setup.c)
 // rejects every id >= REMATCH_ELITE_FOUR_ENTRIES, and the normal-trainer scans in match_call.c stop at
 // REMATCH_SPECIAL_TRAINER_START. Appending at the end of the enum instead would compile clean and never
 // fire a rematch.
-    URANIUM_REMATCH_MEMBERS
-// END URANIUM PATHFINDER SLICE
+    RPG2GBA_REMATCH_MEMBERS
+// END RPG2GBA GAME PROFILE
     REMATCH_WALLY_VR,  // Entries above WALLY are considered normal trainers, from Wally below are special trainers
     REMATCH_ROXANNE,
     REMATCH_BRAWLY,

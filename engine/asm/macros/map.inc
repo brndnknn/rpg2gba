@@ -66,10 +66,10 @@
 	.byte \warpId
 	.byte \map_id & 0xFF  @ map num
 	.byte \map_id >> 8    @ map group
-	@ BEGIN URANIUM PATHFINDER SLICE — arrival facing (0 = retain, else DIR_*) + pad
+	@ BEGIN RPG2GBA ENGINE — arrival facing (0 = retain, else DIR_*) + pad
 	.byte \facing
 	.space 3  @ Padding (struct is 12 bytes under -mabi=apcs-gnu)
-	@ END URANIUM PATHFINDER SLICE
+	@ END RPG2GBA ENGINE
 	inc _num_warps
 	.endm
 

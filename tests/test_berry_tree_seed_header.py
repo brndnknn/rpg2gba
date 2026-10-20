@@ -56,7 +56,7 @@ def test_only_planted_rows_emitted_and_bare_soil_omitted(
     fork = tmp_path / "fork"
     ap.run_berry_tree_pass(out, fork, dry_run=False)
 
-    text = (fork / "data" / "scripts" / "uranium_berry_trees.h").read_text(encoding="utf-8")
+    text = (fork / "data" / "scripts" / "rpg2gba_berry_trees.h").read_text(encoding="utf-8")
     assert "URANIUM_BERRY_TREE_SEED_COUNT 2" in text
     assert text.count("X(") == 2
     # Three fields per row: treeId, item, source yield.
@@ -143,8 +143,8 @@ def test_output_byte_identical_across_two_runs(tmp_path: Path, monkeypatch) -> N
     ap.run_berry_tree_pass(out, fork1, dry_run=False)
     ap.run_berry_tree_pass(out, fork2, dry_run=False)
 
-    text1 = (fork1 / "data" / "scripts" / "uranium_berry_trees.h").read_text(encoding="utf-8")
-    text2 = (fork2 / "data" / "scripts" / "uranium_berry_trees.h").read_text(encoding="utf-8")
+    text1 = (fork1 / "data" / "scripts" / "rpg2gba_berry_trees.h").read_text(encoding="utf-8")
+    text2 = (fork2 / "data" / "scripts" / "rpg2gba_berry_trees.h").read_text(encoding="utf-8")
     assert text1 == text2
 
 
@@ -168,4 +168,4 @@ def test_dry_run_does_not_write(tmp_path: Path, monkeypatch) -> None:
 
     fork = tmp_path / "fork"
     ap.run_berry_tree_pass(out, fork, dry_run=True)
-    assert not (fork / "data" / "scripts" / "uranium_berry_trees.h").exists()
+    assert not (fork / "data" / "scripts" / "rpg2gba_berry_trees.h").exists()

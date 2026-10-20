@@ -4,7 +4,7 @@
 The pass appends the slice's derived white-out respawn points (start-anchor +
 Pokémon Center entries, `rpg2gba.pbs_converter.heal_locations.generate_entries`)
 onto an overlay of the fork's committed `src/data/heal_locations.json`, picked
-up by `engine/json_data_rules.mk`'s `URANIUM_HEAL_LOCATIONS` hook. Since the
+up by `engine/json_data_rules.mk`'s `RPG2GBA_HEAL_LOCATIONS` hook. Since the
 `heal_locations` module is being developed in parallel elsewhere, these tests
 monkeypatch `generate_entries` to a fixed contract-shaped return value rather
 than depending on real data -- matching `test_berry_tree_seed_header.py`'s

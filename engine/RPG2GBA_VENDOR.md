@@ -25,147 +25,100 @@ separately at build time and are **never** committed. Build artifacts (`build/`,
 
 ## Our custom changes (hand-written, version-controlled here)
 
-**CORRECTED 2026-09-07:** this section used to claim the custom diff was three
-test-only files ("revert/gate before a real build"). That was false and had
-gone stale enough to be actively dangerous — an agent trusting it would delete
-or gate working engine features believing them to be disposable test scaffolding.
-The real custom diff, as of this correction, is **77 files / +2647 -343 lines**
-and includes whole new source files (a 761-line map-walker debug mode, an
-embedded-save boot path), new engine mechanics (a movement-type bytecode
-interpreter, a live-graphics-swap special), gameplay content (four new berries,
-two new key items), pacing/save-layout changes, and roughly 15 generated-content
-include-hooks. None of that is test-only, and none of it should be reverted
-before "a real build" — it *is* the real build.
+**Rewritten 2026-10-20 (I3 S6).** The custom diff against the vendor import is
+109 files, +4907/-396 lines (measured with the command below on that date).
+Since I3 (`reference/engine_layers_i3_i5.md`) the edits follow one pattern:
+the stock engine stays as vendored, apart from fenced hooks; the pipeline
+generates each game's content and facts into gitignored `*.gen.h`/`.inc`/`.json`
+files those hooks pull in; generic features any RPG Maker conversion wants are
+hand-written engine code; and test-only behaviour sits behind one switch.
 
 ### The canonical check: diff against the vendor-import commit
 
-There is no hand-maintained file list here anymore — that list is what rotted
-into the false claim above. The primary view of what's custom vs. pristine is:
+There is no hand-maintained file list here; one rotted into a false claim in
+2026-09. The primary view of what's custom vs. pristine is:
 
 ```
 git diff 80cdfce2 HEAD -- engine/
 ```
 
 `80cdfce2` is the commit that imported this tree via `git archive` (see
-Provenance above). Everything after it in this repo's history is a hand-written
-custom change (plus incidental doc edits to this file itself).
+Provenance above). Upstream `21c24202` is **not usable** as the diff base: it is
+not a reachable commit object in this repository.
 
-Upstream `21c24202` (the SHA this tree was forked from) is **not usable** as
-the diff base: this tree was imported as a flat `git archive` snapshot with no
-upstream history carried over, so `21c24202` is not a reachable commit object
-in *this* repository — `git diff 21c24202 HEAD` will simply fail to resolve.
-
-**But `80cdfce2` is NOT a pristine baseline — corrected 2026-09-07.** This
-section used to claim the import "was a straight archive, not a rebase or a
-patched checkout" and that `80cdfce2` was "the last point at which `engine/` was
-byte-identical to upstream. **Both were false.** The import was taken from a
-*dirty* working tree, so three files arrived already carrying custom edits and
-the diff above is structurally blind to them:
+**`80cdfce2` is not a pristine baseline.** The import was taken from a dirty
+working tree, so three files arrived already carrying custom edits the diff
+cannot see (verified 2026-09-07 by blob hash against upstream; 29,958 of 29,961
+files identical):
 
 | File | What is below the baseline |
 |---|---|
-| `src/intro.c` | skip intro / title / menu, boot straight into a new game |
-| `src/new_game.c` | `CB2_StartUraniumSlice` + new-game spawn override into Moki Town |
+| `src/intro.c` | skip the copyright screen, intro and title; boot straight into a new game |
+| `src/new_game.c` | `CB2_StartRpg2gbaHarness` + the new-game spawn override |
 | `include/new_game.h` | its declaration |
 
-33 lines total. Established by comparing blob hashes against upstream
-`21c24202` while an external clone of it still existed (deleted 2026-09-07):
-**29,958 of 29,961 files were identical**, those three the only content
-exceptions. Twelve upstream files are also simply absent — `tools/compresSmol/*`,
-which `.gitignore` excludes, plus `tools/mgba/mgba-rom-test.exe`. Benign.
-
-All 33 lines *are* properly `// BEGIN URANIUM PATHFINDER SLICE` / `// END`
-fenced, so a sentinel grep does find them. That is the whole point:
+All of those lines are fenced (`RPG2GBA HARNESS` / `RPG2GBA GAME PROFILE` since
+S6), so a sentinel grep finds them:
 
 > **Fences miss unfenced edits; the diff misses pre-import edits. Neither check
-> is complete on its own — run both and take the union.**
+> is complete on its own: run both and take the union.**
 
-Re-run that `git diff` whenever you need to know what's custom — don't trust a
-prose summary (including the one below) to still be accurate; verify against
-the diff first, then grep the five sentinels for anything below the baseline.
+### Fence vocabulary
 
-### Orientation (not an inventory) of the major feature areas
+Every custom block is fenced `// BEGIN <sentinel> — why` ... `// END <sentinel>`
+(`@` in asm, `#` in make/python); a few one-line edits carry a single
+`// <sentinel>: ...` comment instead. Seven sentinels:
 
-This is a map to help you find your way into the diff above, not a substitute
-for reading it. Do not use this list to decide what's safe to revert — always
-check the diff. Verified against `git diff 80cdfce2 HEAD -- engine/` on
-2026-09-07:
+| Sentinel | What it marks |
+|---|---|
+| `RPG2GBA GAME PROFILE` | hooks for generated per-game content and facts (species, items, moves, trainers, maps, tilesets, cries, sprites, sizes, spawn), and switches that compile out stock content the game doesn't use |
+| `RPG2GBA ENGINE` | generic engine features any converted game wants (custom move routes, connection remaps, split-map warps, live sprite swap, warp facing, pacing knobs, bag description paging, game-move/ability behaviour) |
+| `RPG2GBA EVENT RANGE EXPANSION` | the extra converter-owned flag/var regions |
+| `RPG2GBA STREAMING` | 11-bit metatile ids, the streaming tile cache, the windowed big-map grid |
+| `RPG2GBA HARNESS` | test-harness boot: skip to a new game, fixed default name |
+| `RPG2GBA EMBEDDED SAVE` | a save blob a playtest stamps into the ROM (harness) |
+| `RPG2GBA MAP WALKER` | the Map Walker debug ROM mode (harness) |
 
-- **Uranium Map Walker** — a whole new debug ROM mode for inspecting converted
-  maps without playing through them: `src/uranium_map_walker.c` (new, 761
-  lines), `include/uranium_map_walker.h` (new), `include/config/uranium_walker.h`
-  (new, the `URANIUM_MAP_WALKER` build switch). Gated call sites in
-  `src/event_object_movement.c`, `src/field_control_avatar.c`, `src/overworld.c`,
-  and a day/night-tint override in `include/config/overworld.h`.
-- **Embedded save (dev/review boot-continue)** — `include/uranium_embedded_save.h`
-  and `src/uranium_embedded_save.c` (both new): a const blob a playtest harness
-  can stamp into a `.gba` so it boots straight into a tested state. Wired into
-  the boot path in `src/new_game.c` (`CB2_StartUraniumSlice`).
-- **Event-range expansion** — `include/config/rpg2gba.h` (new; the
-  `RPG2GBA_EXPAND_EVENT_RANGES` switch and region-size constants), extending
-  `constants/flags.h` and `constants/vars.h` with converter-owned flag/var
-  regions above the vanilla ranges, cleared per-map-transition in
-  `src/event_data.c`, and offset in save-layout terms by flipping
-  `FREE_MYSTERY_EVENT_BUFFERS` in `include/config/save.h` (FALSE → TRUE).
-- **Movement-type bytecode interpreter** — a new autonomous NPC movement type
-  (`MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE`, `constants/event_object_movement.h`)
-  backed by a full bytecode FSM in `src/event_object_movement.c` that replays
-  per-object RMXP move-route programs.
-- **battle_setup rematch/heal fixes** — a earlyrival heal-after/tutorial flag
-  bug fix and a battle-script wait fix in `src/battle_setup.c` and
-  `data/battle_scripts_1.s`, plus the generated PokePod rematch-table
-  include-hooks in `constants/rematches.h` / `src/battle_setup.c`.
-- **Palette/sound pacing knobs** — `RPG2GBA_FADE_DELTA_Y`, `RPG2GBA_BGM_TEMPO_SCALE`,
-  and `RPG2GBA_FAST_TEXT_DEFAULT` in `include/config/rpg2gba.h`, applied in
-  `src/palette.c`, `src/sound.c`, and `src/new_game.c` (`SetDefaultOptions`).
-- **Uranium-original berries and key items** — Acai/Bacu/Cupu/Guara berries and
-  the Sprinklotad/Bike Wheel key items, spanning `constants/items.h`,
-  `src/berry.c`, `src/data/items.h`, `src/data/graphics/*.h`,
-  `src/item_menu_icons.c`, and new art under `graphics/berries/` and
-  `graphics/items/`.
-- **A script-callable live graphics swap** — `RPG2GBA_SetObjectEventGfx`
-  (`asm/macros/event.inc`, `data/specials.inc`, `include/event_object_movement.h`,
-  `src/event_object_movement.c`), backing RMXP's move-command 41 ("Change
-  Graphic") which had no engine-side equivalent.
-- **New-game boot redirect** — `src/new_game.c` (spawn redirect + harness code,
-  extensively commented in place), `src/intro.c` (`SetUpCopyrightScreen`
-  short-circuit, sole boot hook), `include/new_game.h` (prototype). This is the
-  one area with real "test-harness" character (the badge-3 rock-smash rig
-  lived here until 2026-10-13), but even here most of the file's diff is
-  permanent slice-boot plumbing, not scaffolding to strip.
-- **Corpus-sized capacity increases** — `constants/opponents.h`
-  (`TRAINERS_COUNT_EMERALD`/`MAX_TRAINERS_COUNT_EMERALD` raised to cover the
-  full Uranium trainer corpus) and `constants/flags.h` (relocating
-  `TRAINER_REGISTERED_FLAGS_START` to a new `RPG2GBA_TRAINER_REGISTERED_FLAGS_*`
-  region) — both save-layout-breaking, both explained in place.
-- **Roughly 16 generated-content include-hooks** — the recurring pattern of "the
-  assembler writes a gitignored `*.gen.h`/`*.gen.json`/`.inc` file; a committed,
-  sentinel-fenced one-or-two-line hook includes it, falling back to an empty
-  stub or pristine upstream data when nothing is staged." Present in
-  `constants/species.h`, `constants/pokedex.h`, `constants/trainers.h`,
-  `constants/opponents.h`, `constants/rematches.h`, `constants/event_objects.h`,
-  `constants/cries.h`, `include/tilesets.h`, `src/data/tilesets/{graphics,headers,metatiles}.h`,
-  `src/data/object_events/object_event_{graphics,graphics_info,graphics_info_pointers,pic_tables}.h`,
-  `src/data/pokemon/species_info.h`, `src/data/graphics/{pokemon,trainers}.h`,
-  `src/data/script_menu.h` (custom multichoice, same pattern), `sound/cry_tables.inc`
-  (x2) and `sound/direct_sound_data.inc`, `data/event_scripts.s`, `data/map_events.s`,
-  `data/trainers.party`, `map_data_rules.mk` (wild_encounters overlay *and* the
-  `URANIUM_HEAL_LOCATIONS` heal-location overlay, `json_data_rules.mk`), `Makefile`,
-  and `tools/wild_encounters/wild_encounters_to_header.py`. The heal-location
-  entry also sets `SetLastHealLocationWarp(HEAL_LOCATION_URANIUM_START)` in
-  `src/new_game.c`'s `WarpToTruck` — not an include-hook itself, but part of
-  the same white-out-respawn feature (§14.7/§15.6 in `REDERIVATION_PLAN.md`).
+The `URANIUM PATHFINDER SLICE`, `URANIUM MAP WALKER` and `URANIUM EMBEDDED SAVE`
+sentinels were retired in S6; every block was reassigned to one of the above.
 
-Every item above is fenced with a sentinel comment naming its feature area
-(`URANIUM PATHFINDER SLICE`, `URANIUM MAP WALKER`, `URANIUM EMBEDDED SAVE`,
-`RPG2GBA EVENT RANGE EXPANSION`, or `RPG2GBA STREAMING` — the 11-bit metatile ids
-in `global.fieldmap.h`/`fieldmap.h`, 2026-10-16) — grep the tree for those five strings to find
-every fenced block. A handful of single-line edits to existing `#define`s
-(e.g. `constants/flags.h`'s `TRAINER_REGISTERED_FLAGS_START`,
-`constants/opponents.h`'s trainer-count constants) carry an inline explanatory
-comment naming the change instead of a full BEGIN/END bracket, because the
-change is a one-line value substitution, not an insertable block — the comment
-is still grep-able by the same sentinel vocabulary.
+### The harness switch
+
+`include/config/rpg2gba_harness.h` holds the two test switches:
+
+- `RPG2GBA_HARNESS` (default `TRUE`): boot straight into a new game (no
+  copyright screen, intro, title or main menu), name the player "RED", and load
+  an embedded save when one is stamped in. `FALSE` gives the stock boot.
+  Spawning at the game's own start map without the moving-truck scene is a game
+  fact, not harness: it follows `RPG2GBA_NEW_GAME_MAP` (generated game profile).
+- `RPG2GBA_MAP_WALKER` (default `FALSE`): the Map Walker debug ROM; requires
+  the harness.
+
+### Orientation (not an inventory) of the feature areas
+
+A map into the diff, not a substitute for it; check the diff before reverting
+anything.
+
+- **Generated content hooks** (`RPG2GBA GAME PROFILE`, ~50 blocks): species,
+  dex ids, learnsets, cries and sprites; items, berries and icons; moves,
+  abilities and the TM/HM list; trainers, parties, pics and rematches; object
+  event sprites and palettes; tilesets, metatiles and animations; maps,
+  layouts, scripts, wild encounters, heal locations, trades; the species
+  family profile; the game profile (HM badge gates, white-out flag, spawn) and
+  census sizes (flag/var regions, trainer capacity, bag pockets). Most use
+  `__has_include` with a stock fallback, so the tree also builds as stock.
+- **Engine features** (`RPG2GBA ENGINE`): the custom-route bytecode movement
+  type (`src/event_object_movement.c`), connection id remaps
+  (`src/rpg2gba_connection_remap.c`, `src/fieldmap.c`), split-map warps
+  (`src/rpg2gba_split_maps.c`), `RPG2GBA_SetObjectEventGfx`, warp arrival
+  facing, palette/BGM/text pacing knobs, bag description paging, field-move
+  badge gates, battle behaviour for the game's own moves and abilities (with
+  tests in `test/battle/rpg2gba/`).
+- **Streaming** (`RPG2GBA STREAMING`): `src/field_stream.c`, `src/fieldmap.c`,
+  `src/field_camera.c`, `include/global.fieldmap.h`.
+- **Harness** (`RPG2GBA HARNESS`, `EMBEDDED SAVE`, `MAP WALKER`): `src/intro.c`,
+  `src/new_game.c`, `src/rpg2gba_embedded_save.c`, `src/rpg2gba_map_walker.c`
+  and its gated call sites.
 
 ## Generated output is NOT committed
 The rpg2gba pipeline (`scripts/assemble_pathfinder.py`) writes generated maps,
@@ -173,9 +126,9 @@ layouts, scripts, and headers **into this tree**. Those are gitignored (see the
 repo-root `.gitignore`) and regenerated — **never commit pipeline output as
 engine source**. The assembler does **not** edit any tracked upstream file in place;
 it writes gitignored overlays — `data/maps/map_groups.gen.json`,
-`data/layouts/layouts.gen.json`, `data/maps/uranium_includes.inc`,
+`data/layouts/layouts.gen.json`, `data/maps/rpg2gba_includes.inc`,
 `src/data/heal_locations.gen.json`, the
-`uranium_*.h` / `CommonEvents.inc` headers, and the per-map dirs — which the committed
+`rpg2gba_*.h` / `*.gen.h` / `CommonEvents.inc` headers, and the per-map dirs — which the committed
 include-hooks described above pull in. So after an assembly run `git status` stays
 clean against this repo's committed state (only the tracked hook files, not the
 generated overlays they pull in, ever show as changed).

@@ -96,7 +96,7 @@ injection path**: `gRematchTable` and the `REMATCH_*` enum are hand-written C
 in committed vendored source with no generator tool and no data file for a
 `$(or $(wildcard …))` hook to swap. Installing it requires two one-line
 `#include` hooks in committed engine files (the
-`constants/event_objects.h` → `uranium_event_objects.gen.h` precedent), which
+`constants/event_objects.h` → `rpg2gba_event_objects.gen.h` precedent), which
 this unit deliberately does not make.
 """
 from __future__ import annotations
@@ -134,7 +134,7 @@ REMATCH_PREFIX = "REMATCH_URANIUM_"
 #: `AsmFile::ParseLineSkipInEnum` cannot parse -- every assembly unit that
 #: includes this header dies with "unterminated enum". A macro expands on the
 #: invocation line, emitting no line markers inside the enum at all.
-MEMBERS_MACRO = "URANIUM_REMATCH_MEMBERS"
+MEMBERS_MACRO = "RPG2GBA_REMATCH_MEMBERS"
 
 #: The Essentials call that marks an event as a PokePod phone trainer.
 PHONE_REGISTER_CALL = "pbPhoneRegisterBattle"
@@ -774,7 +774,7 @@ def _banner(kind: str) -> str:
 
 
 def emit_rematch_enum(entries: Sequence[RematchEntry]) -> str:
-    """`uranium_rematches.gen.h` — the `MEMBERS_MACRO` definition whose expansion
+    """`rpg2gba_rematches.gen.h` — the `MEMBERS_MACRO` definition whose expansion
     supplies the new enum members inside the `enum { … }` of
     `include/constants/rematches.h`, immediately BEFORE `REMATCH_WALLY_VR` (see
     the module docstring; appending at the end makes every entry
@@ -809,7 +809,7 @@ def emit_rematch_enum(entries: Sequence[RematchEntry]) -> str:
 
 
 def emit_rematch_table(entries: Sequence[RematchEntry]) -> str:
-    """`uranium_rematch_table.gen.h` — `gRematchTable` rows to be `#include`d
+    """`rpg2gba_rematch_table.gen.h` — `gRematchTable` rows to be `#include`d
     inside the initializer in `src/battle_setup.c`.
 
     Tier policy: the tier-1 trainer id in all five slots (module docstring).

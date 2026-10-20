@@ -24,7 +24,7 @@
 // transition like vanilla temp flags; global switches; per-event self
 // switches; the relocated trainer-registered-flags block, added 2026-08-25 —
 // see RPG2GBA_TRAINER_REGISTERED_FLAGS_COUNT below) and one var region. The
-// registry dump (data/scripts/uranium_flags.h) keys its bases off the
+// registry dump (data/scripts/rpg2gba_flags.h) keys its bases off the
 // RPG2GBA_*_START constants derived in constants/flags.h / constants/vars.h,
 // and the pipeline reads the *_COUNT capacities below at assembly time to
 // fail loud on overflow — keep this file the single source of truth for the
@@ -55,7 +55,7 @@
 #define RPG2GBA_VARS_COUNT             0x100  // 256
 #endif
 
-// URANIUM PATHFINDER SLICE: registered-flag block relocation (2026-08-25, user-authorized).
+// RPG2GBA ENGINE: registered-flag block relocation (2026-08-25, user-authorized).
 // Sizes the fourth converter-owned flag region (constants/flags.h,
 // RPG2GBA_TRAINER_REGISTERED_FLAGS_START/_END) that TRAINER_REGISTERED_FLAGS_START now aliases
 // instead of the literal 0x15C it used to be. Vanilla's registered-flag block (78 entries,

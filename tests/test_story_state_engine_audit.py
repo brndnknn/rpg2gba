@@ -5,7 +5,7 @@ Synthetic fixtures build tiny fenced C trees under `tmp_path` to exercise
 fence-form/nesting/function-detection quirks without touching the real
 vendored engine. A separate real-tree test asserts the two known fenced
 writes (`overworld.c:410` in `DoWhiteOut`, `new_game.c:404` in
-`CB2_StartUraniumSlice`) are found -- `engine/` is committed, so it never
+`CB2_StartRpg2gbaHarness`) are found -- `engine/` is committed, so it never
 skips.
 """
 from __future__ import annotations
@@ -41,14 +41,14 @@ def test_begin_end_form_is_found_with_enclosing_function(tmp_path: Path) -> None
     _write(src, """\
 void MyFunc(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE -- reason
+    // BEGIN RPG2GBA HARNESS -- reason
     FlagSet(FLAG_FOO);
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA HARNESS
 }
 """)
     regions = scan_fenced_regions(tmp_path)
     assert len(regions) == 1
-    assert regions[0].sentinel == "URANIUM PATHFINDER SLICE"
+    assert regions[0].sentinel == "RPG2GBA HARNESS"
     assert regions[0].function == "MyFunc"
     writes = fenced_state_writes(regions)
     assert len(writes) == 1
@@ -62,9 +62,9 @@ def test_bare_form_is_found(tmp_path: Path) -> None:
     _write(src, """\
 void OtherFunc(void)
 {
-    // URANIUM MAP WALKER: old-style opener
+    // RPG2GBA MAP WALKER: old-style opener
     VarSet(VAR_BAR, 1);
-    // END URANIUM MAP WALKER
+    // END RPG2GBA MAP WALKER
 }
 """)
     regions = scan_fenced_regions(tmp_path)
@@ -82,9 +82,9 @@ def test_write_outside_any_fence_is_ignored(tmp_path: Path) -> None:
 void F(void)
 {
     FlagSet(FLAG_STOCK);
-    // BEGIN URANIUM PATHFINDER SLICE -- reason
+    // BEGIN RPG2GBA HARNESS -- reason
     FlagSet(FLAG_FENCED);
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA HARNESS
 }
 """)
     writes = fenced_state_writes(scan_fenced_regions(tmp_path))
@@ -100,31 +100,31 @@ def test_bare_marker_skipped_over_by_a_different_sentinels_end(tmp_path: Path) -
     _write(src, """\
 void F(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE -- outer
-    // URANIUM MAP WALKER: just a mention, not a real fence
+    // BEGIN RPG2GBA HARNESS -- outer
+    // RPG2GBA MAP WALKER: just a mention, not a real fence
     FlagSet(FLAG_INSIDE_OUTER);
-    // END URANIUM PATHFINDER SLICE
-    // BEGIN URANIUM MAP WALKER -- a REAL, later, properly paired fence
+    // END RPG2GBA HARNESS
+    // BEGIN RPG2GBA MAP WALKER -- a REAL, later, properly paired fence
     FlagSet(FLAG_INSIDE_WALKER);
-    // END URANIUM MAP WALKER
+    // END RPG2GBA MAP WALKER
 }
 """)
     regions = scan_fenced_regions(tmp_path)
-    # Exactly two real regions: the outer SLICE, and the later real WALKER.
+    # Exactly two real regions: the outer HARNESS, and the later real WALKER.
     assert len(regions) == 2
     sentinels = sorted(r.sentinel for r in regions)
-    assert sentinels == ["URANIUM MAP WALKER", "URANIUM PATHFINDER SLICE"]
+    assert sentinels == ["RPG2GBA HARNESS", "RPG2GBA MAP WALKER"]
     writes = fenced_state_writes(regions)
     by_constant = {w.constant: w.sentinel for w in writes}
-    assert by_constant["FLAG_INSIDE_OUTER"] == "URANIUM PATHFINDER SLICE"
-    assert by_constant["FLAG_INSIDE_WALKER"] == "URANIUM MAP WALKER"
+    assert by_constant["FLAG_INSIDE_OUTER"] == "RPG2GBA HARNESS"
+    assert by_constant["FLAG_INSIDE_WALKER"] == "RPG2GBA MAP WALKER"
 
 
 def test_unclosed_bare_opener_at_eof_is_a_one_line_marker(tmp_path: Path) -> None:
     src = tmp_path / "include" / "config" / "rpg2gba.h"
     _write(src, """\
 #define X 1
-// URANIUM PATHFINDER SLICE: just a one-line note, never closed
+// RPG2GBA HARNESS: just a one-line note, never closed
 #define Y 2
 """)
     regions = scan_fenced_regions(tmp_path)
@@ -136,7 +136,7 @@ def test_unclosed_begin_is_malformed_and_raises(tmp_path: Path) -> None:
     _write(src, """\
 void F(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE -- never closed
+    // BEGIN RPG2GBA HARNESS -- never closed
     FlagSet(FLAG_X);
 }
 """)
@@ -149,10 +149,10 @@ def test_real_begin_skipped_over_by_mismatched_end_raises(tmp_path: Path) -> Non
     _write(src, """\
 void F(void)
 {
-    // BEGIN URANIUM MAP WALKER -- real fence A
-    // BEGIN URANIUM PATHFINDER SLICE -- real fence B, nested
+    // BEGIN RPG2GBA MAP WALKER -- real fence A
+    // BEGIN RPG2GBA HARNESS -- real fence B, nested
     FlagSet(FLAG_X);
-    // END URANIUM MAP WALKER
+    // END RPG2GBA MAP WALKER
 }
 """)
     with pytest.raises(ValueError, match="is never closed by its own"):
@@ -167,9 +167,9 @@ def test_undeclared_write_is_flagged(tmp_path: Path) -> None:
     _write(src, """\
 void F(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE -- reason
+    // BEGIN RPG2GBA HARNESS -- reason
     FlagSet(FLAG_SURPRISE);
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA HARNESS
 }
 """)
     report = audit(tmp_path, flag_state={"switches": {}, "variables": {}}, intro_end_state=(), chapter_read_keys=set())
@@ -187,9 +187,9 @@ def test_declared_transition_write_is_not_undeclared(tmp_path: Path, monkeypatch
     _write(src, """\
 void DoWhiteOut(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE -- reason
+    // BEGIN RPG2GBA HARNESS -- reason
     FlagSet(FLAG_STARTING_OVER);
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA HARNESS
 }
 """)
     fake_transition = EngineTransition(
@@ -311,11 +311,11 @@ def test_chapter_read_keys_skips_stripped_events(tmp_path: Path) -> None:
 def test_intro_gap_vs_unread_vs_satisfied(tmp_path: Path) -> None:
     engine_dir = tmp_path
     _write(engine_dir / "src" / "new_game.c", """\
-void CB2_StartUraniumSlice(void)
+void CB2_StartRpg2gbaHarness(void)
 {
-    // BEGIN URANIUM PATHFINDER SLICE -- reason
+    // BEGIN RPG2GBA HARNESS -- reason
     FlagSet(FLAG_MUM);
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA HARNESS
 }
 """)
     flag_state = {

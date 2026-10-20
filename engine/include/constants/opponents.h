@@ -859,23 +859,23 @@
 #define TRAINER_LEAF                        852
 #define TRAINER_BRENDAN_PLACEHOLDER         853
 #define TRAINER_MAY_PLACEHOLDER             854
-// BEGIN URANIUM PATHFINDER SLICE — generated trainer ids (rpg2gba; see engine/RPG2GBA_VENDOR.md).
+// BEGIN RPG2GBA GAME PROFILE — generated trainer ids (rpg2gba; see engine/RPG2GBA_VENDOR.md).
 // The included file is pipeline-GENERATED + gitignored; the assembler writes it and this hook
 // stays committed + stable across chapters. When no trainers are staged the generated file is an
-// empty stub, URANIUM_TRAINERS_LAST falls back below. Replaced the hand-written TRAINER_THEO_9/10/11
+// empty stub, RPG2GBA_TRAINERS_LAST falls back below. Replaced the hand-written TRAINER_THEO_9/10/11
 // block on 2026-08-05 — Theo is now generated from Uranium trainers.dat ids 9/10/11 like every
 // other trainer, so his ids moved off 855-857 (nothing references the raw numbers).
-#include "constants/uranium_trainer_ids.h"
-#ifndef URANIUM_TRAINERS_LAST
-#define URANIUM_TRAINERS_LAST TRAINER_MAY_PLACEHOLDER
+#include "constants/rpg2gba_trainer_ids.h"
+#ifndef RPG2GBA_TRAINERS_LAST
+#define RPG2GBA_TRAINERS_LAST TRAINER_MAY_PLACEHOLDER
 #endif
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA GAME PROFILE
 
 // NOTE: Because each Trainer uses a flag to determine when they are defeated, there is only space for 9 additional trainers before trainer flag space overflows
 //       More space can be made by shifting flags around in constants/flags.h or changing how trainer flags are handled
 //       MAX_TRAINERS_COUNT can be increased but will take up additional saveblock space
 
-// BEGIN URANIUM PATHFINDER SLICE — corpus-sized trainer provisioning (2026-08-05, user-authorized).
+// BEGIN RPG2GBA GAME PROFILE — corpus-sized trainer provisioning (2026-08-05, user-authorized).
 // Vanilla was 858/864 — 6 free slots, and CH02 alone needs 9. Uranium ships 331 trainers
 // (output/uranium-build/intermediate/trainers.json), so both counts are raised ONCE to cover the
 // whole corpus rather than per chapter: 854 vanilla + 331 Uranium = 1185, rounded up.
@@ -884,7 +884,7 @@
 // Raising MAX shifts SYSTEM_FLAGS and everything after it, which grows SaveBlock1.flags[] and
 // moves every saveblock member past it — EXISTING SAVES DO NOT SURVIVE THIS. That cost is the
 // same for +9 as for +400, which is why it is paid once here.
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA GAME PROFILE
 // BEGIN RPG2GBA GAME PROFILE — the trainer count comes from the generated census when present
 // (config/rpg2gba_sizes.gen.h): generated ids chain from TRAINER_MAY_PLACEHOLDER (854) by +1, so
 // the last id is 854 + N and the count is 855 + N. MAX rounds that up to a multiple of 8 so the

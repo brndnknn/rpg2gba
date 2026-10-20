@@ -121,7 +121,7 @@ which wipe VRAM.
 
 **Pinned slots.** These are never handed out by the allocator:
 - **Animated tiles** keep today's fixed slots. The generated anim code
-  (`uranium_anims.gen.h`) is unchanged, and the packer places animated
+  (`rpg2gba_anims.gen.h`) is unchanged, and the packer places animated
   tiles first, as it does now.
 - **Door tiles** keep 1008–1023.
 - **Tile 0** stays transparent.
@@ -229,7 +229,7 @@ story progress to test it.
    - Its worst window (662) is nearly as dense as 101's (671).
 
 2. **Map Walker ROM for the unreached maps.** This already exists:
-   - `URANIUM_MAP_WALKER` in `engine/include/config/uranium_walker.h`
+   - `RPG2GBA_MAP_WALKER` in `engine/include/config/rpg2gba_harness.h`
      (README "Map Walker") builds a ROM with free movement, no NPCs or
      scripts, and a START-menu warp to any map.
    - Today it leaves out the over-cap maps (`WALKER_OVERFLOW_MAP_IDS`,
@@ -391,7 +391,7 @@ numbers.
 
 **Map Walker.** The walker recipe had rotted. A chapter-era engine line set a
 story flag the walker build doesn't generate (`FLAG_STARTING_OVER` in
-`DoWhiteOut`, now `#if URANIUM_MAP_WALKER == FALSE`). The chapter's generated
+`DoWhiteOut`, now `#if RPG2GBA_MAP_WALKER == FALSE`). The chapter's generated
 tables also name chapter maps, so a walker over a chapter build needs the
 chapter's maps in its list. The `full` corpus now keeps streamed maps instead
 of excluding them as overflow.

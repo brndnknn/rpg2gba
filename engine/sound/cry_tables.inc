@@ -2552,11 +2552,11 @@ gCryTable::
 .if P_FAMILY_PECHARUNT == TRUE
 	cry Cry_Pecharunt
 .endif @ P_FAMILY_PECHARUNT
-@ BEGIN URANIUM PATHFINDER SLICE — generated forward cry rows (rpg2gba).
+@ BEGIN RPG2GBA GAME PROFILE — generated forward cry rows (rpg2gba).
 @ GENERATED + gitignored; empty stub when no species are staged. Must stay inside the
 @ P_CRIES_ENABLED block, and in the SAME order as the CRY_* enum and the reverse table below.
-	.include "sound/uranium_cry_table_forward.inc"
-@ END URANIUM PATHFINDER SLICE
+	.include "sound/rpg2gba_cry_table_forward.inc"
+@ END RPG2GBA GAME PROFILE
 .endif @ P_CRIES_ENABLED
 
 	.align 2
@@ -5113,9 +5113,9 @@ gCryTable_Reverse::
 .if P_FAMILY_PECHARUNT == TRUE
 	cry_reverse Cry_Pecharunt
 .endif @ P_FAMILY_PECHARUNT
-@ BEGIN URANIUM PATHFINDER SLICE — generated reverse cry rows (rpg2gba).
+@ BEGIN RPG2GBA GAME PROFILE — generated reverse cry rows (rpg2gba).
 @ GENERATED + gitignored; empty stub when no species are staged. SAME order as the forward
 @ table above and the CRY_* enum — a mismatch silently plays the wrong species' cry.
-	.include "sound/uranium_cry_table_reverse.inc"
-@ END URANIUM PATHFINDER SLICE
+	.include "sound/rpg2gba_cry_table_reverse.inc"
+@ END RPG2GBA GAME PROFILE
 .endif @ P_CRIES_ENABLED

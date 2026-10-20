@@ -1,7 +1,7 @@
 #include "global.h"
-// BEGIN URANIUM PATHFINDER SLICE — RPG2GBA_WARP_RETAIN_FACING, used by ScrCmd_warp.
+// BEGIN RPG2GBA ENGINE — RPG2GBA_WARP_RETAIN_FACING, used by ScrCmd_warp.
 #include "config/rpg2gba.h"
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA ENGINE
 #include "frontier_util.h"
 #include "battle_setup.h"
 #include "battle_util.h"
@@ -982,14 +982,14 @@ bool8 ScrCmd_warp(struct ScriptContext *ctx)
     SetWarpDestination(mapGroup, mapNum, warpId, x, y);
     DoWarp();
     ResetInitialPlayerAvatarState();
-    // BEGIN URANIUM PATHFINDER SLICE — script warps keep the player's facing (RMXP dir 0),
+    // BEGIN RPG2GBA ENGINE — script warps keep the player's facing (RMXP dir 0),
     // or take an explicit one set by the SetWarpArrivalFacing special. Transition flags
     // (bike/surf) still reset as in vanilla; only the direction is carried.
 #if RPG2GBA_WARP_RETAIN_FACING
     if (!ApplyPendingWarpArrivalFacing())
         SetInitialPlayerAvatarDirection(GetPlayerFacingDirection());
 #endif
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
     return TRUE;
 }
 

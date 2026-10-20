@@ -44,11 +44,11 @@ def extract_repo_species_data() -> list:
     teaching_type = "DEFAULT_LEARNING"
     file_list = sorted(glob.glob("src/data/pokemon/species_info/*_families.h"))
     file_list.append("./src/data/pokemon/species_info.h")
-    # BEGIN URANIUM PATHFINDER SLICE — species_info.h only #includes the staged Uranium
+    # BEGIN RPG2GBA GAME PROFILE — species_info.h only #includes the staged Uranium
     # species file (entries only, no #ifs of its own), so scan it too; absent = no-op.
-    if pathlib.Path("./src/data/pokemon/uranium_species_info.h").is_file():
-        file_list.append("./src/data/pokemon/uranium_species_info.h")
-    # END URANIUM PATHFINDER SLICE
+    if pathlib.Path("./src/data/pokemon/rpg2gba_species_info.h").is_file():
+        file_list.append("./src/data/pokemon/rpg2gba_species_info.h")
+    # END RPG2GBA GAME PROFILE
     for families_fname in file_list:
         with open(families_fname, "r") as family_fp:
             species_lines = family_fp.readlines()

@@ -32,8 +32,8 @@ The code lives in `src/rpg2gba/map_split/` (`ids`, `spec`, `derive`, `stage`,
   currently shares `MAPSEC_LITTLEROOT_TOWN` (`metadata_wiring.DEFAULT_MAPSEC`),
   so a "same MAPSEC" test would silence popups across the whole game. The
   engine instead compares `gLastUsedWarp` with the current map against a
-  generated sibling table (`engine/src/uranium_split_maps.c`,
-  `src/data/uranium_split_siblings.gen.h`). It skips the popup only when both
+  generated sibling table (`engine/src/rpg2gba_split_maps.c`,
+  `src/data/rpg2gba_split_siblings.gen.h`). It skips the popup only when both
   maps are pieces of the same split map.
 - **Split pieces never get the tile merge.** `rom_quantize.tile_merge_exempt`
   keeps it off for any tileset holding a piece. That was the purpose of the
@@ -268,7 +268,7 @@ the connection path**. Crossing a cut would therefore show "Nowtoch City" every
 time.
 
 There are two options:
-- **(a) Recommended:** a fenced `URANIUM PATHFINDER SLICE` edit that applies the
+- **(a) Recommended:** a fenced `RPG2GBA ENGINE` edit (was `URANIUM PATHFINDER SLICE` before the 2026-10-20 relabel) that applies the
   same "same MAPSEC as the map just left → no popup" check on the warp path.
   This changes baseline behaviour (vanilla shows the popup on re-entering the
   same section by door), so it needs approval under §10.

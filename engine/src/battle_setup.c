@@ -232,12 +232,12 @@ const struct RematchTrainer gRematchTable[REMATCH_TABLE_ENTRIES] =
     [REMATCH_GLACIA] = REMATCH(TRAINER_GLACIA, TRAINER_GLACIA, TRAINER_GLACIA, TRAINER_GLACIA, TRAINER_GLACIA, MAP_EVER_GRANDE_CITY),
     [REMATCH_DRAKE] = REMATCH(TRAINER_DRAKE, TRAINER_DRAKE, TRAINER_DRAKE, TRAINER_DRAKE, TRAINER_DRAKE, MAP_EVER_GRANDE_CITY),
     [REMATCH_WALLACE] = REMATCH(TRAINER_WALLACE, TRAINER_WALLACE, TRAINER_WALLACE, TRAINER_WALLACE, TRAINER_WALLACE, MAP_EVER_GRANDE_CITY),
-// BEGIN URANIUM PATHFINDER SLICE — generated PokePod rematch rows include-hook (rpg2gba; see engine/RPG2GBA_VENDOR.md).
-// The assembler always writes data/uranium_rematch_table.gen.h (comment-only stub when no phone-rematch
+// BEGIN RPG2GBA GAME PROFILE — generated PokePod rematch rows include-hook (rpg2gba; see engine/RPG2GBA_VENDOR.md).
+// The assembler always writes data/rpg2gba_rematch_table.gen.h (comment-only stub when no phone-rematch
 // trainers are staged). Rows are [REMATCH_URANIUM_*] designated initializers, so position inside this
 // initializer is irrelevant; the enum ordering hook in constants/rematches.h is what matters.
-#include "data/uranium_rematch_table.gen.h"
-// END URANIUM PATHFINDER SLICE
+#include "data/rpg2gba_rematch_table.gen.h"
+// END RPG2GBA GAME PROFILE
 };
 
 #define tState data[0]
@@ -1325,7 +1325,7 @@ void BattleSetup_StartTrainerBattle(void)
         }
     }
 
-    // BEGIN URANIUM PATHFINDER SLICE — HEAL_AFTER-only earlyrival must NOT be a FIRST_BATTLE.
+    // BEGIN RPG2GBA ENGINE — HEAL_AFTER-only earlyrival must NOT be a FIRST_BATTLE.
     // Upstream masks with `& RIVAL_BATTLE_TUTORIAL`, but RIVAL_BATTLE_TUTORIAL == 3 (0b11)
     // and RIVAL_BATTLE_HEAL_AFTER == 1 (0b01), so `HEAL_AFTER & TUTORIAL` is truthy too — a
     // plain heal-after rival battle wrongly gained BATTLE_TYPE_FIRST_BATTLE. On a LOSS that
@@ -1340,7 +1340,7 @@ void BattleSetup_StartTrainerBattle(void)
     if (GetTrainerBattleMode() == TRAINER_BATTLE_EARLY_RIVAL
         && (GetRivalBattleFlags() & RIVAL_BATTLE_TUTORIAL) == RIVAL_BATTLE_TUTORIAL)
         gBattleTypeFlags |= BATTLE_TYPE_FIRST_BATTLE;
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
 
     if (CurrentBattlePyramidLocation() != PYRAMID_LOCATION_NONE)
     {

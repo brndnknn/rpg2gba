@@ -23,8 +23,8 @@ Fixed values: ivs all 15, abilityNum 0, conditions 0, sheen 0, no held item, no
 mail; `personality` and `otId` are crc32 hashes of the const name, so output is
 idempotent across runs.
 
-The generated fragments (`constants/uranium_ingame_trades.gen.h`,
-`data/uranium_ingame_trade_table.gen.h`) are `#include`d by fenced hooks in the
+The generated fragments (`constants/rpg2gba_ingame_trades.gen.h`,
+`data/rpg2gba_ingame_trade_table.gen.h`) are `#include`d by fenced hooks in the
 vendored `include/constants/trade.h` and `src/data/trade.h`.
 """
 from __future__ import annotations
@@ -40,9 +40,9 @@ from rpg2gba.map_split.ids import origin_of
 from rpg2gba.pbs_converter._id_map import IdMap
 
 GENERATOR = "rpg2gba.ingame_trades"
-MEMBERS_MACRO = "URANIUM_INGAME_TRADE_MEMBERS"
-ENUM_FILENAME = "uranium_ingame_trades.gen.h"
-TABLE_FILENAME = "uranium_ingame_trade_table.gen.h"
+MEMBERS_MACRO = "RPG2GBA_INGAME_TRADE_MEMBERS"
+ENUM_FILENAME = "rpg2gba_ingame_trades.gen.h"
+TABLE_FILENAME = "rpg2gba_ingame_trade_table.gen.h"
 
 #: Fixed vanilla-style values (operator ruling 2026-10-09).
 FIXED_IV = 15
@@ -261,7 +261,7 @@ def _provenance(s: InGameTradeSpec) -> str:
 
 
 def emit_enum(specs: Sequence[InGameTradeSpec]) -> str:
-    """`constants/uranium_ingame_trades.gen.h` — defines MEMBERS_MACRO, expanded inside
+    """`constants/rpg2gba_ingame_trades.gen.h` — defines MEMBERS_MACRO, expanded inside
     `enum InGameTradeID` (a macro, not an in-enum #include: see the rematch hook)."""
     head = _banner(f"INGAME_TRADE_* enum members, expanded by {MEMBERS_MACRO}.")
     if not specs:
@@ -272,7 +272,7 @@ def emit_enum(specs: Sequence[InGameTradeSpec]) -> str:
 
 
 def emit_table(specs: Sequence[InGameTradeSpec]) -> str:
-    """`data/uranium_ingame_trades.gen.h` — rows included inside `sIngameTrades[]`."""
+    """`data/rpg2gba_ingame_trades.gen.h` — rows included inside `sIngameTrades[]`."""
     head = _banner("sIngameTrades[] rows, #included after the vanilla rows.")
     if not specs:
         return head + "// (no Uranium in-game trades in this build set)\n"

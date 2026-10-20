@@ -1,7 +1,7 @@
-#ifndef GUARD_URANIUM_EMBEDDED_SAVE_H
-#define GUARD_URANIUM_EMBEDDED_SAVE_H
+#ifndef GUARD_RPG2GBA_EMBEDDED_SAVE_H
+#define GUARD_RPG2GBA_EMBEDDED_SAVE_H
 
-// BEGIN URANIUM PATHFINDER SLICE — embedded-save boot (dev/review tooling).
+// BEGIN RPG2GBA HARNESS — embedded-save boot (dev/review tooling).
 //
 // A reserved const blob the playtest harness stamps a finished game state into
 // (rpg2gba: src/rpg2gba/playtest/). A stamped ROM is a single self-contained
@@ -15,9 +15,9 @@
 
 // "URNS" little-endian. The linker zero-fills the pristine blob, so any
 // nonzero magic means a stamper wrote it.
-#define URANIUM_EMBEDDED_SAVE_MAGIC 0x534E5255
+#define RPG2GBA_EMBEDDED_SAVE_MAGIC 0x534E5255
 
-struct UraniumEmbeddedSave
+struct Rpg2gbaEmbeddedSave
 {
     u32 magic;
     // Sizes as the stamper understood them; must equal sizeof() of the
@@ -39,12 +39,12 @@ struct UraniumEmbeddedSave
 // volatile, LTO constant-folds "magic == 0" against the initializer and
 // deletes both the check and (via section GC) the blob itself — verified
 // against this build: TryLoad shrank to 4 bytes and .rodata was dropped.
-extern const volatile struct UraniumEmbeddedSave gUraniumEmbeddedSave;
+extern const volatile struct Rpg2gbaEmbeddedSave gRpg2gbaEmbeddedSave;
 
 // Returns TRUE if a stamped state was found and copied into the live save
 // blocks (party/objects synced, gSaveFileStatus set); FALSE on pristine ROM.
-bool32 UraniumEmbeddedSave_TryLoad(void);
+bool32 Rpg2gbaEmbeddedSave_TryLoad(void);
 
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA HARNESS
 
-#endif // GUARD_URANIUM_EMBEDDED_SAVE_H
+#endif // GUARD_RPG2GBA_EMBEDDED_SAVE_H

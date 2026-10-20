@@ -196,7 +196,7 @@ For each candidate map id:
 
 - Runs tileset emission (budget guards fire here), layouts, map constants
   (vanilla-collision check against the fork's **git HEAD**, not working
-  tree), the staging fork gate again, and emits `uranium_flags.h` from the
+  tree), the staging fork gate again, and emits `rpg2gba_flags.h` from the
   registry.
 - **Warts to clean when things link weird:**
   - `output/uranium-build/staging/layouts/layouts.json` **accumulates**
@@ -204,8 +204,8 @@ For each candidate map id:
     undefined `gTileset_Uranium10xx` at link. Delete the manifest (and any
     stale engine `data/maps|layouts` dirs) when switching build flavors or
     renumbering. (`engine_extension_surface.md` §"build gotchas".)
-  - Build flavor flag: `engine/include/config/uranium_walker.h`
-    `URANIUM_MAP_WALKER` must be `FALSE` for the playable slice.
+  - Build flavor flag: `engine/include/config/rpg2gba_harness.h`
+    `RPG2GBA_MAP_WALKER` must be `FALSE` for the playable slice.
   - `make -C engine clean` after flavor switches.
 
 ## 6. Build + boot gate

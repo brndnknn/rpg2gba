@@ -3049,7 +3049,7 @@ const u32 gTilesetTiles_General_Frlg[] = INCGFX_U32("data/tilesets/primary/gener
 
 #endif // IS_FRLG
 
-// BEGIN URANIUM PATHFINDER SLICE — generated tileset tiles/palettes (rpg2gba)
-// uranium_graphics.gen.h is pipeline-generated + gitignored (assemble_pathfinder.py S8a).
-#include "uranium_graphics.gen.h"
-// END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA GAME PROFILE — generated tileset tiles/palettes (rpg2gba)
+// rpg2gba_graphics.gen.h is pipeline-generated + gitignored (assemble_pathfinder.py S8a).
+#include "rpg2gba_graphics.gen.h"
+// END RPG2GBA GAME PROFILE

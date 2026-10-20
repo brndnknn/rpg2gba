@@ -10,12 +10,12 @@ manifest under `<out>/uranium-build/trainers/`.
 
 This module does not touch anything under `engine/`. A later unit stages
 these files into the vendored fork behind committed
-`URANIUM PATHFINDER SLICE`-style fenced include-hooks, mirroring
+`RPG2GBA GAME PROFILE`-style fenced include-hooks, mirroring
 `species_converter.stage`'s split.
 
 Generated files (all under the trainer staging dir, see `write_all`):
 
-  uranium_trainer_front_pic_ids.h  -- `#define TRAINER_PIC_FRONT_URANIUM_<NAME>
+  rpg2gba_trainer_front_pic_ids.h  -- `#define TRAINER_PIC_FRONT_URANIUM_<NAME>
                                        (TRAINER_PIC_COUNT + n)` chains, NOT
                                        enum members. `data/event_scripts.s`
                                        pulls `include/constants/trainers.h`
@@ -34,17 +34,17 @@ Generated files (all under the trainer staging dir, see `write_all`):
                                        `URANIUM_TRAINER_PIC_AFTER_FRONT`
                                        define for the back-pic header to
                                        chain off.
-  uranium_trainer_back_pic_ids.h   -- same `#define` pattern, chained off
+  rpg2gba_trainer_back_pic_ids.h   -- same `#define` pattern, chained off
                                        `URANIUM_TRAINER_PIC_AFTER_FRONT`
                                        (with a defensive `#ifndef` fallback
                                        to `TRAINER_PIC_COUNT`). Ends with
                                        `URANIUM_TRAINER_PIC_TOTAL` and, when
-                                       staged, `URANIUM_HAVE_PLAYER_BACK_PIC`
-                                       / `URANIUM_HAVE_PLAYER_FEMALE_BACK_PIC`
+                                       staged, `RPG2GBA_HAVE_PLAYER_BACK_PIC`
+                                       / `RPG2GBA_HAVE_PLAYER_FEMALE_BACK_PIC`
                                        feature-test guards the engine uses to
                                        decide whether to repoint the vanilla
                                        player back-pic macros.
-  uranium_trainer_graphics.h       -- `INCGFX_*` declarations for every
+  rpg2gba_trainer_graphics.h       -- `INCGFX_*` declarations for every
                                        staged front pic, back pic, and
                                        palette, pointing at engine-relative
                                        paths under
@@ -75,20 +75,20 @@ Generated files (all under the trainer staging dir, see `write_all`):
                                        staged -- see `BACK_SPRITE_ANIM_TABLE`.
                                        Destined for `#include` at the end of
                                        `src/data/graphics/trainers.h`.
-  uranium_trainer_sprites.h        -- `TRAINER_SPRITE(...)` rows. Destined
+  rpg2gba_trainer_sprites.h        -- `TRAINER_SPRITE(...)` rows. Destined
                                        for injection inside the
                                        `gTrainerSprites[]` array body.
-  uranium_trainer_backsprites.h    -- `TRAINER_BACK_SPRITE(...)` rows.
+  rpg2gba_trainer_backsprites.h    -- `TRAINER_BACK_SPRITE(...)` rows.
                                        Destined for injection inside the
                                        `gTrainerBacksprites[]` array body.
-  uranium_trainer_ids.h            -- `TRAINER_*` id `#define` chain off
+  rpg2gba_trainer_ids.h            -- `TRAINER_*` id `#define` chain off
                                        `TRAINER_MAY_PLACEHOLDER` (see
                                        `battles.emit_trainer_ids`). Destined
                                        for `#include` in
                                        `include/constants/opponents.h` right
                                        after the `TRAINER_MAY_PLACEHOLDER`
                                        line.
-  uranium_trainer_party.inc        -- `.party`-DSL trainer battle blocks
+  rpg2gba_trainer_party.inc        -- `.party`-DSL trainer battle blocks
                                        (`tools/trainerproc` input, NOT C --
                                        see `battles.emit_party_fragment`).
                                        Destined for `#include` at the end of
@@ -179,13 +179,13 @@ DEFAULT_ASSET_DIR = "slice1"
 #: idle-FIRST (frame 0 = idle, 1 = raise ball, 2 = windup, 3 = throw), so
 #: parking on `sBackAnims_Hoenn[0]` displayed our frame 3 -- the throw pose --
 #: as a static "idle" image instead of animating into it. `sBackAnims_Uranium`
-#: (emitted into `uranium_trainer_graphics.h`, see `emit_graphics`) is a
+#: (emitted into `rpg2gba_trainer_graphics.h`, see `emit_graphics`) is a
 #: dedicated table built for our frame order; do not swap this back to
 #: `sBackAnims_Hoenn`.
 BACK_SPRITE_Y_OFFSET = 4
 BACK_SPRITE_ANIM_TABLE = "sBackAnims_Uranium"
 
-#: The dedicated animation table block emitted into `uranium_trainer_graphics.h`
+#: The dedicated animation table block emitted into `rpg2gba_trainer_graphics.h`
 #: whenever at least one back pic is staged. Self-contained (defines its own
 #: idle command rather than reusing the stock `sAnim_GeneralFrame0`) so this
 #: header has no dependency on symbols declared later in
@@ -327,8 +327,8 @@ _DEFINE_NOT_ENUM_NOTE = (
 #: player back-pic macros (`TRAINER_BACK_PIC_PLAYER_MALE` etc.) at the staged
 #: Uranium sprite, or leave them on the vanilla fallback.
 _PLAYER_BACK_PIC_GUARDS = {
-    "PLAYER_MALE": "URANIUM_HAVE_PLAYER_BACK_PIC",
-    "PLAYER_FEMALE": "URANIUM_HAVE_PLAYER_FEMALE_BACK_PIC",
+    "PLAYER_MALE": "RPG2GBA_HAVE_PLAYER_BACK_PIC",
+    "PLAYER_FEMALE": "RPG2GBA_HAVE_PLAYER_FEMALE_BACK_PIC",
 }
 
 _AFTER_FRONT = "URANIUM_TRAINER_PIC_AFTER_FRONT"
@@ -340,7 +340,7 @@ def _define_line(name: str, value: str, width: int) -> str:
 
 
 def emit_front_pic_ids(fronts: list[StagedFrontPic]) -> str:
-    """`uranium_trainer_front_pic_ids.h`: `#define`s chained off
+    """`rpg2gba_trainer_front_pic_ids.h`: `#define`s chained off
     `TRAINER_PIC_COUNT`, destined for `#include` AFTER `enum TrainerPicID`'s
     closing brace (never inside it -- see `_DEFINE_NOT_ENUM_NOTE`).
 
@@ -363,7 +363,7 @@ def emit_front_pic_ids(fronts: list[StagedFrontPic]) -> str:
 
 
 def emit_back_pic_ids(backs: list[StagedBackPic]) -> str:
-    """`uranium_trainer_back_pic_ids.h`: `#define`s chained off
+    """`rpg2gba_trainer_back_pic_ids.h`: `#define`s chained off
     `URANIUM_TRAINER_PIC_AFTER_FRONT` (with a defensive `#ifndef` fallback to
     `TRAINER_PIC_COUNT`), destined for `#include` AFTER `enum TrainerPicID`'s
     closing brace, after the front-pic header (never inside the enum -- see
@@ -401,7 +401,7 @@ def emit_back_pic_ids(backs: list[StagedBackPic]) -> str:
 
 
 def emit_graphics(fronts: list[StagedFrontPic], backs: list[StagedBackPic]) -> str:
-    """`uranium_trainer_graphics.h`: `INCGFX_*` declarations.
+    """`rpg2gba_trainer_graphics.h`: `INCGFX_*` declarations.
 
     Front pics are 64x64 compressed 4bpp (`INCGFX_U32(...) .4bpp.smol`,
     matching every vanilla `gTrainerFrontPic_*`). Back pics are the
@@ -438,7 +438,7 @@ def emit_graphics(fronts: list[StagedFrontPic], backs: list[StagedBackPic]) -> s
 
 
 def emit_sprites(fronts: list[StagedFrontPic]) -> str:
-    """`uranium_trainer_sprites.h`: `TRAINER_SPRITE(...)` rows, destined for
+    """`rpg2gba_trainer_sprites.h`: `TRAINER_SPRITE(...)` rows, destined for
     injection inside the `gTrainerSprites[]` array body."""
     banner = generated_banner("SLICE_TRAINER_PICS (common.py)", GENERATOR, timestamp=False)
     if not fronts:
@@ -451,11 +451,11 @@ def emit_sprites(fronts: list[StagedFrontPic]) -> str:
 
 
 def emit_backsprites(backs: list[StagedBackPic]) -> str:
-    """`uranium_trainer_backsprites.h`: `TRAINER_BACK_SPRITE(...)` rows,
+    """`rpg2gba_trainer_backsprites.h`: `TRAINER_BACK_SPRITE(...)` rows,
     destined for injection inside the `gTrainerBacksprites[]` array body.
     yOffset is always `BACK_SPRITE_Y_OFFSET` (4) and the animation table is
     always `BACK_SPRITE_ANIM_TABLE` (`sBackAnims_Uranium`, emitted into
-    `uranium_trainer_graphics.h` by `emit_graphics`) -- NOT the stock
+    `rpg2gba_trainer_graphics.h` by `emit_graphics`) -- NOT the stock
     `sBackAnims_Hoenn`, whose idle slot is frame index 3 while our sheets are
     idle-first (frame 0). See `BACK_SPRITE_ANIM_TABLE`'s comment for detail."""
     banner = generated_banner("SLICE_TRAINER_PICS (common.py)", GENERATOR, timestamp=False)
@@ -558,13 +558,13 @@ def write_all(
     battles = list(battles)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    _write(out_dir / "uranium_trainer_front_pic_ids.h", emit_front_pic_ids(fronts))
-    _write(out_dir / "uranium_trainer_back_pic_ids.h", emit_back_pic_ids(backs))
-    _write(out_dir / "uranium_trainer_graphics.h", emit_graphics(fronts, backs))
-    _write(out_dir / "uranium_trainer_sprites.h", emit_sprites(fronts))
-    _write(out_dir / "uranium_trainer_backsprites.h", emit_backsprites(backs))
-    _write(out_dir / "uranium_trainer_ids.h", battles_mod.emit_trainer_ids(battles, trainer_anchor))
-    _write(out_dir / "uranium_trainer_party.inc", battles_mod.emit_party_fragment(battles))
+    _write(out_dir / "rpg2gba_trainer_front_pic_ids.h", emit_front_pic_ids(fronts))
+    _write(out_dir / "rpg2gba_trainer_back_pic_ids.h", emit_back_pic_ids(backs))
+    _write(out_dir / "rpg2gba_trainer_graphics.h", emit_graphics(fronts, backs))
+    _write(out_dir / "rpg2gba_trainer_sprites.h", emit_sprites(fronts))
+    _write(out_dir / "rpg2gba_trainer_backsprites.h", emit_backsprites(backs))
+    _write(out_dir / "rpg2gba_trainer_ids.h", battles_mod.emit_trainer_ids(battles, trainer_anchor))
+    _write(out_dir / "rpg2gba_trainer_party.inc", battles_mod.emit_party_fragment(battles))
 
     manifest = build_manifest(fronts, backs, battles)
     (out_dir / MANIFEST_NAME).write_text(

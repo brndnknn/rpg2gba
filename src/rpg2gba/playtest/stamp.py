@@ -1,8 +1,8 @@
 """Embedded-save ROM stamping: turn a played scenario into a single-file
 review artifact.
 
-The engine reserves a zero-filled const blob (`gUraniumEmbeddedSave`,
-engine/src/uranium_embedded_save.c). This module dumps the live save blocks
+The engine reserves a zero-filled const blob (`gRpg2gbaEmbeddedSave`,
+engine/src/rpg2gba_embedded_save.c). This module dumps the live save blocks
 out of a post-scenario emulator, packs them into the blob format, and writes
 them into a copy of the .gba at the blob's ROM offset. The stamped ROM boots
 by continuing straight into that state on any emulator/device — no .sav to
@@ -96,7 +96,7 @@ def build_blob(offsets: dict[str, int], blocks: dict[str, bytes]) -> bytes:
 
 def stamp_rom(rom: Path, out: Path, emu: Emulator) -> None:
     """Write `emu`'s dumped state into a copy of `rom` at the blob offset."""
-    file_off = emu.symbols["gUraniumEmbeddedSave"] - ROM_BASE
+    file_off = emu.symbols["gRpg2gbaEmbeddedSave"] - ROM_BASE
     blob = build_blob(emu.offsets, dump_save_blocks(emu))
     data = bytearray(rom.read_bytes())
     if data[file_off : file_off + len(blob)] != bytes(len(blob)):
@@ -205,7 +205,7 @@ def verify_stamped_rom(stamped: Path, engine: Path, expected: tuple[int, int],
                 f"stamped ROM did not boot into its stamped state: expected "
                 f"map {expected} pos {expected_pos}, got map {got} pos "
                 f"{got_pos}. A flash save is shadowing the embedded blob "
-                "(see CB2_StartUraniumSlice in engine/src/new_game.c).")
+                "(see CB2_StartRpg2gbaHarness in engine/src/new_game.c).")
         if emu.field_locked():
             raise ValueError(
                 "stamped ROM booted into its state but the field is locked — "

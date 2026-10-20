@@ -332,7 +332,7 @@ def _regenerate_map_json(
     # in the assembler with a bare "undefined map (check for typos)". Writing
     # it only from the Map Walker path, as before, made the real pipeline
     # depend on when a debug build last ran.
-    reg.write_alias_header(out / "porymap" / "uranium_map_aliases.h")
+    reg.write_alias_header(out / "porymap" / "rpg2gba_map_aliases.h")
     flag_state_path = out / "flag_state.json"
     flag_reg = FlagRegistry.load(flag_state_path, fork_path=fork)
     # load() restores mints + script-switch ids but not labels (labels aren't
@@ -442,13 +442,13 @@ def main() -> int:
         return 1
     fork = Path(fork_path)
 
-    # NPC sprites first: populate engine/include/constants/uranium_event_objects.gen.h
+    # NPC sprites first: populate engine/include/constants/rpg2gba_event_objects.gen.h
     # so load_npc_gfx_map can validate every OBJ_EVENT_GFX_URANIUM_* against a real
     # #define (idempotent — assemble_pathfinder re-runs it before make).
     sprite_pass.run_sprite_pass(fork)
     gfx_headers = [
         fork / "include" / "constants" / "event_objects.h",
-        fork / "include" / "constants" / "uranium_event_objects.gen.h",
+        fork / "include" / "constants" / "rpg2gba_event_objects.gen.h",
     ]
     npc_gfx = load_npc_gfx_map(DEFAULT_NPC_GFX_MAP, gfx_headers)
     # Multi-state sheets (large props): the boot page's own (direction, pattern)

@@ -748,7 +748,7 @@ SLICE1_TODO #28 §5.4 / hand-conversion audit §5.4, 2026-08-04.
 RMXP stalls a move route when its destination tile is blocked/occupied and
 Uranium leans on that idiom ("walk N tiles, stop when you bump into
 someone") — e.g. Map050 EV005 page 0 marches the player `move_up`×10. On
-GBA, `route_sim.py` and `MovementType_UraniumCustomRoute_Callback` only
+GBA, `route_sim.py` and `MovementType_Rpg2gbaCustomRoute_Callback` only
 model this for page-level ambient routes (`move_type == 3`); embedded
 cutscene routes compile to vanilla `applymovement`, whose `walk_*` actions
 never check collision (`InitNpcForMovement`,
@@ -1043,7 +1043,7 @@ flag without auditing that precedence changes behavior on maps nobody has walked
 
 `extraction.py:95` `_CORPUS_GLOBS` covers only `scripts/*.pory`,
 `staging/scripts/*.pory` and `porymap/dispatch/*.pory`. Generated data headers
-— `species/uranium_species_info.h`, `src/data/items.h`, `src/data/moves_info.h`
+— `species/rpg2gba_species_info.h`, `src/data/items.h`, `src/data/moves_info.h`
 — are never read, so the whole `.description` overlong/unwrapped class went
 undetected until it was seen on a device (2026-08-11 boot walk). The module
 already owns the right primitive (`measure_line_width_px`) and a line-width
@@ -3425,7 +3425,7 @@ template, at the reported tile, and at the player's tile; the only z-check is
 - **`IsTrainerReadyForRematch` is a real special** (`data/specials.inc:81`)
   and is FALSE-safe for a trainer absent from the rematch table
   (`TrainerIdToRematchTableId` -> -1 -> FALSE). Larrie IS in the table
-  (`uranium_rematch_table.gen.h`, `REMATCH_URANIUM_LARRIE_4`, five identical
+  (`rpg2gba_rematch_table.gen.h`, `REMATCH_URANIUM_LARRIE_4`, five identical
   stages — the generator emitted no real rematch variants). Richey likewise.
 - **Neither `Page2` arm is silent by design.** FALSE prints the idle msgbox;
   TRUE runs `PlayTrainerEncounterMusic` / `ShowTrainerIntroSpeech` /

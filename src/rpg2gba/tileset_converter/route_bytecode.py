@@ -2,7 +2,7 @@
 
 SoT: ``reference/guides/custom_route_interpreter.md`` (bytecode format +
 v1 scope boundary). The engine C interpreter
-(``MovementType_UraniumCustomRoute``) is the other half; both cite the same
+(``MovementType_Rpg2gbaCustomRoute``) is the other half; both cite the same
 doc and neither invents encoding independently.
 
 This module is self-contained: it does not import from or get imported by
@@ -188,7 +188,7 @@ def encode_route(route: dict, move_frequency: int) -> list[int] | None:
 # --- Route registry (dedup seam) ---------------------------------------
 
 # Route ids ride ObjectEventTemplate.trainerRange_berryTreeId (u8): 1..255,
-# id 0 reserved for "no route" / the NULL index-0 sentinel in sUraniumRoutes[].
+# id 0 reserved for "no route" / the NULL index-0 sentinel in sRpg2gbaRoutes[].
 MAX_ROUTE_ID = 255
 
 
@@ -197,7 +197,7 @@ class RouteRegistry:
 
     One id assignment, two consumers: each object's
     ``trainer_sight_or_berry_tree_id`` in map.json and the gen.h
-    ``sUraniumRoutes[]`` index table. They must agree, so both read this
+    ``sRpg2gbaRoutes[]`` index table. They must agree, so both read this
     registry. Id 0 is reserved (no route / NULL sentinel). Fail-loud past the
     u8 ceiling — the field can't carry it.
     """

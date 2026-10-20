@@ -1,11 +1,11 @@
 #include "global.h"
-// BEGIN URANIUM PATHFINDER SLICE — pulls RPG2GBA_FADE_DELTA_Y (config/rpg2gba.h pacing
+// BEGIN RPG2GBA ENGINE — pulls RPG2GBA_FADE_DELTA_Y (config/rpg2gba.h pacing
 // knob), used at three gPaletteFade.deltaY assignments below to halve every fade-to/from-black
 // (warps, fadescreen, menu/battle-intro fades). Removing this include breaks those
 // assignments; RPG2GBA_FADE_DELTA_Y is a pure timing scale so reverting it restores vanilla
 // (deltaY = 2) fade speed exactly.
 #include "config/rpg2gba.h"
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA ENGINE
 #include "palette.h"
 #include "util.h"
 #include "decompress.h"
@@ -122,9 +122,9 @@ bool32 BeginNormalPaletteFade(u32 selectedPalettes, s8 delay, u8 startY, u8 targ
     }
     else
     {
-        // BEGIN URANIUM PATHFINDER SLICE — fade rate (config/rpg2gba.h).
+        // BEGIN RPG2GBA ENGINE — fade rate (config/rpg2gba.h).
         gPaletteFade.deltaY = RPG2GBA_FADE_DELTA_Y;
-        // END URANIUM PATHFINDER SLICE
+        // END RPG2GBA ENGINE
 
         if (delay < 0)
         {
@@ -167,9 +167,9 @@ bool32 BeginTimeOfDayPaletteFade(u32 selectedPalettes, s8 delay, u8 startY, u8 t
     if (gPaletteFade.active)
         return FALSE;
 
-    // BEGIN URANIUM PATHFINDER SLICE — fade rate (config/rpg2gba.h).
+    // BEGIN RPG2GBA ENGINE — fade rate (config/rpg2gba.h).
     gPaletteFade.deltaY = RPG2GBA_FADE_DELTA_Y;
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
 
     if (delay < 0)
     {
@@ -482,9 +482,9 @@ void UnfadePlttBuffer(u32 selectedPalettes)
 
 void BeginFastPaletteFade(u32 submode)
 {
-    // BEGIN URANIUM PATHFINDER SLICE — fade rate (config/rpg2gba.h).
+    // BEGIN RPG2GBA ENGINE — fade rate (config/rpg2gba.h).
     gPaletteFade.deltaY = RPG2GBA_FADE_DELTA_Y;
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
     BeginFastPaletteFadeInternal(submode);
 }
 

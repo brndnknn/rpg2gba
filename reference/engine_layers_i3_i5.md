@@ -321,6 +321,27 @@ says so.
   undoes only the art's native scale (one 2x halving for backs, none for
   fronts) and Lanczos-shrinks whatever is still over 64px to fit. In-range art
   is byte-identical (ORCHYNX golden unchanged).
+- **S6 DONE 2026-10-20** (relabel):
+  - Mechanism names became `RPG2GBA_*`/`Rpg2gba*`/`rpg2gba_*`: 9 engine files
+    renamed (`rpg2gba_map_walker.c`, `rpg2gba_embedded_save.c`,
+    `rpg2gba_connection_remap.c`, `rpg2gba_split_maps.c` and headers;
+    `config/uranium_walker.h` -> `config/rpg2gba_harness.h`), 134 identifiers
+    and generated-file names, across the engine, the pipeline, tests and live
+    docs. Content names (`OBJ_EVENT_GFX_URANIUM_*`, `HEAL_LOCATION_URANIUM_START`,
+    `MAP_URANIUM_*`, per-tileset/trainer symbols) are unchanged, so the suites
+    are untouched.
+  - Fences: `URANIUM PATHFINDER SLICE` retired; each of its ~130 occurrences was
+    reassigned to `RPG2GBA GAME PROFILE`, `RPG2GBA ENGINE` or the new
+    `RPG2GBA HARNESS`; `URANIUM MAP WALKER`/`EMBEDDED SAVE` became `RPG2GBA *`.
+  - Harness switch: `RPG2GBA_HARNESS` (default TRUE) gates the boot skip, the
+    default name and the embedded save. The truck-scene suppression is a game
+    fact, gated on the generated `RPG2GBA_NEW_GAME_MAP` instead. A FALSE build
+    compiles (12.95 MB) and boots the stock splash, main menu and Birch speech;
+    a Map Walker build (`RPG2GBA_MAP_WALKER TRUE`) compiles too.
+  - `engine/RPG2GBA_VENDOR.md` custom-changes section rewritten (109 files vs
+    the import; seven-sentinel table; ~50 generated-content hooks, not 16).
+  - Results: CH08 498/498 from boot; pytest 5631 passed; ROM 12,780,828 B; CH07-end walk ROM
+    regenerated.
 - **S2 side effect:** fork-index enum parsing was fixed, so the parse is now per
   line, not one identifier per comma segment.
   - The old parse missed every enum member that followed an `#if` or a macro

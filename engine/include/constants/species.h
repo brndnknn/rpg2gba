@@ -1688,17 +1688,17 @@
 #define SPECIES_TATSUGIRI_STRETCHY_MEGA                 1571
 #define SPECIES_GLIMMORA_MEGA                           1572
 
-// BEGIN URANIUM PATHFINDER SLICE — generated species ids (rpg2gba; see engine/RPG2GBA_VENDOR.md).
+// BEGIN RPG2GBA GAME PROFILE — generated species ids (rpg2gba; see engine/RPG2GBA_VENDOR.md).
 // The included file is pipeline-GENERATED + gitignored; the assembler writes it and this hook
 // stays committed + stable across slices. When no species are staged the generated file is an
-// empty stub, URANIUM_SPECIES_LAST falls back below, and SPECIES_EGG keeps its pristine value.
-#include "constants/uranium_species_constants.h"
-#ifndef URANIUM_SPECIES_LAST
-#define URANIUM_SPECIES_LAST                            SPECIES_GLIMMORA_MEGA
+// empty stub, RPG2GBA_SPECIES_LAST falls back below, and SPECIES_EGG keeps its pristine value.
+#include "constants/rpg2gba_species_constants.h"
+#ifndef RPG2GBA_SPECIES_LAST
+#define RPG2GBA_SPECIES_LAST                            SPECIES_GLIMMORA_MEGA
 #endif
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA GAME PROFILE
 
-#define SPECIES_EGG                                     (URANIUM_SPECIES_LAST + 1)
+#define SPECIES_EGG                                     (RPG2GBA_SPECIES_LAST + 1)
 
 #define NUM_SPECIES SPECIES_EGG
 

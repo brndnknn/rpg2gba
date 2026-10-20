@@ -12,7 +12,7 @@ prefers when present (fenced hook; absent = pristine upstream).
 
 Why here and not in `pbs_converter/`: it needs the staged-species manifest and
 the symbol convention `species_converter/stage.py` emits into
-`uranium_species_info.h`; both are species-staging concerns, and stage.py
+`rpg2gba_species_info.h`; both are species-staging concerns, and stage.py
 imports `teachable_symbol` from here so the two cannot drift.
 
 Merge rules (fidelity choices, flagged for the operator):

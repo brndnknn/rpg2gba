@@ -1,13 +1,13 @@
-// BEGIN URANIUM MAP WALKER
+// BEGIN RPG2GBA MAP WALKER
 #include "global.h"
-#include "uranium_map_walker.h"
+#include "rpg2gba_map_walker.h"
 #include "task.h"
 #include "field_screen_effect.h"
 #include "field_tasks.h"
 #include "script.h"
 #include "field_player_avatar.h"
 
-#if URANIUM_MAP_WALKER == TRUE
+#if RPG2GBA_MAP_WALKER == TRUE
 
 #include "event_object_movement.h"
 #include "fieldmap.h"
@@ -19,24 +19,24 @@
 #include "menu.h"
 #include "text.h"
 #include "string_util.h"
-// BEGIN URANIUM MAP WALKER — ListMenu API for the scrolling START menu
+// BEGIN RPG2GBA MAP WALKER — ListMenu API for the scrolling START menu
 #include "list_menu.h"
-// END URANIUM MAP WALKER
+// END RPG2GBA MAP WALKER
 #include "constants/weather.h"
 #include "constants/rgb.h"
 #include "constants/maps.h"
-// BEGIN URANIUM MAP WALKER — include generated map list for START menu
-#include "uranium_walker_maps.h"
-// END URANIUM MAP WALKER
+// BEGIN RPG2GBA MAP WALKER — include generated map list for START menu
+#include "rpg2gba_walker_maps.h"
+// END RPG2GBA MAP WALKER
 
 #define UWALKER_CURSOR_TAG  0x4B57
-// BEGIN URANIUM MAP WALKER — max warp overlay sprites per map (debug cap)
+// BEGIN RPG2GBA MAP WALKER — max warp overlay sprites per map (debug cap)
 #define UWALKER_OVERLAY_MAX 16
-// END URANIUM MAP WALKER
+// END RPG2GBA MAP WALKER
 
 static bool8 sWalkerActive = FALSE;
 
-// BEGIN URANIUM MAP WALKER — emulator harness warp (rpg2gba.playtest.screen_check).
+// BEGIN RPG2GBA MAP WALKER — emulator harness warp (rpg2gba.playtest.screen_check).
 // The harness writes a destination and sets `pending`; the walker task warps there
 // on its next frame, the same way the START menu does. Never set in normal play.
 struct UWalkerHarnessWarp
@@ -47,8 +47,8 @@ struct UWalkerHarnessWarp
 	s8 x;
 	s8 y;
 };
-EWRAM_DATA struct UWalkerHarnessWarp gUraniumWalkerHarnessWarp = {0};
-// END URANIUM MAP WALKER
+EWRAM_DATA struct UWalkerHarnessWarp gRpg2gbaWalkerHarnessWarp = {0};
+// END RPG2GBA MAP WALKER
 
 // ---------------------------------------------------------------------------
 // L-toggle debug HUD
@@ -83,13 +83,13 @@ static const u8 sHudTxtMt[]    = _("mt ");
 static u8    sHudWindowId;  // valid only while sHudOn == TRUE
 static bool8 sHudOn;
 
-// BEGIN URANIUM MAP WALKER — START-button jump menu: window template, map list
+// BEGIN RPG2GBA MAP WALKER — START-button jump menu: window template, map list
 // baseBlock=65: after HUD's tile range (baseBlock=1, 16*4=64 tiles → slots 1-64).
 // height=2*UWALKER_MENU_ROWS tiles: a ListMenu row is half a tile-line, same
 // convention as debug.c's sDebugMenuWindowTemplateMain (height = 2 * DEBUG_MENU_HEIGHT_MAIN).
 // UWALKER_MENU_ROWS is the VISIBLE row count; the ListMenu scrolls through
 // however many of the up-to-~190 map entries don't fit (was previously sized
-// to URANIUM_WALKER_MAP_COUNT+3, which broke past ~11 entries).
+// to RPG2GBA_WALKER_MAP_COUNT+3, which broke past ~11 entries).
 // Screen is 20 tile-rows tall, so with tilemapTop=1 the window must be <=19 tiles:
 // 9 rows (height 18, top 1) is the max that fits — identical to debug.c's menu.
 #define UWALKER_MENU_ROWS 9
@@ -106,10 +106,10 @@ static const struct WindowTemplate sMenuWindowTemplate = {
 struct UWalkerMapEntry { u8 mapGroup; u8 mapNum; const u8 *name; };
 static const struct UWalkerMapEntry sWalkerMapList[] = {
 #define X(mapConst, nm) { MAP_GROUP(mapConst), MAP_NUM(mapConst), nm },
-	URANIUM_WALKER_MAP_LIST(X)
+	RPG2GBA_WALKER_MAP_LIST(X)
 #undef X
 };
-// END URANIUM MAP WALKER
+// END RPG2GBA MAP WALKER
 
 // ---------------------------------------------------------------------------
 // Cursor graphics (built into EWRAM at first map load, reused on warps)
@@ -179,7 +179,7 @@ static const union AnimCmd *const sCursorAnimTable[] = {
 static const struct SpriteSheet    sCursorSheet   = {sCursorTileBuffer, 3 * 128, UWALKER_CURSOR_TAG};
 static const struct SpritePalette  sCursorPalette = {sCursorPal,                 UWALKER_CURSOR_TAG};
 
-static void SpriteCB_UraniumCursor(struct Sprite *sprite);  // forward decl
+static void SpriteCB_Rpg2gbaCursor(struct Sprite *sprite);  // forward decl
 
 static const struct SpriteTemplate sCursorSpriteTemplate = {
 	.tileTag     = UWALKER_CURSOR_TAG,
@@ -188,12 +188,12 @@ static const struct SpriteTemplate sCursorSpriteTemplate = {
 	.anims       = sCursorAnimTable,
 	.images      = NULL,
 	.affineAnims = gDummySpriteAffineAnimTable,
-	.callback    = SpriteCB_UraniumCursor,
+	.callback    = SpriteCB_Rpg2gbaCursor,
 };
 
-// BEGIN URANIUM MAP WALKER — overlay sprite template: same tiles/palette as cursor, no-op CB
-// Reuses UWALKER_CURSOR_TAG tile sheet + palette already loaded by UraniumWalker_CreateCursor.
-// Position is written each frame by UraniumWalker_UpdateOverlay; callback is a no-op.
+// BEGIN RPG2GBA MAP WALKER — overlay sprite template: same tiles/palette as cursor, no-op CB
+// Reuses UWALKER_CURSOR_TAG tile sheet + palette already loaded by Rpg2gbaWalker_CreateCursor.
+// Position is written each frame by Rpg2gbaWalker_UpdateOverlay; callback is a no-op.
 // AnimateSprite is called automatically by the sprite manager, so anim 1 cycles without help.
 static void SpriteCB_OverlayMarker(struct Sprite *sprite)
 {
@@ -209,13 +209,13 @@ static const struct SpriteTemplate sOverlaySpriteTemplate = {
 	.affineAnims = gDummySpriteAffineAnimTable,
 	.callback    = SpriteCB_OverlayMarker,
 };
-// END URANIUM MAP WALKER
+// END RPG2GBA MAP WALKER
 
 // ---------------------------------------------------------------------------
 // Sprite callback: pins cursor to screen centre, switches anim on warp tiles
 // ---------------------------------------------------------------------------
 
-static void SpriteCB_UraniumCursor(struct Sprite *sprite)
+static void SpriteCB_Rpg2gbaCursor(struct Sprite *sprite)
 {
 	u8    id = gPlayerAvatar.objectEventId;
 	s16   cx = gObjectEvents[id].currentCoords.x - MAP_OFFSET;
@@ -258,7 +258,7 @@ static void SpriteCB_UraniumCursor(struct Sprite *sprite)
 // initializer would land in the discarded .data section (link error).
 static u8 sCursorSpriteId;
 
-static void UraniumWalker_CreateCursor(void)
+static void Rpg2gbaWalker_CreateCursor(void)
 {
 	static bool8 sBuilt = FALSE;
 	u8 px[16][16];
@@ -315,14 +315,14 @@ static void UraniumWalker_CreateCursor(void)
 // Public API
 // ---------------------------------------------------------------------------
 
-// Flip the walker on BEFORE the map load (called from CB2_StartUraniumSlice), so the
+// Flip the walker on BEFORE the map load (called from CB2_StartRpg2gbaHarness), so the
 // runtime gates (NPC spawn, collision clamp, step scripts) apply during the load itself.
-void UraniumWalker_Begin(void)
+void Rpg2gbaWalker_Begin(void)
 {
 	sWalkerActive = TRUE;
 }
 
-bool8 UraniumWalker_IsActive(void)
+bool8 Rpg2gbaWalker_IsActive(void)
 {
 	return sWalkerActive;
 }
@@ -345,7 +345,7 @@ static EWRAM_DATA struct UWalkerLoc sBackStack[UWALKER_STACK_MAX] = {0};
 static u8    sBackDepth;     // bss
 static bool8 sWarpPending;   // bss: set after issuing a warp, cleared on next map load
 
-// BEGIN URANIUM MAP WALKER — R overlay + START menu file-scope state
+// BEGIN RPG2GBA MAP WALKER — R overlay + START menu file-scope state
 static bool8 sOverlayOn;
 static u8    sOverlaySpriteIds[UWALKER_OVERLAY_MAX];
 static u8    sOverlaySpriteCount;
@@ -353,16 +353,16 @@ static bool8 sMenuOpen;
 static u8    sMenuWindowId;
 static u8    sMenuTaskId;  // ListMenuInit's own task id; only valid while sMenuOpen == TRUE
 // Populated once per OpenMenu from sWalkerMapList; id = the array index, which
-// UraniumWalker_UpdateMenu uses directly as the sWalkerMapList lookup key when
+// Rpg2gbaWalker_UpdateMenu uses directly as the sWalkerMapList lookup key when
 // ListMenu_ProcessInput reports an A-button selection. EWRAM_DATA (like sBackStack):
 // ~190 entries * 8 bytes belongs in EWRAM, not scarce IWRAM (plain .bss lands in
 // IWRAM on this linker script). Only touched while the menu is open, so EWRAM speed
 // is fine.
-static EWRAM_DATA struct ListMenuItem sMenuListItems[URANIUM_WALKER_MAP_COUNT] = {0};
-// END URANIUM MAP WALKER
+static EWRAM_DATA struct ListMenuItem sMenuListItems[RPG2GBA_WALKER_MAP_COUNT] = {0};
+// END RPG2GBA MAP WALKER
 
 // Cursor map-local coords = the (hidden) player anchor's coords minus MAP_OFFSET.
-static void UraniumWalker_GetCursorCoords(s16 *x, s16 *y)
+static void Rpg2gbaWalker_GetCursorCoords(s16 *x, s16 *y)
 {
 	u8 id = gPlayerAvatar.objectEventId;
 	*x = gObjectEvents[id].currentCoords.x - MAP_OFFSET;
@@ -370,14 +370,14 @@ static void UraniumWalker_GetCursorCoords(s16 *x, s16 *y)
 }
 
 // Index of the warp at the cursor tile, or -1.
-static s32 UraniumWalker_WarpAtCursor(void)
+static s32 Rpg2gbaWalker_WarpAtCursor(void)
 {
 	s16 cx, cy;
 	u8  i;
 
 	if (gMapHeader.events == NULL)
 		return -1;
-	UraniumWalker_GetCursorCoords(&cx, &cy);
+	Rpg2gbaWalker_GetCursorCoords(&cx, &cy);
 	for (i = 0; i < gMapHeader.events->warpCount; i++)
 	{
 		if (gMapHeader.events->warps[i].x == cx && gMapHeader.events->warps[i].y == cy)
@@ -386,13 +386,13 @@ static s32 UraniumWalker_WarpAtCursor(void)
 	return -1;
 }
 
-static void UraniumWalker_PushBack(void)
+static void Rpg2gbaWalker_PushBack(void)
 {
 	s16 cx, cy;
 
 	if (sBackDepth >= UWALKER_STACK_MAX)
 		return;  // stack full: drop the push rather than overwrite (cap depth)
-	UraniumWalker_GetCursorCoords(&cx, &cy);
+	Rpg2gbaWalker_GetCursorCoords(&cx, &cy);
 	sBackStack[sBackDepth].mapGroup = gSaveBlock1Ptr->location.mapGroup;
 	sBackStack[sBackDepth].mapNum   = gSaveBlock1Ptr->location.mapNum;
 	sBackStack[sBackDepth].x        = cx;
@@ -402,29 +402,29 @@ static void UraniumWalker_PushBack(void)
 
 // DoWarp arms gFieldCallback = FieldCB_DefaultWarpExit; override it so the walker
 // reinstalls (cursor/weather/task/player-hide) on the destination map.
-static void UraniumWalker_RearmAfterWarp(void)
+static void Rpg2gbaWalker_RearmAfterWarp(void)
 {
-	gFieldCallback = UraniumWalker_FieldCB_MapLoad;
+	gFieldCallback = Rpg2gbaWalker_FieldCB_MapLoad;
 }
 
 // A on a warp tile: push current location, fire the warp like normal play.
-static bool8 UraniumWalker_DoWarpFollow(void)
+static bool8 Rpg2gbaWalker_DoWarpFollow(void)
 {
-	s32 i = UraniumWalker_WarpAtCursor();
+	s32 i = Rpg2gbaWalker_WarpAtCursor();
 	const struct WarpEvent *w;
 
 	if (i < 0)
 		return FALSE;
 	w = &gMapHeader.events->warps[i];
-	UraniumWalker_PushBack();
+	Rpg2gbaWalker_PushBack();
 	SetWarpDestinationToMapWarp(w->mapGroup, w->mapNum, w->warpId);
 	DoWarp();
-	UraniumWalker_RearmAfterWarp();
+	Rpg2gbaWalker_RearmAfterWarp();
 	return TRUE;
 }
 
 // B: pop the back-stack, warp to the exact tile we left (literal coords, WARP_ID_NONE).
-static bool8 UraniumWalker_DoBack(void)
+static bool8 Rpg2gbaWalker_DoBack(void)
 {
 	struct UWalkerLoc *loc;
 
@@ -434,16 +434,16 @@ static bool8 UraniumWalker_DoBack(void)
 	loc = &sBackStack[sBackDepth];
 	SetWarpDestination(loc->mapGroup, loc->mapNum, WARP_ID_NONE, (s8)loc->x, (s8)loc->y);
 	DoWarp();
-	UraniumWalker_RearmAfterWarp();
+	Rpg2gbaWalker_RearmAfterWarp();
 	return TRUE;
 }
 
-// BEGIN URANIUM MAP WALKER — R-button warp overlay: create / destroy / update
-// Sprites reuse UWALKER_CURSOR_TAG tiles already loaded by UraniumWalker_CreateCursor.
+// BEGIN RPG2GBA MAP WALKER — R-button warp overlay: create / destroy / update
+// Sprites reuse UWALKER_CURSOR_TAG tiles already loaded by Rpg2gbaWalker_CreateCursor.
 // DestroyOverlay does NOT free the tile/palette — that is the cursor's responsibility.
 // On map load the warp transition destroys all sprites; reset sOverlaySpriteCount=0
 // and call CreateOverlay (NOT DestroyOverlay) to rebuild from the cleared state.
-static void UraniumWalker_CreateOverlay(void)
+static void Rpg2gbaWalker_CreateOverlay(void)
 {
 	u8 i;
 	u8 count;
@@ -467,7 +467,7 @@ static void UraniumWalker_CreateOverlay(void)
 	}
 }
 
-static void UraniumWalker_DestroyOverlay(void)
+static void Rpg2gbaWalker_DestroyOverlay(void)
 {
 	u8 i;
 
@@ -486,7 +486,7 @@ static void UraniumWalker_DestroyOverlay(void)
 //          screen_y =  80 + (warp_ty - cursor_ty) * 16
 // Sprites outside the safe OAM range [-16,256] x [-16,176] are hidden to
 // prevent the GBA from wrapping them to the opposite edge of the screen.
-static void UraniumWalker_UpdateOverlay(void)
+static void Rpg2gbaWalker_UpdateOverlay(void)
 {
 	s16 cx, cy;
 	u8  i;
@@ -494,7 +494,7 @@ static void UraniumWalker_UpdateOverlay(void)
 	if (gMapHeader.events == NULL)
 		return;
 
-	UraniumWalker_GetCursorCoords(&cx, &cy);
+	Rpg2gbaWalker_GetCursorCoords(&cx, &cy);
 
 	for (i = 0; i < sOverlaySpriteCount; i++)
 	{
@@ -525,13 +525,13 @@ static void UraniumWalker_UpdateOverlay(void)
 		}
 	}
 }
-// END URANIUM MAP WALKER
+// END RPG2GBA MAP WALKER
 
 // ---------------------------------------------------------------------------
 // HUD helpers: create / draw / destroy
 // ---------------------------------------------------------------------------
 
-static void UraniumWalker_CreateHud(void)
+static void Rpg2gbaWalker_CreateHud(void)
 {
 	LoadMessageBoxAndBorderGfx();
 	sHudWindowId = AddWindow(&sHudWindowTemplate);
@@ -540,20 +540,20 @@ static void UraniumWalker_CreateHud(void)
 	CopyWindowToVram(sHudWindowId, COPYWIN_FULL);
 }
 
-static void UraniumWalker_DestroyHud(void)
+static void Rpg2gbaWalker_DestroyHud(void)
 {
 	ClearStdWindowAndFrameToTransparent(sHudWindowId, TRUE);
 	RemoveWindow(sHudWindowId);
 	sHudWindowId = WINDOW_NONE;
 }
 
-static void UraniumWalker_DrawHud(void)
+static void Rpg2gbaWalker_DrawHud(void)
 {
 	s16 cx, cy;
 	u32 metatileId;
 	u8 *p;
 
-	UraniumWalker_GetCursorCoords(&cx, &cy);
+	Rpg2gbaWalker_GetCursorCoords(&cx, &cy);
 	metatileId = MapGridGetMetatileIdAt(cx + MAP_OFFSET, cy + MAP_OFFSET);
 
 	FillWindowPixelBuffer(sHudWindowId, PIXEL_FILL(1));
@@ -579,12 +579,12 @@ static void UraniumWalker_DrawHud(void)
 	CopyWindowToVram(sHudWindowId, COPYWIN_FULL);
 }
 
-// BEGIN URANIUM MAP WALKER — START-button jump menu: close / open / update
+// BEGIN RPG2GBA MAP WALKER — START-button jump menu: close / open / update
 // CloseMenu tears down the ListMenu task + window and resets state.  It does NOT
 // unlock the player:
 //   warp path — DoWarp already locked; map-load CB calls UnlockPlayerFieldControls.
 //   cancel path — caller must call UnlockPlayerFieldControls after CloseMenu.
-static void UraniumWalker_CloseMenu(void)
+static void Rpg2gbaWalker_CloseMenu(void)
 {
 	DestroyListMenuTask(sMenuTaskId, NULL, NULL);
 	sMenuTaskId = TASK_NONE;
@@ -597,7 +597,7 @@ static void UraniumWalker_CloseMenu(void)
 // Builds the scrolling ListMenu over sWalkerMapList. Field values below mirror
 // debug.c's Debug_ShowMenu (the engine's own scrolling-list idiom), except
 // fontId (FONT_SMALL, matching this window's prior small-font rendering).
-static void UraniumWalker_OpenMenu(void)
+static void Rpg2gbaWalker_OpenMenu(void)
 {
 	struct ListMenuTemplate t = {0};
 	u16 i;
@@ -609,7 +609,7 @@ static void UraniumWalker_OpenMenu(void)
 	sMenuOpen = TRUE;
 
 	// sWalkerMapList[i].name is already a ROM COMPOUND_STRING pointer — no copy needed.
-	for (i = 0; i < URANIUM_WALKER_MAP_COUNT; i++)
+	for (i = 0; i < RPG2GBA_WALKER_MAP_COUNT; i++)
 	{
 		sMenuListItems[i].name = sWalkerMapList[i].name;
 		sMenuListItems[i].id   = i;
@@ -618,7 +618,7 @@ static void UraniumWalker_OpenMenu(void)
 	t.items               = sMenuListItems;
 	t.moveCursorFunc       = ListMenuDefaultCursorMoveFunc;
 	t.itemPrintFunc        = NULL;
-	t.totalItems           = URANIUM_WALKER_MAP_COUNT;
+	t.totalItems           = RPG2GBA_WALKER_MAP_COUNT;
 	t.maxShowed            = UWALKER_MENU_ROWS;
 	t.windowId             = sMenuWindowId;
 	t.header_X             = 0;
@@ -651,102 +651,102 @@ static void UraniumWalker_OpenMenu(void)
 // B: ListMenu_ProcessInput returns LIST_CANCEL directly.
 // START: not handled by ListMenu_ProcessInput, so checked explicitly here — same
 //    "cancel" behavior as B.
-static void UraniumWalker_UpdateMenu(void)
+static void Rpg2gbaWalker_UpdateMenu(void)
 {
 	s32 id = ListMenu_ProcessInput(sMenuTaskId);
 
 	if (id == LIST_CANCEL || JOY_NEW(START_BUTTON))
 	{
-		UraniumWalker_CloseMenu();
+		Rpg2gbaWalker_CloseMenu();
 		UnlockPlayerFieldControls();
 	}
 	else if (id >= 0)
 	{
 		const struct UWalkerMapEntry *entry = &sWalkerMapList[id];
-		UraniumWalker_CloseMenu();        // list task + window gone; sMenuOpen=FALSE
-		UraniumWalker_PushBack();         // back-stack records current location
+		Rpg2gbaWalker_CloseMenu();        // list task + window gone; sMenuOpen=FALSE
+		Rpg2gbaWalker_PushBack();         // back-stack records current location
 		SetWarpDestination(entry->mapGroup, entry->mapNum, WARP_ID_NONE, 0, 0);
 		DoWarp();                         // locks player; map-load CB will unlock
-		UraniumWalker_RearmAfterWarp();
+		Rpg2gbaWalker_RearmAfterWarp();
 		sWarpPending = TRUE;
 	}
 	// else LIST_NOTHING_CHOSEN: nothing to do; ListMenu_ProcessInput already redrew
 	// the list internally if a D-pad scroll moved the cursor.
 }
-// END URANIUM MAP WALKER
+// END RPG2GBA MAP WALKER
 
 // Walker task — handles walker-specific input.  Movement is driven by the normal
 // field control; collision override (event_object_movement.c) clamps to map bounds.
-static void Task_UraniumWalker(u8 taskId)
+static void Task_Rpg2gbaWalker(u8 taskId)
 {
-	// BEGIN URANIUM MAP WALKER — menu short-circuit: menu owns all input while open
+	// BEGIN RPG2GBA MAP WALKER — menu short-circuit: menu owns all input while open
 	if (sMenuOpen)
 	{
-		UraniumWalker_UpdateMenu();
+		Rpg2gbaWalker_UpdateMenu();
 		return;
 	}
-	// END URANIUM MAP WALKER
+	// END RPG2GBA MAP WALKER
 
 	if (sWarpPending)
 		return;  // ignore input during a warp transition until the next map loads
 
-	// BEGIN URANIUM MAP WALKER — emulator harness warp
-	if (gUraniumWalkerHarnessWarp.pending)
+	// BEGIN RPG2GBA MAP WALKER — emulator harness warp
+	if (gRpg2gbaWalkerHarnessWarp.pending)
 	{
-		gUraniumWalkerHarnessWarp.pending = FALSE;
-		SetWarpDestination(gUraniumWalkerHarnessWarp.mapGroup, gUraniumWalkerHarnessWarp.mapNum,
-		                   WARP_ID_NONE, gUraniumWalkerHarnessWarp.x, gUraniumWalkerHarnessWarp.y);
+		gRpg2gbaWalkerHarnessWarp.pending = FALSE;
+		SetWarpDestination(gRpg2gbaWalkerHarnessWarp.mapGroup, gRpg2gbaWalkerHarnessWarp.mapNum,
+		                   WARP_ID_NONE, gRpg2gbaWalkerHarnessWarp.x, gRpg2gbaWalkerHarnessWarp.y);
 		DoWarp();
-		UraniumWalker_RearmAfterWarp();
+		Rpg2gbaWalker_RearmAfterWarp();
 		sWarpPending = TRUE;
 		return;
 	}
-	// END URANIUM MAP WALKER
+	// END RPG2GBA MAP WALKER
 
 	if (JOY_NEW(A_BUTTON))
 	{
-		if (UraniumWalker_DoWarpFollow())
+		if (Rpg2gbaWalker_DoWarpFollow())
 			sWarpPending = TRUE;
 	}
 	else if (JOY_NEW(B_BUTTON))
 	{
-		if (UraniumWalker_DoBack())
+		if (Rpg2gbaWalker_DoBack())
 			sWarpPending = TRUE;
 	}
 	else if (JOY_NEW(L_BUTTON))
 	{
 		sHudOn = !sHudOn;
 		if (sHudOn)
-			UraniumWalker_CreateHud();
+			Rpg2gbaWalker_CreateHud();
 		else
-			UraniumWalker_DestroyHud();
+			Rpg2gbaWalker_DestroyHud();
 	}
-	// BEGIN URANIUM MAP WALKER — R: toggle warp overlay; START: open jump menu
+	// BEGIN RPG2GBA MAP WALKER — R: toggle warp overlay; START: open jump menu
 	else if (JOY_NEW(R_BUTTON))
 	{
 		sOverlayOn = !sOverlayOn;
 		if (sOverlayOn)
-			UraniumWalker_CreateOverlay();
+			Rpg2gbaWalker_CreateOverlay();
 		else
-			UraniumWalker_DestroyOverlay();
+			Rpg2gbaWalker_DestroyOverlay();
 	}
 	else if (JOY_NEW(START_BUTTON))
 	{
-		UraniumWalker_OpenMenu();
+		Rpg2gbaWalker_OpenMenu();
 	}
-	// END URANIUM MAP WALKER
+	// END RPG2GBA MAP WALKER
 
 	// Redraw HUD every frame so coords + metatile stay current.
 	if (sHudOn)
-		UraniumWalker_DrawHud();
-	// BEGIN URANIUM MAP WALKER — reposition overlay sprites every frame
+		Rpg2gbaWalker_DrawHud();
+	// BEGIN RPG2GBA MAP WALKER — reposition overlay sprites every frame
 	if (sOverlayOn)
-		UraniumWalker_UpdateOverlay();
-	// END URANIUM MAP WALKER
+		Rpg2gbaWalker_UpdateOverlay();
+	// END RPG2GBA MAP WALKER
 }
 
 // Called as gFieldCallback on walker boot (replaces FieldCB_WarpExitFadeFromBlack).
-void UraniumWalker_FieldCB_MapLoad(void)
+void Rpg2gbaWalker_FieldCB_MapLoad(void)
 {
 	FadeInFromBlack();
 	sWalkerActive = TRUE;
@@ -754,18 +754,18 @@ void UraniumWalker_FieldCB_MapLoad(void)
 	SetUpFieldTasks();            // installs step machinery for smooth movement
 	UnlockPlayerFieldControls();
 	SetPlayerInvisibility(TRUE);  // cursor replaces the player sprite
-	if (FindTaskIdByFunc(Task_UraniumWalker) == TASK_NONE)
-		CreateTask(Task_UraniumWalker, 80);
+	if (FindTaskIdByFunc(Task_Rpg2gbaWalker) == TASK_NONE)
+		CreateTask(Task_Rpg2gbaWalker, 80);
 	SetCurrentAndNextWeatherNoDelay(WEATHER_NONE);  // raw display: no weather overlay
-	UraniumWalker_CreateCursor();
+	Rpg2gbaWalker_CreateCursor();
 	// The window system is reset on every map load, so the HUD windowId is stale
 	// after any warp.  If the HUD was on, drop the stale id and reopen the window.
 	if (sHudOn)
 	{
 		sHudWindowId = WINDOW_NONE;
-		UraniumWalker_CreateHud();
+		Rpg2gbaWalker_CreateHud();
 	}
-	// BEGIN URANIUM MAP WALKER — close stale menu state + rebuild overlay for new map
+	// BEGIN RPG2GBA MAP WALKER — close stale menu state + rebuild overlay for new map
 	// Window system reset on map load: stale sMenuWindowId/sMenuTaskId are gone (the
 	// map transition already wiped the window + task system), so just clear the
 	// flags — do NOT call DestroyListMenuTask/RemoveWindow here, those handles are
@@ -779,10 +779,10 @@ void UraniumWalker_FieldCB_MapLoad(void)
 	if (sOverlayOn)
 	{
 		sOverlaySpriteCount = 0;
-		UraniumWalker_CreateOverlay();
+		Rpg2gbaWalker_CreateOverlay();
 	}
-	// END URANIUM MAP WALKER
+	// END RPG2GBA MAP WALKER
 }
 
-#endif // URANIUM_MAP_WALKER == TRUE
-// END URANIUM MAP WALKER
+#endif // RPG2GBA_MAP_WALKER == TRUE
+// END RPG2GBA MAP WALKER

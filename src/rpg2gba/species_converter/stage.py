@@ -8,14 +8,14 @@ manifest under `<out>/uranium-build/species/`.
 
 This module does not touch anything under `engine/`. A later unit
 (`assemble_pathfinder.py`) stages these files into the vendored fork behind
-committed `URANIUM PATHFINDER SLICE` fenced include-hooks; see
+committed `RPG2GBA GAME PROFILE` fenced include-hooks; see
 `STARTER_SPECIES_PLAN.md` §3 for the hook mechanism and exact insertion
 points.
 
 Generated files (all under the output species dir, see `write_all`):
 
-  uranium_species_constants.h   — SPECIES_* #defines chained off
-                                   SPECIES_GLIMMORA_MEGA + URANIUM_SPECIES_LAST
+  rpg2gba_species_constants.h   — SPECIES_* #defines chained off
+                                   SPECIES_GLIMMORA_MEGA + RPG2GBA_SPECIES_LAST
                                    marker. Hooked into
                                    include/constants/species.h above the
                                    SPECIES_EGG line.
@@ -26,14 +26,14 @@ Generated files (all under the output species dir, see `write_all`):
   uranium_pokedex_count.h       — `#undef`/`#define NATIONAL_DEX_COUNT`.
                                    Hooked after the P_GEN_9_POKEMON `#elif`
                                    chain, before `POKEMON_SLOTS_NUMBER`.
-  uranium_learnsets.h           — six `static const struct LevelUpMove` arrays.
+  rpg2gba_learnsets.h           — six `static const struct LevelUpMove` arrays.
                                    MUST be hooked at *file scope* in
                                    src/data/pokemon/species_info.h, near its
                                    existing top-of-file includes (line ~4,
                                    after `species_info/shared_front_pic_anims.h`)
                                    — NOT inside the `gSpeciesInfo[]` array. See
                                    "Plan correction" below.
-  uranium_species_info.h        — six `[SPECIES_X] = {...}` gSpeciesInfo
+  rpg2gba_species_info.h        — six `[SPECIES_X] = {...}` gSpeciesInfo
                                    entries only (no #includes of its own —
                                    matches the vanilla `species_info/gen_N_
                                    families.h` convention, which also emit
@@ -42,24 +42,24 @@ Generated files (all under the output species dir, see `write_all`):
                                    Hooked into src/data/pokemon/species_info.h
                                    in the custom-species slot (~line 177),
                                    *inside* the `gSpeciesInfo[]` initializer.
-  uranium_species_graphics.h    — INCGFX_* declarations. Hooked at the end of
+  rpg2gba_species_graphics.h    — INCGFX_* declarations. Hooked at the end of
                                    src/data/graphics/pokemon.h.
-  uranium_cries_enum.h          — bare `CRY_<NAME>,` enum entries. Hooked into
+  rpg2gba_cries_enum.h          — bare `CRY_<NAME>,` enum entries. Hooked into
                                    include/constants/cries.h before CRY_COUNT.
-  uranium_cry_table_forward.inc — `cry Cry_<Ident>` rows. Hooked into
+  rpg2gba_cry_table_forward.inc — `cry Cry_<Ident>` rows. Hooked into
                                    `gCryTable::` in sound/cry_tables.inc.
-  uranium_cry_table_reverse.inc — `cry_reverse Cry_<Ident>` rows, SAME ORDER
+  rpg2gba_cry_table_reverse.inc — `cry_reverse Cry_<Ident>` rows, SAME ORDER
                                    as the forward table. Hooked into
                                    `gCryTable_Reverse::` in the same file.
-  uranium_cry_sound_data.inc    — `.incbin` blocks. Hooked into
+  rpg2gba_cry_sound_data.inc    — `.incbin` blocks. Hooked into
                                    sound/direct_sound_data.inc.
   species_manifest.json         — flat per-species record tying constants to
                                    asset paths; consumed by the capability
                                    gate (W5) and by other converter units.
 
 **Plan correction (found while matching the real fork tree):** the plan's
-`STARTER_SPECIES_PLAN.md` §3/§4-W1 describes `uranium_species_info.h`
-`#include`-ing `uranium_learnsets.h` "at the top of file 2". That can't work:
+`STARTER_SPECIES_PLAN.md` §3/§4-W1 describes `rpg2gba_species_info.h`
+`#include`-ing `rpg2gba_learnsets.h` "at the top of file 2". That can't work:
 file 2's OWN hook point is *inside* `gSpeciesInfo[]`'s designated-initializer
 list (before its closing `};`), so a nested `#include` of a header that
 declares new file-scope `static const` arrays would splice a declaration
@@ -69,7 +69,7 @@ into the middle of an initializer list — invalid C. The vanilla
 already being visible earlier in the same translation unit
 (`src/pokemon.c` includes `data/pokemon/level_up_learnsets/gen_*.h` *before*
 `data/pokemon/species_info.h`). This module follows that same pattern:
-`uranium_species_info.h` has no `#include`s, and `uranium_learnsets.h` needs
+`rpg2gba_species_info.h` has no `#include`s, and `rpg2gba_learnsets.h` needs
 its own file-scope hook, separate from the array-body hook. Both hook points
 are documented above and in the write-up returned to the caller.
 
@@ -194,8 +194,8 @@ def read_pristine_species_egg(engine_dir: Path) -> tuple[int, str]:
             "Fork header has drifted from the pinned shape this emitter was verified against."
         )
     anchor = m.group(1)
-    # Once the committed URANIUM PATHFINDER SLICE hook is applied, SPECIES_EGG is
-    # defined against the indirection macro URANIUM_SPECIES_LAST rather than a
+    # Once the committed RPG2GBA GAME PROFILE hook is applied, SPECIES_EGG is
+    # defined against the indirection macro RPG2GBA_SPECIES_LAST rather than a
     # numeric species constant. Follow exactly one level of aliasing, resolving
     # through the hook's `#ifndef` fallback, so this keeps reporting the PRISTINE
     # value whether or not an overlay is currently staged (the fallback always
@@ -229,8 +229,8 @@ def read_pristine_species_egg(engine_dir: Path) -> tuple[int, str]:
         )
     # Return the RESOLVED anchor, never the indirection macro: the generated
     # constants file chains its first species off this name and is #include-d
-    # *above* the hook's `#ifndef URANIUM_SPECIES_LAST` fallback, so emitting
-    # `(URANIUM_SPECIES_LAST + 1)` there would reference a macro that is still
+    # *above* the hook's `#ifndef RPG2GBA_SPECIES_LAST` fallback, so emitting
+    # `(RPG2GBA_SPECIES_LAST + 1)` there would reference a macro that is still
     # undefined at that point (and that the generated file itself goes on to
     # define). Chaining off the last vanilla species is correct either way.
     return pristine_egg, resolved
@@ -453,7 +453,7 @@ def _no_op_note() -> str:
 
 
 def emit_species_constants(staged: list[StagedSpecies], anchor: str) -> str:
-    """`uranium_species_constants.h`: chained #defines + URANIUM_SPECIES_LAST."""
+    """`rpg2gba_species_constants.h`: chained #defines + RPG2GBA_SPECIES_LAST."""
     banner = generated_banner("dexdata.dat + STARTER_SPECIES", GENERATOR, timestamp=False)
     if not staged:
         return wrap_header("GUARD_URANIUM_SPECIES_CONSTANTS_H", _no_op_note(), banner=banner)
@@ -462,12 +462,12 @@ def emit_species_constants(staged: list[StagedSpecies], anchor: str) -> str:
     for s in staged:
         lines.append(f"#define {s.spec.constant} ({prev} + 1)")
         prev = s.spec.constant
-    lines.append(f"#define URANIUM_SPECIES_LAST {prev}")
+    lines.append(f"#define RPG2GBA_SPECIES_LAST {prev}")
     return wrap_header("GUARD_URANIUM_SPECIES_CONSTANTS_H", "\n".join(lines), banner=banner)
 
 
 def emit_pokedex_ids(staged: list[StagedSpecies], anchor: str) -> str:
-    """`uranium_pokedex_ids.h`: chained `NATIONAL_DEX_*` #defines off `anchor`
+    """`rpg2gba_pokedex_ids.h`: chained `NATIONAL_DEX_*` #defines off `anchor`
     (the enum's real last member — NOT `NATIONAL_DEX_COUNT`, which this same
     header redefines below; chaining off a value we're about to rewrite would
     make the ids depend on macro-expansion order) plus the `NATIONAL_DEX_COUNT`
@@ -709,7 +709,7 @@ def emit_species_info(
     fragment is spliced *inside* the `gSpeciesInfo[]` initializer, so it must
     not itself contain top-level declarations or includes of headers that
     aren't already guaranteed-included earlier in the translation unit. See
-    the module docstring's "Plan correction" note — `uranium_learnsets.h`
+    the module docstring's "Plan correction" note — `rpg2gba_learnsets.h`
     needs a separate, file-scope hook, not an `#include` from this file.
     """
     banner = generated_banner(
@@ -1057,20 +1057,20 @@ def write_all(
         resolver = None
         staged = []
 
-    _write(out_dir / "uranium_species_constants.h", emit_species_constants(staged, anchor))
+    _write(out_dir / "rpg2gba_species_constants.h", emit_species_constants(staged, anchor))
     _write(
-        out_dir / "uranium_pokedex_ids.h",
+        out_dir / "rpg2gba_pokedex_ids.h",
         emit_pokedex_ids(staged, common.PRISTINE_NATIONAL_DEX_ANCHOR),
     )
     learnsets_text, dropped_moves = emit_learnsets(staged, resolver, fork_moves)
-    _write(out_dir / "uranium_learnsets.h", learnsets_text)
-    _write(out_dir / "uranium_species_info.h",
+    _write(out_dir / "rpg2gba_learnsets.h", learnsets_text)
+    _write(out_dir / "rpg2gba_species_info.h",
            emit_species_info(staged, resolver, charmap_chars, charmap))
-    _write(out_dir / "uranium_species_graphics.h", emit_graphics(staged))
-    _write(out_dir / "uranium_cries_enum.h", emit_cries_enum(staged))
-    _write(out_dir / "uranium_cry_table_forward.inc", emit_cry_table_forward(staged))
-    _write(out_dir / "uranium_cry_table_reverse.inc", emit_cry_table_reverse(staged))
-    _write(out_dir / "uranium_cry_sound_data.inc", emit_cry_sound_data(staged))
+    _write(out_dir / "rpg2gba_species_graphics.h", emit_graphics(staged))
+    _write(out_dir / "rpg2gba_cries_enum.h", emit_cries_enum(staged))
+    _write(out_dir / "rpg2gba_cry_table_forward.inc", emit_cry_table_forward(staged))
+    _write(out_dir / "rpg2gba_cry_table_reverse.inc", emit_cry_table_reverse(staged))
+    _write(out_dir / "rpg2gba_cry_sound_data.inc", emit_cry_sound_data(staged))
 
     manifest = build_manifest(staged, pristine_egg, dropped_moves)
     (out_dir / common.MANIFEST_NAME).write_text(

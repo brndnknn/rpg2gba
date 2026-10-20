@@ -401,22 +401,22 @@ extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_UnusedMauvi
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_UnusedMauvilleOldMan2;
 extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_ApricornTree;
 
-// BEGIN URANIUM PATHFINDER SLICE — extern decls for generated Uranium OW graphics-info structs (rpg2gba; stub when none staged).
-#include "uranium_object_event_graphics_info_decls.gen.h"
-// END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA GAME PROFILE — extern decls for generated Uranium OW graphics-info structs (rpg2gba; stub when none staged).
+#include "rpg2gba_object_event_graphics_info_decls.gen.h"
+// END RPG2GBA GAME PROFILE
 
 const struct ObjectEventGraphicsInfo *const gObjectEventGraphicsInfoPointers[NUM_OBJ_EVENT_GFX] = {
-    // BEGIN URANIUM PATHFINDER SLICE — player walk/run art: converted Uranium HERO sheets when staged;
+    // BEGIN RPG2GBA GAME PROFILE — player walk/run art: converted Uranium HERO sheets when staged;
     // the decls stub #defines the Uranium symbol back to gObjectEventGraphicsInfo_BrendanNormal when not.
     [OBJ_EVENT_GFX_BRENDAN_NORMAL] =           &gObjectEventGraphicsInfo_UraniumPlayerNormal,
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA GAME PROFILE
     [OBJ_EVENT_GFX_BRENDAN_MACH_BIKE] =        &gObjectEventGraphicsInfo_BrendanMachBike,
     [OBJ_EVENT_GFX_BRENDAN_SURFING] =          &gObjectEventGraphicsInfo_BrendanSurfing,
-    // BEGIN URANIUM PATHFINDER SLICE — field-move (rock smash etc.) pose: Uranium hero art with a
+    // BEGIN RPG2GBA GAME PROFILE — field-move (rock smash etc.) pose: Uranium hero art with a
     // 1-tick terminating anim (Uranium has no field-move pose; a looping anim here would softlock
     // the held-movement wait in fldeff). Decls stub #defines this back to BrendanFieldMove unstaged.
     [OBJ_EVENT_GFX_BRENDAN_FIELD_MOVE] =       &gObjectEventGraphicsInfo_UraniumPlayerFieldMove,
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA GAME PROFILE
     [OBJ_EVENT_GFX_QUINTY_PLUMP] =             &gObjectEventGraphicsInfo_QuintyPlump,
     [OBJ_EVENT_GFX_NINJA_BOY] =                &gObjectEventGraphicsInfo_NinjaBoy,
     [OBJ_EVENT_GFX_TWIN] =                     &gObjectEventGraphicsInfo_Twin,
@@ -802,9 +802,9 @@ const struct ObjectEventGraphicsInfo *const gObjectEventGraphicsInfoPointers[NUM
     [OBJ_EVENT_GFX_DEOXYS_N]                 = &gObjectEventGraphicsInfo_DeoxysN,
     [OBJ_EVENT_GFX_SS_ANNE]                  = &gObjectEventGraphicsInfo_SSAnne,
 #endif // IS_FRLG
-// BEGIN URANIUM PATHFINDER SLICE — generated Uranium OW pointer entries, designated by OBJ_EVENT_GFX_URANIUM_* (rpg2gba; stub when none staged).
-#include "uranium_object_event_graphics_info_pointers.gen.h"
-// END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA GAME PROFILE — generated Uranium OW pointer entries, designated by OBJ_EVENT_GFX_URANIUM_* (rpg2gba; stub when none staged).
+#include "rpg2gba_object_event_graphics_info_pointers.gen.h"
+// END RPG2GBA GAME PROFILE
 };
 
 const struct ObjectEventGraphicsInfo *const gMauvilleOldManGraphicsInfoPointers[] = {

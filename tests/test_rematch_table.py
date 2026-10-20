@@ -434,8 +434,8 @@ def test_assembler_pass_runs_by_default_and_installs_into_the_fork() -> None:
     src = (REPO_ROOT / "scripts" / "assemble_pathfinder.py").read_text(encoding="utf-8")
     assert '"--skip-rematches", action="store_true"' in src
     assert "if not args.skip_rematches:\n        run_rematch_pass(" in src
-    assert '"include" / "constants" / "uranium_rematches.gen.h"' in src
-    assert '"src" / "data" / "uranium_rematch_table.gen.h"' in src
+    assert '"include" / "constants" / "rpg2gba_rematches.gen.h"' in src
+    assert '"src" / "data" / "rpg2gba_rematch_table.gen.h"' in src
 
 
 def test_committed_engine_hooks_are_present_and_correctly_placed() -> None:
@@ -447,7 +447,7 @@ def test_committed_engine_hooks_are_present_and_correctly_placed() -> None:
     """
     engine = REPO_ROOT / "engine"
     header = (engine / "include" / "constants" / "rematches.h").read_text(encoding="utf-8")
-    include_at = header.index('#include "constants/uranium_rematches.gen.h"')
+    include_at = header.index('#include "constants/rpg2gba_rematches.gen.h"')
     enum_at = header.index("enum {")
     macro_at = header.index(f"    {rm.MEMBERS_MACRO}\n")
     wally_at = header.index("    REMATCH_WALLY_VR,")
@@ -456,7 +456,7 @@ def test_committed_engine_hooks_are_present_and_correctly_placed() -> None:
     assert include_at < enum_at < macro_at < wally_at
 
     table = (engine / "src" / "battle_setup.c").read_text(encoding="utf-8")
-    assert '#include "data/uranium_rematch_table.gen.h"' in table
+    assert '#include "data/rpg2gba_rematch_table.gen.h"' in table
 
 
 def test_empty_batch_emits_no_op_fragments() -> None:

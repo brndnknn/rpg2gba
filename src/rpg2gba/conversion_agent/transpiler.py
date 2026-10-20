@@ -738,7 +738,7 @@ _STARTER_SELECTOR_PBGET_RE = re.compile(
 # VAR_TEMP_0/1 are this transpiler's own scratch (_ALIGN_AXIS_VAR); the
 # buckets take 3/4/5, the same three the (now retired) hand conversion used
 # and boot-walked. NB the registry's VAR_TEMP_MOVE_CHOICE is NOT VAR_TEMP_2 —
-# it is a minted var in the Uranium range (data/scripts/uranium_flags.h), so
+# it is a minted var in the Uranium range (data/scripts/rpg2gba_flags.h), so
 # it cannot collide with these.
 _ARRAY_BUCKET_VARS = ("VAR_TEMP_3", "VAR_TEMP_4", "VAR_TEMP_5")
 # The array literal, the indexed bump, the argmax, the `if x==A / x=B` remap

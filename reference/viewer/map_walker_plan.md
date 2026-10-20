@@ -28,7 +28,7 @@ exist and are proven by the viewer; this plan wires them over the full corpus.
 ## 2. Scope & non-goals
 
 **In scope**
-- A compile-time `URANIUM_MAP_WALKER` mode in the vendored engine (`engine/`).
+- A compile-time `RPG2GBA_MAP_WALKER` mode in the vendored engine (`engine/`).
 - Cursor movement, warp-follow (A) / back-stack (B), warp reveal (hold R),
   jump-to-map menu (Start), debug HUD (L toggle).
 - Building all 199 Uranium maps' **tilesets + layouts + headers + warps** into the
@@ -71,20 +71,20 @@ from research and may drift; function names are authoritative. New code lives in
 new file plus sentinel-fenced hooks, all revertable against upstream.
 
 ### 4.1 New files
-- `src/uranium_map_walker.c` — the walker field controller, cursor/warp sprites,
+- `src/rpg2gba_map_walker.c` — the walker field controller, cursor/warp sprites,
   HUD, jump menu, back-stack.
-- `include/uranium_map_walker.h` — public hooks called from gated sites.
-- `include/config/uranium_walker.h` — `#define URANIUM_MAP_WALKER FALSE` (flip to
+- `include/rpg2gba_map_walker.h` — public hooks called from gated sites.
+- `include/config/rpg2gba_harness.h` — `#define RPG2GBA_MAP_WALKER FALSE` (flip to
   `TRUE` for the walker build).
 
 ### 4.2 Boot & flag
 Reuse the existing PATHFINDER boot chain (intro/title/menu already bypassed):
-- `src/intro.c` (`COPYRIGHT_START_INTRO`, ~1107) → `CB2_StartUraniumSlice`
-- `src/new_game.c` `CB2_StartUraniumSlice` (~239) → stamps identity → `CB2_NewGame`
+- `src/intro.c` (`COPYRIGHT_START_INTRO`, ~1107) → `CB2_StartRpg2gbaHarness`
+- `src/new_game.c` `CB2_StartRpg2gbaHarness` (~239) → stamps identity → `CB2_NewGame`
 - `src/new_game.c` `WarpToTruck` (~137) → spawn override to
   `MAP_MOKI_TOWN_PLAYERS_HOUSE_1F` @ (7,7)
 
-When `URANIUM_MAP_WALKER == TRUE`, after `CB2_NewGame` finishes its map-load loop,
+When `RPG2GBA_MAP_WALKER == TRUE`, after `CB2_NewGame` finishes its map-load loop,
 install the walker field controller (a task + input hook) instead of normal field
 control. The spawn tile (7,7) becomes the cursor's starting tile.
 
@@ -279,8 +279,8 @@ preview. Keep a way to reproduce the old slice pool for regression comparison.
 ## 9. Implementation sequence
 
 **Phase A — Engine walker (on the current 3 maps)**
-1. Add `include/config/uranium_walker.h` flag + new
-   `uranium_map_walker.{c,h}` skeleton; wire the field controller under the flag.
+1. Add `include/config/rpg2gba_harness.h` flag + new
+   `rpg2gba_map_walker.{c,h}` skeleton; wire the field controller under the flag.
 2. Invisible anchor + event gating (§4.3); raw display (§4.10).
 3. Movement + bounds clamp (§4.4).
 4. Cursor sprite + blink + warp white-flash (§4.5).

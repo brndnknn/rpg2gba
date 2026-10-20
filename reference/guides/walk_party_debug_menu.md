@@ -35,7 +35,7 @@ Pokémon at the level you want.
 
 The ids are append-only, so these stay valid. A species added later gets the
 next id. Regenerate with `python output/scratch/species_ids.py`, or read
-`engine/include/constants/uranium_species_constants.h` (ids start at
+`engine/include/constants/rpg2gba_species_constants.h` (ids start at
 `SPECIES_GLIMMORA_MEGA + 1` = 1573). Stock species keep their national-dex ids.
 
 | Id | Species | Id | Species |

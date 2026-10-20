@@ -35,9 +35,9 @@ from rpg2gba.story_state.transitions import (
 logger = logging.getLogger(__name__)
 
 SENTINELS: tuple[str, ...] = (
-    "URANIUM PATHFINDER SLICE",
-    "URANIUM MAP WALKER",
-    "URANIUM EMBEDDED SAVE",
+    "RPG2GBA HARNESS",
+    "RPG2GBA MAP WALKER",
+    "RPG2GBA EMBEDDED SAVE",
     "RPG2GBA EVENT RANGE EXPANSION",
     "RPG2GBA GAME PROFILE",
     "RPG2GBA ENGINE",
@@ -63,7 +63,7 @@ _END_RE = re.compile(rf"^\s*//\s*END\s+({_SENTINEL_ALT})\b")
 # with no trailing ';' -- deliberately loose (this is a locator heuristic, not
 # a C parser). The opening brace is expected on its own line immediately
 # after (pokeemerald's brace style), which is what both known real sites
-# (`DoWhiteOut`, `CB2_StartUraniumSlice`) look like.
+# (`DoWhiteOut`, `CB2_StartRpg2gbaHarness`) look like.
 _FUNC_SIG_RE = re.compile(r"^[A-Za-z_][\w \*]*?\b(\w+)\([^;{}]*\)\s*$")
 
 _WRITE_CALL_RE = re.compile(

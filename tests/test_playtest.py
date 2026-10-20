@@ -1749,7 +1749,7 @@ def test_probed_printer_offsets_match_the_compiled_accessor() -> None:
 
 @needs_probe
 def test_probe_constants_resolves_known_good_name() -> None:
-    # VAR_TEMP_POKEMON_CHOICE is defined in uranium_flags.h as
+    # VAR_TEMP_POKEMON_CHOICE is defined in rpg2gba_flags.h as
     # (RPG2GBA_VAR_BASE + 0), and RPG2GBA_VAR_BASE is RPG2GBA_VARS_START
     # (constants/vars.h). Resolve both through the same probe and check the
     # indirection chain the header encodes, rather than hardcoding a number.
@@ -1765,7 +1765,7 @@ def test_probe_constants_raises_on_unknown_name() -> None:
 
 
 def test_probe_constants_missing_header_raises_loud(tmp_path: Path) -> None:
-    with pytest.raises(RuntimeError, match="uranium_flags.h"):
+    with pytest.raises(RuntimeError, match="rpg2gba_flags.h"):
         probe_constants(tmp_path, ["VAR_TEMP_POKEMON_CHOICE"])
 
 
@@ -2140,7 +2140,7 @@ def test_verify_stamped_rom_catches_an_unsynced_blob(tmp_path: Path) -> None:
 
     pristine = ENGINE / "pokeemerald.gba"
     stamped = tmp_path / "oldbug_stamped.gba"
-    file_off = emu.symbols["gUraniumEmbeddedSave"] - ROM_BASE
+    file_off = emu.symbols["gRpg2gbaEmbeddedSave"] - ROM_BASE
     data = bytearray(pristine.read_bytes())
     data[file_off : file_off + len(blob)] = blob
     stamped.write_bytes(data)

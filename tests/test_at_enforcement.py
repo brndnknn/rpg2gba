@@ -177,7 +177,7 @@ class FakeEmulator:
         self._pos_i = 0
         self.symbols = {"gSaveBlock1Ptr": 0x1000, "gSaveBlock2Ptr": 0x1000,
                         "gSaveBlock3Ptr": 0x1000, "gPokemonStoragePtr": 0x1000,
-                        "gUraniumEmbeddedSave": 0}
+                        "gRpg2gbaEmbeddedSave": 0}
         self.offsets = {"sizeof_sb1": 4, "sizeof_sb2": 4, "sizeof_sb3": 4,
                         "sizeof_storage": 4, "sizeof_es": 16,
                         "embedded_save_magic": 0xABCDEF01,

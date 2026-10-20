@@ -736,7 +736,7 @@ def persist_seed_blob(blobs_dir: Path, chapter: str, rom: Path,
         "seeds_beat": snapshot.beat,
         "rom_sha256": hash_file(rom),
         "prefix_sha256": prefix_sha256,
-        "blob_offset": emu.symbols["gUraniumEmbeddedSave"],
+        "blob_offset": emu.symbols["gRpg2gbaEmbeddedSave"],
         "created": datetime.now(timezone.utc).isoformat(),
         "player_pos": list(snapshot.player_pos),
         "map_location": list(snapshot.map_location),
@@ -1040,7 +1040,7 @@ def _build_bundle(chapter: Chapter, attempt: AttemptResult, output_root: Path) -
         if attempt.final_emulator is not None:
             try:
                 blob = build_blob(attempt.final_emulator.offsets, snap.blocks)
-                file_offset = (attempt.final_emulator.symbols["gUraniumEmbeddedSave"]
+                file_offset = (attempt.final_emulator.symbols["gRpg2gbaEmbeddedSave"]
                                - ROM_BASE)
                 write_blob_to_rom(attempt.pristine_rom, bundle_dir / "pre_beat.gba",
                                    blob, file_offset)
@@ -1088,7 +1088,7 @@ def _stamp_green(chapter: Chapter, rom: Path, attempt: AttemptResult,
             "chapter": chapter.name,
             "kind": "chapter-complete",
             "rom_sha256": hash_file(rom),
-            "blob_offset": emu.symbols["gUraniumEmbeddedSave"],
+            "blob_offset": emu.symbols["gRpg2gbaEmbeddedSave"],
             "player_pos": list(emu.player_pos()),
             "map_location": list(emu.map_location()),
             "created": datetime.now(timezone.utc).isoformat(),

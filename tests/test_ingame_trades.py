@@ -121,7 +121,7 @@ def test_scan_idempotent_and_rendered_text(tmp_path: Path) -> None:
     assert it.emit_table(a) == it.emit_table(b)
 
     enum = it.emit_enum(a)
-    assert "#define URANIUM_INGAME_TRADE_MEMBERS \\\n    INGAME_TRADE_MAP046_EV014,\n" in enum
+    assert "#define RPG2GBA_INGAME_TRADE_MEMBERS \\\n    INGAME_TRADE_MAP046_EV014,\n" in enum
     table = it.emit_table(a)
     for line in (
         "[INGAME_TRADE_MAP046_EV014] =",
@@ -143,7 +143,7 @@ def test_scan_idempotent_and_rendered_text(tmp_path: Path) -> None:
 
 
 def test_zero_trades_emit_valid_empty_fragments() -> None:
-    assert it.emit_enum([]).rstrip().endswith("#define URANIUM_INGAME_TRADE_MEMBERS")
+    assert it.emit_enum([]).rstrip().endswith("#define RPG2GBA_INGAME_TRADE_MEMBERS")
     assert "[INGAME_TRADE" not in it.emit_table([])
 
 

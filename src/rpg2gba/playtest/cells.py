@@ -254,7 +254,7 @@ def custom_route_loop(map_constant: str, event_id: int) -> tuple[RouteStep, ...]
     ROM interprets (`route_bytecode.encode_route`), walked from the RMXP
     spawn cell. Only a looping, non-skippable walker qualifies: the engine
     holds such a walker in place when its next step is blocked
-    (`MovementType_UraniumCustomRoute_Callback`), which is what lets a player
+    (`MovementType_Rpg2gbaCustomRoute_Callback`), which is what lets a player
     standing on its path stop it (`assertions.talk_to_moving_npc`, ROM run
     36: Moki Town's Chyinmunk). A route that stops holds still anyway; a
     skippable one skips a blocked step rather than waiting.
@@ -272,7 +272,7 @@ def custom_route_loop(map_constant: str, event_id: int) -> tuple[RouteStep, ...]
 
     if not has_local_id(map_constant, event_id):
         return None
-    if emitted_movement_type(map_constant, event_id) != "MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE":
+    if emitted_movement_type(map_constant, event_id) != "MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE":
         return None
     uid, _graph = _graph_for(map_constant, resolver="custom_route_loop")
     event = _event_lookup(uid, event_id, map_constant=map_constant, resolver="custom_route_loop")
@@ -283,7 +283,7 @@ def custom_route_loop(map_constant: str, event_id: int) -> tuple[RouteStep, ...]
     if code is None or code[-1] != OP_END_LOOP or code[1] & FLAG_SKIPPABLE:
         return None
     # Per-command idle, clamped to >= 1 and followed by a one-frame yield
-    # (`UraniumRoute_BeginIdle`). ROM run 42: Moki Town's ev070 idles 0x66
+    # (`Rpg2gbaRoute_BeginIdle`). ROM run 42: Moki Town's ev070 idles 0x66
     # frames per step, and a fixed 24-frame guess timed out its intercept.
     idle = max(1, code[0]) + 1
     steps: list[RouteStep] = []

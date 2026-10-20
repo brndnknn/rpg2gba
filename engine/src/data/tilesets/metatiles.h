@@ -409,7 +409,7 @@ const u16 gMetatileAttributes_HallOfFame[] = INCBIN_U16("data/tilesets/secondary
 
 #endif // IS_FRLG
 
-// BEGIN URANIUM PATHFINDER SLICE — generated metatiles/attributes (rpg2gba)
-// uranium_metatiles.gen.h is pipeline-generated + gitignored (assemble_pathfinder.py S8a).
-#include "uranium_metatiles.gen.h"
-// END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA GAME PROFILE — generated metatiles/attributes (rpg2gba)
+// rpg2gba_metatiles.gen.h is pipeline-generated + gitignored (assemble_pathfinder.py S8a).
+#include "rpg2gba_metatiles.gen.h"
+// END RPG2GBA GAME PROFILE

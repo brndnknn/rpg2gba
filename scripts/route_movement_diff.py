@@ -109,7 +109,7 @@ class _DemotedCapture(logging.Handler):
 # dict lookup — the header-checked loader (npc_gfx.load_npc_gfx_map) exists to
 # additionally prove the constant is real against the fork's generated
 # headers (CLAUDE.md §4.7 forward gate). That gate requires
-# uranium_event_objects.gen.h, which only exists after running the sprite
+# rpg2gba_event_objects.gen.h, which only exists after running the sprite
 # pass, which WRITES into engine/ — off limits for this tool. We don't need
 # fork-symbol validation to diff movement_type/route_id, so we load the same
 # JSON directly and skip the header check.

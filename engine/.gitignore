@@ -66,13 +66,13 @@ tools/aif2pcm/aif2pcm
 *.smolTM
 __pycache__
 .map_version
-# URANIUM PATHFINDER SLICE — connection id remap tables, written by the rpg2gba pipeline
-src/data/uranium_connection_remaps.gen.h
-# URANIUM PATHFINDER SLICE — split-map sibling table, written by the rpg2gba pipeline
-src/data/uranium_split_siblings.gen.h
-# URANIUM PATHFINDER SLICE — NPC in-game trade enum members + rows, written by the rpg2gba pipeline
-include/constants/uranium_ingame_trades.gen.h
-src/data/uranium_ingame_trade_table.gen.h
+# RPG2GBA GAME PROFILE — connection id remap tables, written by the rpg2gba pipeline
+src/data/rpg2gba_connection_remaps.gen.h
+# RPG2GBA GAME PROFILE — split-map sibling table, written by the rpg2gba pipeline
+src/data/rpg2gba_split_siblings.gen.h
+# RPG2GBA GAME PROFILE — NPC in-game trade enum members + rows, written by the rpg2gba pipeline
+include/constants/rpg2gba_ingame_trades.gen.h
+src/data/rpg2gba_ingame_trade_table.gen.h
 # RPG2GBA GAME PROFILE — per-game profile and generated game content, written by the rpg2gba pipeline
 include/config/rpg2gba_species_profile.gen.h
 include/constants/rpg2gba_items.gen.h
@@ -87,6 +87,6 @@ src/data/rpg2gba_battle/
 include/config/rpg2gba_game.gen.h
 include/constants/rpg2gba_bag.gen.h
 include/config/rpg2gba_sizes.gen.h
-# BEGIN URANIUM PATHFINDER SLICE — learnables overlay (upstream + Uranium TM/HM/tutor compatibility), written by the rpg2gba pipeline
+# BEGIN RPG2GBA GAME PROFILE — learnables overlay (upstream + Uranium TM/HM/tutor compatibility), written by the rpg2gba pipeline
 src/data/pokemon/all_learnables.gen.json
-# END URANIUM PATHFINDER SLICE
+# END RPG2GBA GAME PROFILE

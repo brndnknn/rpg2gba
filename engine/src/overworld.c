@@ -1,25 +1,25 @@
 #include "global.h"
-// BEGIN URANIUM MAP WALKER — pulls UraniumWalker_FieldCB_MapLoad/UraniumWalker_IsActive
+// BEGIN RPG2GBA MAP WALKER — pulls Rpg2gbaWalker_FieldCB_MapLoad/Rpg2gbaWalker_IsActive
 // used below (map-load field callback swap, spawn suppression gate). Removing this include
 // breaks those call sites; reverting them too restores vanilla map-load/spawn behavior.
-#include "uranium_map_walker.h"
-// END URANIUM MAP WALKER
-// BEGIN URANIUM PATHFINDER SLICE — connection id remap
-#include "uranium_connection_remap.h"
-// END URANIUM PATHFINDER SLICE
-// BEGIN URANIUM PATHFINDER SLICE — split-map popup
-#include "uranium_split_maps.h"
-// END URANIUM PATHFINDER SLICE
+#include "rpg2gba_map_walker.h"
+// END RPG2GBA MAP WALKER
+// BEGIN RPG2GBA ENGINE — connection id remap
+#include "rpg2gba_connection_remap.h"
+// END RPG2GBA ENGINE
+// BEGIN RPG2GBA ENGINE — split-map popup
+#include "rpg2gba_split_maps.h"
+// END RPG2GBA ENGINE
 // BEGIN RPG2GBA STREAMING — seam swap (LoadMapFromCameraTransition, VBlankCB_Field)
 #include "field_stream.h"
 // END RPG2GBA STREAMING
-// BEGIN URANIUM PATHFINDER SLICE — pulls FLAG_STARTING_OVER (the flag registry's
+// BEGIN RPG2GBA GAME PROFILE — pulls FLAG_STARTING_OVER (the flag registry's
 // generated dump, keyed off config/rpg2gba.h's range bases), set in DoWhiteOut()
-// below. "../" for the same reason as new_game.c's uranium_berry_trees.h include.
+// below. "../" for the same reason as new_game.c's rpg2gba_berry_trees.h include.
 // Removing these includes breaks that call.
 #include "config/rpg2gba.h"
-#include "../data/scripts/uranium_flags.h"
-// END URANIUM PATHFINDER SLICE
+#include "../data/scripts/rpg2gba_flags.h"
+// END RPG2GBA GAME PROFILE
 #include "overworld.h"
 #include "battle_pyramid.h"
 #include "battle_setup.h"
@@ -243,10 +243,10 @@ EWRAM_DATA static struct WarpData sFixedDiveWarp = {0};
 EWRAM_DATA static struct WarpData sFixedHoleWarp = {0};
 EWRAM_DATA static mapsec_u16_t sLastMapSectionId = 0;
 EWRAM_DATA static struct InitialPlayerAvatarState sInitialPlayerAvatarState = {0};
-// BEGIN URANIUM PATHFINDER SLICE — a script warp's explicit arrival facing, set by the
+// BEGIN RPG2GBA ENGINE — a script warp's explicit arrival facing, set by the
 // SetWarpArrivalFacing special and consumed by the next ScrCmd_warp (DIR_NONE = none).
 EWRAM_DATA static u8 sPendingWarpArrivalFacing = DIR_NONE;
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA ENGINE
 EWRAM_DATA static u16 sAmbientCrySpecies = 0;
 EWRAM_DATA static bool8 sIsAmbientCryWaterMon = FALSE;
 EWRAM_DATA static u8 sHoursOverride = 0; // used to override apparent time of day hours
@@ -419,7 +419,7 @@ void DoWhiteOut(void)
     // Essentials' pbStartOver sets it on every white-out, and the respawn map's converted
     // autorun (a home heal or a Center nurse scene) runs on arrival and clears it. Absent
     // in a stock build, which keeps the silent native respawn.
-#if defined(RPG2GBA_WHITEOUT_FLAG) && URANIUM_MAP_WALKER == FALSE // the Map Walker build has no flag registry
+#if defined(RPG2GBA_WHITEOUT_FLAG) && RPG2GBA_MAP_WALKER == FALSE // the Map Walker build has no flag registry
     FlagSet(RPG2GBA_WHITEOUT_FLAG);
 #endif
     // END RPG2GBA GAME PROFILE
@@ -908,10 +908,10 @@ bool8 SetDiveWarpDive(u16 x, u16 y)
 
 void LoadMapFromCameraTransition(u8 mapGroup, u8 mapNum)
 {
-    // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+    // BEGIN RPG2GBA ENGINE — connection id remap
     const struct Tileset *oldPrimaryTileset = gMapHeader.mapLayout->primaryTileset;
     bool32 primaryChanged;
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
 
     SetWarpDestination(mapGroup, mapNum, WARP_ID_NONE, -1, -1);
 
@@ -941,7 +941,7 @@ void LoadMapFromCameraTransition(u8 mapGroup, u8 mapNum)
     Overworld_ClearSavedMusic();
     RunOnTransitionMapScript();
     InitMap();
-    // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+    // BEGIN RPG2GBA ENGINE — connection id remap
     // Vanilla never changes primary tileset across a connection (this function
     // only ever reloaded the secondary); Uranium cross-tileset connections do.
     // The whole-view redraw happens in CameraMove after MoveMapViewToBackup.
@@ -953,22 +953,22 @@ void LoadMapFromCameraTransition(u8 mapGroup, u8 mapNum)
     // END RPG2GBA STREAMING
     if (primaryChanged)
     {
-        UraniumCopyPrimaryTilesetToVramUsingHeap(gMapHeader.mapLayout);
-        UraniumLoadPrimaryTilesetPalette(gMapHeader.mapLayout, TRUE); // gamma shift below fills Faded
+        Rpg2gbaCopyPrimaryTilesetToVramUsingHeap(gMapHeader.mapLayout);
+        Rpg2gbaLoadPrimaryTilesetPalette(gMapHeader.mapLayout, TRUE); // gamma shift below fills Faded
         ApplyWeatherColorMapToPals(0, GetNumPalsInPrimary(gMapHeader.mapLayout)); // palettes [0,5]
     }
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
     CopySecondaryTilesetToVramUsingHeap(gMapHeader.mapLayout);
     LoadSecondaryTilesetPalette(gMapHeader.mapLayout, TRUE); // skip copying to Faded, gamma shift will take care of it
 
     ApplyWeatherColorMapToPals(GetNumPalsInPrimary(gMapHeader.mapLayout), NUM_PALS_TOTAL - GetNumPalsInPrimary(gMapHeader.mapLayout)); // palettes [6,12]
 
-    // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+    // BEGIN RPG2GBA ENGINE — connection id remap
     if (primaryChanged)
         InitTilesetAnimations(); // primary + secondary
     else
         InitSecondaryTilesetAnimation();
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
     UpdateLocationHistoryForRoamer();
     MoveAllRoamers();
     DoCurrentWeather();
@@ -1070,7 +1070,7 @@ void StoreInitialPlayerAvatarState(void)
         sInitialPlayerAvatarState.transitionFlags = PLAYER_AVATAR_FLAG_ON_FOOT;
 }
 
-// BEGIN URANIUM PATHFINDER SLICE — warp arrival facing (RPG2GBA_WARP_RETAIN_FACING,
+// BEGIN RPG2GBA ENGINE — warp arrival facing (RPG2GBA_WARP_RETAIN_FACING,
 // WARP_RETAIN_FACING_PROPOSAL.md §0). RMXP warps carry an arrival direction; these let the
 // departure warp (SetupWarp) or a script warp (ScrCmd_warp) set it on the stored state that
 // GetAdjustedInitialDirection falls back to.
@@ -1102,7 +1102,7 @@ bool32 ApplyPendingWarpArrivalFacing(void)
     sPendingWarpArrivalFacing = DIR_NONE;
     return TRUE;
 }
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA ENGINE
 
 static struct InitialPlayerAvatarState *GetInitialPlayerAvatarState(void)
 {
@@ -1158,14 +1158,14 @@ static enum Direction GetAdjustedInitialDirection(struct InitialPlayerAvatarStat
     else if (MetatileBehavior_IsDeepSouthWarp(metatileBehavior) == TRUE)
         return DIR_NORTH;
     else if (MetatileBehavior_IsNonAnimDoor(metatileBehavior) == TRUE || MetatileBehavior_IsDoor(metatileBehavior) == TRUE)
-    // BEGIN URANIUM PATHFINDER SLICE — door arrivals keep the warp's facing (the exit
+    // BEGIN RPG2GBA ENGINE — door arrivals keep the warp's facing (the exit
     // step then follows it) instead of always facing south. Vanilla: return DIR_SOUTH;
 #if RPG2GBA_WARP_RETAIN_FACING
         return playerStruct->direction;
 #else
         return DIR_SOUTH;
 #endif
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
     else if (MetatileBehavior_IsSouthArrowWarp(metatileBehavior) == TRUE)
         return DIR_NORTH;
     else if (MetatileBehavior_IsNorthArrowWarp(metatileBehavior) == TRUE)
@@ -1184,14 +1184,14 @@ static enum Direction GetAdjustedInitialDirection(struct InitialPlayerAvatarStat
     else if (MetatileBehavior_IsLadder(metatileBehavior) == TRUE)
         return playerStruct->direction;
     else
-    // BEGIN URANIUM PATHFINDER SLICE — plain arrivals keep the stored facing (RMXP
+    // BEGIN RPG2GBA ENGINE — plain arrivals keep the stored facing (RMXP
     // retain semantics, or the warp's explicit facing). Vanilla: return DIR_SOUTH;
 #if RPG2GBA_WARP_RETAIN_FACING
         return playerStruct->direction;
 #else
         return DIR_SOUTH;
 #endif
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
 }
 
 static u16 GetCenterScreenMetatileBehavior(void)
@@ -1998,24 +1998,26 @@ void CB2_NewGame(void)
         gFieldCallback = FieldCB_WarpExitFadeFromBlack;
     else
     {
-        // BEGIN URANIUM PATHFINDER SLICE — suppress the moving-truck cutscene on new-game boot.
-        // The slice spawns into a normal map (Map049 Player's House 1F), not InsideOfTruck.
-        // ExecuteTruckSequence rewrites truck-only metatiles, bobs the camera (the "shake"),
-        // and LockPlayerFieldControls() (can't move). It runs synchronously inside the
-        // DoMapLoadLoop() below (state 12 -> RunFieldCallback), so swapping it here — before the
-        // load loop consumes the callback — is the only place that works; clearing gFieldCallback
-        // after CB2_NewGame() returns (new_game.c) is too late. Arm the plain warp-exit fade
-        // instead. Revert this block (restore ExecuteTruckSequence) for vanilla boot.
+        // BEGIN RPG2GBA GAME PROFILE — no moving-truck cutscene when the game has its own spawn.
+        // With RPG2GBA_NEW_GAME_MAP set, the new game spawns into the game's own start map,
+        // not InsideOfTruck. ExecuteTruckSequence would rewrite truck-only metatiles there,
+        // bob the camera (the "shake") and LockPlayerFieldControls() (can't move). It runs
+        // synchronously inside the DoMapLoadLoop() below (state 12 -> RunFieldCallback), so
+        // swapping it here, before the load loop consumes the callback, is the only place
+        // that works; clearing gFieldCallback after CB2_NewGame() returns is too late. Arm the
+        // plain warp-exit fade instead. Stock build: the truck sequence, as upstream.
         //
-        // URANIUM MAP WALKER: for the same "callback is consumed inside DoMapLoadLoop"
+        // RPG2GBA MAP WALKER: for the same "callback is consumed inside DoMapLoadLoop"
         // reason, the walker's field callback MUST be armed here, not after CB2_NewGame
         // returns. It installs the walker task + cursor + hides the player on map load.
-#if URANIUM_MAP_WALKER == TRUE
-        gFieldCallback = UraniumWalker_FieldCB_MapLoad;
-#else
+#if RPG2GBA_MAP_WALKER == TRUE
+        gFieldCallback = Rpg2gbaWalker_FieldCB_MapLoad;
+#elif defined(RPG2GBA_NEW_GAME_MAP)
         gFieldCallback = FieldCB_WarpExitFadeFromBlack;
+#else
+        gFieldCallback = ExecuteTruckSequence;
 #endif
-        // END URANIUM PATHFINDER SLICE
+        // END RPG2GBA GAME PROFILE
     }
     gFieldCallback2 = NULL;
     DoMapLoadLoop(&gMain.state);
@@ -2182,8 +2184,8 @@ void CB2_ReturnToFieldFadeFromBlack(void)
 
 static void FieldCB_FadeTryShowMapPopup(void)
 {
-    // URANIUM PATHFINDER SLICE: split-map popup — no popup between pieces of one split map
-    if (gMapHeader.showMapName == TRUE && SecretBaseMapPopupEnabled() == TRUE && !UraniumIsSplitSiblingWarp())
+    // RPG2GBA ENGINE: split-map popup — no popup between pieces of one split map
+    if (gMapHeader.showMapName == TRUE && SecretBaseMapPopupEnabled() == TRUE && !Rpg2gbaIsSplitSiblingWarp())
         ShowMapNamePopup();
     FieldCB_WarpExitFadeFromBlack();
 }
@@ -2440,8 +2442,8 @@ static bool32 LoadMapInStepsLocal(u8 *state, bool32 a2)
         (*state)++;
         break;
     case 11:
-        // URANIUM PATHFINDER SLICE: split-map popup — no popup between pieces of one split map
-        if (gMapHeader.showMapName == TRUE && SecretBaseMapPopupEnabled() == TRUE && !UraniumIsSplitSiblingWarp())
+        // RPG2GBA ENGINE: split-map popup — no popup between pieces of one split map
+        if (gMapHeader.showMapName == TRUE && SecretBaseMapPopupEnabled() == TRUE && !Rpg2gbaIsSplitSiblingWarp())
             ShowMapNamePopup();
         (*state)++;
         break;
@@ -2706,18 +2708,18 @@ static void InitObjectEventsLocal(void)
     InitPlayerAvatar(x, y, player->direction, gSaveBlock2Ptr->playerGender);
     SetPlayerAvatarTransitionFlags(player->transitionFlags);
     ResetInitialPlayerAvatarState();
-    // BEGIN URANIUM PATHFINDER SLICE — a SetWarpArrivalFacing that no warp consumed must
+    // BEGIN RPG2GBA ENGINE — a SetWarpArrivalFacing that no warp consumed must
     // not leak into a later, unrelated script warp.
     ClearPendingWarpArrivalFacing();
-    // END URANIUM PATHFINDER SLICE
-    // BEGIN URANIUM MAP WALKER — no NPCs; no on-warp map scripts
-#if URANIUM_MAP_WALKER != TRUE
+    // END RPG2GBA ENGINE
+    // BEGIN RPG2GBA MAP WALKER — no NPCs; no on-warp map scripts
+#if RPG2GBA_MAP_WALKER != TRUE
     TrySpawnObjectEvents(0, 0);
     FollowerNPC_HandleSprite();
     UpdateFollowingPokemon();
     TryRunOnWarpIntoMapScript();
 #endif
-    // END URANIUM MAP WALKER
+    // END RPG2GBA MAP WALKER
 }
 
 static void InitObjectEventsReturnToField(void)

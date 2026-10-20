@@ -151,7 +151,7 @@ meant to grow as later slices exercise more of Essentials' surface.
 | Story-gated / conditionally-hidden actor | `MAP_SCRIPT_ON_TRANSITION` + a `FLAG_HIDE_*`-pattern visibility flag | Vanilla pattern, reused generically for any page condition a static object event can't express on its own. |
 | Post-warp arrival facing | `MAP_SCRIPT_ON_WARP_INTO_MAP_TABLE` + `turnobject` | Vanilla mechanism; the arrival-facing feature this pipeline builds on top of it is documented in `MEMORY.md`/history under "WARP-ARRIVAL FACING". |
 | Simple back-and-forth patrol/wander | `MOVEMENT_TYPE_WANDER_AROUND` and other native `MOVEMENT_TYPE_*` | Used when the RMXP route is natively expressible; see the next row for when it isn't. |
-| Arbitrary/looping custom move route | `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` (fork addition, `0x53`) | Full spec: `reference/guides/custom_route_interpreter.md`. Superseded the native-approximation path (`WALK_LEFT_AND_RIGHT`/`WALK_SEQUENCE_*`/`LOOK_AROUND`) because roughly 62% of a real corpus's custom routes are not natively expressible. |
+| Arbitrary/looping custom move route | `MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE` (fork addition, `0x53`) | Full spec: `reference/guides/custom_route_interpreter.md`. Superseded the native-approximation path (`WALK_LEFT_AND_RIGHT`/`WALK_SEQUENCE_*`/`LOOK_AROUND`) because roughly 62% of a real corpus's custom routes are not natively expressible. |
 
 ### Deliberately not used, with reasons on file
 

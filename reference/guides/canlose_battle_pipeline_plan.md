@@ -110,7 +110,7 @@ that, for the `TRAINER_*` referenced by the slice's scripts, emits:
    writing a generated `trainers.party` from `upstream + slice`.
 2. **`TRAINER_*` constants**. `opponents.h` is hand-maintained + committed and the
    fork-index gate reads it from `HEAD:engine`. Two viable routes:
-   - **Generated header** (like `uranium_flags.h`): write a gitignored
+   - **Generated header** (like `rpg2gba_flags.h`): write a gitignored
      `uranium_trainers.h` with `#define TRAINER_X (TRAINERS_COUNT_EMERALD + n)`,
      include it via the existing hook, AND feed the names to the gate via a new
      `trainer_manifest.json` consumed by `fork_index.registry_extra_symbols`

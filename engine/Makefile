@@ -250,13 +250,13 @@ AUTO_GEN_TARGETS += $(DATA_SRC_SUBDIR)/wild_encounters.h
 MISC_TOOL_DIR := $(TOOLS_DIR)/misc
 AUTO_GEN_TARGETS +=  $(INCLUDE_DIRS)/constants/script_commands.h
 
-# URANIUM PATHFINDER SLICE: prefer the assembler-generated overlay when present,
+# RPG2GBA GAME PROFILE: prefer the assembler-generated overlay when present,
 # mirroring the layouts.gen.json / map_groups.gen.json hooks in map_data_rules.mk.
 # With no overlay on disk this resolves to the committed file = pristine behavior.
-URANIUM_WILD_ENCOUNTERS := $(or $(wildcard $(DATA_SRC_SUBDIR)/wild_encounters.gen.json),$(DATA_SRC_SUBDIR)/wild_encounters.json)
+RPG2GBA_WILD_ENCOUNTERS := $(or $(wildcard $(DATA_SRC_SUBDIR)/wild_encounters.gen.json),$(DATA_SRC_SUBDIR)/wild_encounters.json)
 
-$(DATA_SRC_SUBDIR)/wild_encounters.h: $(URANIUM_WILD_ENCOUNTERS) $(WILD_ENCOUNTERS_TOOL_DIR)/wild_encounters_to_header.py $(INCLUDE_DIRS)/config/overworld.h $(INCLUDE_DIRS)/config/dexnav.h
-	python3 $(WILD_ENCOUNTERS_TOOL_DIR)/wild_encounters_to_header.py $(URANIUM_WILD_ENCOUNTERS)
+$(DATA_SRC_SUBDIR)/wild_encounters.h: $(RPG2GBA_WILD_ENCOUNTERS) $(WILD_ENCOUNTERS_TOOL_DIR)/wild_encounters_to_header.py $(INCLUDE_DIRS)/config/overworld.h $(INCLUDE_DIRS)/config/dexnav.h
+	python3 $(WILD_ENCOUNTERS_TOOL_DIR)/wild_encounters_to_header.py $(RPG2GBA_WILD_ENCOUNTERS)
 
 $(INCLUDE_DIRS)/constants/script_commands.h: $(MISC_TOOL_DIR)/make_scr_cmd_constants.py $(DATA_ASM_SUBDIR)/script_cmd_table.inc
 	python3  $(MISC_TOOL_DIR)/make_scr_cmd_constants.py
@@ -545,10 +545,10 @@ $(OBJ_DIR)/sym_ewram.ld: sym_ewram.txt
 	$(RAMSCRGEN) ewram_data $< ENGLISH > $@
 
 TEACHABLE_DEPS := $(ALL_LEARNABLES_JSON) $(INCLUDE_DIRS)/constants/tms_hms.h $(INCLUDE_DIRS)/config/pokemon.h $(DATA_SRC_SUBDIR)/pokemon/special_movesets.json $(INCLUDE_DIRS)/config/pokedex_plus_hgss.h $(LEARNSET_HELPERS_DIR)/make_teachables.py
-# BEGIN URANIUM PATHFINDER SLICE — rebuild teachables when the assembler-generated
+# BEGIN RPG2GBA GAME PROFILE — rebuild teachables when the assembler-generated
 # learnables overlay changes (make_teachables.py itself picks it over all_learnables.json).
 TEACHABLE_DEPS += $(wildcard $(DATA_SRC_SUBDIR)/pokemon/all_learnables.gen.json)
-# END URANIUM PATHFINDER SLICE
+# END RPG2GBA GAME PROFILE
 # BEGIN RPG2GBA GAME PROFILE — and when the generated TM/HM list changes
 TEACHABLE_DEPS += $(wildcard $(INCLUDE_DIRS)/constants/rpg2gba_machines.gen.h)
 # END RPG2GBA GAME PROFILE
@@ -562,10 +562,10 @@ $(ALL_LEARNABLES_JSON):  | $(wildcard $(LEARNSET_HELPERS_DATA_DIR)/*.json)
 $(ALL_TUTORS_JSON): $(shell find data/ -type f -name '*.inc')  $(LEARNSET_HELPERS_DIR)/make_tutors.py | $(LEARNSET_HELPERS_BUILD_DIR)
 	python3 $(LEARNSET_HELPERS_DIR)/make_tutors.py $@
 
-# BEGIN URANIUM PATHFINDER SLICE — this rule also depends on uranium_species_info.h (second
+# BEGIN RPG2GBA GAME PROFILE — this rule also depends on rpg2gba_species_info.h (second
 # wildcard prerequisite) because make_teaching_types.py scans it for staged species.
-$(ALL_TEACHING_TYPES_JSON): $(wildcard $(DATA_SRC_SUBDIR)/pokemon/species_info/*_families.h) $(wildcard $(DATA_SRC_SUBDIR)/pokemon/uranium_species_info.h) $(LEARNSET_HELPERS_DIR)/make_teaching_types.py | $(LEARNSET_HELPERS_BUILD_DIR)
-# END URANIUM PATHFINDER SLICE
+$(ALL_TEACHING_TYPES_JSON): $(wildcard $(DATA_SRC_SUBDIR)/pokemon/species_info/*_families.h) $(wildcard $(DATA_SRC_SUBDIR)/pokemon/rpg2gba_species_info.h) $(LEARNSET_HELPERS_DIR)/make_teaching_types.py | $(LEARNSET_HELPERS_BUILD_DIR)
+# END RPG2GBA GAME PROFILE
 	python3 $(LEARNSET_HELPERS_DIR)/make_teaching_types.py $@
 
 $(DATA_SRC_SUBDIR)/pokemon/teachable_learnsets.h: $(TEACHABLE_DEPS) | $(ALL_TUTORS_JSON) $(ALL_TEACHING_TYPES_JSON)

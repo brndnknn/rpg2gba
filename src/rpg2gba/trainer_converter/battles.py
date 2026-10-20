@@ -17,7 +17,7 @@ its emitter -- as the source of truth for party/class/gender data, and emits:
 This module does not touch anything under `engine/`; `stage.py` writes the
 generated files into the trainer staging dir, and a later step (the lead's
 `assemble_pathfinder.py`) stages them into the vendored fork behind committed
-`URANIUM PATHFINDER SLICE` include-hooks.
+`RPG2GBA GAME PROFILE` include-hooks.
 
 **Trainer Class / Music / Gender resolution (CLAUDE.md §4.7):** Uranium's own
 minted `trainer_class` constant spelling (`trainers.json`'s `trainer_class`
@@ -496,7 +496,7 @@ def _emit_trainer_block(t: StagedTrainerBattle) -> str:
 
 
 def emit_party_fragment(staged: list[StagedTrainerBattle]) -> str:
-    """`uranium_trainer_party.inc` -- `.party` DSL text (NOT C), destined for
+    """`rpg2gba_trainer_party.inc` -- `.party` DSL text (NOT C), destined for
     `#include` at the end of `src/data/trainers.party` (see `stage.py`'s
     module docstring for the exact `-iquote include`-relative hook path).
 
@@ -519,7 +519,7 @@ def emit_party_fragment(staged: list[StagedTrainerBattle]) -> str:
 
 
 def emit_trainer_ids(staged: list[StagedTrainerBattle], anchor: str) -> str:
-    """`uranium_trainer_ids.h`: chained `#define`s + `URANIUM_TRAINERS_LAST` +
+    """`rpg2gba_trainer_ids.h`: chained `#define`s + `RPG2GBA_TRAINERS_LAST` +
     `URANIUM_TRAINERS_STAGED_COUNT`.
 
     Mirrors `species_converter.stage.emit_species_constants`'s anchor-chain
@@ -536,7 +536,7 @@ def emit_trainer_ids(staged: list[StagedTrainerBattle], anchor: str) -> str:
     for t in staged:
         lines.append(f"#define {t.trainer_key} ({prev} + 1)")
         prev = t.trainer_key
-    lines.append(f"#define URANIUM_TRAINERS_LAST {prev}")
+    lines.append(f"#define RPG2GBA_TRAINERS_LAST {prev}")
     lines.append(f"#define URANIUM_TRAINERS_STAGED_COUNT {len(staged)}")
     return "\n".join(lines) + "\n"
 

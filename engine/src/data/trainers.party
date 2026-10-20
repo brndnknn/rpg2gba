@@ -16874,7 +16874,7 @@ Kyogre
 Level: 5
 IVs: 0 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
 
-/* BEGIN URANIUM PATHFINDER SLICE — generated trainer parties (rpg2gba; see
+/* BEGIN RPG2GBA GAME PROFILE — generated trainer parties (rpg2gba; see
    engine/RPG2GBA_VENDOR.md). The included file is pipeline-GENERATED + gitignored;
    this hook stays committed + stable across chapters. It lives under include/ because
    trainer_rules.mk pipes this file through `$(CPP) $(CPPFLAGS) -traditional-cpp -` on
@@ -16886,5 +16886,5 @@ IVs: 0 HP / 0 Atk / 0 Def / 0 SpA / 0 SpD / 0 Spe
    to the hand ones — they carry Uranium's real IVs (10) and happiness (70), where the
    hand blocks silently took trainerproc's IV-31 default. That is a real difficulty
    change, taken deliberately as the fidelity upgrade. */
-#include "data/uranium_trainer_party.inc"
-/* END URANIUM PATHFINDER SLICE */
+#include "data/rpg2gba_trainer_party.inc"
+/* END RPG2GBA GAME PROFILE */

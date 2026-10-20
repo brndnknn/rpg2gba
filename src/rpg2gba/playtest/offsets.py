@@ -74,16 +74,16 @@ _PROBE_ENTRIES: dict[str, str] = {
     "off_iteminfo_price": "offsetof(struct ItemInfo, price)",
     "sizeof_iteminfo": "sizeof(struct ItemInfo)",
     "flag_sys_b_dash": "FLAG_SYS_B_DASH",
-    "off_es_sb1": "offsetof(struct UraniumEmbeddedSave, sb1)",
-    "off_es_sb2": "offsetof(struct UraniumEmbeddedSave, sb2)",
-    "off_es_sb3": "offsetof(struct UraniumEmbeddedSave, sb3)",
-    "off_es_storage": "offsetof(struct UraniumEmbeddedSave, storage)",
-    "sizeof_es": "sizeof(struct UraniumEmbeddedSave)",
+    "off_es_sb1": "offsetof(struct Rpg2gbaEmbeddedSave, sb1)",
+    "off_es_sb2": "offsetof(struct Rpg2gbaEmbeddedSave, sb2)",
+    "off_es_sb3": "offsetof(struct Rpg2gbaEmbeddedSave, sb3)",
+    "off_es_storage": "offsetof(struct Rpg2gbaEmbeddedSave, storage)",
+    "sizeof_es": "sizeof(struct Rpg2gbaEmbeddedSave)",
     "sizeof_sb1": "sizeof(struct SaveBlock1)",
     "sizeof_sb2": "sizeof(struct SaveBlock2)",
     "sizeof_sb3": "sizeof(struct SaveBlock3)",
     "sizeof_storage": "sizeof(struct PokemonStorage)",
-    "embedded_save_magic": "URANIUM_EMBEDDED_SAVE_MAGIC",
+    "embedded_save_magic": "RPG2GBA_EMBEDDED_SAVE_MAGIC",
     "vars_start": "VARS_START",
     # -- battle mini-driver (playtest/battle.py) -----------------------------
     # struct Pokemon (include/pokemon.h): unencrypted party-struct tail.
@@ -318,7 +318,7 @@ _PROBE_TEMPLATE = """\
 #include <stddef.h>
 #include "global.h"
 #include "constants/flags.h"
-#include "uranium_embedded_save.h"
+#include "rpg2gba_embedded_save.h"
 #include "pokemon.h"
 #include "main.h"
 #include "fieldmap.h"
@@ -371,7 +371,7 @@ _CONSTANT_PROBE_TEMPLATE = """\
 #include "global.h"
 #include "constants/flags.h"
 #include "constants/vars.h"
-#include "data/scripts/uranium_flags.h"
+#include "data/scripts/rpg2gba_flags.h"
 #include "fieldmap.h"
 #include "constants/metatile_behaviors.h"
 #include "constants/event_objects.h"
@@ -391,7 +391,7 @@ def probe_constants(engine: Path, names: Sequence[str]) -> dict[str, int]:
     itself (it would itself expand) — symbols are index-mangled (`c0`, `c1`,
     ...) and mapped back to `names` by position.
     """
-    header = engine / "data" / "scripts" / "uranium_flags.h"
+    header = engine / "data" / "scripts" / "rpg2gba_flags.h"
     if not header.exists():
         raise RuntimeError(
             f"{header} is missing. It is a generated file, produced by "

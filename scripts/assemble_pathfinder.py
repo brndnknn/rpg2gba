@@ -12,17 +12,17 @@ Pass 2 (S8c) — fork assembly
       - staged map.bin + border.bin -> fork data/layouts/<name>/
       - write fork data/layouts/layouts.gen.json (upstream + slice; overlay, gitignored)
       - write fork data/maps/map_groups.gen.json (upstream + gMapGroup_Uranium; overlay)
-      - write fork data/scripts/uranium_map_aliases.h
-      - write fork data/scripts/uranium_flags.h (flag registry dump)
-      - write fork data/maps/uranium_includes.inc (gitignored; pulled in by the committed
-        URANIUM PATHFINDER SLICE include-hook in data/event_scripts.s)
+      - write fork data/scripts/rpg2gba_map_aliases.h
+      - write fork data/scripts/rpg2gba_flags.h (flag registry dump)
+      - write fork data/maps/rpg2gba_includes.inc (gitignored; pulled in by the committed
+        RPG2GBA GAME PROFILE include-hook in data/event_scripts.s)
 
 Pass 2.5 (S8b4) — wild encounter table staging
     Upsert the slice's converted wild-encounter tables (Phase 2 output,
     intermediate/wild_encounters.json) into an overlay of the fork's
     src/data/wild_encounters.json (gWildMonHeaders group), keyed by MAP_* --
     an overlay like layouts/map_groups (src/data/wild_encounters.gen.json,
-    gitignored; see run_encounters_pass docstring for the URANIUM_WILD_ENCOUNTERS
+    gitignored; see run_encounters_pass docstring for the RPG2GBA_WILD_ENCOUNTERS
     hook in engine/Makefile that selects it over the committed file).
 
 Pass 2.6 (S8b5) — PokePod rematch table staging
@@ -36,7 +36,7 @@ Pass 2.7 (S8b6) — heal-location overlay
     sites (`rpg2gba.pbs_converter.heal_locations`) and append them to an
     overlay of the fork's `src/data/heal_locations.json`
     (src/data/heal_locations.gen.json, gitignored; see run_heal_location_pass
-    docstring for the URANIUM_HEAL_LOCATIONS hook in
+    docstring for the RPG2GBA_HEAL_LOCATIONS hook in
     engine/json_data_rules.mk that selects it over the committed file).
 
 Pass 2.8 (S8b7) — teachable-learnset overlay
@@ -47,7 +47,7 @@ Pass 2.8 (S8b7) — teachable-learnset overlay
     see run_teachables_pass and rpg2gba.species_converter.teachables.
 
 Pass 3 (S8d) — berry tree seed table
-    Emit fork data/scripts/uranium_berry_trees.h (gitignored): the pre-planted
+    Emit fork data/scripts/rpg2gba_berry_trees.h (gitignored): the pre-planted
     berry-tree save-slot table consumed by new_game.c's NewGameInitData, right
     after ClearBerryTrees().
 
@@ -123,7 +123,7 @@ def _load_warp_overrides(out: Path) -> dict[int, set[tuple[int, int]]]:
 # Flag/var address layout for the pathfinder boot test. The numeric layout now
 # lives in the ENGINE, single source of truth: include/config/rpg2gba.h defines
 # the region capacities, constants/flags.h + constants/vars.h derive the region
-# starts. These names are resolved symbolically by cpp when uranium_flags.h is
+# starts. These names are resolved symbolically by cpp when rpg2gba_flags.h is
 # #included from data/event_scripts.s (after constants/flags.h / vars.h) — no
 # numeric literals here anymore (audit findings F1/F2 fix; the old hardcoded
 # bases were out-of-bounds writes / aliased live vanilla vars — see
@@ -219,7 +219,7 @@ def run_graphics_pass(out: Path, fork: Path, dry_run: bool) -> None:
         from rpg2gba.tileset_converter.route_table_emit import write_stub
 
         route_gen = (
-            fork / "src" / "data" / "object_events" / "uranium_move_routes.gen.h"
+            fork / "src" / "data" / "object_events" / "rpg2gba_move_routes.gen.h"
         )
         if not route_gen.exists():
             write_stub(fork)
@@ -399,15 +399,15 @@ def run_layout_pass(
 # mapping documented in species_converter/stage.py's module docstring
 # ("Generated files" list) and STARTER_SPECIES_PLAN.md §3's table.
 _SPECIES_HEADER_DEST_DIRS: dict[str, str] = {
-    "uranium_species_constants.h": "include/constants",
-    "uranium_pokedex_ids.h": "include/constants",
-    "uranium_cries_enum.h": "include/constants",
-    "uranium_learnsets.h": "src/data/pokemon",
-    "uranium_species_info.h": "src/data/pokemon",
-    "uranium_species_graphics.h": "src/data/graphics",
-    "uranium_cry_table_forward.inc": "sound",
-    "uranium_cry_table_reverse.inc": "sound",
-    "uranium_cry_sound_data.inc": "sound",
+    "rpg2gba_species_constants.h": "include/constants",
+    "rpg2gba_pokedex_ids.h": "include/constants",
+    "rpg2gba_cries_enum.h": "include/constants",
+    "rpg2gba_learnsets.h": "src/data/pokemon",
+    "rpg2gba_species_info.h": "src/data/pokemon",
+    "rpg2gba_species_graphics.h": "src/data/graphics",
+    "rpg2gba_cry_table_forward.inc": "sound",
+    "rpg2gba_cry_table_reverse.inc": "sound",
+    "rpg2gba_cry_sound_data.inc": "sound",
 }
 
 
@@ -505,18 +505,18 @@ def run_species_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
 # _SPECIES_HEADER_DEST_DIRS above and trainer_converter/stage.py's module
 # docstring ("Generated files" list).
 _TRAINER_HEADER_DEST_DIRS: dict[str, str] = {
-    "uranium_trainer_front_pic_ids.h": "include/constants",
-    "uranium_trainer_back_pic_ids.h": "include/constants",
-    "uranium_trainer_graphics.h": "src/data/graphics",
-    "uranium_trainer_sprites.h": "src/data/graphics",
-    "uranium_trainer_backsprites.h": "src/data/graphics",
+    "rpg2gba_trainer_front_pic_ids.h": "include/constants",
+    "rpg2gba_trainer_back_pic_ids.h": "include/constants",
+    "rpg2gba_trainer_graphics.h": "src/data/graphics",
+    "rpg2gba_trainer_sprites.h": "src/data/graphics",
+    "rpg2gba_trainer_backsprites.h": "src/data/graphics",
     # Trainer battle data (2026-08-05). The .party fragment lands under include/
     # rather than src/data/ on purpose: trainer_rules.mk pipes trainers.party
     # through `$(CPP) $(CPPFLAGS) -traditional-cpp -` on STDIN, so there is no
     # current-file directory and only `-iquote include` resolves the hook's
-    # `#include "data/uranium_trainer_party.inc"`.
-    "uranium_trainer_ids.h": "include/constants",
-    "uranium_trainer_party.inc": "include/data",
+    # `#include "data/rpg2gba_trainer_party.inc"`.
+    "rpg2gba_trainer_ids.h": "include/constants",
+    "rpg2gba_trainer_party.inc": "include/data",
 }
 
 
@@ -551,7 +551,7 @@ def run_trainer_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
 
     # trainer_rules.mk's `%.h: %.party $(TRAINERPROC)` rule only lists
     # trainers.party itself as a prerequisite -- it doesn't know
-    # trainers.party #includes uranium_trainer_party.inc, so copying a
+    # trainers.party #includes rpg2gba_trainer_party.inc, so copying a
     # changed .inc above leaves src/data/trainers.h stale (make sees
     # trainers.party's own mtime unchanged and skips TRAINERPROC). A newly
     # staged battle then compiles with a trainer id `gTrainers[]` has no
@@ -566,7 +566,7 @@ def run_trainer_pass(out: Path, fork: Path, uranium_src: Path, dry_run: bool) ->
 
     # --- Copy per-trainer art into the fork tree ---
     # stage.py bakes `graphics/trainers/uranium/<asset_dir>/<file>` engine-relative
-    # paths into its INCGFX declarations (uranium_trainer_graphics.h) and the
+    # paths into its INCGFX declarations (rpg2gba_trainer_graphics.h) and the
     # manifest's art_files entries. A mismatch here is a silent build break
     # (INCGFX would point at a file that was never copied), so assert
     # agreement rather than assuming it.
@@ -620,7 +620,7 @@ def run_encounters_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> N
     Writes `src/data/wild_encounters.gen.json` (gitignored), never the committed
     `src/data/wild_encounters.json` -- mirrors the `layouts.gen.json` /
     `map_groups.gen.json` overlay pattern `run_fork_pass` already uses.
-    `engine/Makefile`'s `URANIUM_WILD_ENCOUNTERS` var (near line 253) prefers the
+    `engine/Makefile`'s `RPG2GBA_WILD_ENCOUNTERS` var (near line 253) prefers the
     `.gen.json` overlay when present, falling back to the committed file when
     absent, so a repo with no overlay on disk builds pristine upstream behavior.
     `wild_encounters.py.upsert_encounters` always reads the committed file fresh
@@ -723,8 +723,8 @@ def run_rematch_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> None
     (`include/constants/rematches.h`) are hand-written C in committed vendored
     source, with no generator tool and no data file for a `$(or $(wildcard …))`
     hook to swap. So the fragments are installed the other sanctioned way — the
-    `constants/event_objects.h` -> `uranium_event_objects.gen.h` precedent: two
-    committed `URANIUM PATHFINDER SLICE` `#include` hooks pull in gitignored
+    `constants/event_objects.h` -> `rpg2gba_event_objects.gen.h` precedent: two
+    committed `RPG2GBA GAME PROFILE` `#include` hooks pull in gitignored
     generated headers, which this pass writes into `out/trainers/rematch/` and
     then copies into the fork. Both are always written (comment-only stubs when
     no phone-rematch trainers are staged), so a build never sees a missing
@@ -770,9 +770,9 @@ def run_rematch_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> None
         )
 
     dest = out / "trainers" / "rematch"
-    _write(dest / "uranium_rematches.gen.h", rm.emit_rematch_enum(entries),
+    _write(dest / "rpg2gba_rematches.gen.h", rm.emit_rematch_enum(entries),
            "rematch enum members", dry_run)
-    _write(dest / "uranium_rematch_table.gen.h", rm.emit_rematch_table(entries),
+    _write(dest / "rpg2gba_rematch_table.gen.h", rm.emit_rematch_table(entries),
            "gRematchTable rows", dry_run)
     _write(
         dest / "rematch_manifest.json",
@@ -791,13 +791,13 @@ def run_rematch_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -> None
         dry_run,
     )
     _copy(
-        dest / "uranium_rematches.gen.h",
-        fork / "include" / "constants" / "uranium_rematches.gen.h",
+        dest / "rpg2gba_rematches.gen.h",
+        fork / "include" / "constants" / "rpg2gba_rematches.gen.h",
         "rematch enum members", dry_run,
     )
     _copy(
-        dest / "uranium_rematch_table.gen.h",
-        fork / "src" / "data" / "uranium_rematch_table.gen.h",
+        dest / "rpg2gba_rematch_table.gen.h",
+        fork / "src" / "data" / "rpg2gba_rematch_table.gen.h",
         "gRematchTable rows", dry_run,
     )
 
@@ -810,7 +810,7 @@ def run_ingame_trade_pass(out: Path, fork: Path, dry_run: bool) -> None:
     """Stage native `sIngameTrades[]` rows + `INGAME_TRADE_*` enum members for the
     slice's Uranium `pbStartTrade` events (`rpg2gba.ingame_trades`).
 
-    Same hook shape as the rematch pass: two committed `URANIUM PATHFINDER SLICE`
+    Same hook shape as the rematch pass: two committed `RPG2GBA GAME PROFILE`
     `#include` hooks (`constants/trade.h`, `src/data/trade.h`) pull in gitignored
     fragments, both ALWAYS written (empty-safe stubs for zero trades). Scans
     `maps/` only (it holds the split pieces; `maps_presplit/` is the unsplit
@@ -851,7 +851,7 @@ def run_ingame_trade_pass(out: Path, fork: Path, dry_run: bool) -> None:
 def ingame_trade_gate_symbols(out: Path) -> set[str]:
     """`INGAME_TRADE_*` names for the staging gate, read from the S8b5b manifest.
 
-    The members land in the gitignored `uranium_ingame_trades.gen.h`, so the fork
+    The members land in the gitignored `rpg2gba_ingame_trades.gen.h`, so the fork
     index never carries them. Empty when the manifest is absent (e.g.
     `--skip-ingame-trades` with no prior pass) — any trade reference then fails
     the gate, as it should.
@@ -878,7 +878,7 @@ def run_heal_location_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -
     Writes `fork/src/data/heal_locations.gen.json` (gitignored): the committed
     upstream file's own `heal_locations` array with the slice's entries
     appended, in the returned order. `engine/json_data_rules.mk`'s
-    `URANIUM_HEAL_LOCATIONS` var (near the top of the file) prefers this
+    `RPG2GBA_HEAL_LOCATIONS` var (near the top of the file) prefers this
     overlay when present, falling back to the committed file when absent — a
     repo with no overlay on disk builds pristine upstream behavior. The
     committed file is always re-read fresh as the base (never a prior
@@ -1226,7 +1226,7 @@ def run_fork_pass(
     )
     # HEAL_LOCATION_* constants are generated from heal_locations(.gen).json
     # into an untracked header, so the index never carries them. Read the
-    # same file the build's URANIUM_HEAL_LOCATIONS hook selects (overlay if
+    # same file the build's RPG2GBA_HEAL_LOCATIONS hook selects (overlay if
     # S8b6 wrote one, else upstream) — a setrespawn target absent from it
     # would fail at make, so it must fail here first.
     heal_json = fork / "src" / "data" / "heal_locations.gen.json"
@@ -1334,7 +1334,7 @@ def run_fork_pass(
     # --- Write layouts overlay (data/layouts/layouts.gen.json) ---
     # Seed from the PRISTINE upstream layouts.json (the full vanilla manifest) so the
     # tracked file is never touched; upsert the slice layouts. map_data_rules.mk reads
-    # this overlay when present (URANIUM_LAYOUTS).
+    # this overlay when present (RPG2GBA_LAYOUTS).
     pristine_layouts_json = fork / "data" / "layouts" / "layouts.json"
     gen_layouts_json = fork / "data" / "layouts" / _GEN_LAYOUTS
     staging_layouts_json = staging_layouts / "layouts.json"
@@ -1362,7 +1362,7 @@ def run_fork_pass(
     # --- Write map_groups overlay (data/maps/map_groups.gen.json) ---
     # Seed from the PRISTINE upstream map_groups.json, append gMapGroup_Uranium. Always
     # built fresh from pristine (deterministic; the tracked file stays byte-for-byte
-    # upstream). map_data_rules.mk reads this overlay when present (URANIUM_MAP_GROUPS).
+    # upstream). map_data_rules.mk reads this overlay when present (RPG2GBA_MAP_GROUPS).
     pristine_mg = fork / "data" / "maps" / "map_groups.json"
     gen_mg = fork / "data" / "maps" / _GEN_MAP_GROUPS
     mg = json.loads(pristine_mg.read_text(encoding="utf-8"))
@@ -1378,23 +1378,23 @@ def run_fork_pass(
     prune_stale_map_dirs(fork, frozenset(uranium_maps), dry_run)
 
     # --- Write alias header ---
-    alias_src = out / "porymap" / "uranium_map_aliases.h"
-    dest_alias = fork / "data" / "scripts" / "uranium_map_aliases.h"
-    _copy(alias_src, dest_alias, "uranium_map_aliases.h", dry_run)
+    alias_src = out / "porymap" / "rpg2gba_map_aliases.h"
+    dest_alias = fork / "data" / "scripts" / "rpg2gba_map_aliases.h"
+    _copy(alias_src, dest_alias, "rpg2gba_map_aliases.h", dry_run)
 
     # --- Write walker maps header (debug jump-menu macro) ---
     from rpg2gba.tileset_converter.map_constants import MapConstantRegistry
     _walker_reg = MapConstantRegistry(state_path=out / "porymap" / "map_constants.json")
     _walker_reg.load()
-    dest_walker = fork / "include" / "uranium_walker_maps.h"
+    dest_walker = fork / "include" / "rpg2gba_walker_maps.h"
     if not dry_run:
         _walker_reg.write_walker_maps_header(SLICE_MAP_IDS, dest_walker)
-        logger.info("  wrote uranium_walker_maps.h (%d maps)", len(SLICE_MAP_IDS))
+        logger.info("  wrote rpg2gba_walker_maps.h (%d maps)", len(SLICE_MAP_IDS))
     else:
-        logger.info("  [dry] would write uranium_walker_maps.h")
+        logger.info("  [dry] would write rpg2gba_walker_maps.h")
 
     # --- Write flag registry header ---
-    dest_flags = fork / "data" / "scripts" / "uranium_flags.h"
+    dest_flags = fork / "data" / "scripts" / "rpg2gba_flags.h"
     _emit_flags_header(fork, dest_flags, compiled_texts, dry_run)
 
     # --- Write the slice include list pulled in by the event_scripts.s hook ---
@@ -1418,7 +1418,7 @@ def _load_rpg2gba_capacities(fork: Path) -> dict[str, int]:
 
     Fails loud if the fork lacks the RPG2GBA event-range expansion (missing
     header, gate compiled out, or a missing count #define) — emitting
-    uranium_flags.h against an unexpanded engine would reintroduce the
+    rpg2gba_flags.h against an unexpanded engine would reintroduce the
     out-of-bounds-write bug the expansion fixed (audit findings F1/F2; see
     reference/guides/engine_extension_surface.md §2).
     """
@@ -1426,7 +1426,7 @@ def _load_rpg2gba_capacities(fork: Path) -> dict[str, int]:
     if not header.is_file():
         raise RuntimeError(
             f"{header} not found — this fork lacks the RPG2GBA event-range "
-            "expansion, so uranium_flags.h cannot be emitted safely (see "
+            "expansion, so rpg2gba_flags.h cannot be emitted safely (see "
             "reference/guides/engine_extension_surface.md §2)."
         )
     text = header.read_text(encoding="utf-8")
@@ -1435,7 +1435,7 @@ def _load_rpg2gba_capacities(fork: Path) -> dict[str, int]:
     if gate is None or gate.group(1) != "TRUE":
         raise RuntimeError(
             f"{header}: RPG2GBA_EXPAND_EVENT_RANGES is not TRUE — the event-range "
-            "expansion is compiled out, so emitting uranium_flags.h would "
+            "expansion is compiled out, so emitting rpg2gba_flags.h would "
             "reintroduce the out-of-bounds-write bug it fixed (see "
             "reference/guides/engine_extension_surface.md §2)."
         )
@@ -1484,9 +1484,9 @@ def _emit_flags_header(
             tempswitch_base=TEMPSWITCH_BASE,
             capacities=_load_rpg2gba_capacities(fork),
         )
-        logger.info("  wrote uranium_flags.h (%s)", dest)
+        logger.info("  wrote rpg2gba_flags.h (%s)", dest)
     else:
-        logger.info("  [dry] would write uranium_flags.h")
+        logger.info("  [dry] would write rpg2gba_flags.h")
 
 
 def _write_event_includes(
@@ -1495,10 +1495,10 @@ def _write_event_includes(
     has_common_events: bool,
     dry_run: bool,
 ) -> None:
-    """Write data/maps/uranium_includes.inc — the GENERATED, gitignored list of slice
+    """Write data/maps/rpg2gba_includes.inc — the GENERATED, gitignored list of slice
     script includes pulled in by the committed include-hook in data/event_scripts.s.
 
-    The hook itself also `#include`s uranium_map_aliases.h + uranium_flags.h; those are
+    The hook itself also `#include`s rpg2gba_map_aliases.h + rpg2gba_flags.h; those are
     C-preprocessor headers and must stay as `#include` lines in event_scripts.s (so the
     CPP pass sees them), which is why they live in the committed hook, not here."""
     includes: list[str] = []
@@ -1510,17 +1510,17 @@ def _write_event_includes(
 
     text = (
         "@ GENERATED by scripts/assemble_pathfinder.py — DO NOT EDIT, DO NOT COMMIT.\n"
-        "@ Pulled in by the URANIUM PATHFINDER SLICE include-hook in data/event_scripts.s.\n"
+        "@ Pulled in by the RPG2GBA GAME PROFILE include-hook in data/event_scripts.s.\n"
         + "\n".join(includes) + "\n"
     )
 
-    dest = fork / "data" / "maps" / "uranium_includes.inc"
+    dest = fork / "data" / "maps" / "rpg2gba_includes.inc"
     if not dry_run:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(text, encoding="utf-8")
-        logger.info("  wrote data/maps/uranium_includes.inc (%d includes)", len(includes))
+        logger.info("  wrote data/maps/rpg2gba_includes.inc (%d includes)", len(includes))
     else:
-        logger.info("  [dry] would write uranium_includes.inc (%d includes)", len(includes))
+        logger.info("  [dry] would write rpg2gba_includes.inc (%d includes)", len(includes))
 
 
 # ---------------------------------------------------------------------------
@@ -1528,9 +1528,9 @@ def _write_event_includes(
 # ---------------------------------------------------------------------------
 
 def run_berry_tree_pass(out: Path, fork: Path, dry_run: bool) -> None:
-    """Emit data/scripts/uranium_berry_trees.h: the pre-planted berry-tree
+    """Emit data/scripts/rpg2gba_berry_trees.h: the pre-planted berry-tree
     seed table consumed by new_game.c's NewGameInitData, right after
-    `ClearBerryTrees()` (BEGIN URANIUM PATHFINDER SLICE fence).
+    `ClearBerryTrees()` (BEGIN RPG2GBA GAME PROFILE fence).
 
     Reads the same `Map{id:03d}.template_fields.json` sidecars
     `stage_slice_scripts._load_template_fields` already validates (`kind ==
@@ -1619,17 +1619,17 @@ def run_berry_tree_pass(out: Path, fork: Path, dry_run: bool) -> None:
         f"#define URANIUM_BERRY_TREE_SEED_COUNT {len(rows)}",
     ]
     if rows:
-        lines.append("#define URANIUM_BERRY_TREE_SEED_LIST(X) \\")
+        lines.append("#define RPG2GBA_BERRY_TREE_SEED_LIST(X) \\")
         for i, (tree_id, berry_item, berry_yield) in enumerate(rows):
             suffix = " \\" if i < len(rows) - 1 else ""
             lines.append(f"    X({tree_id}, {berry_item}, {berry_yield}){suffix}")
     else:
-        lines.append("#define URANIUM_BERRY_TREE_SEED_LIST(X)")
+        lines.append("#define RPG2GBA_BERRY_TREE_SEED_LIST(X)")
     lines.append("")
 
-    dest = fork / "data" / "scripts" / "uranium_berry_trees.h"
+    dest = fork / "data" / "scripts" / "rpg2gba_berry_trees.h"
     text = "\n".join(lines)
-    _write(dest, text, "uranium_berry_trees.h", dry_run)
+    _write(dest, text, "rpg2gba_berry_trees.h", dry_run)
     logger.info("  %d pre-planted berry tree(s)", len(rows))
 
 

@@ -141,8 +141,8 @@ build below), `make -C engine clean` first.
 
 ### Debug variant: the Map Walker (all ~199 maps, warps-only, no scripts)
 
-Instead of steps 2–4, flip `URANIUM_MAP_WALKER` to `TRUE` in
-`engine/include/config/uranium_walker.h` and run:
+Instead of steps 2–4, flip `RPG2GBA_MAP_WALKER` to `TRUE` in
+`engine/include/config/rpg2gba_harness.h` and run:
 
 ```
 .venv/bin/python -m rpg2gba.pipeline phase5 --maps full

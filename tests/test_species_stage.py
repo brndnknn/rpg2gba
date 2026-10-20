@@ -131,9 +131,9 @@ def _entry(c_text: str, const: str) -> str:
 
 
 def test_roundtrip_stats_and_types(uranium_src: Path, engine_dir: Path, tmp_path: Path) -> None:
-    """Stats/types emitted into uranium_species_info.h re-read back to parsed values."""
+    """Stats/types emitted into rpg2gba_species_info.h re-read back to parsed values."""
     manifest = stage.write_all(uranium_src=uranium_src, engine_dir=engine_dir, out_dir=tmp_path)
-    c_text = (tmp_path / "uranium_species_info.h").read_text(encoding="utf-8")
+    c_text = (tmp_path / "rpg2gba_species_info.h").read_text(encoding="utf-8")
 
     species, _ = stage.load_all_species(uranium_src, stage._reference_dir())
     records = stage.select_starters(species, STARTER_SPECIES)
@@ -156,8 +156,8 @@ def test_roundtrip_manifest_matches_emitted_constants(
     """Every manifest species_constant appears as a `[SPECIES_X] =` entry and
     a `#define SPECIES_X` in the constants overlay."""
     manifest = stage.write_all(uranium_src=uranium_src, engine_dir=engine_dir, out_dir=tmp_path)
-    info_text = (tmp_path / "uranium_species_info.h").read_text(encoding="utf-8")
-    const_text = (tmp_path / "uranium_species_constants.h").read_text(encoding="utf-8")
+    info_text = (tmp_path / "rpg2gba_species_info.h").read_text(encoding="utf-8")
+    const_text = (tmp_path / "rpg2gba_species_constants.h").read_text(encoding="utf-8")
     for rec in manifest["species"]:
         const = rec["species_constant"]
         assert f"[{const}] =" in info_text
@@ -172,7 +172,7 @@ def test_roundtrip_manifest_matches_emitted_constants(
 def test_golden_orchynx_metalynx(uranium_src: Path, engine_dir: Path, tmp_path: Path) -> None:
     """Pinned emitted entries for ORCHYNX (plain) + METALYNX (evolution target)."""
     stage.write_all(uranium_src=uranium_src, engine_dir=engine_dir, out_dir=tmp_path)
-    c_text = (tmp_path / "uranium_species_info.h").read_text(encoding="utf-8")
+    c_text = (tmp_path / "rpg2gba_species_info.h").read_text(encoding="utf-8")
     got = _entry(c_text, "SPECIES_ORCHYNX") + "\n" + _entry(c_text, "SPECIES_METALYNX") + "\n"
     expected = (FIXTURES / "species_stage_golden.h").read_text(encoding="utf-8")
     assert got == expected
@@ -185,7 +185,7 @@ def test_golden_orchynx_metalynx(uranium_src: Path, engine_dir: Path, tmp_path: 
 
 def test_edge_fork_append_id_math(uranium_src: Path, engine_dir: Path, tmp_path: Path) -> None:
     """The first new species takes the pristine SPECIES_EGG value, ids chain
-    sequentially, and URANIUM_SPECIES_LAST anchors to the final one.
+    sequentially, and RPG2GBA_SPECIES_LAST anchors to the final one.
 
     STARTER_SPECIES is no longer just the six starters (2026-08-05: extended
     with the seven Route-1 trainer-party species plus every intermediate/
@@ -205,10 +205,10 @@ def test_edge_fork_append_id_math(uranium_src: Path, engine_dir: Path, tmp_path:
     ids = [rec["fork_species_id"] for rec in manifest["species"]]
     assert ids == list(range(pristine_egg, pristine_egg + n))
 
-    const_text = (tmp_path / "uranium_species_constants.h").read_text(encoding="utf-8")
+    const_text = (tmp_path / "rpg2gba_species_constants.h").read_text(encoding="utf-8")
     assert f"#define SPECIES_ORCHYNX ({anchor} + 1)" in const_text
     assert "#define SPECIES_METALYNX (SPECIES_ORCHYNX + 1)" in const_text
-    assert f"#define URANIUM_SPECIES_LAST {STARTER_SPECIES[-1].constant}" in const_text
+    assert f"#define RPG2GBA_SPECIES_LAST {STARTER_SPECIES[-1].constant}" in const_text
 
 
 def test_edge_empty_selection_is_noop(engine_dir: Path, tmp_path: Path) -> None:
@@ -221,21 +221,21 @@ def test_edge_empty_selection_is_noop(engine_dir: Path, tmp_path: Path) -> None:
     assert manifest["new_species_egg"] == manifest["pristine_species_egg"]
 
     for name in (
-        "uranium_species_constants.h",
-        "uranium_pokedex_ids.h",
-        "uranium_learnsets.h",
-        "uranium_species_info.h",
-        "uranium_species_graphics.h",
-        "uranium_cries_enum.h",
-        "uranium_cry_table_forward.inc",
-        "uranium_cry_table_reverse.inc",
-        "uranium_cry_sound_data.inc",
+        "rpg2gba_species_constants.h",
+        "rpg2gba_pokedex_ids.h",
+        "rpg2gba_learnsets.h",
+        "rpg2gba_species_info.h",
+        "rpg2gba_species_graphics.h",
+        "rpg2gba_cries_enum.h",
+        "rpg2gba_cry_table_forward.inc",
+        "rpg2gba_cry_table_reverse.inc",
+        "rpg2gba_cry_sound_data.inc",
     ):
         text = (tmp_path / name).read_text(encoding="utf-8")
         assert "SPECIES_ORCHYNX" not in text
         assert "no Uranium species selected" in text
         # Every #define/emitted symbol line must be absent — only banner/guard/note lines remain.
-        assert "URANIUM_SPECIES_LAST" not in text
+        assert "RPG2GBA_SPECIES_LAST" not in text
 
 
 def test_edge_idempotence(uranium_src: Path, engine_dir: Path, tmp_path: Path) -> None:
@@ -289,7 +289,7 @@ def test_route1_species_present_in_manifest_and_constants(
     staged alongside them to avoid a dangling reference) all reach the
     manifest and the emitted constants header."""
     manifest = stage.write_all(uranium_src=uranium_src, engine_dir=engine_dir, out_dir=tmp_path)
-    const_text = (tmp_path / "uranium_species_constants.h").read_text(encoding="utf-8")
+    const_text = (tmp_path / "rpg2gba_species_constants.h").read_text(encoding="utf-8")
     manifest_constants = {rec["species_constant"] for rec in manifest["species"]}
 
     expected_new = {

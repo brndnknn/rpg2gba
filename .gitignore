@@ -33,65 +33,65 @@ reference/map_feedback/
 # and all per-slice content lands in the generated *.gen.json / *.inc files below.
 # See engine/RPG2GBA_VENDOR.md.
 engine/data/scripts/CommonEvents.inc
-engine/data/scripts/uranium_flags.h
-engine/data/scripts/uranium_map_aliases.h
+engine/data/scripts/rpg2gba_flags.h
+engine/data/scripts/rpg2gba_map_aliases.h
 engine/data/scripts/Map*_dispatch.pory
-engine/data/maps/uranium_includes.inc
+engine/data/maps/rpg2gba_includes.inc
 engine/data/maps/map_groups.gen.json
 engine/data/layouts/layouts.gen.json
-# S8b4: encounter-table overlay (picked up by the URANIUM_WILD_ENCOUNTERS hook
+# S8b4: encounter-table overlay (picked up by the RPG2GBA_WILD_ENCOUNTERS hook
 # in engine/Makefile; absent => the committed wild_encounters.json is used).
 engine/src/data/wild_encounters.gen.json
-# White-out heal locations overlay (picked up by the URANIUM_HEAL_LOCATIONS hook
+# White-out heal locations overlay (picked up by the RPG2GBA_HEAL_LOCATIONS hook
 # in engine/json_data_rules.mk; absent => the committed heal_locations.json is used).
 engine/src/data/heal_locations.gen.json
-# S8d: pre-planted berry-tree seed table (pulled in by the committed URANIUM
-# PATHFINDER SLICE include-hook right after ClearBerryTrees() in src/new_game.c).
-engine/data/scripts/uranium_berry_trees.h
+# S8d: pre-planted berry-tree seed table (pulled in by the committed RPG2GBA
+# GAME PROFILE include-hook right after ClearBerryTrees() in src/new_game.c).
+engine/data/scripts/rpg2gba_berry_trees.h
 # S8a tileset graphics: generated engine fragments (pulled in by committed sentinel
 # #include hooks in src/data/tilesets/*.h + include/tilesets.h) and the emitted art.
-engine/src/data/tilesets/uranium_graphics.gen.h
-engine/src/data/tilesets/uranium_metatiles.gen.h
-engine/src/data/tilesets/uranium_tilesets.gen.h
+engine/src/data/tilesets/rpg2gba_graphics.gen.h
+engine/src/data/tilesets/rpg2gba_metatiles.gen.h
+engine/src/data/tilesets/rpg2gba_tilesets.gen.h
 # Tileset animations: gen'd frame tables + callbacks, pulled in by the committed
 # sentinel #include hook at the bottom of src/tileset_anims.c (stub when empty).
-engine/src/data/tilesets/uranium_anims.gen.h
-engine/include/uranium_externs.gen.h
-engine/include/uranium_walker_maps.h
+engine/src/data/tilesets/rpg2gba_anims.gen.h
+engine/include/rpg2gba_externs.gen.h
+engine/include/rpg2gba_walker_maps.h
 engine/data/tilesets/primary/uranium*/
 engine/data/tilesets/secondary/uranium*/
 # Task-4 NPC sprites: generated engine fragments (pulled in by committed sentinel
 # #include hooks in include/constants/event_objects.h, src/data/object_events/*.h,
 # and src/event_object_movement.c) and the emitted sprite sheets.
-engine/include/constants/uranium_event_objects.gen.h
-engine/src/data/object_events/uranium_*.gen.h
+engine/include/constants/rpg2gba_event_objects.gen.h
+engine/src/data/object_events/rpg2gba_*.gen.h
 engine/graphics/object_events/pics/uranium/
 # PokePod phone rematches (S8b5): generated engine fragments, pulled in by committed
 # sentinel #include hooks in include/constants/rematches.h and src/battle_setup.c.
-engine/include/constants/uranium_rematches.gen.h
-engine/src/data/uranium_rematch_table.gen.h
+engine/include/constants/rpg2gba_rematches.gen.h
+engine/src/data/rpg2gba_rematch_table.gen.h
 # Starter species conversion: generated engine overlays (pulled in by committed
-# URANIUM PATHFINDER SLICE #include/.include hooks in include/constants/{species,
+# RPG2GBA GAME PROFILE #include/.include hooks in include/constants/{species,
 # pokedex,cries}.h, src/data/pokemon/species_info.h, src/data/graphics/pokemon.h,
 # and sound/{cry_tables,direct_sound_data}.inc) plus the emitted art and cries.
-engine/include/constants/uranium_species_constants.h
-engine/include/constants/uranium_pokedex_ids.h
-engine/include/constants/uranium_cries_enum.h
-engine/src/data/pokemon/uranium_learnsets.h
-engine/src/data/pokemon/uranium_species_info.h
-engine/src/data/graphics/uranium_species_graphics.h
-engine/sound/uranium_cry_*.inc
+engine/include/constants/rpg2gba_species_constants.h
+engine/include/constants/rpg2gba_pokedex_ids.h
+engine/include/constants/rpg2gba_cries_enum.h
+engine/src/data/pokemon/rpg2gba_learnsets.h
+engine/src/data/pokemon/rpg2gba_species_info.h
+engine/src/data/graphics/rpg2gba_species_graphics.h
+engine/sound/rpg2gba_cry_*.inc
 engine/graphics/pokemon/uranium/
 
-# Trainer battle pics (URANIUM PATHFINDER SLICE #include hooks in
+# Trainer battle pics (RPG2GBA GAME PROFILE #include hooks in
 # include/constants/trainers.h and src/data/graphics/trainers.h) plus the emitted art.
-engine/include/constants/uranium_trainer_front_pic_ids.h
-engine/include/constants/uranium_trainer_back_pic_ids.h
-engine/include/constants/uranium_trainer_ids.h
-engine/include/data/uranium_trainer_party.inc
-engine/src/data/graphics/uranium_trainer_graphics.h
-engine/src/data/graphics/uranium_trainer_sprites.h
-engine/src/data/graphics/uranium_trainer_backsprites.h
+engine/include/constants/rpg2gba_trainer_front_pic_ids.h
+engine/include/constants/rpg2gba_trainer_back_pic_ids.h
+engine/include/constants/rpg2gba_trainer_ids.h
+engine/include/data/rpg2gba_trainer_party.inc
+engine/src/data/graphics/rpg2gba_trainer_graphics.h
+engine/src/data/graphics/rpg2gba_trainer_sprites.h
+engine/src/data/graphics/rpg2gba_trainer_backsprites.h
 engine/graphics/trainers/uranium/
 
 # Staged Uranium cries land beside the ~1161 TRACKED vanilla cry wavs. This

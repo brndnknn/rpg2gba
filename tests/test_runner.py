@@ -26,7 +26,7 @@ from rpg2gba.playtest.runner import RunnerError, run_chapter
 from rpg2gba.playtest.stamp import ROM_BASE
 
 ROM_SIZE = 0x400
-BLOB_FILE_OFFSET = 0x100  # gUraniumEmbeddedSave - ROM_BASE, must fit ROM_SIZE
+BLOB_FILE_OFFSET = 0x100  # gRpg2gbaEmbeddedSave - ROM_BASE, must fit ROM_SIZE
 
 
 class FakeEmulator:
@@ -61,7 +61,7 @@ class FakeEmulator:
             "gSaveBlock2Ptr": 0x1000,
             "gSaveBlock3Ptr": 0x1000,
             "gPokemonStoragePtr": 0x1000,
-            "gUraniumEmbeddedSave": ROM_BASE + BLOB_FILE_OFFSET,
+            "gRpg2gbaEmbeddedSave": ROM_BASE + BLOB_FILE_OFFSET,
         }
         self.offsets = {
             "sizeof_sb1": 4, "sizeof_sb2": 4, "sizeof_sb3": 4, "sizeof_storage": 4,

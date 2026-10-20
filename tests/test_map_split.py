@@ -227,7 +227,7 @@ def test_rewrite_transfer_targets_the_piece() -> None:
 
 def test_siblings_header() -> None:
     text = render_siblings_header([5, A, B], {A: "MAP_TOWN", B: "MAP_TOWN_EAST"})
-    assert "#define URANIUM_SPLIT_SIBLING_COUNT 2" in text
+    assert "#define RPG2GBA_SPLIT_SIBLING_COUNT 2" in text
     assert "MAP_GROUP(MAP_TOWN_EAST), .mapNum = MAP_NUM(MAP_TOWN_EAST), .origin = 1" in text
     assert "COUNT 0" in render_siblings_header([5], {})
 

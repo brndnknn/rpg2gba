@@ -1,10 +1,10 @@
 #include "global.h"
-// BEGIN URANIUM MAP WALKER — pulls UraniumWalker_IsActive, used at the spawn-suppression
+// BEGIN RPG2GBA MAP WALKER — pulls Rpg2gbaWalker_IsActive, used at the spawn-suppression
 // gates below (no NPCs ever while the walker is active, including the in-view scroll-spawn
 // path). Removing this include breaks those checks; reverting them too restores vanilla
 // object-event spawning.
-#include "uranium_map_walker.h"
-// END URANIUM MAP WALKER
+#include "rpg2gba_map_walker.h"
+// END RPG2GBA MAP WALKER
 #include "malloc.h"
 #include "battle_anim.h"
 #include "battle_pyramid.h"
@@ -178,10 +178,10 @@ static void VirtualObject_UpdateAnim(struct Sprite *);
 static void ApplyLevitateMovement(u8);
 static bool8 MovementType_Disguise_Callback(struct ObjectEvent *, struct Sprite *);
 static bool8 MovementType_Buried_Callback(struct ObjectEvent *, struct Sprite *);
-// BEGIN URANIUM PATHFINDER SLICE — new autonomous movement type (rpg2gba).
-static void MovementType_UraniumCustomRoute(struct Sprite *);
-static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *, struct Sprite *);
-// END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA ENGINE — new autonomous movement type (rpg2gba).
+static void MovementType_Rpg2gbaCustomRoute(struct Sprite *);
+static bool8 MovementType_Rpg2gbaCustomRoute_Callback(struct ObjectEvent *, struct Sprite *);
+// END RPG2GBA ENGINE
 static void CreateReflectionEffectSprites(void);
 static u8 GetObjectEventIdByLocalIdAndMapInternal(u8, u8, u8);
 static bool8 GetAvailableObjectEventId(u16, u8, u8, u8 *);
@@ -356,9 +356,9 @@ static void (*const sMovementTypeCallbacks[])(struct Sprite *) =
     [MOVEMENT_TYPE_WALK_SLOWLY_IN_PLACE_LEFT] = MovementType_WalkSlowlyInPlace,
     [MOVEMENT_TYPE_WALK_SLOWLY_IN_PLACE_RIGHT] = MovementType_WalkSlowlyInPlace,
     [MOVEMENT_TYPE_FOLLOW_PLAYER] = MovementType_FollowPlayer,
-// BEGIN URANIUM PATHFINDER SLICE — new autonomous movement type (rpg2gba).
-    [MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE] = MovementType_UraniumCustomRoute,
-// END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA ENGINE — new autonomous movement type (rpg2gba).
+    [MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE] = MovementType_Rpg2gbaCustomRoute,
+// END RPG2GBA ENGINE
 };
 
 static const bool8 sMovementTypeHasRange[NUM_MOVEMENT_TYPES] = {
@@ -488,9 +488,9 @@ const u8 gInitialMovementTypeFacingDirections[NUM_MOVEMENT_TYPES] = {
     [MOVEMENT_TYPE_WALK_SLOWLY_IN_PLACE_LEFT] = DIR_WEST,
     [MOVEMENT_TYPE_WALK_SLOWLY_IN_PLACE_RIGHT] = DIR_EAST,
     [MOVEMENT_TYPE_FOLLOW_PLAYER] = DIR_SOUTH,
-// BEGIN URANIUM PATHFINDER SLICE — new autonomous movement type (rpg2gba).
-    [MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE] = DIR_SOUTH,
-// END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA ENGINE — new autonomous movement type (rpg2gba).
+    [MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE] = DIR_SOUTH,
+// END RPG2GBA ENGINE
 };
 
 #include "data/object_events/object_event_graphics_info_pointers.h"
@@ -502,11 +502,11 @@ const u8 gInitialMovementTypeFacingDirections[NUM_MOVEMENT_TYPES] = {
 #include "data/object_events/object_event_graphics_info.h"
 #include "data/object_events/object_event_graphics_info_followers.h"
 
-// BEGIN URANIUM PATHFINDER SLICE — per-object custom-route bytecode table (rpg2gba).
-// Declares sUraniumRoutes[] ahead of MovementType_UraniumCustomRoute below. Gitignored;
+// BEGIN RPG2GBA ENGINE — per-object custom-route bytecode table (rpg2gba).
+// Declares sRpg2gbaRoutes[] ahead of MovementType_Rpg2gbaCustomRoute below. Gitignored;
 // stub (empty table) when no routes are staged, so a fresh clone still compiles.
-#include "data/object_events/uranium_move_routes.gen.h"
-// END URANIUM PATHFINDER SLICE
+#include "data/object_events/rpg2gba_move_routes.gen.h"
+// END RPG2GBA ENGINE
 
 static const struct SpritePalette sObjectEventSpritePalettes[] = {
     {gObjectEventPal_Npc1,                  OBJ_EVENT_PAL_TAG_NPC_1},
@@ -598,10 +598,10 @@ static const struct SpritePalette sObjectEventSpritePalettes[] = {
     {gObjectEventPaletteLight2,             OBJ_EVENT_PAL_TAG_LIGHT_2},
     {gObjectEventPaletteEmotes,             OBJ_EVENT_PAL_TAG_EMOTES},
     {gObjectEventPaletteNeonLight,          OBJ_EVENT_PAL_TAG_NEON_LIGHT},
-// BEGIN URANIUM PATHFINDER SLICE — generated Uranium OW sprite palette registrations; MUST precede the
+// BEGIN RPG2GBA GAME PROFILE — generated Uranium OW sprite palette registrations; MUST precede the
 // OBJ_EVENT_PAL_TAG_NONE terminator below (rpg2gba; stub when none staged).
-#include "data/object_events/uranium_object_event_palettes.gen.h"
-// END URANIUM PATHFINDER SLICE
+#include "data/object_events/rpg2gba_object_event_palettes.gen.h"
+// END RPG2GBA GAME PROFILE
 #ifdef BUGFIX
     {NULL,                                  OBJ_EVENT_PAL_TAG_NONE},
 #else
@@ -2916,13 +2916,13 @@ void TrySpawnObjectEvents(s16 cameraX, s16 cameraY)
     u8 i;
     u8 objectCount;
 
-    // BEGIN URANIUM MAP WALKER — no NPCs ever. Gates the in-view scroll-spawn path too
+    // BEGIN RPG2GBA MAP WALKER — no NPCs ever. Gates the in-view scroll-spawn path too
     // (not just InitObjectEventsLocal), so NPCs don't pop in as the camera moves.
-#if URANIUM_MAP_WALKER == TRUE
-    if (UraniumWalker_IsActive())
+#if RPG2GBA_MAP_WALKER == TRUE
+    if (Rpg2gbaWalker_IsActive())
         return;
 #endif
-    // END URANIUM MAP WALKER
+    // END RPG2GBA MAP WALKER
 
     if (gMapHeader.events != NULL)
     {
@@ -3174,7 +3174,7 @@ void ObjectEventSetGraphicsIdByLocalIdAndMap(u8 localId, u8 mapNum, u8 mapGroup,
         ObjectEventSetGraphicsId(&gObjectEvents[objectEventId], graphicsId);
 }
 
-// BEGIN URANIUM PATHFINDER SLICE — script-callable live graphics swap (rpg2gba).
+// BEGIN RPG2GBA ENGINE — script-callable live graphics swap (rpg2gba).
 // RMXP move-command 41 ("Change Graphic") repaints an event's sprite in place
 // mid-scene; it is one of the most common idioms in the converted corpus
 // (1115 uses across 499 events). Emerald resolves an object's sprite at spawn
@@ -3213,7 +3213,7 @@ void RPG2GBA_SetObjectEventGfx(void)
                         ? ANIM_STAY_STILL
                         : GetFaceDirectionAnimNum(objectEvent->facingDirection));
 }
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA ENGINE
 
 void ObjectEventTurn(struct ObjectEvent *objectEvent, enum Direction direction)
 {
@@ -6180,33 +6180,33 @@ bool8 MovementType_Buried_Step0(struct ObjectEvent *objectEvent, struct Sprite *
     return FALSE;
 }
 
-// BEGIN URANIUM PATHFINDER SLICE — custom-route bytecode interpreter (rpg2gba).
+// BEGIN RPG2GBA ENGINE — custom-route bytecode interpreter (rpg2gba).
 // Plays back a per-object route bytecode program (dedup'd across the slice,
 // looked up by trainerRange_berryTreeId — see MOVEMENT_TYPE_BERRY_TREE_GROWTH
 // precedent for reuse of that field). Contract: reference/guides/custom_route_interpreter.md.
 enum
 {
-    URANIUM_ROUTE_OP_END_LOOP    = 0x00,
-    URANIUM_ROUTE_OP_STEP_DOWN   = 0x01,
-    URANIUM_ROUTE_OP_STEP_LEFT   = 0x02,
-    URANIUM_ROUTE_OP_STEP_RIGHT  = 0x03,
-    URANIUM_ROUTE_OP_STEP_UP     = 0x04,
-    URANIUM_ROUTE_OP_END_STOP    = 0x0F,
-    URANIUM_ROUTE_OP_FACE_DOWN   = 0x11,
-    URANIUM_ROUTE_OP_FACE_LEFT   = 0x12,
-    URANIUM_ROUTE_OP_FACE_RIGHT  = 0x13,
-    URANIUM_ROUTE_OP_FACE_UP     = 0x14,
-    URANIUM_ROUTE_OP_WAIT        = 0x20,
-    URANIUM_ROUTE_OP_THROUGH_ON  = 0x30,
-    URANIUM_ROUTE_OP_THROUGH_OFF = 0x31,
+    RPG2GBA_ROUTE_OP_END_LOOP    = 0x00,
+    RPG2GBA_ROUTE_OP_STEP_DOWN   = 0x01,
+    RPG2GBA_ROUTE_OP_STEP_LEFT   = 0x02,
+    RPG2GBA_ROUTE_OP_STEP_RIGHT  = 0x03,
+    RPG2GBA_ROUTE_OP_STEP_UP     = 0x04,
+    RPG2GBA_ROUTE_OP_END_STOP    = 0x0F,
+    RPG2GBA_ROUTE_OP_FACE_DOWN   = 0x11,
+    RPG2GBA_ROUTE_OP_FACE_LEFT   = 0x12,
+    RPG2GBA_ROUTE_OP_FACE_RIGHT  = 0x13,
+    RPG2GBA_ROUTE_OP_FACE_UP     = 0x14,
+    RPG2GBA_ROUTE_OP_WAIT        = 0x20,
+    RPG2GBA_ROUTE_OP_THROUGH_ON  = 0x30,
+    RPG2GBA_ROUTE_OP_THROUGH_OFF = 0x31,
 };
 
 enum
 {
-    URANIUM_ROUTE_STATE_INIT = 0,
-    URANIUM_ROUTE_STATE_FETCH_EXEC,
-    URANIUM_ROUTE_STATE_EXEC_WALK,
-    URANIUM_ROUTE_STATE_WAIT,
+    RPG2GBA_ROUTE_STATE_INIT = 0,
+    RPG2GBA_ROUTE_STATE_FETCH_EXEC,
+    RPG2GBA_ROUTE_STATE_EXEC_WALK,
+    RPG2GBA_ROUTE_STATE_WAIT,
 };
 
 // data[1] (sTypeFuncId) = FSM sub-state. CRITICAL: the normal-walk movement
@@ -6228,17 +6228,17 @@ enum
 // the NPC stood and shifted its whole path (ROM run 39, Moki Town ev027 found
 // at x=49 on a 45..48 loop). RMXP resumes the route index after unlock.
 #define sRoutePacked data[6]
-#define URANIUM_ROUTE_PC(o)              ((o)->directionSequenceIndex)
-#define URANIUM_ROUTE_SET_PC(o, v)       ((o)->directionSequenceIndex = (v))
-#define URANIUM_ROUTE_THROUGH(s)         ((s)->sRoutePacked & 0x100)
-#define URANIUM_ROUTE_SET_THROUGH(s, on) ((s)->sRoutePacked = (on) ? ((s)->sRoutePacked | 0x100) : ((s)->sRoutePacked & ~0x100))
+#define RPG2GBA_ROUTE_PC(o)              ((o)->directionSequenceIndex)
+#define RPG2GBA_ROUTE_SET_PC(o, v)       ((o)->directionSequenceIndex = (v))
+#define RPG2GBA_ROUTE_THROUGH(s)         ((s)->sRoutePacked & 0x100)
+#define RPG2GBA_ROUTE_SET_THROUGH(s, on) ((s)->sRoutePacked = (on) ? ((s)->sRoutePacked | 0x100) : ((s)->sRoutePacked & ~0x100))
 // v2 bytecode: route[1] is the flags byte, bit0 = RMXP route.skippable.
 // Unlike PC/through this is immutable per-route data, not sprite scratch, so
 // it reads the route pointer, not the sprite.
-#define URANIUM_ROUTE_SKIPPABLE(route)   ((route)[1] & 0x01)
+#define RPG2GBA_ROUTE_SKIPPABLE(route)   ((route)[1] & 0x01)
 
 // RMXP move-route direction codes (1=down 2=left 3=right 4=up) -> engine DIR_*.
-static enum Direction UraniumRoute_RmxpDirToEngine(u8 rmxpDir)
+static enum Direction Rpg2gbaRoute_RmxpDirToEngine(u8 rmxpDir)
 {
     switch (rmxpDir)
     {
@@ -6259,58 +6259,58 @@ static enum Direction UraniumRoute_RmxpDirToEngine(u8 rmxpDir)
 // the frame ended. lock's Task_FreezeSelectedObjectAndPlayer waits for that
 // flag to clear, so talking to a freq-6 walker hung in `lock` (ROM run 38,
 // Moki Town's Chyinmunk). Yielding here leaves one idle frame per step.
-static bool8 UraniumRoute_BeginIdle(struct Sprite *sprite, u8 idle)
+static bool8 Rpg2gbaRoute_BeginIdle(struct Sprite *sprite, u8 idle)
 {
     SetMovementDelay(sprite, idle == 0 ? 1 : idle);
-    sprite->sTypeFuncId = URANIUM_ROUTE_STATE_WAIT;
+    sprite->sTypeFuncId = RPG2GBA_ROUTE_STATE_WAIT;
     return FALSE;
 }
 
-static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *objectEvent, struct Sprite *sprite)
+static bool8 MovementType_Rpg2gbaCustomRoute_Callback(struct ObjectEvent *objectEvent, struct Sprite *sprite)
 {
-    const u8 *route = sUraniumRoutes[objectEvent->trainerRange_berryTreeId];
+    const u8 *route = sRpg2gbaRoutes[objectEvent->trainerRange_berryTreeId];
     u8 pc;
     u8 op;
     enum Direction dir;
 
     switch (sprite->sTypeFuncId)
     {
-    case URANIUM_ROUTE_STATE_INIT:
+    case RPG2GBA_ROUTE_STATE_INIT:
         // Re-entered after every talk too: drop the in-flight step only. First
         // start (PC 0, set at spawn) is the one place the route is reset.
         ClearObjectEventMovement(objectEvent, sprite);
-        if (URANIUM_ROUTE_PC(objectEvent) == 0)
+        if (RPG2GBA_ROUTE_PC(objectEvent) == 0)
         {
-            URANIUM_ROUTE_SET_PC(objectEvent, 2); // byte 0 = idle header, byte 1 = flags; opcodes start at byte 2
-            URANIUM_ROUTE_SET_THROUGH(sprite, FALSE);
+            RPG2GBA_ROUTE_SET_PC(objectEvent, 2); // byte 0 = idle header, byte 1 = flags; opcodes start at byte 2
+            RPG2GBA_ROUTE_SET_THROUGH(sprite, FALSE);
         }
-        sprite->sTypeFuncId = URANIUM_ROUTE_STATE_FETCH_EXEC;
+        sprite->sTypeFuncId = RPG2GBA_ROUTE_STATE_FETCH_EXEC;
         return TRUE;
 
-    case URANIUM_ROUTE_STATE_FETCH_EXEC:
-        pc = URANIUM_ROUTE_PC(objectEvent);
+    case RPG2GBA_ROUTE_STATE_FETCH_EXEC:
+        pc = RPG2GBA_ROUTE_PC(objectEvent);
         op = route[pc];
         switch (op)
         {
-        case URANIUM_ROUTE_OP_END_LOOP:
-            URANIUM_ROUTE_SET_PC(objectEvent, 2);
+        case RPG2GBA_ROUTE_OP_END_LOOP:
+            RPG2GBA_ROUTE_SET_PC(objectEvent, 2);
             return TRUE; // no time cost; loop back and re-fetch immediately
 
-        case URANIUM_ROUTE_OP_END_STOP:
+        case RPG2GBA_ROUTE_OP_END_STOP:
             return FALSE; // halt, hold position forever
 
-        case URANIUM_ROUTE_OP_STEP_DOWN:
-        case URANIUM_ROUTE_OP_STEP_LEFT:
-        case URANIUM_ROUTE_OP_STEP_RIGHT:
-        case URANIUM_ROUTE_OP_STEP_UP:
-            dir = UraniumRoute_RmxpDirToEngine(op);
-            if (!URANIUM_ROUTE_THROUGH(sprite)
+        case RPG2GBA_ROUTE_OP_STEP_DOWN:
+        case RPG2GBA_ROUTE_OP_STEP_LEFT:
+        case RPG2GBA_ROUTE_OP_STEP_RIGHT:
+        case RPG2GBA_ROUTE_OP_STEP_UP:
+            dir = Rpg2gbaRoute_RmxpDirToEngine(op);
+            if (!RPG2GBA_ROUTE_THROUGH(sprite)
                 && GetCollisionInDirection(objectEvent, dir) != COLLISION_NONE)
             {
-                if (URANIUM_ROUTE_SKIPPABLE(route))          // skippable: advance past it, idle
+                if (RPG2GBA_ROUTE_SKIPPABLE(route))          // skippable: advance past it, idle
                 {
-                    URANIUM_ROUTE_SET_PC(objectEvent, pc + 1);
-                    return UraniumRoute_BeginIdle(sprite, route[0]);
+                    RPG2GBA_ROUTE_SET_PC(objectEvent, pc + 1);
+                    return Rpg2gbaRoute_BeginIdle(sprite, route[0]);
                 }
                 // Non-skippable (RMXP default): DO NOT advance the PC — retry
                 // this same opcode next cycle (matches RMXP's stall-in-place,
@@ -6325,38 +6325,38 @@ static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *object
                 ObjectEventSetSingleMovement(objectEvent, sprite,
                     GetWalkInPlaceNormalMovementAction(dir));
                 objectEvent->singleMovementActive = TRUE;
-                sprite->sTypeFuncId = URANIUM_ROUTE_STATE_EXEC_WALK;
+                sprite->sTypeFuncId = RPG2GBA_ROUTE_STATE_EXEC_WALK;
                 return TRUE;                                  // PC NOT advanced -> retries same opcode
             }
-            URANIUM_ROUTE_SET_PC(objectEvent, pc + 1);             // commit only on the success path
+            RPG2GBA_ROUTE_SET_PC(objectEvent, pc + 1);             // commit only on the success path
             ObjectEventSetSingleMovement(objectEvent, sprite, GetWalkNormalMovementAction(dir));
             objectEvent->singleMovementActive = TRUE; // required: exec advances the walk each frame only while set (WalkBackAndForth_Step2)
-            sprite->sTypeFuncId = URANIUM_ROUTE_STATE_EXEC_WALK;
+            sprite->sTypeFuncId = RPG2GBA_ROUTE_STATE_EXEC_WALK;
             return TRUE;
 
-        case URANIUM_ROUTE_OP_FACE_DOWN:
-        case URANIUM_ROUTE_OP_FACE_LEFT:
-        case URANIUM_ROUTE_OP_FACE_RIGHT:
-        case URANIUM_ROUTE_OP_FACE_UP:
-            dir = UraniumRoute_RmxpDirToEngine(op - 0x10);
+        case RPG2GBA_ROUTE_OP_FACE_DOWN:
+        case RPG2GBA_ROUTE_OP_FACE_LEFT:
+        case RPG2GBA_ROUTE_OP_FACE_RIGHT:
+        case RPG2GBA_ROUTE_OP_FACE_UP:
+            dir = Rpg2gbaRoute_RmxpDirToEngine(op - 0x10);
             SetObjectEventDirection(objectEvent, dir);
-            URANIUM_ROUTE_SET_PC(objectEvent, pc + 1);
-            return UraniumRoute_BeginIdle(sprite, route[0]);
+            RPG2GBA_ROUTE_SET_PC(objectEvent, pc + 1);
+            return Rpg2gbaRoute_BeginIdle(sprite, route[0]);
 
-        case URANIUM_ROUTE_OP_WAIT:
+        case RPG2GBA_ROUTE_OP_WAIT:
             SetMovementDelay(sprite, route[pc + 1]);
-            URANIUM_ROUTE_SET_PC(objectEvent, pc + 2);
-            sprite->sTypeFuncId = URANIUM_ROUTE_STATE_WAIT;
+            RPG2GBA_ROUTE_SET_PC(objectEvent, pc + 2);
+            sprite->sTypeFuncId = RPG2GBA_ROUTE_STATE_WAIT;
             return TRUE;
 
-        case URANIUM_ROUTE_OP_THROUGH_ON:
-            URANIUM_ROUTE_SET_THROUGH(sprite, TRUE);
-            URANIUM_ROUTE_SET_PC(objectEvent, pc + 1);
+        case RPG2GBA_ROUTE_OP_THROUGH_ON:
+            RPG2GBA_ROUTE_SET_THROUGH(sprite, TRUE);
+            RPG2GBA_ROUTE_SET_PC(objectEvent, pc + 1);
             return TRUE; // no time cost
 
-        case URANIUM_ROUTE_OP_THROUGH_OFF:
-            URANIUM_ROUTE_SET_THROUGH(sprite, FALSE);
-            URANIUM_ROUTE_SET_PC(objectEvent, pc + 1);
+        case RPG2GBA_ROUTE_OP_THROUGH_OFF:
+            RPG2GBA_ROUTE_SET_THROUGH(sprite, FALSE);
+            RPG2GBA_ROUTE_SET_PC(objectEvent, pc + 1);
             return TRUE; // no time cost
 
         default:
@@ -6366,18 +6366,18 @@ static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *object
             return FALSE;
         }
 
-    case URANIUM_ROUTE_STATE_EXEC_WALK:
+    case RPG2GBA_ROUTE_STATE_EXEC_WALK:
         if (ObjectEventExecSingleMovementAction(objectEvent, sprite))
         {
             objectEvent->singleMovementActive = FALSE; // step finished; pair with the TRUE set in FETCH_EXEC
-            return UraniumRoute_BeginIdle(sprite, route[0]);
+            return Rpg2gbaRoute_BeginIdle(sprite, route[0]);
         }
         return FALSE;
 
-    case URANIUM_ROUTE_STATE_WAIT:
+    case RPG2GBA_ROUTE_STATE_WAIT:
         if (WaitForMovementDelay(sprite))
         {
-            sprite->sTypeFuncId = URANIUM_ROUTE_STATE_FETCH_EXEC;
+            sprite->sTypeFuncId = RPG2GBA_ROUTE_STATE_FETCH_EXEC;
             return TRUE;
         }
         return FALSE;
@@ -6388,17 +6388,17 @@ static bool8 MovementType_UraniumCustomRoute_Callback(struct ObjectEvent *object
 }
 
 #undef sRoutePacked
-#undef URANIUM_ROUTE_PC
-#undef URANIUM_ROUTE_SET_PC
-#undef URANIUM_ROUTE_THROUGH
-#undef URANIUM_ROUTE_SET_THROUGH
-#undef URANIUM_ROUTE_SKIPPABLE
+#undef RPG2GBA_ROUTE_PC
+#undef RPG2GBA_ROUTE_SET_PC
+#undef RPG2GBA_ROUTE_THROUGH
+#undef RPG2GBA_ROUTE_SET_THROUGH
+#undef RPG2GBA_ROUTE_SKIPPABLE
 
-static void MovementType_UraniumCustomRoute(struct Sprite *sprite)
+static void MovementType_Rpg2gbaCustomRoute(struct Sprite *sprite)
 {
-    UpdateObjectEventCurrentMovement(&gObjectEvents[sprite->sObjEventId], sprite, MovementType_UraniumCustomRoute_Callback);
+    UpdateObjectEventCurrentMovement(&gObjectEvents[sprite->sObjEventId], sprite, MovementType_Rpg2gbaCustomRoute_Callback);
 }
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA ENGINE
 
 bool8 MovementType_MoveInPlace_Step1(struct ObjectEvent *objectEvent, struct Sprite *sprite)
 {
@@ -6805,9 +6805,9 @@ enum Collision GetCollisionAtCoords(struct ObjectEvent *objectEvent, s16 x, s16 
         return COLLISION_NONE;
     #endif
 
-    // BEGIN URANIUM MAP WALKER — free movement within map bounds; clamp at edges
-#if URANIUM_MAP_WALKER == TRUE
-    if (UraniumWalker_IsActive())
+    // BEGIN RPG2GBA MAP WALKER — free movement within map bounds; clamp at edges
+#if RPG2GBA_MAP_WALKER == TRUE
+    if (Rpg2gbaWalker_IsActive())
     {
         s16 localX = x - MAP_OFFSET;
         s16 localY = y - MAP_OFFSET;
@@ -6817,7 +6817,7 @@ enum Collision GetCollisionAtCoords(struct ObjectEvent *objectEvent, s16 x, s16 
         return COLLISION_NONE;
     }
 #endif
-    // END URANIUM MAP WALKER
+    // END RPG2GBA MAP WALKER
 
     objectEvent->directionOverwrite = DIR_NONE;
 

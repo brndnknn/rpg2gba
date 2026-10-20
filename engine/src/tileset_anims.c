@@ -1433,9 +1433,9 @@ void InitTilesetAnim_CeladonGym(void)
 }
 
 
-// BEGIN URANIUM PATHFINDER SLICE — generated tileset animations for converted Uranium
+// BEGIN RPG2GBA GAME PROFILE — generated tileset animations for converted Uranium
 // tilesets (rpg2gba build_slice_tilesets; stub with empty body when none staged).
 // Included here (not a standalone TU) so the generated InitTilesetAnim_Uranium* /
 // TilesetAnim_Uranium* functions can set this file's static callback/counter state.
-#include "data/tilesets/uranium_anims.gen.h"
-// END URANIUM PATHFINDER SLICE
+#include "data/tilesets/rpg2gba_anims.gen.h"
+// END RPG2GBA GAME PROFILE

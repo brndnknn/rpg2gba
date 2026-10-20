@@ -183,12 +183,12 @@ struct WarpEvent
     u8 warpId;
     u8 mapNum;
     u8 mapGroup;
-    // BEGIN URANIUM PATHFINDER SLICE — arrival facing carried on the departure warp
+    // BEGIN RPG2GBA ENGINE — arrival facing carried on the departure warp
     // (0 = retain, else DIR_*; RPG2GBA_WARP_RETAIN_FACING). Emitted by warp_def.
     // Padded to 12 explicitly: modern's -mabi=apcs-gnu rounds struct sizes to 4 bytes.
     u8 facing;
     u8 padding[3];
-    // END URANIUM PATHFINDER SLICE
+    // END RPG2GBA ENGINE
 };
 
 struct CoordEvent

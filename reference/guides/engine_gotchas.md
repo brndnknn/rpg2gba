@@ -64,7 +64,7 @@ if a literal genuinely needs to land in that range.
 each one advanced exactly one step per player interaction ("moves only when
 talked to").
 
-**Root cause:** `MovementType_UraniumCustomRoute_Callback`'s FSM originally
+**Root cause:** `MovementType_Rpg2gbaCustomRoute_Callback`'s FSM originally
 stored its program counter in `sprite->data[4]` and its through-mode flag in
 `sprite->data[5]`. But the normal-walk movement action
 (`SetSpriteDataForNormalStep` → `NpcTakeStep`) reuses `data[4]`=sSpeed and
@@ -76,7 +76,7 @@ regardless of its own FSM state) advanced it further.
 **Fix:** pack PC (low byte) + through-mode (bit 8) into a single slot,
 `sprite->data[6]` — verified as the ONLY sprite-data slot safe across both a
 walk action and a wait, per `engine/src/event_object_movement.c:6217-6223`
-(`URANIUM_ROUTE_SET_PC`/`URANIUM_ROUTE_PC` macros operate on `sRoutePacked` =
+(`RPG2GBA_ROUTE_SET_PC`/`RPG2GBA_ROUTE_PC` macros operate on `sRoutePacked` =
 `data[6]`). `data[3]`/`data[4]`/`data[5]` are walk-action scratch;
 `data[3]`/`data[7]` are owned by `SetMovementDelay`/`WaitForMovementDelay`.
 Also added `ClearObjectEventMovement` on FSM INIT and clamped idle to `>= 1`
@@ -87,7 +87,7 @@ pre-decrement underflows 0 to a ~65k-frame stall).
 that needs FSM state to survive across a walk step, check which `data[]`
 indices the stock movement actions your FSM invokes actually touch
 (`SetSpriteDataForNormalStep`/`NpcTakeStep` own 3/4/5; the delay helpers own
-3/7). `data[6]` is free precedent (`MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE`
+3/7). `data[6]` is free precedent (`MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE`
 already claims it for this exact reason); `data[0]`=objEventId and
 `data[2]`=sActionFuncId are owned by `ObjectEventExecSingleMovementAction` —
 never touch those either. Full slot map:

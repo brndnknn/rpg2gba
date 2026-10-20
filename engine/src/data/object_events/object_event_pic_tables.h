@@ -3030,6 +3030,6 @@ static const struct SpriteFrameImage sPicTable_MomFrlg[] = {
 
 #endif // IS_FRLG
 
-// BEGIN URANIUM PATHFINDER SLICE — generated Uranium OW sprite pic tables (rpg2gba; stub when none staged).
-#include "uranium_object_event_pic_tables.gen.h"
-// END URANIUM PATHFINDER SLICE
+// BEGIN RPG2GBA GAME PROFILE — generated Uranium OW sprite pic tables (rpg2gba; stub when none staged).
+#include "rpg2gba_object_event_pic_tables.gen.h"
+// END RPG2GBA GAME PROFILE

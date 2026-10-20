@@ -52,7 +52,7 @@ MOVE_TYPE_CUSTOM = 3
 #: `route_bytecode.encode_route` can encode the whole move_route; routes it
 #: demotes (diagonals, move-random, toward/away-player, jump, unknown/empty)
 #: fall through to the existing classifier unchanged.
-MOVEMENT_TYPE_CUSTOM_ROUTE = "MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE"
+MOVEMENT_TYPE_CUSTOM_ROUTE = "MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE"
 
 # RMXP graphic.direction values -> the facing suffix on MOVEMENT_TYPE_FACE_*.
 _DIRECTION_TO_FACING = {2: "DOWN", 4: "LEFT", 6: "RIGHT", 8: "UP"}
@@ -320,7 +320,7 @@ class MovementSpec:
 
     `route_bytecode` is set instead of the above when `movement_type ==
     MOVEMENT_TYPE_CUSTOM_ROUTE`: the `encode_route`-produced byte sequence
-    the engine's `MovementType_UraniumCustomRoute` interpreter plays back
+    the engine's `MovementType_Rpg2gbaCustomRoute` interpreter plays back
     directly (`reference/guides/custom_route_interpreter.md`). `None` for
     every other movement type."""
 
@@ -368,7 +368,7 @@ def movement_spec_for(page: dict, *, allow_custom_route: bool = True) -> Movemen
     move_type 3 is INTERPRETER-FIRST: `_spec_for_custom_route` tries
     `route_bytecode.encode_route` on the whole route before any of cases a-h
     below; an encodable route (most cardinal steps/turns/through-toggles)
-    returns `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` with `route_bytecode` set,
+    returns `MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE` with `route_bytecode` set,
     played back verbatim by the engine's bytecode interpreter — no native
     approximation needed. Cases a-h are the fallback for what `encode_route`
     demotes (see its docstring): diagonals, move-random, toward/away-player,
@@ -453,7 +453,7 @@ def movement_spec_for(page: dict, *, allow_custom_route: bool = True) -> Movemen
     and goes straight to the native/static classification (cases a-h) —
     exactly the path already taken when `encode_route` itself returns `None`.
     This exists for callers that structurally cannot use
-    `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` even though the interpreter could
+    `MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE` even though the interpreter could
     encode the route (`metadata_wiring.build_object_events`'s battle-trainer
     branch: that movement type rides the same object_event template field as
     the trainer's sight radius). The native approximation this falls back to
@@ -502,7 +502,7 @@ def _spec_for_custom_route(page: dict, *, allow_custom_route: bool = True) -> Mo
     as if `encode_route` had returned `None` (see `movement_spec_for`'s
     docstring for why a caller would pass `False`). When the attempt does
     run: success (not `None`) means the engine's bytecode interpreter
-    (`MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE`) can play the route verbatim —
+    (`MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE`) can play the route verbatim —
     deterministic pacing and arbitrary step/turn/through sequences the
     native classifier below can't (or can only approximate) — so that wins
     outright, no fall-through. `encode_route` returns `None` only for the v1

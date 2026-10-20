@@ -883,9 +883,9 @@ harness-specific and land here:
 
 The capture-tutorial harness was disabled 2026-08-02 (`5352fd2d`) once its
 boot-walk passed on ROM `e0f6d30f`, so the chapter suite gets its fresh start
-back (`CB2_StartUraniumSlice` boots a real new game again). `new_game.c`
+back (`CB2_StartRpg2gbaHarness` boots a real new game again). `new_game.c`
 currently carries **four** disabled/commented-out harness blocks inside
-`CB2_StartUraniumSlice` (`engine/src/new_game.c:301-450`), read in full
+`CB2_StartRpg2gbaHarness` (`engine/src/new_game.c:301-450`), read in full
 2026-08-04:
 
 1. `engine/src/new_game.c:352-356` — the rock-smash-companion lines

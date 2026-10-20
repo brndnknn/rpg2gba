@@ -16,8 +16,8 @@ stale slot, a missed upload or a refcount bug all show up as mismatches. The cac
 counters (`gFieldStream` overflows/errors) and a refcount recount from the tilemap
 buffers are checked on top, as early warnings.
 
-The check runs on a Map Walker ROM (`URANIUM_MAP_WALKER`), which can walk anywhere
-and has a harness warp (`gUraniumWalkerHarnessWarp`).
+The check runs on a Map Walker ROM (`RPG2GBA_MAP_WALKER`), which can walk anywhere
+and has a harness warp (`gRpg2gbaWalkerHarnessWarp`).
 """
 from __future__ import annotations
 
@@ -150,11 +150,11 @@ class ScreenChecker:
         self.engine = engine
         self.sym = SymbolMap(engine / "pokeemerald.map")
         self.off = probe_offsets(engine)
-        for needed in ("gUraniumWalkerHarnessWarp", "gFieldStream"):
+        for needed in ("gRpg2gbaWalkerHarnessWarp", "gFieldStream"):
             if needed not in self.sym:
                 raise click.ClickException(
                     f"{needed} is not in {engine / 'pokeemerald.map'}: the screen check "
-                    "needs a Map Walker build (URANIUM_MAP_WALKER TRUE) with the streaming cache"
+                    "needs a Map Walker build (RPG2GBA_MAP_WALKER TRUE) with the streaming cache"
                 )
         self._map_consts = _walker_map_constants(engine)
         values = probe_constants(engine, sorted(self._map_consts.values()))
@@ -224,7 +224,7 @@ class ScreenChecker:
         """Warp through the walker's harness hook and wait for the map to settle."""
         value = self._map_value[map_id]
         group, num = value >> 8, value & 0xFF
-        base = self.sym["gUraniumWalkerHarnessWarp"]
+        base = self.sym["gRpg2gbaWalkerHarnessWarp"]
         self.core.memory.u8.raw_write(base + 1, group)
         self.core.memory.u8.raw_write(base + 2, num)
         self.core.memory.u8.raw_write(base + 3, x & 0xFF)
@@ -393,7 +393,7 @@ _WALKER_ENTRY = re.compile(r'X\((MAP_\w+), COMPOUND_STRING\("(\d+) ')
 
 def _walker_map_constants(engine: Path) -> dict[int, str]:
     """Uranium map id -> MAP_* constant, from the walker's generated map list."""
-    text = (engine / "include" / "uranium_walker_maps.h").read_text(encoding="utf-8")
+    text = (engine / "include" / "rpg2gba_walker_maps.h").read_text(encoding="utf-8")
     return {int(mid): const for const, mid in _WALKER_ENTRY.findall(text)}
 
 

@@ -214,12 +214,12 @@ def main():
         quit(0)
 
     SOURCE_LEARNSETS_JSON = pathlib.Path("./src/data/pokemon/all_learnables.json")
-    # BEGIN URANIUM PATHFINDER SLICE — prefer the assembler-generated overlay (upstream
+    # BEGIN RPG2GBA GAME PROFILE — prefer the assembler-generated overlay (upstream
     # learnables + Uranium TM/HM/tutor compatibility); absent = pristine upstream file.
-    _uranium_overlay = pathlib.Path("./src/data/pokemon/all_learnables.gen.json")
-    if _uranium_overlay.is_file():
-        SOURCE_LEARNSETS_JSON = _uranium_overlay
-    # END URANIUM PATHFINDER SLICE
+    _rpg2gba_overlay = pathlib.Path("./src/data/pokemon/all_learnables.gen.json")
+    if _rpg2gba_overlay.is_file():
+        SOURCE_LEARNSETS_JSON = _rpg2gba_overlay
+    # END RPG2GBA GAME PROFILE
     SOURCE_TEACHING_TYPES_JSON = SOURCE_DIR / "all_teaching_types.json"
 
     assert SOURCE_LEARNSETS_JSON.exists(), f"{SOURCE_LEARNSETS_JSON=} does not exist"

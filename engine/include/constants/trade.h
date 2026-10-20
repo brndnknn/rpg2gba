@@ -4,12 +4,12 @@
 #define TRADE_PLAYER  0
 #define TRADE_PARTNER 1
 
-// BEGIN URANIUM PATHFINDER SLICE — generated NPC-trade enum include-hook (rpg2gba; see engine/RPG2GBA_VENDOR.md).
-// The assembler always writes constants/uranium_ingame_trades.gen.h (a no-op definition when no trades are
-// staged); it defines URANIUM_INGAME_TRADE_MEMBERS, expanded inside the enum below. The include stays out here
+// BEGIN RPG2GBA GAME PROFILE — generated NPC-trade enum include-hook (rpg2gba; see engine/RPG2GBA_VENDOR.md).
+// The assembler always writes constants/rpg2gba_ingame_trades.gen.h (a no-op definition when no trades are
+// staged); it defines RPG2GBA_INGAME_TRADE_MEMBERS, expanded inside the enum below. The include stays out here
 // for the same cpp line-marker reason as constants/rematches.h (.s files include this header).
-#include "constants/uranium_ingame_trades.gen.h"
-// END URANIUM PATHFINDER SLICE
+#include "constants/rpg2gba_ingame_trades.gen.h"
+// END RPG2GBA GAME PROFILE
 
 // In-game Trade IDs
 enum InGameTradeID
@@ -28,9 +28,9 @@ enum InGameTradeID
     INGAME_TRADE_ELECTRODE,
     INGAME_TRADE_TANGELA,
     INGAME_TRADE_SEEL,
-    // BEGIN URANIUM PATHFINDER SLICE — generated NPC-trade members (macro from the gen.h above)
-    URANIUM_INGAME_TRADE_MEMBERS
-    // END URANIUM PATHFINDER SLICE
+    // BEGIN RPG2GBA GAME PROFILE — generated NPC-trade members (macro from the gen.h above)
+    RPG2GBA_INGAME_TRADE_MEMBERS
+    // END RPG2GBA GAME PROFILE
 };
 
 // Return values for CanTradeSelectedMon and CanSpinTradeMon

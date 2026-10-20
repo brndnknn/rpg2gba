@@ -133,9 +133,9 @@ checked before the PC is committed.
 Route ids are assigned by the **route registry** (build-time, lead-owned): dedup
 identical byte arrays across all slice objects → 1-based id → both (a) each
 object's `trainer_sight_or_berry_tree_id` in map.json and (b) the gen.h index
-table `sUraniumRoutes[]`. Single assignment, two consumers — must agree.
+table `sRpg2gbaRoutes[]`. Single assignment, two consumers — must agree.
 
-## Engine interpreter FSM (`MovementType_UraniumCustomRoute`)
+## Engine interpreter FSM (`MovementType_Rpg2gbaCustomRoute`)
 
 Hand-rolled wrapper (precedent: `MovementType_BerryTreeGrowth`, not the
 `movement_type_def` macro — step count is bytecode-length-dependent). Calls
@@ -147,30 +147,30 @@ was never shipped and does not match the code):**
 
 - `data[1]` (`sTypeFuncId`) = FSM sub-state (see below).
 - The PC is `objectEvent->directionSequenceIndex`
-  (`URANIUM_ROUTE_PC`/`URANIUM_ROUTE_SET_PC`, taking the object, not the
+  (`RPG2GBA_ROUTE_PC`/`RPG2GBA_ROUTE_SET_PC`, taking the object, not the
   sprite). 0 = not started (zeroed at spawn); a live PC is always >= 2.
 - `data[6]` (`sRoutePacked`) holds the through flag in bit 8
-  (`URANIUM_ROUTE_THROUGH`/`URANIUM_ROUTE_SET_THROUGH`). This is the *only*
+  (`RPG2GBA_ROUTE_THROUGH`/`RPG2GBA_ROUTE_SET_THROUGH`). This is the *only*
   sprite-data slot safe across both a walk and a wait — the normal-walk
   movement action clobbers `data[3]`/`data[4]`/`data[5]` every frame as its own
   scratch, and the delay helpers own `data[3]`/`data[7]`.
 - The per-route idle (`route[0]`) is **not** cached in sprite data at all — it
-  is re-read from the route pointer fresh every time `UraniumRoute_BeginIdle`
+  is re-read from the route pointer fresh every time `Rpg2gbaRoute_BeginIdle`
   is called.
 - `skippable` (`route[1]` bit 0) is likewise never copied into sprite data —
   it's immutable per-route data, read directly off `route` via
-  `URANIUM_ROUTE_SKIPPABLE(route)` whenever a STEP is blocked.
+  `RPG2GBA_ROUTE_SKIPPABLE(route)` whenever a STEP is blocked.
 
 Sub-states (`sprite->sTypeFuncId`, values `URANIUM_ROUTE_STATE_*`):
 - **INIT (0):** `ClearObjectEventMovement`; only if the PC is 0 (first start):
-  `URANIUM_ROUTE_SET_PC(objEvent, 2)` (byte 0 = idle, byte 1 = flags, opcodes
-  start at byte 2) and `URANIUM_ROUTE_SET_THROUGH(sprite, FALSE)`; → FETCH_EXEC.
-- **FETCH_EXEC (1):** `pc = URANIUM_ROUTE_PC(objEvent)`; `op = route[pc]`:
-  - END_LOOP → `URANIUM_ROUTE_SET_PC(objEvent, 2)`; re-enter FETCH_EXEC (no time
+  `RPG2GBA_ROUTE_SET_PC(objEvent, 2)` (byte 0 = idle, byte 1 = flags, opcodes
+  start at byte 2) and `RPG2GBA_ROUTE_SET_THROUGH(sprite, FALSE)`; → FETCH_EXEC.
+- **FETCH_EXEC (1):** `pc = RPG2GBA_ROUTE_PC(objEvent)`; `op = route[pc]`:
+  - END_LOOP → `RPG2GBA_ROUTE_SET_PC(objEvent, 2)`; re-enter FETCH_EXEC (no time
     cost).
   - END_STOP → return FALSE (idle forever).
   - STEP dir → if `!through` and `GetCollisionInDirection(objEvent, dir) !=
-    COLLISION_NONE` (blocked): if `URANIUM_ROUTE_SKIPPABLE(route)`, advance the
+    COLLISION_NONE` (blocked): if `RPG2GBA_ROUTE_SKIPPABLE(route)`, advance the
     PC and idle (skip past it); else leave the PC untouched, turn to face
     `dir`, and issue a walk-in-place action — see "Blocked-step semantics"
     above. Otherwise (clear): commit `pc + 1` to the PC, issue
@@ -182,18 +182,18 @@ Sub-states (`sprite->sTypeFuncId`, values `URANIUM_ROUTE_STATE_*`):
   - FACE dir → `SetObjectEventDirection(objEvent, dir)`; PC += 1; → idle
     (WAIT).
   - WAIT op → `SetMovementDelay(sprite, route[pc+1])`; PC += 2; → WAIT.
-  - THROUGH_ON/OFF → `URANIUM_ROUTE_SET_THROUGH(sprite, on)`; PC += 1;
+  - THROUGH_ON/OFF → `RPG2GBA_ROUTE_SET_THROUGH(sprite, on)`; PC += 1;
     re-enter FETCH_EXEC (no time cost).
 - **EXEC_WALK (2):** if `ObjectEventExecSingleMovementAction(objEvent, sprite)`
   done → `objectEvent->singleMovementActive = FALSE` (pairs with the TRUE set
-  in FETCH_EXEC); `UraniumRoute_BeginIdle(sprite, route[0])` → WAIT. This path
+  in FETCH_EXEC); `Rpg2gbaRoute_BeginIdle(sprite, route[0])` → WAIT. This path
   is shared by both a real step and a blocked walk-in-place; since the
   blocked/non-skippable branch never advanced the PC, completing a
   walk-in-place naturally re-fetches the *same* STEP opcode on the next
   FETCH_EXEC and retries it.
 - **WAIT (3):** if `WaitForMovementDelay(sprite)` → FETCH_EXEC.
 
-**Every idle yields (corrected 2026-09-30).** `UraniumRoute_BeginIdle` returns
+**Every idle yields (corrected 2026-09-30).** `Rpg2gbaRoute_BeginIdle` returns
 FALSE, ending the callback loop for the frame. `UpdateObjectEventCurrentMovement`
 re-runs a callback that returns TRUE *within the same frame*, so when it
 returned TRUE a freq-6 walker (idle clamped to 1) went step-done → WAIT (expired
@@ -220,7 +220,7 @@ Direction mapping: RMXP 1/2/3/4 → `DIR_SOUTH/WEST/EAST/NORTH`.
 ## Engine registration (sentinel fences — `engine_extension_surface.md` §3, KEEP)
 
 - `include/constants/event_object_movement.h`: `#define
-  MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE 0x53`; bump `NUM_MOVEMENT_TYPES` → `0x54`.
+  MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE 0x53`; bump `NUM_MOVEMENT_TYPES` → `0x54`.
 - `src/event_object_movement.c`: entries in `sMovementTypeCallbacks[]` and
   `gInitialMovementTypeFacingDirections[]` (= `DIR_SOUTH`); OMIT
   `sMovementTypeHasRange[]` (defaults FALSE — no range box). The callback + FSM.
@@ -229,10 +229,10 @@ Direction mapping: RMXP 1/2/3/4 → `DIR_SOUTH/WEST/EAST/NORTH`.
   re-designate an index); route pointer array must be `const`; gen header must
   exist before `make` (ship an empty stub for zero-route clones).
 
-## Gen-hook: `src/data/object_events/uranium_move_routes.gen.h`
+## Gen-hook: `src/data/object_events/rpg2gba_move_routes.gen.h`
 
 Modeled on `sprite_emit.py`. Holds `const u8 sUraniumRoute_N[]` bytecode arrays
-+ `const u8 *const sUraniumRoutes[]` 1-indexed index table (`[0] = NULL`).
++ `const u8 *const sRpg2gbaRoutes[]` 1-indexed index table (`[0] = NULL`).
 Gitignored; empty-but-valid stub when zero routes so a fresh clone compiles.
 
 ## Pipeline data path (in-process, NO sidecar)
@@ -249,7 +249,7 @@ is needed (unlike traits, whose producer is the transpiler). Path, all inside
    strings, not bytecode) — it only shares the RMXP-code semantics.
 2. `npc_gfx._spec_for_custom_route`: new branch before the demote fallback —
    `encode_route` succeeds → `MovementSpec(movement_type=
-   MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE, route_bytecode=...)`.
+   MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE, route_bytecode=...)`.
 3. `metadata_wiring.build_object_events`: collect each object's `route_bytecode`
    into a **route registry** (dedup identical byte arrays → 1-based id); set
    `ObjectEvent.route_id`; `to_dict` emits it as `trainer_sight_or_berry_tree_id`.
@@ -257,7 +257,7 @@ is needed (unlike traits, whose producer is the transpiler). Path, all inside
    gen.h. Same assemble pass as sprite_emit; empty stub when zero routes.
 
 The registry is the shared seam: one id assignment, two consumers (map.json
-`trainer_sight_or_berry_tree_id` + gen.h `sUraniumRoutes[]`). Lead-owned.
+`trainer_sight_or_berry_tree_id` + gen.h `sRpg2gbaRoutes[]`). Lead-owned.
 
 ---
 
@@ -345,11 +345,11 @@ step semantics; `cell_clear` is not a substitute for it.
   the plan doc's bug table).
 - **Engine collision-before-PC fix:** `engine/src/event_object_movement.c`,
   the `URANIUM_ROUTE_OP_STEP_*` case (~6277-6316 as of this extraction). The
-  `GetCollisionInDirection` check runs BEFORE `URANIUM_ROUTE_SET_PC` commits
+  `GetCollisionInDirection` check runs BEFORE `RPG2GBA_ROUTE_SET_PC` commits
   the advance. On a non-skippable block: `SetObjectEventDirection` turns the
   sprite, `GetWalkInPlaceNormalMovementAction` plays the walk-in-place anim,
   the PC is **not** advanced — so the same STEP opcode is re-fetched and
-  retried next cycle. On a skippable block: `URANIUM_ROUTE_SET_PC(sprite, pc +
+  retried next cycle. On a skippable block: `RPG2GBA_ROUTE_SET_PC(sprite, pc +
   1)` advances past it same as a clean idle tick. This mirrors vanilla
   `MoveNextDirectionInSequence` and `MovementType_WalkBackAndForth_Step2`,
   which substitute the movement action on collision without touching their

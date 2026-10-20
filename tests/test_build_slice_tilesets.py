@@ -248,16 +248,16 @@ def test_emitted_art_files(tmp_path: Path) -> None:
 
 def test_engine_fragments(tmp_path: Path) -> None:
     fork, _, _ = _run(tmp_path)
-    graphics = (fork / "src" / "data" / "tilesets" / "uranium_graphics.gen.h").read_text(
+    graphics = (fork / "src" / "data" / "tilesets" / "rpg2gba_graphics.gen.h").read_text(
         encoding="utf-8"
     )
-    metatiles = (fork / "src" / "data" / "tilesets" / "uranium_metatiles.gen.h").read_text(
+    metatiles = (fork / "src" / "data" / "tilesets" / "rpg2gba_metatiles.gen.h").read_text(
         encoding="utf-8"
     )
-    structs = (fork / "src" / "data" / "tilesets" / "uranium_tilesets.gen.h").read_text(
+    structs = (fork / "src" / "data" / "tilesets" / "rpg2gba_tilesets.gen.h").read_text(
         encoding="utf-8"
     )
-    externs = (fork / "include" / "uranium_externs.gen.h").read_text(encoding="utf-8")
+    externs = (fork / "include" / "rpg2gba_externs.gen.h").read_text(encoding="utf-8")
 
     assert (
         'gTilesetTiles_Uranium5[] = INCGFX_U32("data/tilesets/primary/uranium5/tiles.png"'
@@ -273,9 +273,9 @@ def test_engine_fragments(tmp_path: Path) -> None:
     assert "extern const struct Tileset gTileset_Uranium5;" in externs
     assert "extern const struct Tileset gTileset_Uranium5B;" in externs
 
-    # No animated tilesets staged -> uranium_anims.gen.h is the empty-body stub
+    # No animated tilesets staged -> rpg2gba_anims.gen.h is the empty-body stub
     # (still written, so the engine's unconditional #include compiles).
-    anims = (fork / "src" / "data" / "tilesets" / "uranium_anims.gen.h").read_text(
+    anims = (fork / "src" / "data" / "tilesets" / "rpg2gba_anims.gen.h").read_text(
         encoding="utf-8"
     )
     assert "InitTilesetAnim_Uranium5" not in anims
@@ -284,7 +284,7 @@ def test_engine_fragments(tmp_path: Path) -> None:
 def test_engine_fragments_with_animated_effect(tmp_path: Path) -> None:
     """A tileset whose column keys include a 3-frame animated autotile: the
     PRIMARY struct's .callback wires to InitTilesetAnim_Uranium5, forward-declared
-    in uranium_tilesets.gen.h, and uranium_anims.gen.h carries the frame table,
+    in rpg2gba_tilesets.gen.h, and rpg2gba_anims.gen.h carries the frame table,
     queue fn, dispatcher, and install fn."""
     fork = _fake_fork(tmp_path)
     base = tmp_path / "tileset_map.json"
@@ -306,13 +306,13 @@ def test_engine_fragments_with_animated_effect(tmp_path: Path) -> None:
         terrain_tags_for=lambda ts: _ZERO_TERRAIN_TAGS,
     )
 
-    structs = (fork / "src" / "data" / "tilesets" / "uranium_tilesets.gen.h").read_text(
+    structs = (fork / "src" / "data" / "tilesets" / "rpg2gba_tilesets.gen.h").read_text(
         encoding="utf-8"
     )
     assert "void InitTilesetAnim_Uranium5(void);" in structs
     assert ".callback = InitTilesetAnim_Uranium5," in structs
 
-    anims = (fork / "src" / "data" / "tilesets" / "uranium_anims.gen.h").read_text(
+    anims = (fork / "src" / "data" / "tilesets" / "rpg2gba_anims.gen.h").read_text(
         encoding="utf-8"
     )
     assert 'INCGFX_U16("data/tilesets/primary/uranium5/anim/anim3/f00.png", ".4bpp")' in anims

@@ -529,7 +529,7 @@ def test_build_occupancy_leaves_custom_route_patrols_passable(tmp_path):
     constants_json, maps_dir = _write_occupancy_fixture(tmp_path, [
         {
             "x": 8, "y": 7,
-            "movement_type": "MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE",
+            "movement_type": "MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE",
             "script": "Map037_EV005_Dispatch",
         },
     ])

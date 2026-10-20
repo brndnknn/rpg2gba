@@ -180,7 +180,7 @@ def test_id_allocation_chains_off_anchor_by_position() -> None:
     assert "#define TRAINER_THEO_9 (TRAINER_MAY_PLACEHOLDER + 1)" in header
     assert "#define TRAINER_THEO_10 (TRAINER_THEO_9 + 1)" in header
     assert "#define TRAINER_THEO_11 (TRAINER_THEO_10 + 1)" in header
-    assert "#define URANIUM_TRAINERS_LAST TRAINER_THEO_11" in header
+    assert "#define RPG2GBA_TRAINERS_LAST TRAINER_THEO_11" in header
     assert "#define URANIUM_TRAINERS_STAGED_COUNT 3" in header
 
 
@@ -202,9 +202,9 @@ def test_id_allocation_order_is_selection_order_not_uranium_id() -> None:
 def test_golden_output_for_theo_trio() -> None:
     staged = _build(_THEO_KEYS)
     combined = (
-        "// === uranium_trainer_ids.h ===\n"
+        "// === rpg2gba_trainer_ids.h ===\n"
         + battles.emit_trainer_ids(staged, "TRAINER_MAY_PLACEHOLDER")
-        + "// === uranium_trainer_party.inc ===\n"
+        + "// === rpg2gba_trainer_party.inc ===\n"
         + battles.emit_party_fragment(staged)
     )
     golden_path = FIXTURES / "trainer_battles_golden.inc"
@@ -230,8 +230,8 @@ def test_empty_selection_produces_noop_files() -> None:
 def test_empty_battles_write_all_leaves_pic_only_behavior_unaffected(tmp_path: Path) -> None:
     manifest = write_all(out_dir=tmp_path, fronts=(), backs=(), battles=())
     assert manifest["trainers"] == []
-    ids_header = (tmp_path / "uranium_trainer_ids.h").read_text(encoding="utf-8")
-    party_frag = (tmp_path / "uranium_trainer_party.inc").read_text(encoding="utf-8")
+    ids_header = (tmp_path / "rpg2gba_trainer_ids.h").read_text(encoding="utf-8")
+    party_frag = (tmp_path / "rpg2gba_trainer_party.inc").read_text(encoding="utf-8")
     assert "no-op" in ids_header
     assert "no-op" in party_frag
 

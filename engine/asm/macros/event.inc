@@ -707,7 +707,7 @@
 	.2byte \y
 	.endm
 
-	@ URANIUM PATHFINDER SLICE — script-callable live graphics swap (rpg2gba).
+	@ RPG2GBA ENGINE — script-callable live graphics swap (rpg2gba).
 	@ Repaints the specified (localId) object's sprite in place, mid-scene.
 	@ See RPG2GBA_SetObjectEventGfx (src/event_object_movement.c) and its
 	@ def_special entry (data/specials.inc). localId may be OBJ_EVENT_ID_PLAYER.
@@ -716,7 +716,7 @@
 	setvar VAR_0x8005, \gfxId
 	special RPG2GBA_SetObjectEventGfx
 	.endm
-	@ END URANIUM PATHFINDER SLICE
+	@ END RPG2GBA ENGINE
 
 	@ Sets the specified object's invisibility to FALSE.
 	.macro showobjectat localId:req, map:req

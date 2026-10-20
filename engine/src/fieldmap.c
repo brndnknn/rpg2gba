@@ -18,10 +18,10 @@
 #include "constants/metatile_behaviors.h"
 #include "constants/metatile_behaviors_frlg.h"
 #include "wild_encounter.h"
-// BEGIN URANIUM PATHFINDER SLICE — connection id remap
-#include "uranium_connection_remap.h"
+// BEGIN RPG2GBA ENGINE — connection id remap
+#include "rpg2gba_connection_remap.h"
 #include "field_camera.h"
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA ENGINE
 // BEGIN RPG2GBA STREAMING
 #include "field_stream.h"
 // END RPG2GBA STREAMING
@@ -52,12 +52,12 @@ static const struct ConnectionFlags sDummyConnectionFlags = {0};
 
 static void InitMapLayoutData(struct MapHeader *mapHeader);
 static void InitBackupMapLayoutData(const u16 *map, u16 width, u16 height);
-// BEGIN URANIUM PATHFINDER SLICE — connection id remap (added `remap` param)
+// BEGIN RPG2GBA ENGINE — connection id remap (added `remap` param)
 static void FillSouthConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap);
 static void FillNorthConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap);
 static void FillWestConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap);
 static void FillEastConnection(struct MapHeader const *mapHeader, struct MapHeader const *connectedMapHeader, s32 offset, const u16 *remap);
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA ENGINE
 static void InitBackupMapLayoutConnections(struct MapHeader *mapHeader);
 static void LoadSavedMapView(void);
 static bool8 SkipCopyingMetatileFromSavedMap(u16 *mapBlock, u16 mapWidth, u8 yMode);
@@ -243,7 +243,7 @@ static u16 BigMapBaseBlock(int x, int y)
         {
             u16 block = rect->src[dy * rect->srcWidth + dx];
             if (rect->remap != NULL)
-                UraniumApplyConnectionRemap(&block, 1, rect->remap);
+                Rpg2gbaApplyConnectionRemap(&block, 1, rect->remap);
             return block;
         }
     }
@@ -432,9 +432,9 @@ static void InitBackupMapLayoutConnections(struct MapHeader *mapHeader)
         {
             struct MapHeader const *cMap = GetMapHeaderFromConnection(connection);
             s32 offset = connection->offset;
-            // BEGIN URANIUM PATHFINDER SLICE — connection id remap
-            const u16 *remap = UraniumGetConnectionRemap(connection->mapGroup, connection->mapNum);
-            // END URANIUM PATHFINDER SLICE
+            // BEGIN RPG2GBA ENGINE — connection id remap
+            const u16 *remap = Rpg2gbaGetConnectionRemap(connection->mapGroup, connection->mapNum);
+            // END RPG2GBA ENGINE
             switch (connection->direction)
             {
             case CONNECTION_SOUTH:
@@ -458,7 +458,7 @@ static void InitBackupMapLayoutConnections(struct MapHeader *mapHeader)
     }
 }
 
-// URANIUM PATHFINDER SLICE: connection id remap — added `remap` param (NULL = vanilla)
+// RPG2GBA ENGINE: connection id remap — added `remap` param (NULL = vanilla)
 static void FillConnection(int x, int y, struct MapHeader const *connectedMapHeader, const u16 *remap, int x2, int y2, int width, int height)
 {
     int i;
@@ -480,10 +480,10 @@ static void FillConnection(int x, int y, struct MapHeader const *connectedMapHea
     for (i = 0; i < height; i++)
     {
         CpuCopy16(src, dest, width * 2);
-        // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+        // BEGIN RPG2GBA ENGINE — connection id remap
         if (remap != NULL)
-            UraniumApplyConnectionRemap(dest, width, remap);
-        // END URANIUM PATHFINDER SLICE
+            Rpg2gbaApplyConnectionRemap(dest, width, remap);
+        // END RPG2GBA ENGINE
         dest += gBackupMapLayout.width;
         src += mapWidth;
     }
@@ -522,7 +522,7 @@ static void FillSouthConnection(struct MapHeader const *mapHeader, struct MapHea
 
         FillConnection(
             x, y,
-            connectedMapHeader, remap, // URANIUM PATHFINDER SLICE: connection id remap
+            connectedMapHeader, remap, // RPG2GBA ENGINE: connection id remap
             x2, /*y2*/ 0,
             width, /*height*/ MAP_OFFSET);
     }
@@ -562,7 +562,7 @@ static void FillNorthConnection(struct MapHeader const *mapHeader, struct MapHea
 
         FillConnection(
             x, /*y*/ 0,
-            connectedMapHeader, remap, // URANIUM PATHFINDER SLICE: connection id remap
+            connectedMapHeader, remap, // RPG2GBA ENGINE: connection id remap
             x2, y2,
             width, /*height*/ MAP_OFFSET);
 
@@ -601,7 +601,7 @@ static void FillWestConnection(struct MapHeader const *mapHeader, struct MapHead
 
         FillConnection(
             /*x*/ 0, y,
-            connectedMapHeader, remap, // URANIUM PATHFINDER SLICE: connection id remap
+            connectedMapHeader, remap, // RPG2GBA ENGINE: connection id remap
             x2, y2,
             /*width*/ MAP_OFFSET, height);
     }
@@ -638,7 +638,7 @@ static void FillEastConnection(struct MapHeader const *mapHeader, struct MapHead
 
         FillConnection(
             x, y,
-            connectedMapHeader, remap, // URANIUM PATHFINDER SLICE: connection id remap
+            connectedMapHeader, remap, // RPG2GBA ENGINE: connection id remap
             /*x2*/ 0, y2,
             /*width*/ MAP_OFFSET + 1, height);
     }
@@ -1084,12 +1084,12 @@ bool8 CameraMove(int x, int y)
             return gCamera.active;
         }
 
-        // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+        // BEGIN RPG2GBA ENGINE — connection id remap
         u8 oldMapGroup = gSaveBlock1Ptr->location.mapGroup;
         u8 oldMapNum = gSaveBlock1Ptr->location.mapNum;
         const struct Tileset *oldPrimaryTileset = gMapHeader.mapLayout->primaryTileset;
         const u16 *viewRemap;
-        // END URANIUM PATHFINDER SLICE
+        // END RPG2GBA ENGINE
         SetPositionFromConnection(connection, direction, x, y);
         LoadMapFromCameraTransition(connection->mapGroup, connection->mapNum);
         gCamera.active = TRUE;
@@ -1097,10 +1097,10 @@ bool8 CameraMove(int x, int y)
         gCamera.y = old_y - gSaveBlock1Ptr->pos.y;
         gSaveBlock1Ptr->pos.x += x;
         gSaveBlock1Ptr->pos.y += y;
-        // BEGIN URANIUM PATHFINDER SLICE — connection id remap
+        // BEGIN RPG2GBA ENGINE — connection id remap
         // location is now the new map, so this is the new map's table for
         // viewing the map just left (NULL = vanilla).
-        viewRemap = UraniumGetConnectionRemap(oldMapGroup, oldMapNum);
+        viewRemap = Rpg2gbaGetConnectionRemap(oldMapGroup, oldMapNum);
         if (viewRemap == NULL && gMapHeader.mapLayout->primaryTileset == oldPrimaryTileset)
         {
             MoveMapViewToBackup(direction);
@@ -1123,7 +1123,7 @@ bool8 CameraMove(int x, int y)
             gSaveBlock1Ptr->pos.x += x;
             gSaveBlock1Ptr->pos.y += y;
         }
-        // END URANIUM PATHFINDER SLICE
+        // END RPG2GBA ENGINE
     }
 
     BigMap_Track(); // RPG2GBA STREAMING: windowed backup grid follows the camera
@@ -1420,10 +1420,10 @@ void LoadSecondaryTilesetPalette(struct MapLayout const *mapLayout, bool8 skipFa
     LoadTilesetPalette(mapLayout->secondaryTileset, GetNumPalsInPrimary(mapLayout) * 16, (NUM_PALS_TOTAL - GetNumPalsInPrimary(mapLayout)) * PLTT_SIZE_4BPP, skipFaded, GetNumPalsInPrimary(mapLayout));
 }
 
-// BEGIN URANIUM PATHFINDER SLICE — connection id remap
+// BEGIN RPG2GBA ENGINE — connection id remap
 // Primary-tileset counterparts of the secondary reload used by
 // LoadMapFromCameraTransition, for connections that change primary tileset.
-void UraniumCopyPrimaryTilesetToVramUsingHeap(struct MapLayout const *mapLayout)
+void Rpg2gbaCopyPrimaryTilesetToVramUsingHeap(struct MapLayout const *mapLayout)
 {
     // BEGIN RPG2GBA STREAMING
     if (StreamPrimaryLoad(mapLayout))
@@ -1434,11 +1434,11 @@ void UraniumCopyPrimaryTilesetToVramUsingHeap(struct MapLayout const *mapLayout)
     CopyTilesetToVramUsingHeap(mapLayout->primaryTileset, GetNumTilesInPrimary(mapLayout), 0);
 }
 
-void UraniumLoadPrimaryTilesetPalette(struct MapLayout const *mapLayout, bool8 skipFaded)
+void Rpg2gbaLoadPrimaryTilesetPalette(struct MapLayout const *mapLayout, bool8 skipFaded)
 {
     LoadTilesetPalette(mapLayout->primaryTileset, 0, GetNumPalsInPrimary(mapLayout) * PLTT_SIZE_4BPP, skipFaded, GetNumPalsInPrimary(mapLayout));
 }
-// END URANIUM PATHFINDER SLICE
+// END RPG2GBA ENGINE
 
 void CopyMapTilesetsToVram(struct MapLayout const *mapLayout)
 {

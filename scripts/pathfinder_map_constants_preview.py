@@ -34,7 +34,7 @@ def main() -> None:
         map_infos_path=MAP_INFOS,
         overrides_path=OVERRIDES,
         state_path=PORYMAP / "map_constants.json",
-        alias_header_path=PORYMAP / "uranium_map_aliases.h",
+        alias_header_path=PORYMAP / "rpg2gba_map_aliases.h",
         map_groups_path=PORYMAP / "map_groups.json",
     )
 
@@ -45,7 +45,7 @@ def main() -> None:
         print(f"{uid:>4}  {c.map_const:<34} {c.dir_name:<26} {c.display_name}{collide}")
 
     print("\nalias header:")
-    print((PORYMAP / "uranium_map_aliases.h").read_text(encoding="utf-8"))
+    print((PORYMAP / "rpg2gba_map_aliases.h").read_text(encoding="utf-8"))
 
     collisions = [reg.get(u).map_const for u in SLICE_IDS if reg.get(u).map_const in vanilla]
     print("RESULT:", "COLLISION-FREE" if not collisions else f"COLLIDES: {collisions}")

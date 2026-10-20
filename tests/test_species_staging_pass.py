@@ -77,37 +77,37 @@ def test_header_dest_map_covers_every_generated_file() -> None:
     list, excluding the manifest, which stays in `out/` and is never staged
     into the fork)."""
     documented = {
-        "uranium_species_constants.h",
-        "uranium_pokedex_ids.h",
-        "uranium_learnsets.h",
-        "uranium_species_info.h",
-        "uranium_species_graphics.h",
-        "uranium_cries_enum.h",
-        "uranium_cry_table_forward.inc",
-        "uranium_cry_table_reverse.inc",
-        "uranium_cry_sound_data.inc",
+        "rpg2gba_species_constants.h",
+        "rpg2gba_pokedex_ids.h",
+        "rpg2gba_learnsets.h",
+        "rpg2gba_species_info.h",
+        "rpg2gba_species_graphics.h",
+        "rpg2gba_cries_enum.h",
+        "rpg2gba_cry_table_forward.inc",
+        "rpg2gba_cry_table_reverse.inc",
+        "rpg2gba_cry_sound_data.inc",
     }
     assert set(assemble_pathfinder._SPECIES_HEADER_DEST_DIRS) == documented
 
 
 def test_header_dest_dirs_match_committed_hooks() -> None:
     """Pin the exact engine-relative directories the committed
-    `URANIUM PATHFINDER SLICE` hooks `#include`/`.include` these files from
+    `RPG2GBA GAME PROFILE` hooks `#include`/`.include` these files from
     (verified against the real fork in `engine/`: `species.h`,
     `pokedex.h`, `cries.h`, `species_info.h`, `graphics/pokemon.h`,
     `sound/cry_tables.inc`, `sound/direct_sound_data.inc`) -- a change here
     that drifts from those hook paths would silently break the `#include`
     resolution at compile time, not at staging time."""
     assert assemble_pathfinder._SPECIES_HEADER_DEST_DIRS == {
-        "uranium_species_constants.h": "include/constants",
-        "uranium_pokedex_ids.h": "include/constants",
-        "uranium_cries_enum.h": "include/constants",
-        "uranium_learnsets.h": "src/data/pokemon",
-        "uranium_species_info.h": "src/data/pokemon",
-        "uranium_species_graphics.h": "src/data/graphics",
-        "uranium_cry_table_forward.inc": "sound",
-        "uranium_cry_table_reverse.inc": "sound",
-        "uranium_cry_sound_data.inc": "sound",
+        "rpg2gba_species_constants.h": "include/constants",
+        "rpg2gba_pokedex_ids.h": "include/constants",
+        "rpg2gba_cries_enum.h": "include/constants",
+        "rpg2gba_learnsets.h": "src/data/pokemon",
+        "rpg2gba_species_info.h": "src/data/pokemon",
+        "rpg2gba_species_graphics.h": "src/data/graphics",
+        "rpg2gba_cry_table_forward.inc": "sound",
+        "rpg2gba_cry_table_reverse.inc": "sound",
+        "rpg2gba_cry_sound_data.inc": "sound",
     }
 
 
@@ -146,7 +146,7 @@ def test_dry_run_writes_generated_files_but_never_touches_fork(
     species_dir = tmp_path / "species"
     assemble_pathfinder.run_species_pass(tmp_path, engine_dir, uranium_src, dry_run=True)
 
-    assert (species_dir / "uranium_species_info.h").is_file()
+    assert (species_dir / "rpg2gba_species_info.h").is_file()
     assert (species_dir / "species_manifest.json").is_file()
     for spec in STARTER_SPECIES:
         art_dir = tmp_path / "species" / "art" / spec.internal_name.lower()
@@ -175,7 +175,7 @@ def test_sidecar_overrides_reach_species_info(
     icon_by_name = {r.spec.internal_name: r for r in icon_result.species}
 
     assemble_pathfinder.run_species_pass(tmp_path, engine_dir, uranium_src, dry_run=True)
-    info_text = (tmp_path / "species" / "uranium_species_info.h").read_text(encoding="utf-8")
+    info_text = (tmp_path / "species" / "rpg2gba_species_info.h").read_text(encoding="utf-8")
 
     for spec in STARTER_SPECIES:
         entry = _entry(info_text, spec.constant)

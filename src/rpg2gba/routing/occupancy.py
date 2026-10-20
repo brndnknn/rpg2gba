@@ -60,8 +60,8 @@ tile position, so its offline location can't be predicted:
 
 UNRECOGNIZED -- fails loud (`OccupancyError`), never defaulted to either
 bucket (CLAUDE.md §4.5). This deliberately includes
-`MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` (this fork's own addition, `0x53`,
-`MovementType_UraniumCustomRoute` -- an autonomous per-object route-bytecode
+`MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE` (this fork's own addition, `0x53`,
+`MovementType_Rpg2gbaCustomRoute` -- an autonomous per-object route-bytecode
 player, `reference/guides/custom_route_interpreter.md`): per that guide and
 `reference/archive/SLICE1_EVENTS.md`, a custom route can be a stand-in-place
 idle (turn/wait commands only) OR a genuine patrol that walks the object
@@ -188,7 +188,7 @@ _MOBILE_MOVEMENT_TYPES = frozenset({
     # walker still re-plans around live object tiles
     # (playtest/emulator.py `_occupied_object_tiles`), which is what makes
     # this safe rather than merely cheap.
-    "MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE",
+    "MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE",
 })
 
 

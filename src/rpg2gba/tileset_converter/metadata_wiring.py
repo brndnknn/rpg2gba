@@ -163,9 +163,9 @@ TRIGGER_PARALLEL = 4  # RMXP trigger: runs continuously in the background
 _TRAINER_NAME_RE = re.compile(r"Trainer\((\d+)\)")
 
 # Movement types a battle trainer (visible Trainer(N)) may keep. Only
-# MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE genuinely collides with
+# MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE genuinely collides with
 # trainer_sight_or_berry_tree_id — both are backed by the same object_event
-# template field (sUraniumRoutes vs the sight radius
+# template field (sRpg2gbaRoutes vs the sight radius
 # trainer_see.c GetTrainerApproachDistance needs). Every vanilla autonomous
 # movement type reads the independent movementRangeX/movementRangeY fields
 # instead (engine/src/event_object_movement.c:1627-1628 range copy vs :1631
@@ -192,7 +192,7 @@ _TRAINER_MOVEMENT_ALLOWED_PREFIXES = (
 def _trainer_movement_allowed(movement_type: str) -> bool:
     """True iff a battle trainer may keep `movement_type` unchanged rather
     than being demoted to a static facing. Default-deny: anything not on the
-    allow-list (including MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE and any
+    allow-list (including MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE and any
     MOVEMENT_TYPE_WANDER_*) is refused. See the allow-list comment above for
     the engine facts behind this."""
     if movement_type in _TRAINER_MOVEMENT_ALLOWED_EXACT:
@@ -444,13 +444,13 @@ class ObjectEvent:
     - `trainer_type == TRAINER_TYPE_NORMAL`: read as the LOS sight range in
       tiles, checked along the object's facing direction
       (engine/src/trainer_see.c:643-655, `GetTrainerApproachDistance`).
-    - `movement_type == MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE`: read as this
+    - `movement_type == MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE`: read as this
       project's custom Uranium route id
-      (`sUraniumRoutes[objectEvent->trainerRange_berryTreeId]`,
+      (`sRpg2gbaRoutes[objectEvent->trainerRange_berryTreeId]`,
       engine/src/event_object_movement.c:6251).
 
     These two uses collide on one field, so an object can never carry both a
-    nonzero `trainer_type` and `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` —
+    nonzero `trainer_type` and `MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE` —
     `__post_init__` fails loud on that combination rather than emitting a
     map.json where one meaning silently clobbers the other."""
 
@@ -474,7 +474,7 @@ class ObjectEvent:
                 f"{MOVEMENT_TYPE_CUSTOM_ROUTE!r} — both are backed by the same "
                 f"trainer_sight_or_berry_tree_id field (trainer_see.c "
                 f"GetTrainerApproachDistance vs event_object_movement.c "
-                f"sUraniumRoutes), so an object cannot be both a sight trainer "
+                f"sRpg2gbaRoutes), so an object cannot be both a sight trainer "
                 f"and a custom-route mover"
             )
 
@@ -3220,7 +3220,7 @@ def build_object_events(
 
             # Visible Trainer(N) battle trainer (see the module comment above
             # `_TRAINER_NAME_RE` and `ObjectEvent`'s docstring): only
-            # MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE genuinely collides with
+            # MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE genuinely collides with
             # trainer_sight_or_berry_tree_id (both are backed by that one
             # object_event template field — ObjectEvent.__post_init__'s
             # collision guard). Every vanilla movement type is safe to keep:
@@ -3257,7 +3257,7 @@ def build_object_events(
                     # allow_custom_route=False: the interpreter's route id and
                     # the trainer's sight radius are the same object_event
                     # template field, so a trainer can never keep
-                    # MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE regardless of whether
+                    # MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE regardless of whether
                     # encode_route could play the route verbatim. Skipping the
                     # interpreter attempt up front routes plain cardinal-step/
                     # turn routes straight to the native approximation
@@ -3279,7 +3279,7 @@ def build_object_events(
                                 f"{MOVEMENT_TYPE_CUSTOM_ROUTE!r} collides with "
                                 f"trainer_sight_or_berry_tree_id (both are "
                                 f"backed by the same object_event template "
-                                f"field — sUraniumRoutes vs the sight radius "
+                                f"field — sRpg2gbaRoutes vs the sight radius "
                                 f"trainer_see.c GetTrainerApproachDistance "
                                 f"needs)"
                             )

@@ -599,7 +599,7 @@ def _intercept_route_walker(emu: Emulator, beat: str, local_id: int,
     fastest frequency, and chasing its live position lost every race).
 
     The engine holds a non-skippable walker in place when its next step is
-    blocked (`MovementType_UraniumCustomRoute_Callback`), so a player on a
+    blocked (`MovementType_Rpg2gbaCustomRoute_Callback`), so a player on a
     step's `target` stops it one tile away, on that step's `origin`, facing
     the player. Through steps are skipped: they walk through the player.
     Candidates are tried nearest first; a cell the walker currently holds
@@ -698,7 +698,7 @@ def talk_to_moving_npc(emu: Emulator, beat: str, local_id: int, *,
                        route: Sequence[RouteStep] | None = None) -> None:
     """Interact with an NPC that does not stay where it spawned.
 
-    A `MOVEMENT_TYPE_URANIUM_CUSTOM_ROUTE` walker invalidates a derived
+    A `MOVEMENT_TYPE_RPG2GBA_CUSTOM_ROUTE` walker invalidates a derived
     approach cell the moment it steps off its template position, and it
     invalidates it in the worst way: the NPC ends up standing ON the
     approach cell while the player stands on the NPC's vacated spawn tile.

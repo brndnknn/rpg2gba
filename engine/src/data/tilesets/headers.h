@@ -1542,8 +1542,8 @@ const struct Tileset gTileset_HallOfFame =
 
 #endif // IS_FRLG
 
-// BEGIN URANIUM PATHFINDER SLICE — generated Tileset structs (rpg2gba)
-// uranium_tilesets.gen.h is pipeline-generated + gitignored (assemble_pathfinder.py S8a).
+// BEGIN RPG2GBA GAME PROFILE — generated Tileset structs (rpg2gba)
+// rpg2gba_tilesets.gen.h is pipeline-generated + gitignored (assemble_pathfinder.py S8a).
 // Placed after graphics.h + metatiles.h in tilesets.c, so the symbols it references exist.
-#include "uranium_tilesets.gen.h"
-// END URANIUM PATHFINDER SLICE
+#include "rpg2gba_tilesets.gen.h"
+// END RPG2GBA GAME PROFILE

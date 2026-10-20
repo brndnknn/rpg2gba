@@ -1212,13 +1212,13 @@ static const struct InGameTrade sIngameTrades[] =
         .sheen = 10,
         .requestedSpecies = SPECIES_PONYTA
     }
-// BEGIN URANIUM PATHFINDER SLICE — generated NPC-trade rows include-hook (rpg2gba; see engine/RPG2GBA_VENDOR.md).
-// The assembler always writes data/uranium_ingame_trade_table.gen.h (comment-only stub when no trades are staged).
+// BEGIN RPG2GBA GAME PROFILE — generated NPC-trade rows include-hook (rpg2gba; see engine/RPG2GBA_VENDOR.md).
+// The assembler always writes data/rpg2gba_ingame_trade_table.gen.h (comment-only stub when no trades are staged).
 // The comma closes the SEEL row; a trailing comma before `};` is legal C. Rows are [INGAME_TRADE_*] designated
 // initializers, so enum members supplied by constants/trade.h (above) line up by index.
     ,
-#include "uranium_ingame_trade_table.gen.h"
-// END URANIUM PATHFINDER SLICE
+#include "rpg2gba_ingame_trade_table.gen.h"
+// END RPG2GBA GAME PROFILE
 };
 
 static const u16 sIngameTradeMail[][MAIL_WORDS_COUNT + 1] =
