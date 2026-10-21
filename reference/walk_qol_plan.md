@@ -50,7 +50,8 @@ operator grill session on 2026-10-21.
 
 ## 3. Progress
 
-- **BUILT 2026-10-21; awaiting operator walk.**
+- **CLOSED 2026-10-21: operator walk passed; merged to `main`.**
+- BUILT 2026-10-21:
   - Engine (`RPG2GBA HARNESS`):
     - `struct Rpg2gbaWalkExtras` sits at the end of the embedded save
       (`include/rpg2gba_embedded_save.h`).

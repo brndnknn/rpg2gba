@@ -933,3 +933,6 @@ nothing in §1 touches.
 
   Carrying a save across builds (the rest of I6, with stable flag numbering)
   is not part of this branch.
+- **2026-10-21, walk QoL CLOSED (operator walk passed):** the CH06-end walk
+  ROM (`QOL-CH06-end.gba`) worked as planned; the branch is merged to `main`.
+  I1 is closed. I6 stays open for carrying a save across builds.
