@@ -92,7 +92,8 @@ overhang the water glitch.
 **I2b. Large boulders use the wrong palette.** The large boulders don't share
 the palette of the surrounding rocky terrain, so they look out of place.
 
-**Status:** I2a FIXED 2026-10-16 (§3). I2b researched (below); not yet discussed.
+**Status:** I2a FIXED 2026-10-16 (§3). I2b BUILT 2026-10-21 on branch
+`i2b-boulder-palette` (palette refit, §3 entry); awaiting the operator walk.
 
 #### Research (2026-10-16)
 
@@ -936,3 +937,26 @@ nothing in §1 touches.
 - **2026-10-21, walk QoL CLOSED (operator walk passed):** the CH06-end walk
   ROM (`QOL-CH06-end.gba`) worked as planned; the branch is merged to `main`.
   I1 is closed. I6 stays open for carrying a save across builds.
+- **2026-10-21, I2b BUILT (branch `i2b-boulder-palette`), operator picked
+  "refit pass" then "score against originals":**
+  - After packing, `quantize.refit_tiles` moves each packed 8x8 piece to the
+    palette that draws it best. Palettes never change. A piece moves only when
+    the new palette is no worse on both of two counts and better on one:
+    pixels drawn visibly off (more than one 5-bit step in a channel) and
+    summed squared error. Either count alone failed by eye: squared error
+    turned a brown ledge grey, and the bad-pixel count alone turned a fence
+    green.
+  - Tiles the game-wide tile merge put in for other art (`d = 24`, so a
+    stand-in can be a hue step off) are scored against the art they replaced.
+    `tile_merge` records it as `MetatileImage.merged_from`, the metatile dedup
+    keeps it, and `emit` hands it to the quantizer as `reference_tiles`.
+    Scoring a stand-in against itself is what made the ledge grey.
+  - On in the ROM (`rom_quantize.ROM_REFIT`) and the map viewer. Pinned
+    rock/green tiles never move.
+  - Measured against a refit-off build, per 16x16 cell vs source:
+    - Route 2: 201 better, 2 worse;
+    - Moki: 389 better, 3 worse;
+    - Route 1: 584 better, 7 worse.
+    The worse cells are at most about 1 point worse. Route 2's boulders are
+    tan again. CH08 498/498 from boot; pytest 5648 passed.
+  - Walk ROM `output/playtest-gen/walk/I2b-CH06-end.gba`.

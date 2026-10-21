@@ -29,7 +29,7 @@ import logging
 import time
 from collections import Counter
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -245,6 +245,7 @@ class MergeTable:
         # replacement must go into every frame too, or frame 0 alone changes and
         # emit sees a spurious animated slot (the I2a overhang glitch).
         frames = mt.frames  # copied on the first replacement only
+        merged_from = {k: list(v) for k, v in (mt.merged_from or {}).items()}
         for si, fr in enumerate(_slot_frames_for_metatile(mt)):
             fr = _effective_frames(fr)
             if len(fr) > 1 or all(int(f[..., 3].max()) == 0 for f in fr):
@@ -256,11 +257,12 @@ class MergeTable:
             rep = np.frombuffer(rk, dtype=np.uint8).reshape(8, 8, 4)
             q = _apply_flip(np.asarray(ORIENTS[o](rep), dtype=np.uint8), h, v)
             r, c = _POSITIONS[si % 4]
+            merged_from.setdefault(si, []).append(np.array(fr[0], dtype=np.uint8))
             if frames and frames is mt.frames:
                 frames = [(fb.copy(), ft.copy()) for fb, ft in mt.frames]
             for layer in [bot if si < 4 else top] + [f[0 if si < 4 else 1] for f in frames or []]:
                 layer[r:r + 8, c:c + 8] = q
-        out = MetatileImage(bot, top, mt.layer_type, mt.behavior, frames)
+        out = MetatileImage(bot, top, mt.layer_type, mt.behavior, frames, merged_from or None)
         if _static_slot_mask(out) != _static_slot_mask(mt):
             raise AssertionError(
                 "merge changed which quadrants are animated (static/animated slot "
@@ -366,7 +368,11 @@ def _mt_signature(mt: MetatileImage) -> tuple:
 
 def dedup_metatiles(mts: list[MetatileImage]) -> tuple[list[MetatileImage], list[int]]:
     """Lossless metatile merge: identical (bottom, top, all frames, behavior,
-    layer_type) collapse to the first occurrence; ``remap[old] = new``."""
+    layer_type) collapse to the first occurrence; ``remap[old] = new``.
+
+    The survivor keeps every collapsed copy's ``merged_from`` originals (a slot a copy
+    used as itself counts as its own original), so the palette refit still sees all
+    the art each tile is drawn for."""
     seen: dict[tuple, int] = {}
     unique: list[MetatileImage] = []
     remap: list[int] = []
@@ -376,8 +382,28 @@ def dedup_metatiles(mts: list[MetatileImage]) -> tuple[list[MetatileImage], list
         if idx is None:
             idx = seen[sig] = len(unique)
             unique.append(mt)
+        elif mt.merged_from or unique[idx].merged_from:
+            unique[idx] = _union_merged_from(unique[idx], mt)
         remap.append(idx)
     return unique, remap
+
+
+def _slot_originals(mt: MetatileImage, slot: int) -> list[np.ndarray]:
+    """The art a slot is drawn for: its merged originals, else its own quad."""
+    if mt.merged_from and slot in mt.merged_from:
+        return mt.merged_from[slot]
+    return [np.asarray(_slot_frames_for_metatile(mt)[slot][0], dtype=np.uint8)]
+
+
+def _union_merged_from(a: MetatileImage, b: MetatileImage) -> MetatileImage:
+    slots = set(a.merged_from or {}) | set(b.merged_from or {})
+    merged: dict[int, list[np.ndarray]] = {}
+    for s in sorted(slots):
+        seen: dict[bytes, np.ndarray] = {}
+        for q in _slot_originals(a, s) + _slot_originals(b, s):
+            seen.setdefault(q.tobytes(), q)
+        merged[s] = list(seen.values())
+    return replace(a, merged_from=merged)
 
 
 def merge_and_dedup_metatiles(

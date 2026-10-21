@@ -29,6 +29,7 @@ from rpg2gba.tileset_converter.graphics.quantize import (
     QuantizeResult,
     _dominant_family,
     quantize_tile_to_palette,
+    refit_tiles,
     resolve_alpha,
     to_5bit,
 )
@@ -174,9 +175,13 @@ def make_shared_quantizer(
     min_tiles: int = 8,
     rock_max_shift: int = 1,
     family_params: FamilyParams | None = None,
+    refit: bool = False,
 ) -> Callable[..., QuantizeResult]:
     """Wrap *base* so fixed rock / green palettes are reserved when a map uses enough
-    of that art.  ``.info`` on the returned callable holds the latest call's counts."""
+    of that art.  ``.info`` on the returned callable holds the latest call's counts.
+
+    With *refit*, tiles the packer placed (not the pinned rock/green tiles) then move
+    to whichever palette, shared ones included, draws them closest (`refit_tiles`)."""
     fparams = family_params or FamilyParams()
     info: dict = {}
 
@@ -185,6 +190,7 @@ def make_shared_quantizer(
         *,
         max_palettes: int = DEFAULT_MAX_PALETTES,
         extra_tile_colors: dict[int, np.ndarray] | None = None,
+        reference_tiles: dict[int, list[np.ndarray]] | None = None,
     ) -> QuantizeResult:
         n = len(tiles)
         tile_palette = [-1] * n
@@ -268,6 +274,14 @@ def make_shared_quantizer(
                 f"shared palettes produced {len(palettes)} palettes, over max {max_palettes}"
             )
 
+        result = QuantizeResult(
+            palettes=palettes, tile_palette=tile_palette, quantized=quantized,  # type: ignore[arg-type]
+            stats={"n_palettes": len(palettes)}, color_map=color_map,
+        )
+        if refit and rest:
+            refit_tiles(list(tiles), result, movable=rest, extra_tile_colors=extra_tile_colors,
+                        reference_tiles=reference_tiles)
+
         info.clear()
         info.update(
             n_rock=n_rock, n_green=n_green, rock_reserved=rock_reserved,
@@ -275,10 +289,8 @@ def make_shared_quantizer(
             packer_budget=budget,
         )
         logger.debug("shared palettes: %s", info)
-        return QuantizeResult(
-            palettes=palettes, tile_palette=tile_palette, quantized=quantized,  # type: ignore[arg-type]
-            stats={"n_palettes": len(palettes), **info}, color_map=color_map,
-        )
+        result.stats.update(info)
+        return result
 
     quantizer.info = info  # type: ignore[attr-defined]
     return quantizer

@@ -56,6 +56,7 @@ from rpg2gba.tileset_converter.graphics.quantize import (
 from rpg2gba.tileset_converter.graphics.raster import TileRasterizer, column_in_atlas
 from rpg2gba.tileset_converter.graphics.rom_quantize import (
     ROM_FAMILY_PARAMS,
+    ROM_REFIT,
     ROM_SHARED_PALETTES,
     ROM_TILE_MERGE,
 )
@@ -404,7 +405,7 @@ def _make_quantizer(*, shared: bool = False):
     ``shared=True`` wraps it with the P2 shared-palette reservation (per-map path only)."""
     base = partial(build_quantized_tileset_family, params=_family_params)
     if shared:
-        return make_shared_quantizer(base, family_params=_family_params)
+        return make_shared_quantizer(base, family_params=_family_params, refit=ROM_REFIT)
     return base
 
 
@@ -730,7 +731,7 @@ def _budget_probe(metatiles: list[MetatileImage], max_palettes: int, shared: boo
     from rpg2gba.tileset_converter.graphics.emit import emit_tileset
 
     base = partial(build_quantized_tileset_family, params=params)
-    q = make_shared_quantizer(base, family_params=params) if shared else base
+    q = make_shared_quantizer(base, family_params=params, refit=ROM_REFIT) if shared else base
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         em = emit_tileset(

@@ -22,6 +22,10 @@ from .shared_palettes import make_shared_quantizer
 
 ROM_FAMILY_PARAMS: FamilyParams = FamilyParams(reduction="ward")
 ROM_SHARED_PALETTES: bool = True
+# After packing, move each packed tile to the palette that draws it closest
+# (quantize.refit_tiles). Fixes pieces whose dominant colour fell in the wrong hue
+# family, e.g. Route 2's tan boulders drawn pink (intermission I2b, 2026-10-21).
+ROM_REFIT: bool = True
 # Game-wide near-duplicate tile merge (graphics/tile_merge.py, K 16 rock/green / 4 other)
 # + lossless metatile dedup, applied by build_slice_tilesets to every metatile of every
 # map. Operator-approved 2026-10-06 for all maps, to put Kevlar (31) +
@@ -53,5 +57,5 @@ def make_rom_quantizer() -> Callable[..., QuantizeResult]:
     Fresh per call because the shared wrapper records per-call ``.info``."""
     base = partial(build_quantized_tileset_family, params=ROM_FAMILY_PARAMS)
     if ROM_SHARED_PALETTES:
-        return make_shared_quantizer(base, family_params=ROM_FAMILY_PARAMS)
+        return make_shared_quantizer(base, family_params=ROM_FAMILY_PARAMS, refit=ROM_REFIT)
     return base

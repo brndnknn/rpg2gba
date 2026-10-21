@@ -264,3 +264,57 @@ def test_rep_for_unknown_key_raises():
         t.rep_for(b"\x00" * 256)
     with pytest.raises(KeyError, match="stale"):
         t.apply_metatile(_mt([_other(99)] * 4))
+
+
+def test_apply_metatile_records_the_replaced_originals():
+    """I2b: a replaced slot remembers the art it stood in for; untouched slots don't."""
+    base = _other(3)
+    near = _bump(base, 2)
+    table = tm.build_merge_table(
+        tm.collect_quads([(_mt([base] * 4), 100), (_mt([near] * 4), 1)]), PARAMS)
+    out = table.apply_metatile(_mt([near, base, near, base]))
+    assert out.merged_from is not None and sorted(out.merged_from) == [0, 2]
+    assert all(np.array_equal(o[0], near) for o in (out.merged_from[0], out.merged_from[2]))
+    assert table.apply_metatile(_mt([base] * 4)).merged_from is None
+
+
+def test_dedup_keeps_every_copys_originals():
+    """Two metatiles that merge to the same art collapse to one; the survivor keeps
+    both copies' originals, and a copy that used the stand-in as itself counts too."""
+    base = _other(3)
+    near = _bump(base, 2)
+    table = tm.build_merge_table(
+        tm.collect_quads([(_mt([base] * 4), 100), (_mt([near] * 4), 1)]), PARAMS)
+    unique, remap = tm.merge_and_dedup_metatiles(
+        [_mt([near] * 4), _mt([base] * 4)], table)
+    assert remap == [0, 0] and len(unique) == 1
+    kept = {o.tobytes() for o in unique[0].merged_from[0]}
+    assert kept == {near.tobytes(), base.tobytes()}
+
+
+def test_emit_passes_merged_originals_to_the_quantizer():
+    """emit hands the quantizer, per stand-in tile, the originals (canonical
+    orientation) plus the tile itself where a slot uses it unreplaced."""
+    from rpg2gba.tileset_converter.graphics.emit import _canonicalize_and_quantize
+    from rpg2gba.tileset_converter.graphics.quantize import build_quantized_tileset
+
+    base = _other(3)
+    near = _bump(base, 2)
+    table = tm.build_merge_table(
+        tm.collect_quads([(_mt([base] * 4), 100), (_mt([near] * 4), 1)]), PARAMS)
+    seen: dict = {}
+
+    def spy(tiles, **kw):
+        seen.update(kw)
+        return build_quantized_tileset(tiles, **kw)
+
+    mts = [table.apply_metatile(_mt([near, base, base, base]))]
+    _canonicalize_and_quantize(mts, quantizer=spy)
+    refs = seen["reference_tiles"]
+    assert len(refs) == 1
+    (got,) = refs.values()
+    assert {_canon(r)[0] for r in got} == {_canon(near)[0], _canon(base)[0]}
+
+    seen.clear()
+    _canonicalize_and_quantize([_mt([base] * 4)], quantizer=spy)
+    assert "reference_tiles" not in seen

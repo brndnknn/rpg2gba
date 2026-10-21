@@ -149,6 +149,7 @@ def make_pinned_quantizer(
         *,
         max_palettes: int = DEFAULT_MAX_PALETTES,
         extra_tile_colors: dict[int, np.ndarray] | None = None,
+        reference_tiles: dict[int, list[np.ndarray]] | None = None,  # unused: pinned is best-fit
     ) -> QuantizeResult:
         _check(max_palettes)
         n = len(tiles)

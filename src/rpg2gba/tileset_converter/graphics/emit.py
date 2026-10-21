@@ -90,6 +90,10 @@ class MetatileImage:
     # Animation frames 1..N-1 (frame 0 IS bottom/top above); None/[] = static.
     # Each entry is a (bottom, top) pair, same shape/dtype as bottom/top.
     frames: list[tuple[np.ndarray, np.ndarray]] | None = None
+    # Pre-merge art of the quadrant slots the game-wide tile merge replaced: slot
+    # (0-7) -> the original 8x8 RGBA quads it stands in for, in this metatile's
+    # orientation. Not drawn; the palette refit scores against it (I2b).
+    merged_from: dict[int, list[np.ndarray]] | None = None
 
 
 @dataclass
@@ -247,13 +251,19 @@ def _canonicalize_and_quantize(
     unique_canon: list[np.ndarray] = []
     canon_frames: list[list[np.ndarray]] = []
     metatile_slots: list[list[tuple[int, int, int]]] = []
+    # Per canon tile, the art it is drawn for (canonical orientation): its own pixels
+    # where a slot uses it as itself, the originals where the tile merge put it in
+    # for other art (`MetatileImage.merged_from`). Only passed to the quantizer when
+    # some tile stands in for merged art.
+    refs: dict[int, dict[bytes, np.ndarray]] = {}
+    stands_in: set[int] = set()
 
     for mt in metatiles:
         per_slot_frames = _slot_frames_for_metatile(mt)
         if len(per_slot_frames) != 8:
             raise AssertionError("expected 8 quadrants per metatile")
         slots: list[tuple[int, int, int]] = []
-        for frame_list in per_slot_frames:
+        for si, frame_list in enumerate(per_slot_frames):
             frame_list = _effective_frames(frame_list)
             key, transformed, h, v = _flip_canonical_multi(frame_list)
             idx = canon_to_idx.get(key)
@@ -263,7 +273,17 @@ def _canonicalize_and_quantize(
                 unique_canon.append(transformed[0])
                 canon_frames.append(transformed)
             slots.append((idx, h, v))
+            bucket = refs.setdefault(idx, {})
+            originals = (mt.merged_from or {}).get(si)
+            if originals:
+                stands_in.add(idx)
+                for o in originals:
+                    oc = _apply_flip(np.asarray(o, dtype=np.uint8), h, v)
+                    bucket.setdefault(oc.tobytes(), oc)
+            else:
+                bucket.setdefault(transformed[0].tobytes(), transformed[0])
         metatile_slots.append(slots)
+    reference_tiles = {i: list(refs[i].values()) for i in sorted(stands_in)}
 
     extra_tile_colors: dict[int, np.ndarray] = {}
     for i, frames in enumerate(canon_frames):
@@ -276,6 +296,7 @@ def _canonicalize_and_quantize(
     quant = quantizer(
         unique_canon, max_palettes=max_palettes,
         extra_tile_colors=extra_tile_colors or None,
+        **({"reference_tiles": reference_tiles} if reference_tiles else {}),
     )
     return unique_canon, metatile_slots, quant, canon_frames
 

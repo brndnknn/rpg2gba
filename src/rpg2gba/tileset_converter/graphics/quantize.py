@@ -139,6 +139,122 @@ def quantize_tile_to_palette(tile: np.ndarray, palette: np.ndarray) -> np.ndarra
     return out
 
 
+def _tile_color_map(
+    tile: np.ndarray, out: np.ndarray
+) -> list[tuple[tuple[int, int, int], tuple[int, int, int]]]:
+    """(orig_rgb8, final_rgb8) over a tile's distinct opaque colours; see QuantizeResult."""
+    res = resolve_alpha(tile)
+    op = res[..., 3] == 255
+    orig8 = res[..., :3][op]
+    uniq, idx = np.unique(orig8, axis=0, return_index=True)
+    finals = out[..., :3][op][idx]
+    return [
+        (tuple(int(v) for v in o), tuple(int(v) for v in f))  # type: ignore[misc]
+        for o, f in zip(uniq, finals)
+    ]
+
+
+REFIT_MAX_SHIFT = 1  # a pixel more than this many 5-bit steps off in any channel is visibly off
+
+
+def _palette_fit(
+    px5: np.ndarray, palette: np.ndarray, targets: list[np.ndarray] | None = None
+) -> tuple[int, int]:
+    """(visibly-off pixel count, summed squared error) of colours `px5` (N,3, 5-bit
+    units) snapped to their nearest `palette` colour, measured against `px5` itself
+    or, when given, against each of `targets` (N,3 arrays aligned with `px5`)."""
+    p5 = palette.astype(np.int32) >> 3
+    d = px5[:, None, :] - p5[None, :, :]
+    snapped = p5[(d ** 2).sum(2).argmin(1)]
+    bad = sse = 0
+    for t in targets if targets is not None else [px5]:
+        diff = np.abs(t - snapped)
+        bad += int((diff.max(1) > REFIT_MAX_SHIFT).sum())
+        sse += int((diff ** 2).sum())
+    return bad, sse
+
+
+def refit_tiles(
+    tiles: list[np.ndarray],
+    result: QuantizeResult,
+    *,
+    movable: list[int] | None = None,
+    extra_tile_colors: dict[int, np.ndarray] | None = None,
+    reference_tiles: dict[int, list[np.ndarray]] | None = None,
+) -> QuantizeResult:
+    """Move each tile to the palette that draws it with the least error (I2b).
+
+    Packing assigns tiles to palettes by family and colour-set overlap, never by how
+    well the finished palette draws them; a piece whose dominant colour lands in the
+    wrong hue family (the shaded quarters of a tan boulder classed "red") is snapped
+    to a palette with no tan ramp. This pass leaves the palettes untouched and moves
+    a tile only when another palette is no worse on both of two counts and better on
+    one: pixels drawn visibly off (more than `REFIT_MAX_SHIFT` 5-bit steps in a
+    channel) and summed squared error, over its pixels plus its later animation
+    frames' colours. Either count alone misleads by eye: squared error trades a whole
+    tile's main colour shifting a hue step for a few outlier pixels (a brown ledge
+    went grey), and a bad-pixel count can flip on two pixels while the error triples
+    (a fence went green).
+    `reference_tiles` (index -> 8x8 RGBA arrays) names the art a tile is really drawn
+    for when the game-wide tile merge made it stand in for other quads: the tile's
+    pixels, snapped to a palette, are scored against each of those instead of against
+    themselves. Otherwise a stand-in that is a hue step off its originals gets
+    "fixed" toward itself and away from them (Route 2's ledge went grey).
+    `movable` limits which tiles may move (default: all non-empty tiles). Mutates and
+    returns `result`."""
+    pal_list = [np.asarray(p) for p in result.palettes]
+    if len(pal_list) < 2:
+        return result
+    idxs = range(len(tiles)) if movable is None else movable
+    moved = 0
+    for i in idxs:
+        cur = result.tile_palette[i]
+        if cur < 0:
+            continue
+        res = resolve_alpha(tiles[i])
+        op = res[..., 3] == 255
+        if not op.any():
+            continue
+        px5 = (to_5bit(res[..., :3][op]) >> 3).astype(np.int32)
+        refs = reference_tiles.get(i) if reference_tiles else None
+        targets = (
+            None if not refs
+            else [(to_5bit(np.asarray(r)[..., :3][op]) >> 3).astype(np.int32) for r in refs]
+        )
+        extra = extra_tile_colors.get(i) if extra_tile_colors else None
+        extra5 = (
+            np.asarray(extra, np.int32) >> 3 if extra is not None and len(extra) else None
+        )
+
+        def fit(p: np.ndarray) -> tuple[int, int]:
+            bad, sse = _palette_fit(px5, p, targets)
+            if extra5 is not None:
+                eb, es = _palette_fit(extra5, p)
+                bad, sse = bad + eb, sse + es
+            return bad, sse
+
+        fits = [fit(p) if len(p) else None for p in pal_list]
+        cb, cs = fits[cur]  # type: ignore[misc]
+        # Only a palette at least as good on BOTH counts, and better on one, may win:
+        # never trade visibly-off pixels against squared error in either direction.
+        better = [
+            pi for pi, f in enumerate(fits)
+            if f is not None and pi != cur and f[0] <= cb and f[1] <= cs and f != (cb, cs)
+        ]
+        if not better:
+            continue
+        best = min(better, key=lambda pi: (fits[pi], pi))
+        out = quantize_tile_to_palette(tiles[i], pal_list[best])
+        result.tile_palette[i] = best
+        result.quantized[i] = out
+        result.color_map[i] = _tile_color_map(tiles[i], out)
+        moved += 1
+    if moved:
+        logger.debug("refit moved %d tile(s) to a closer palette", moved)
+    result.stats["refit_moved"] = result.stats.get("refit_moved", 0) + moved
+    return result
+
+
 def _split_boxes(pixels: np.ndarray, k: int) -> list[np.ndarray]:
     """Median-cut (N,3) uint8 pixels into <=k boxes (population-balanced splits)."""
     pixels = to_5bit(pixels)
@@ -240,6 +356,7 @@ def build_quantized_tileset(
     iterations: int = 8,
     extra_tile_colors: dict[int, np.ndarray] | None = None,
     reduction: str = "median_cut",
+    reference_tiles: dict[int, list[np.ndarray]] | None = None,
 ) -> QuantizeResult:
     """Quantize a list of 8x8 RGBA tiles into <=`max_palettes` GBA sub-palettes.
 
@@ -279,7 +396,7 @@ def build_quantized_tileset(
     in it (emit.py then quantizes each extra frame against that palette separately).
     Returns the sub-palettes, per-tile palette index (-1 = empty tile), the remapped
     RGBA tiles, and loss stats."""
-    _ = (weights, iterations)  # retained for API compatibility
+    _ = (weights, iterations, reference_tiles)  # API compatibility; refs serve refit_tiles only
     if reduction not in _REDUCTIONS:
         raise ValueError(f"unknown reduction {reduction!r}; expected one of {_REDUCTIONS}")
     resolved = [resolve_alpha(t) for t in tiles]
@@ -579,6 +696,7 @@ def build_quantized_tileset_family(
     tiles: list[np.ndarray], *, max_palettes: int = DEFAULT_MAX_PALETTES,
     params: FamilyParams | None = None,
     extra_tile_colors: dict[int, np.ndarray] | None = None,
+    reference_tiles: dict[int, list[np.ndarray]] | None = None,
 ) -> QuantizeResult:
     """Partition tiles by their dominant hue family, pour the palette budget into the
     families that overflow most, pack each family with the global packer.
@@ -589,6 +707,7 @@ def build_quantized_tileset_family(
     (index -> extra 5-bit opaque colours, e.g. an animated tile's later frames) widens
     that tile's family-distinct-colour count for budget allocation and is forwarded
     into its family's `build_quantized_tileset` call so the assigned palette covers it."""
+    _ = reference_tiles  # packing ignores them; they serve refit_tiles only
     params = params or FamilyParams()
     n = len(tiles)
     fam_of = [_dominant_family(t, params) for t in tiles]
