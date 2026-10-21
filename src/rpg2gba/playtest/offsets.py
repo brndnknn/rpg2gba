@@ -79,6 +79,14 @@ _PROBE_ENTRIES: dict[str, str] = {
     "off_es_sb3": "offsetof(struct Rpg2gbaEmbeddedSave, sb3)",
     "off_es_storage": "offsetof(struct Rpg2gbaEmbeddedSave, storage)",
     "sizeof_es": "sizeof(struct Rpg2gbaEmbeddedSave)",
+    # Walk-ROM extras (reference/walk_qol_plan.md): filled by `playtest walk`.
+    "off_es_walk": "offsetof(struct Rpg2gbaEmbeddedSave, walk)",
+    "off_walk_romid": "offsetof(struct Rpg2gbaWalkExtras, romId)",
+    "off_walk_expshare": "offsetof(struct Rpg2gbaWalkExtras, expShare)",
+    "off_walk_grantcount": "offsetof(struct Rpg2gbaWalkExtras, grantCount)",
+    "off_walk_grants": "offsetof(struct Rpg2gbaWalkExtras, grants)",
+    "sizeof_walk": "sizeof(struct Rpg2gbaWalkExtras)",
+    "val_walk_grant_max": "RPG2GBA_WALK_GRANT_MAX",
     "sizeof_sb1": "sizeof(struct SaveBlock1)",
     "sizeof_sb2": "sizeof(struct SaveBlock2)",
     "sizeof_sb3": "sizeof(struct SaveBlock3)",
@@ -378,6 +386,7 @@ _CONSTANT_PROBE_TEMPLATE = """\
 #include "constants/event_object_movement.h"
 #include "constants/songs.h"
 #include "constants/script_menu.h"
+#include "constants/species.h"
 {entries}
 """
 

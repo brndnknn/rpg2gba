@@ -98,6 +98,12 @@ DAY_NIGHT = EngineObligation(
 
 OBLIGATIONS: tuple[EngineObligation, ...] = (DAY_NIGHT,)
 
-# Empty since 2026-10-13: the FLAG_BADGE03_GET Rock Smash rig was removed when
-# field_move.c took Uranium's badge-count HM gates.
-HARNESS_ONLY: tuple[HarnessOnlyWrite, ...] = ()
+# The FLAG_BADGE03_GET Rock Smash rig that stood here was removed 2026-10-13,
+# when field_move.c took Uranium's badge-count HM gates.
+HARNESS_ONLY: tuple[HarnessOnlyWrite, ...] = (
+    HarnessOnlyWrite(
+        write=EngineWrite("FlagSet", "FLAG_RPG2GBA_EXP_SHARE", "Rpg2gbaEmbeddedSave_TryLoad"),
+        reason="walk ROMs turn on party-wide EXP Share on a seed boot "
+               "(reference/walk_qol_plan.md); suite runs never set it",
+    ),
+)

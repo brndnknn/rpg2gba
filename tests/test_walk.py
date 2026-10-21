@@ -35,6 +35,38 @@ OFFSETS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def stub_walk_extras(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
+    """These tests use a fake engine dir, which the walk-extras step can't
+    probe. Record its calls instead; tests/test_walk_extras.py covers it."""
+    from rpg2gba.playtest import walk_extras
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(walk_extras, "plan_extras",
+                        lambda chapter, at_beat, *, grant, exp_share:
+                        ("plan", at_beat, grant, exp_share))
+    monkeypatch.setattr(walk_extras, "patch_extras",
+                        lambda rom, engine, extras: calls.append(("patch", rom, extras)))
+    monkeypatch.setattr(walk_extras, "verify_extras",
+                        lambda rom, engine, extras, *, boot_frames:
+                        calls.append(("verify", rom, extras)))
+    return calls
+
+
+def test_build_walk_rom_adds_walk_extras_to_the_built_rom(
+        tmp_path: Path, stub_walk_extras: list[tuple]) -> None:
+    chapter = three_beat_chapter()
+    rom = make_rom(tmp_path / "rom.gba", ROM_SIZE)
+    out = tmp_path / "out"
+    write_beat_seed(out / "blobs", chapter.name, "B1", rom)
+    walk_out = tmp_path / "w.gba"
+
+    walk.build_walk_rom(out, chapter, rom, tmp_path / "engine", at_beat="B1",
+                        out=walk_out, verify=False, grant=False)
+
+    assert stub_walk_extras == [("patch", walk_out, ("plan", "B1", False, True))]
+
+
 def make_blob(fill: int = 0xAB) -> bytes:
     blocks = {name: bytes([fill]) * 4 for name in ("sb1", "sb2", "sb3", "storage")}
     return build_blob(OFFSETS, blocks)

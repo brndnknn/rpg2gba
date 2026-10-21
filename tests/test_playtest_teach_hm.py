@@ -1,6 +1,10 @@
 """Integration test: teach HM06 (Rock Smash) through the real bag/party UI on
 the CH07 walk ROM (party = one starter with 3 moves, HM06 in the bag).
-Skips when mgba, the ROM, or the engine build artifacts are absent."""
+Skips when mgba, the ROM, or the engine build artifacts are absent.
+
+Build the fixture without walk extras, so the party stays the suite's:
+`rpg2gba playtest walk --chapter CH08 --at-beat CH07:m035seamN040_transit
+--output output/playtest-gen --no-grant --no-exp-share`."""
 from __future__ import annotations
 
 import importlib.util

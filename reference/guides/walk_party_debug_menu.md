@@ -61,6 +61,13 @@ next id. Regenerate with `python output/scratch/species_ids.py`, or read
 
 ## Limits
 
-- **Walk ROMs reset on every boot** (I6): the embedded save loads before the
-  `.sav`, so a party built this way lasts until you power off.
+- **Save in-game to keep it.** Since 2026-10-21 (`reference/walk_qol_plan.md`)
+  a walk ROM continues an in-game save made on that same ROM. A save from any
+  other ROM or build is ignored and the walk's built-in state loads instead,
+  so a new walk ROM starts over.
+- Walk ROMs also come with every species catchable so far (party, then PC)
+  and party-wide EXP Share; `playtest walk --no-grant` / `--no-exp-share` turn
+  them off.
+- Stock species outside the game's kept families show "Species Disabled"
+  (I3 species profile).
 - A species whose data is missing shows "Species Disabled" and can't be given.

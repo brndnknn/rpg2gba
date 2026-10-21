@@ -639,7 +639,9 @@ at the `.sav` (`new_game.c:359-387`). That was deliberate: it fixed the
 2026-08-01 bug where an old `.sav` hijacked the walk. The consequence is that
 **saving on a walk ROM does nothing useful.** Every boot returns to the
 stamped point. So today the operator *cannot* carry progress forward even
-within one ROM.
+within one ROM. *(Fixed within one ROM on 2026-10-21, branch
+`walk-quality-of-life-upgrades`: a walk ROM's own in-game save now continues.
+Across builds is still open. See `reference/walk_qol_plan.md`.)*
 
 **2. A rebuild can silently change what saved data means.** The pokeemerald
 save has no version field. A `.sav` loads if every sector's signature and
@@ -920,3 +922,14 @@ nothing in §1 touches.
     pipeline is its own task; four other 3+-option Show Choices could use
     `dynmultichoice`; the engine's `SaveBlock1 is backwards compatible` test
     still fails (pre-existing).
+- **2026-10-21, I1 + I6 narrowed (operator grill session):** branch
+  `walk-quality-of-life-upgrades`, plan `reference/walk_qol_plan.md`. Three
+  walk-ROM upgrades:
+  - an in-game save made on a walk ROM continues on that same ROM (a ROM id
+    match; a save from any other ROM still loses to the seed);
+  - every species catchable in the maps passed so far is granted at the
+    party's top level, party first then PC;
+  - party-wide EXP Share.
+
+  Carrying a save across builds (the rest of I6, with stable flag numbering)
+  is not part of this branch.

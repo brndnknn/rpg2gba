@@ -137,9 +137,14 @@ def run(chapter: str, from_beat: str | None, rom: Path | None, engine: Path,
 @click.option("--suite", type=click.Choice(["hand", "gen"]), default="gen",
               show_default=True, help="Load the chapter from the hand-written "
                    "or beat-gen-generated module suite.")
+@click.option("--grant/--no-grant", default=True, show_default=True,
+              help="Give every species catchable in the maps passed so far "
+                   "(party first, then PC) on boot.")
+@click.option("--exp-share/--no-exp-share", default=True, show_default=True,
+              help="Turn on party-wide EXP Share in the walk ROM.")
 def walk_cmd(chapter: str, at_beat: str | None, at_end: bool, rom: Path | None,
              engine: Path, output: Path | None, out: Path | None,
-             verify: bool, suite: str) -> None:
+             verify: bool, suite: str, grant: bool, exp_share: bool) -> None:
     """Build a bootable ROM positioned at a chosen point in a chapter.
 
     Patches an embedded-save seed blob into a copy of the pristine ROM so it
@@ -167,8 +172,9 @@ def walk_cmd(chapter: str, at_beat: str | None, at_end: bool, rom: Path | None,
     try:
         chap = load_chapter(chapter, suite=suite)
         seed = walk.build_walk_rom(output, chap, rom, engine, at_beat=at_beat,
-                                    at_end=at_end, out=out, verify=verify)
-    except (KeyError, RunnerError) as exc:
+                                    at_end=at_end, out=out, verify=verify,
+                                    grant=grant, exp_share=exp_share)
+    except (KeyError, RunnerError, ValueError, FileNotFoundError) as exc:
         click.echo(f"error: {exc}", err=True)
         sys.exit(2)
 

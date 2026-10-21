@@ -333,8 +333,10 @@ void CB2_StartRpg2gbaHarness(void)
     // still falls through to the flash save below and a player keeps their
     // in-game saves across launches. Pristine ROM + empty flash falls through
     // to the new-game boot — the regression harness always runs that path.
-    // (Consequence, by design: on a stamped ROM an in-game save is inert —
-    // the next boot returns to the stamped state, not to where you saved.)
+    // Exception (2026-10-21, reference/walk_qol_plan.md): a walk ROM carries a
+    // random id, and an in-game save made on that same ROM carries it too, so
+    // TryLoad() returns FALSE for it and the player's own save continues. A
+    // save from any other ROM still loses to the blob.
     // CB2_InitCopyrightScreenAfterBootup already ran LoadGameSave(SAVE_NORMAL)
     // before handing control here, so a valid flash save is already sitting in
     // the save blocks; TryLoad() overwrites it in place.

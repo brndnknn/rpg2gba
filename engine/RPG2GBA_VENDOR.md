@@ -94,6 +94,13 @@ sentinels were retired in S6; every block was reassigned to one of the above.
 - `RPG2GBA_MAP_WALKER` (default `FALSE`): the Map Walker debug ROM; requires
   the harness.
 
+Walk ROMs add three things to the embedded save (`struct Rpg2gbaWalkExtras`,
+`reference/walk_qol_plan.md`): a ROM id, so an in-game save made on that ROM
+continues on the next boot; species to give on boot; and party-wide EXP Share,
+via `FLAG_RPG2GBA_EXP_SHARE` (stock `FLAG_UNUSED_0x020`, wired to
+`I_EXP_SHARE_FLAG` in `config/item.h`). The id is kept in SaveBlock2's unused
+`filler_90`.
+
 ### Orientation (not an inventory) of the feature areas
 
 A map into the diff, not a substitute for it; check the diff before reverting

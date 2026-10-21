@@ -17,6 +17,24 @@
 // nonzero magic means a stamper wrote it.
 #define RPG2GBA_EMBEDDED_SAVE_MAGIC 0x534E5255
 
+// Most species a walk ROM can grant on boot.
+#define RPG2GBA_WALK_GRANT_MAX 128
+
+struct Rpg2gbaWalkExtras
+{
+    // Random per walk ROM; 0 = none. Copied into SaveBlock2 on a blob boot so
+    // an in-game save carries it. A flash save holding this ROM's id is the
+    // player's own save on this ROM, and boots instead of the blob.
+    u32 romId;
+    // Nonzero: set FLAG_RPG2GBA_EXP_SHARE (party-wide EXP Share) on a blob boot.
+    u8 expShare;
+    u8 padding;
+    // Species given on a blob boot at the party's top level, party first then
+    // PC; species the player already owns are skipped.
+    u16 grantCount;
+    u16 grants[RPG2GBA_WALK_GRANT_MAX];
+};
+
 struct Rpg2gbaEmbeddedSave
 {
     u32 magic;
@@ -32,6 +50,10 @@ struct Rpg2gbaEmbeddedSave
     struct SaveBlock2 sb2;
     struct SaveBlock3 sb3;
     struct PokemonStorage storage;
+    // Walk-ROM extras (reference/walk_qol_plan.md). Zero in a captured blob
+    // and on suite/review ROMs; `playtest walk` fills them when it builds a
+    // walk ROM, so they are not part of any sha-keyed seed.
+    struct Rpg2gbaWalkExtras walk;
 };
 
 // volatile is load-bearing: the pristine ROM links this blob zero-filled, and
@@ -42,7 +64,8 @@ struct Rpg2gbaEmbeddedSave
 extern const volatile struct Rpg2gbaEmbeddedSave gRpg2gbaEmbeddedSave;
 
 // Returns TRUE if a stamped state was found and copied into the live save
-// blocks (party/objects synced, gSaveFileStatus set); FALSE on pristine ROM.
+// blocks (party/objects synced, gSaveFileStatus set); FALSE on pristine ROM,
+// or when the flash save already loaded is this walk ROM's own save.
 bool32 Rpg2gbaEmbeddedSave_TryLoad(void);
 
 // END RPG2GBA HARNESS

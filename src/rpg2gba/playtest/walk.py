@@ -241,13 +241,19 @@ def resolve_seed(output_root: Path, chapter: Chapter, rom: Path, *,
 
 def build_walk_rom(output_root: Path, chapter: Chapter, rom: Path, engine: Path, *,
                     at_beat: str | None = None, at_end: bool = False, out: Path,
-                    verify: bool = True) -> Seed:
+                    verify: bool = True, grant: bool = True,
+                    exp_share: bool = True) -> Seed:
     """Resolve a seed and write a bootable ROM for it at `out`.
 
     A "beat" seed is patched into a copy of `rom`; a "chapter-complete" seed
     is already a stamped ROM and is copied as-is. When `verify`, the result
     is re-booted with a deliberately foreign `.sav` paired to prove the
-    embedded blob wins over save residue (the invariant `stamp.py` pins)."""
+    embedded blob wins over save residue (the invariant `stamp.py` pins).
+
+    Walk extras (`walk_extras`, `reference/walk_qol_plan.md`) are then written
+    into the copy: a random ROM id so the player's own in-game save on this
+    ROM survives a reboot, the species catchable so far (`grant`), and
+    party-wide EXP Share (`exp_share`)."""
     seed = resolve_seed(output_root, chapter, rom, at_beat=at_beat, at_end=at_end)
     out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -262,6 +268,13 @@ def build_walk_rom(output_root: Path, chapter: Chapter, rom: Path, engine: Path,
     else:
         raise runner.RunnerError(f"unknown seed kind {seed.kind!r}")
 
+    from . import walk_extras
+
+    extras = walk_extras.plan_extras(
+        chapter, seed.beat if seed.kind == "beat" else None,
+        grant=grant, exp_share=exp_share)
+    walk_extras.patch_extras(out, engine, extras)
+
     logger.info("[%s] walk ROM (%s): %s", chapter.name, seed.kind, out)
 
     if verify:
@@ -269,5 +282,7 @@ def build_walk_rom(output_root: Path, chapter: Chapter, rom: Path, engine: Path,
 
         verify_stamped_rom(out, engine, seed.map_location, seed.player_pos,
                             boot_frames=runner.SEEDED_BOOT_FRAMES)
+        walk_extras.verify_extras(out, engine, extras,
+                                  boot_frames=runner.SEEDED_BOOT_FRAMES)
 
     return seed

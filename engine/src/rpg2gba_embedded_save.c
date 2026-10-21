@@ -8,6 +8,10 @@
 #include "save.h"
 #include "gpu_regs.h"
 #include "pokemon_storage_system.h"
+#include "event_data.h"
+#include "pokemon.h"
+#include "script_pokemon_util.h"
+#include "constants/items.h"
 #include "constants/rgb.h"
 
 // Zero-filled in a pristine build; the stamper rewrites these bytes in the
@@ -40,8 +44,63 @@ static void FailLoud(void)
         ;
 }
 
+// The walk ROM id rides in SaveBlock2's unused filler_90 bytes, so an in-game
+// save made on a walk ROM carries the id of the ROM it was made on.
+static u32 *SavedWalkRomId(void)
+{
+    return (u32 *)gSaveBlock2Ptr->filler_90;
+}
+
+static bool32 PlayerOwnsSpecies(u16 species)
+{
+    u32 i, box, pos;
+
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES) == species)
+            return TRUE;
+    }
+    for (box = 0; box < TOTAL_BOXES_COUNT; box++)
+    {
+        for (pos = 0; pos < IN_BOX_COUNT; pos++)
+        {
+            if (GetBoxMonDataAt(box, pos, MON_DATA_SPECIES) == species)
+                return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+// Gives each listed species the player doesn't own yet, at the party's top
+// level: party slots first, then the PC (ScriptGiveMon routes it, and marks
+// the Pokédex caught as a scripted gift would).
+static void GrantWalkSpecies(void)
+{
+    u32 i, count = gRpg2gbaEmbeddedSave.walk.grantCount;
+    u8 level = 1;
+
+    if (count > RPG2GBA_WALK_GRANT_MAX)
+        FailLoud();
+    for (i = 0; i < PARTY_SIZE; i++)
+    {
+        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES) != SPECIES_NONE
+         && GetMonData(&gPlayerParty[i], MON_DATA_LEVEL) > level)
+            level = GetMonData(&gPlayerParty[i], MON_DATA_LEVEL);
+    }
+    for (i = 0; i < count; i++)
+    {
+        u16 species = gRpg2gbaEmbeddedSave.walk.grants[i];
+
+        if (species == SPECIES_NONE || PlayerOwnsSpecies(species))
+            continue;
+        ScriptGiveMon(species, level, ITEM_NONE);
+    }
+}
+
 bool32 Rpg2gbaEmbeddedSave_TryLoad(void)
 {
+    u32 romId;
+
     if (gRpg2gbaEmbeddedSave.magic == 0)
         return FALSE;
     if (gRpg2gbaEmbeddedSave.magic != RPG2GBA_EMBEDDED_SAVE_MAGIC
@@ -50,6 +109,14 @@ bool32 Rpg2gbaEmbeddedSave_TryLoad(void)
      || gRpg2gbaEmbeddedSave.sb3Size != sizeof(struct SaveBlock3)
      || gRpg2gbaEmbeddedSave.storageSize != sizeof(struct PokemonStorage))
         FailLoud();
+
+    // The player's own save on this walk ROM wins over the blob. LoadGameSave
+    // already put any valid flash save in the save blocks; only a save holding
+    // this ROM's id counts, so a .sav left by another build or another walk
+    // ROM still loses to the blob (the 2026-08-01 stale-save protection).
+    romId = gRpg2gbaEmbeddedSave.walk.romId;
+    if (romId != 0 && gSaveFileStatus == SAVE_STATUS_OK && *SavedWalkRomId() == romId)
+        return FALSE;
 
     CopyFromBlob(gSaveBlock1Ptr, &gRpg2gbaEmbeddedSave.sb1, sizeof(struct SaveBlock1));
     CopyFromBlob(gSaveBlock2Ptr, &gRpg2gbaEmbeddedSave.sb2, sizeof(struct SaveBlock2));
@@ -60,6 +127,11 @@ bool32 Rpg2gbaEmbeddedSave_TryLoad(void)
     // globals.
     CopyPartyAndObjectsFromSave();
     gSaveFileStatus = SAVE_STATUS_OK;
+
+    *SavedWalkRomId() = romId;
+    if (gRpg2gbaEmbeddedSave.walk.expShare && FLAG_RPG2GBA_EXP_SHARE != 0)
+        FlagSet(FLAG_RPG2GBA_EXP_SHARE);
+    GrantWalkSpecies();
     return TRUE;
 }
 
