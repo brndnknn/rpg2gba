@@ -92,8 +92,8 @@ overhang the water glitch.
 **I2b. Large boulders use the wrong palette.** The large boulders don't share
 the palette of the surrounding rocky terrain, so they look out of place.
 
-**Status:** I2a FIXED 2026-10-16 (§3). I2b BUILT 2026-10-21 on branch
-`i2b-boulder-palette` (palette refit, §3 entry); awaiting the operator walk.
+**Status:** I2a FIXED 2026-10-16 (§3). I2b CLOSED 2026-10-21 (palette refit,
+§3 entry; operator walk passed, merged to `main`).
 
 #### Research (2026-10-16)
 
@@ -960,3 +960,5 @@ nothing in §1 touches.
     The worse cells are at most about 1 point worse. Route 2's boulders are
     tan again. CH08 498/498 from boot; pytest 5648 passed.
   - Walk ROM `output/playtest-gen/walk/I2b-CH06-end.gba`.
+- **2026-10-21, I2b CLOSED:** operator walk of `I2b-CH06-end.gba` passed;
+  branch `i2b-boulder-palette` merged to `main`.
