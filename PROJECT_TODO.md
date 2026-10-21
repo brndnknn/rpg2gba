@@ -17,6 +17,20 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 152. Two small Uranium leftovers in tracked engine code (I3 S7 audit)
+
+Filed 2026-10-21 at the I3 gate. The S7 audit of `git diff 80cdfce2 HEAD -- engine/` found
+nothing hand-typed that the build actually uses, apart from S3's ruled ability-behaviour C.
+Two tidy-ups remain, neither of which changes the Uranium build:
+- `include/constants/opponents.h`: the `#else` fallback for `TRAINERS_COUNT_EMERALD` (1189 /
+  1280) is stock + Uranium's 331 trainers. The generated `rpg2gba_sizes.gen.h` always
+  overrides it, but a stock build should fall back to stock values. Its stale
+  "854 + 331 = 1185" comment goes too.
+- `src/data/object_events/object_event_graphics_info_pointers.h`: the Brendan rows name
+  `gObjectEventGraphicsInfo_UraniumPlayerNormal` / `...FieldMove` directly. A neutral
+  `Rpg2gba*` alias defined in the generated decls header would keep game names out of
+  the engine.
+
 ### 151. Map viewer / oracle don't read the streamed tileset format or the windowed grid
 
 Filed 2026-10-18 when I4 closed (operator: backlog it). Streamed tilesets (`reference/streamed_maps.json`:

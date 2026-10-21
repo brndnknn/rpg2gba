@@ -32,7 +32,7 @@ without fighting.
 
 so that a walk doesn't stall on healing, Pokémon Center trips, or lost battles.
 
-**Status:** researched 2026-10-16 (below); not yet discussed.
+**Status:** answered for now by the debug menu (2026-10-16, §3); I6 is the fuller answer.
 
 #### Research (2026-10-16)
 
@@ -92,7 +92,7 @@ overhang the water glitch.
 **I2b. Large boulders use the wrong palette.** The large boulders don't share
 the palette of the surrounding rocky terrain, so they look out of place.
 
-**Status:** researched 2026-10-16 (below); not yet discussed.
+**Status:** I2a FIXED 2026-10-16 (§3). I2b researched (below); not yet discussed.
 
 #### Research (2026-10-16)
 
@@ -236,7 +236,7 @@ between acts.
 **Status:** researched 2026-10-16 (below). Deep-dive 2026-10-19, together with
 I5: options, layering and open questions are in
 `reference/engine_layers_i3_i5.md`, with evidence in
-`reference/findings/rom_ledger_2026-10-19.md`. Not yet decided.
+`reference/findings/rom_ledger_2026-10-19.md`. **CLOSED 2026-10-21** (built and merged; §3).
 
 #### Research (2026-10-16)
 
@@ -291,7 +291,7 @@ the player moves? That is how open-world games such as GTA or Breath of the
 Wild stream a huge world without loading all of it. Is this possible at all on
 GBA hardware, knowing it would be a much bigger engine change?
 
-**Status:** researched 2026-10-16 (below); not yet discussed.
+**Status:** **CLOSED 2026-10-18** (built and merged; §3).
 
 #### Research (2026-10-16)
 
@@ -534,7 +534,7 @@ operator plays mostly in emulators. On real hardware they would use an SD-card
 flash cartridge, which already stores hundreds of games, so a standard
 cartridge's capacity may not be the real ceiling. Where is the limit, really?
 
-**Status:** researched 2026-10-16 (below). Deep-dive 2026-10-19 with I3:
+**Status:** **CLOSED 2026-10-21 with I3** (§3). Researched 2026-10-16 (below). Deep-dive 2026-10-19 with I3:
 `reference/engine_layers_i3_i5.md`. **Correction (2026-10-19):** the table
 below calls `sound_data.o` "stock music". About 9.5 of its 10.05 MiB is
 Pokémon cries, and all stock music together is ≈ 1.7 MB. Stock species data
@@ -901,3 +901,22 @@ nothing in §1 touches.
     - branch `intermission-engine-layers`;
     - done means CH08 from boot, pytest, no hand-typed facts left, a kept/dropped
       report, and an operator walk.
+- **2026-10-21, I3 + I5 CLOSED (operator walk passed):**
+  `intermission-engine-layers` is merged to `main`. Stage-by-stage record:
+  `reference/engine_layers_i3_i5.md` §8.
+  - What landed: the species profile (15 canon families kept) and stubbed stock
+    layouts (ROM 26.55 → 12.19 MiB); items, moves, abilities, the TM/HM list and
+    the remaining hand-typed facts (HM gates, spawn, white-out flag, census
+    sizes, bag pockets) are generated; starter choice through `dynmultichoice`;
+    engine mechanism names and fences relabelled `RPG2GBA_*`, with the test-only
+    boot behind `RPG2GBA_HARNESS`.
+  - Changed from the build-out scope: canon species keep **stock** sprites
+    (operator, 2026-10-20, after side-by-side sheets). Uranium's own oversize
+    art is shrunk to fit the 64 px canvas instead of halved.
+  - The save layout changed in S4, so the I6 keeper save starts on this layout.
+  - Left open: #41 / #35 blocked items (Nuclear type, Thunderstorm, Sticky
+    Terrain, Air Mail, Uranium Core); #152 (two small engine leftovers);
+    content prefixes are still hard-coded as Uranium, so a game-agnostic
+    pipeline is its own task; four other 3+-option Show Choices could use
+    `dynmultichoice`; the engine's `SaveBlock1 is backwards compatible` test
+    still fails (pre-existing).

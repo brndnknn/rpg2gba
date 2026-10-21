@@ -342,6 +342,17 @@ says so.
     the import; seven-sentinel table; ~50 generated-content hooks, not 16).
   - Results: CH08 498/498 from boot; pytest 5631 passed; ROM 12,780,828 B; CH06-end walk ROM
     regenerated.
+- **S7 PASSED 2026-10-21 (operator walk: "the walk looked good"); I3 build-out
+  closed and merged to `main`.**
+  - Checks: pytest 5631 passed; CH08 498/498 from boot; kept/dropped report
+    (`python -m rpg2gba.build_report`: 15 canon families kept, 524 dropped;
+    785 of 809 stock layouts stubbed; ROM 12.19 MiB of 32).
+  - Hand-fact audit of the engine diff plus the three pre-import files: the
+    spawn, HM gates, white-out flag, berry trees, sizes, items, moves and
+    abilities all come from generated headers. The ability *behaviour* C is
+    hand-written by design (S3), keyed on generated macros. Two small
+    leftovers are filed as PROJECT_TODO #152.
+  - Walk ROM: `output/playtest-gen/walk/S7-CH06-end.gba` (CH06's end).
 - **S2 side effect:** fork-index enum parsing was fixed, so the parse is now per
   line, not one identifier per comma segment.
   - The old parse missed every enum member that followed an `#if` or a macro
