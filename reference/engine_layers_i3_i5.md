@@ -312,7 +312,7 @@ says so.
   - Results: CH08 498/498 from boot; pytest 5627 passed; `make check` 5163,
     only `SaveBlock1 is backwards compatible` fails (pre-existing; SaveBlock1
     is now 12,536 B of 15,872); CH08 manifest 0 errors; ROM 12,764,204 B; the
-    CH07-end walk ROM was regenerated for the teach-HM tests.
+    CH06-end walk ROM (before CH07's first beat) was regenerated for the teach-HM tests.
 - **S5 DONE 2026-10-20 (re-scoped):** canon species keep stock sprites (ruling
   reversed, §7 answer 2). The stage instead fixed Uranium's own oversize art:
   front battlers are drawn at 1x up to 81px and were halved to fit the 64px
@@ -340,7 +340,7 @@ says so.
     a Map Walker build (`RPG2GBA_MAP_WALKER TRUE`) compiles too.
   - `engine/RPG2GBA_VENDOR.md` custom-changes section rewritten (109 files vs
     the import; seven-sentinel table; ~50 generated-content hooks, not 16).
-  - Results: CH08 498/498 from boot; pytest 5631 passed; ROM 12,780,828 B; CH07-end walk ROM
+  - Results: CH08 498/498 from boot; pytest 5631 passed; ROM 12,780,828 B; CH06-end walk ROM
     regenerated.
 - **S2 side effect:** fork-index enum parsing was fixed, so the parse is now per
   line, not one identifier per comma segment.
