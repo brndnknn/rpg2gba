@@ -17,6 +17,35 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 153. Carry the operator's own save across builds (intermission I6) — REVISIT AFTER EACH ACT
+
+Filed 2026-10-21. **Operator decision: get more of the game built first.** At the end of
+every act, raise this with the operator and ask whether it is time; record the answer here.
+Until then, walk ROMs continue to start from the suite's state.
+
+The goal is to start one real playthrough and keep that save and party on every walk
+after it. Research and options: `reference/intermission_a1_a2.md` §1 I6.
+- **Already done (2026-10-21, `reference/walk_qol_plan.md`):** within one walk ROM, an
+  in-game save continues on the next boot. Walk ROMs also come with every species
+  catchable so far, and party-wide EXP Share.
+- **The blocker across builds is flag numbering.** `flag_registry.dump_header` numbers
+  flags and vars by sorted position, so a later chapter that mints a lower-numbered switch
+  shifts every flag above it, and any new self-switch shifts every hide flag. An old save
+  then loads but points at the wrong flags. Fixing it (number by Uranium id, or by a
+  persisted append-only order) is a flag-registry policy change, so it needs the
+  operator's call (`CLAUDE.md` §10). It is also what forces seed blobs to be thrown away
+  on every rebuild.
+- **The three options from the research:**
+  - A: keep one `.sav` across builds. Needs stable ids, a "play" build mode, and a
+    save-format version stamped into the ROM.
+  - B: transplant the party into each new walk ROM. Needs a `.sav` reader and a seed
+    writer; story choices don't carry over.
+  - C: migrate the whole save through a per-build id translation table.
+
+  Stable ids make B small and C rarely needed.
+- **Related:** #85 (the boot-walk seeding recipe in `BUILD_PLAN.md`), #21 (no
+  freshness guard on the ROM under test).
+
 ### 152. Two small Uranium leftovers in tracked engine code (I3 S7 audit)
 
 Filed 2026-10-21 at the I3 gate. The S7 audit of `git diff 80cdfce2 HEAD -- engine/` found

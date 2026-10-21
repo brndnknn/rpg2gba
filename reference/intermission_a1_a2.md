@@ -625,7 +625,9 @@ Possible shapes the operator raised:
   and puts that party into the next walk ROM's start state.
 - Some other way of getting the same result.
 
-**Status:** researched 2026-10-16 (below); not yet discussed.
+**Status:** researched 2026-10-16 (below). **Deferred 2026-10-21** (operator: get more of
+the game built first). Moved to the backlog as `PROJECT_TODO.md` #153, to revisit after
+each act. The within-one-ROM half shipped with walk QoL.
 
 #### Research (2026-10-16)
 
@@ -962,3 +964,5 @@ nothing in §1 touches.
   - Walk ROM `output/playtest-gen/walk/I2b-CH06-end.gba`.
 - **2026-10-21, I2b CLOSED:** operator walk of `I2b-CH06-end.gba` passed;
   branch `i2b-boulder-palette` merged to `main`.
+- **2026-10-21, I6 deferred:** operator wants more of the game built first. Filed as
+  `PROJECT_TODO.md` #153, to revisit at the end of every act.
