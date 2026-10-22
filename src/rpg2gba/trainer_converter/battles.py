@@ -82,6 +82,21 @@ _CLASS_PIC_INTERNAL_NAME: dict[str, str] = {
     # map is per real fork class, so every Uranium LEADER_* type collapses onto
     # this one pic; a second leader needs a per-trainer pic, not this row.
     "TRAINER_CLASS_LEADER": "LEADER_ROXANNE",
+    # CH09 (Route 3): Lara, Johnny, Marc, Shauna/Sophy. The tubers are two
+    # fork classes (see _CLASS_BY_URANIUM_CLASS), so two pics.
+    "TRAINER_CLASS_TUBER_F": "TUBER_FEMALE",
+    "TRAINER_CLASS_TUBER_M": "TUBER_MALE",
+    "TRAINER_CLASS_SAILOR": "SAILOR",
+    "TRAINER_CLASS_PICNICKER": "PICNICKER",
+}
+
+#: Uranium classes whose display name does not name a fork class, mapped to the
+#: fork class by hand. Both tuber types display "TUBER", and the fork has no
+#: TRAINER_CLASS_TUBER: it splits the class by gender
+#: (include/constants/trainers.h:455-456). Still checked against the fork.
+_CLASS_BY_URANIUM_CLASS: dict[str, str] = {
+    "TRAINER_CLASS_TUBER_FEMALE": "TRAINER_CLASS_TUBER_F",
+    "TRAINER_CLASS_TUBER_MALE": "TRAINER_CLASS_TUBER_M",
 }
 
 #: Classes whose music the fork picks per trainer gender, not per class: vanilla
@@ -125,6 +140,13 @@ _CLASS_ENCOUNTER_MUSIC: dict[str, str] = {
     # (engine/src/data/trainers.h:1329) -- two independent confirmations, not
     # a guess from the generic Male bucket.
     "TRAINER_CLASS_BLACK_BELT": "TRAINER_ENCOUNTER_MUSIC_INTENSE",
+    # CH09 (Route 3). The constants' own comments name the classes
+    # (include/constants/trainers.h:558 "... Sailors ...", :560 "Used for
+    # Tubers, Picnickers, ...").
+    "TRAINER_CLASS_TUBER_F": "TRAINER_ENCOUNTER_MUSIC_GIRL",
+    "TRAINER_CLASS_TUBER_M": "TRAINER_ENCOUNTER_MUSIC_GIRL",
+    "TRAINER_CLASS_PICNICKER": "TRAINER_ENCOUNTER_MUSIC_GIRL",
+    "TRAINER_CLASS_SAILOR": "TRAINER_ENCOUNTER_MUSIC_MALE",
 }
 
 _TRAINER_ANCHOR_RE_TMPL = r"^#define\s+{anchor}\s+(\d+)\s*$"
@@ -239,7 +261,9 @@ def resolve_trainer_class(
     constant -- never invented, never silently substituted (CLAUDE.md §4.7).
     """
     display_name = _class_display_name(trainer_class_const_uranium, trainer_types)
-    candidate = to_constant("TRAINER_CLASS", display_name)
+    candidate = _CLASS_BY_URANIUM_CLASS.get(trainer_class_const_uranium) or to_constant(
+        "TRAINER_CLASS", display_name
+    )
     if candidate not in fork_classes:
         raise ValueError(
             f"{trainer_class_const_uranium} (display name {display_name!r}) resolves to "

@@ -439,6 +439,16 @@ def test_unrepresentable_char_fails_loud(engine_dir: Path) -> None:
         stage.emit_engine_text("A snowman: ☃", charmap_chars, species="TESTMON", field="description")
 
 
+def test_straight_double_quotes_become_charmap_curly_quotes(engine_dir: Path) -> None:
+    """preproc has no glyph for a straight double quote (Brainoar's dex text,
+    CH09); paired straight quotes become the charmap's “ ” glyphs."""
+    charmap_chars = stage.load_charmap_chars(engine_dir)
+    out = stage.emit_engine_text('Called "The sage", it is', charmap_chars, species="T", field="description")
+    assert out == "Called “The sage”, it is"
+    with pytest.raises(ValueError, match="unpaired double quote"):
+        stage.emit_engine_text('One " only', charmap_chars, species="T", field="description")
+
+
 # ===========================================================================
 # Luxi family (2026-08-19) — Happiness (method 1) and Item (method 7)
 # evolutions, previously unsupported by build_staged_species.
@@ -666,3 +676,109 @@ def test_regional_dex_written_from_real_data(uranium_src: Path, engine_dir: Path
     assert "#define RPG2GBA_REGIONAL_DEX_COUNT 201" in text
     assert "[0] = NATIONAL_DEX_ORCHYNX, \\" in text
     assert 'RPG2GBA_REGIONAL_DEX_TITLE _("TANDOR DEX")' in text
+
+
+# --- multi-evolution + Seikamater (method 26), CH09 ---------------------------
+
+_SEIKA_CONDITION = "CONDITIONS({IF_GENDER, MON_FEMALE}, {IF_HOLD_ITEM, ITEM_ROYAL_JELLY})"
+
+
+def _multi_evo_fixture() -> tuple[tuple[SpeciesSpec, ...], list[pokemon.Species], pokemon._Resolver]:
+    specs = (SpeciesSpec(1, "PREMON"), SpeciesSpec(2, "SIDEMON"), SpeciesSpec(3, "ENDMON"))
+    recs = [
+        _make_species(id=1, internal_name="PREMON", evolutions=[(26, 498, 3), (20, 148, 2)]),
+        _make_species(id=2, internal_name="SIDEMON"),
+        _make_species(id=3, internal_name="ENDMON"),
+    ]
+    resolver = _make_resolver(
+        item_internal={498: "ROYALJELLY"},
+        item_names={498: "Royal Jelly"},
+        move_internal={148: "INCINERATE"},
+        fork_items={"ITEM_SHINY_STONE"},  # ROYAL_JELLY only exists as a generated item
+        fork_moves={"MOVE_INCINERATE"},
+    )
+    return specs, recs, resolver
+
+
+def test_multi_evolution_emits_two_entries_in_record_order(engine_dir: Path) -> None:
+    specs, recs, resolver = _multi_evo_fixture()
+    staged = stage.build_staged_species(specs, recs, pristine_species_egg=100, resolver=resolver)
+
+    assert staged[0].evolution_target_fork_id == staged[2].fork_id
+    assert [e.target_fork_id for e in staged[0].extra_evolutions] == [staged[1].fork_id]
+
+    charmap_chars = stage.load_charmap_chars(engine_dir)
+    charmap = stage.load_charmap(engine_dir / "charmap.txt")
+    text = stage.emit_species_info(staged, resolver, charmap_chars, charmap)
+    assert (
+        f"        .evolutions = EVOLUTION({{EVO_LEVEL, 45, SPECIES_ENDMON, {_SEIKA_CONDITION}}},\n"
+        "                                {EVO_LEVEL, 0, SPECIES_SIDEMON, CONDITIONS({IF_KNOWS_MOVE, MOVE_INCINERATE})}),\n"
+    ) in text
+
+
+def test_seikamater_method_26_condition_text() -> None:
+    specs, recs, resolver = _multi_evo_fixture()
+    staged = stage.build_staged_species(specs, recs, pristine_species_egg=100, resolver=resolver)
+    assert staged[0].evolution_kind == "EVO_LEVEL"
+    assert staged[0].evolution_level == 45
+    assert staged[0].evolution_condition == _SEIKA_CONDITION
+
+
+def test_evolution_item_accepts_item_pass_generated_constant() -> None:
+    """ROYAL_JELLY is not in the fork's items.h; the item pass generates it."""
+    from rpg2gba.item_converter.catalog import generated_constants
+
+    assert "ITEM_ROYAL_JELLY" in generated_constants()
+    specs = (SpeciesSpec(1, "PREMON"), SpeciesSpec(2, "POSTMON"))
+    recs = [
+        _make_species(id=1, internal_name="PREMON", evolutions=[(7, 498, 2)]),
+        _make_species(id=2, internal_name="POSTMON"),
+    ]
+    resolver = _make_resolver(
+        item_internal={498: "ROYALJELLY"}, item_names={498: "Royal Jelly"}, fork_items={"ITEM_SHINY_STONE"}
+    )
+    staged = stage.build_staged_species(specs, recs, pristine_species_egg=100, resolver=resolver)
+    assert staged[0].evolution_item_constant == "ITEM_ROYAL_JELLY"
+
+
+def test_seikamater_unknown_item_fails_loud() -> None:
+    specs = (SpeciesSpec(1, "PREMON"), SpeciesSpec(2, "POSTMON"))
+    recs = [
+        _make_species(id=1, internal_name="PREMON", evolutions=[(26, 99, 2)]),
+        _make_species(id=2, internal_name="POSTMON"),
+    ]
+    resolver = _make_resolver(
+        item_internal={99: "MADEUPSTONE"}, item_names={99: "Made Up Stone"}, fork_items={"ITEM_SHINY_STONE"}
+    )
+    with pytest.raises(ValueError, match="not defined in the fork"):
+        stage.build_staged_species(specs, recs, pristine_species_egg=100, resolver=resolver)
+
+
+def test_single_evolution_text_unchanged_golden(engine_dir: Path) -> None:
+    """Byte-pinned single-evolution lines (pre-multi-evolution shapes)."""
+    specs = (SpeciesSpec(1, "PREMON"), SpeciesSpec(2, "POSTMON"))
+    resolver = _make_resolver(move_internal={148: "INCINERATE"}, fork_moves={"MOVE_INCINERATE"})
+    charmap_chars = stage.load_charmap_chars(engine_dir)
+    charmap = stage.load_charmap(engine_dir / "charmap.txt")
+    expected = {
+        (4, 16): "        .evolutions = EVOLUTION({EVO_LEVEL, 16, SPECIES_POSTMON}),\n",
+        (1, 0): "        .evolutions = EVOLUTION({EVO_LEVEL, 0, SPECIES_POSTMON, "
+        "CONDITIONS({IF_MIN_FRIENDSHIP, FRIENDSHIP_EVO_THRESHOLD})}),\n",
+        (20, 148): "        .evolutions = EVOLUTION({EVO_LEVEL, 0, SPECIES_POSTMON, "
+        "CONDITIONS({IF_KNOWS_MOVE, MOVE_INCINERATE})}),\n",
+    }
+    for (method, param), line in expected.items():
+        recs = [
+            _make_species(id=1, internal_name="PREMON", evolutions=[(method, param, 2)]),
+            _make_species(id=2, internal_name="POSTMON"),
+        ]
+        staged = stage.build_staged_species(specs, recs, pristine_species_egg=100, resolver=resolver)
+        assert staged[0].extra_evolutions == ()
+        text = stage.emit_species_info(staged, resolver, charmap_chars, charmap)
+        assert line in text
+
+
+def test_engine_defines_seikamater_condition_symbols(engine_dir: Path) -> None:
+    header = (engine_dir / "include" / "constants" / "pokemon.h").read_text(encoding="utf-8")
+    for sym in ("IF_GENDER", "IF_HOLD_ITEM", "MON_FEMALE"):
+        assert re.search(rf"\b{sym}\b", header), sym

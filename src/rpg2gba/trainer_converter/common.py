@@ -99,6 +99,13 @@ SLICE_TRAINER_PICS: tuple[TrainerPicSpec, ...] = (
     # id 71 (intermediate/trainer_types.json, display name "LEADER" ->
     # TRAINER_CLASS_LEADER), Graphics/Characters/trainer071.png.
     TrainerPicSpec(71, "LEADER_ROXANNE"),
+    # CH09 (Route 3): trainertypes.dat ids from intermediate/trainer_types.json
+    # (TUBER_FEMALE 19, TUBER_MALE 25, SAILOR 46, PICNICKER 60); each
+    # Graphics/Characters/trainer<id>.png exists in the Uranium tree.
+    TrainerPicSpec(19, "TUBER_FEMALE"),
+    TrainerPicSpec(25, "TUBER_MALE"),
+    TrainerPicSpec(46, "SAILOR"),
+    TrainerPicSpec(60, "PICNICKER"),
 )
 
 #: internal_name values in `SLICE_TRAINER_PICS` that additionally get a player
@@ -170,6 +177,17 @@ SLICE_TRAINER_BATTLES: tuple[str, ...] = (
     "TRAINER_THEO_12",
     "TRAINER_THEO_13",
     "TRAINER_THEO_14",
+    # CH09 (Route 3): the map's eight trainers, in map event order -- Sack
+    # (Map059 EV009, phone trainer), Lara (EV012), Chan (EV018), Johnny (EV027),
+    # Marc (EV029), Julianna (EV031), Sophy (EV032), Shauna (EV050).
+    "TRAINER_SACK_28",
+    "TRAINER_LARA_21",
+    "TRAINER_CHAN_27",
+    "TRAINER_JOHNNY_22",
+    "TRAINER_MARC_41",
+    "TRAINER_JULIANNA_250",
+    "TRAINER_SOPHY_42",
+    "TRAINER_SHAUNA_249",
 )
 
 

@@ -174,4 +174,5 @@ _MAP_CONSTANTS = {
     31: "MAP_KEVLAR_TOWN",
     37: "MAP_PASSAGE_CAVE_2F",
     40: "MAP_NOWTOCH_CITY",  # CH06: 4 diagonal-stair events (the park; unsplit since 2026-10-17)
+    59: "MAP_ROUTE_03",  # CH09: 4 "Stairs" events EV041-044
 }

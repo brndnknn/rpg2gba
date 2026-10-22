@@ -657,6 +657,21 @@
       "reason": "See map 33 EV028."
     },
     {
+      "map_id": 59, "event_id": 1, "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 33 EV028. CH09 Route 3's three lamp glows (2026-10-22): single page on switch 106, trigger 0, empty command list, graphic `light` (reference/chapters/09-route-3.md §3.4)."
+    },
+    {
+      "map_id": 59, "event_id": 2, "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 59 EV001."
+    },
+    {
+      "map_id": 59, "event_id": 3, "expect_name": "Luz",
+      "feature": "RMXP ambient-lighting event (additive alpha-gradient glow overlay)",
+      "reason": "See map 59 EV001."
+    },
+    {
       "map_id": 49, "event_id": 17, "expect_name": "Lucille",
       "feature": "Post-game NPC in the player's house: one action page gated on switch 125 (FINAL_EVENT), sprite sheet PU-CURIEend",
       "reason": "Deferred, not a no-port. 2026-10-02 the converter began placing late NPCs (no boot page, a visible page) as flag-hidden actors (ROM run 69, map068/ev017); this one's sheet has no reference/npc_gfx_map.json entry and nothing in reach of the chain can show her. Operator ruling 2026-10-02: strip for now; revisit (map the sheet, drop this entry) when the post-game is in scope."

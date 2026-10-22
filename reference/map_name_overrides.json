@@ -2,6 +2,14 @@
   "_comment": "Source of truth for CORRECTED map identity (CLAUDE.md §4.3). Phase-5 `mint` consults `overrides` BEFORE map_infos.json, because RMXP MapInfos editor names can be stale. `overrides` = map id -> {display_name, evidence}; mint reads ONLY this map. `reviewed` records identity questions checked against the wiki that need NO override, so they are not re-litigated. `orphans` = maps with no map_infos entry, pending disposition. `phase7_confirm` = ids to verify in the §9 #3 manual playthrough. Build-agent-maintained; arbitration is spoiler-free (location names / BGM asset / connection topology only). Wiki: https://pokemon-uranium.fandom.com/wiki/",
 
   "overrides": {
+    "1": {
+      "display_name": "Route 03 Gatehouse",
+      "evidence": "CH09 disambiguation (2026-10-22). Maps 59, 1 and 54 all carry the map_infos name 'Route 03'. Map 1 (20x15, child of 59) is a pass-through gate: doors from Route 3 at (87,8)/(88,8) and far doors to Burole Town (map 60). Map 59 keeps the plain name. Spoiler-free positional label."
+    },
+    "54": {
+      "display_name": "Route 03 House",
+      "evidence": "CH09 disambiguation (see map 1). Map 54 (20x15, child of 59) is a single-room house entered from Route 3 at (31,26), with no other exit."
+    },
     "48": {
       "display_name": "Moki Town Player's House 2F",
       "evidence": "Pathfinder S4 floor disambiguation. Maps 48 and 49 share the map_infos name '\\PN's house'. S1 warp trace (PATHFINDER_FINDINGS.md): map 49 has the street door to Moki Town => ground floor (1F, player spawn); map 48 is reachable only via the in-house stairs from 49 => upper floor (2F). The RMXP MapInfos `order` field (48=9, 49=10) is editor tree order, NOT floor order, and would mislabel them."

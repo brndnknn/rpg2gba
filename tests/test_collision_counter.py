@@ -92,6 +92,20 @@ def test_synthetic_out_of_range_tile_id_fails_loud() -> None:
         build_counter_grid(grid, arrays)
 
 
+def test_out_of_atlas_static_id_is_masked_like_the_layout() -> None:
+    """A static id past the tileset image (CH09's gatehouse, map 1) is drawn as
+    nothing by RMXP and masked by the layout converter; the offline grids mask
+    it too instead of failing on the passage lookup."""
+    from rpg2gba.traversal.collision import build_blocked_grid
+
+    passages = [0] * 392  # 384 autotile ids + one row of 8 static tiles
+    passages[384] = 0x80  # a counter tile under the stale id
+    arrays = TilesetArrays(passages=passages, priorities=[0] * 392, terrain_tags=[0] * 392)
+    grid = _grid(1, 1, [[[384]], [[0]], [[3453]]])
+    assert build_counter_grid(grid, arrays)[(0, 0)] is True  # stale top layer skipped
+    assert build_blocked_grid(grid, arrays)[(0, 0)] is False
+
+
 @pytest.mark.skipif(
     not MAP068.is_file() or not TILESETS_JSON.is_file(),
     reason="requires the decoded corpus under output/uranium-build/ (run the pipeline first)",

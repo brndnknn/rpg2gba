@@ -17,7 +17,13 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
-from rpg2gba.tileset_converter.layout import RMXP_LAYERS, TileGrid, column_blocked, column_key
+from rpg2gba.tileset_converter.layout import (
+    RMXP_LAYERS,
+    TileGrid,
+    column_blocked,
+    column_key,
+    mask_out_of_atlas,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,12 +77,25 @@ def build_tile_grid(map_json: dict) -> TileGrid:
     return grid
 
 
+def _masked(grid: TileGrid, arrays: TilesetArrays) -> TileGrid:
+    """`layout.mask_out_of_atlas` against this tileset's last static id, so the
+    offline graph sees the same grid the ROM layout was built from: stale ids
+    past the tileset image are drawn as nothing by RMXP and masked by the layout
+    converter (CH09's gatehouse, map 1, has 34). RMXP sizes `passages` from the
+    image (384 autotile ids + 8 per row), so its last index is the atlas bound."""
+    masked, cells = mask_out_of_atlas(grid, len(arrays.passages) - 1)
+    if cells:
+        logger.debug("masked %d out-of-atlas cell-layer(s)", len(cells))
+    return masked
+
+
 def build_blocked_grid(
     grid: TileGrid, arrays: TilesetArrays
 ) -> dict[tuple[int, int], bool]:
     """{(x, y): blocked} for every cell, via `layout.column_blocked` — no
     stair/ledge/warp overrides applied (those are the graph layer's job, not
-    the raw collision layer's)."""
+    the raw collision layer's). Out-of-atlas ids are masked first (`_masked`)."""
+    grid = _masked(grid, arrays)
     blocked: dict[tuple[int, int], bool] = {}
     for y in range(grid.ysize):
         for x in range(grid.xsize):
@@ -131,12 +150,14 @@ def build_counter_grid(
     `@passages[tile_id]` directly with no empty-tile special case, so tile id
     0's own `passages[0]` entry is consulted exactly like any other id.
 
-    An out-of-range tile id for `arrays.passages` fails loud (`KeyError`),
-    mirroring `layout._passage_lookup`'s fail-loud convention for passage
-    lookups (CLAUDE.md §4.3/§4.5) — a passage byte decides real interaction
-    behavior, so a silent default here would be exactly the kind of "300 maps
-    later" bug that convention exists to prevent.
+    Stale out-of-atlas ids are masked first (`_masked`, the layout converter's
+    rule). Any other out-of-range tile id for `arrays.passages` fails loud
+    (`KeyError`), mirroring `layout._passage_lookup`'s fail-loud convention for
+    passage lookups (CLAUDE.md §4.3/§4.5) — a passage byte decides real
+    interaction behavior, so a silent default here would be exactly the kind of
+    "300 maps later" bug that convention exists to prevent.
     """
+    grid = _masked(grid, arrays)
     counters: dict[tuple[int, int], bool] = {}
     for y in range(grid.ysize):
         for x in range(grid.xsize):

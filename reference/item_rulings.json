@@ -31,7 +31,7 @@
     "ICESHARD": {"kind": "held", "note": "described as an Ice boost; never checked"},
     "PRETTYRIBBON": {"kind": "held", "note": "described as a Fairy boost; never checked"},
     "AROMATICHERB": {"kind": "held", "note": "no script reference"},
-    "ROYALJELLY": {"kind": "held", "note": "species-specific evolution block deferred"},
+    "ROYALJELLY": {"kind": "held", "note": "Seikamater evolution item (method 26: held, level 45+, female); staged 2026-10-22"},
 
     "METALYNXITE": {"kind": "held", "note": "mega stone; inert until Uranium mega forms exist"},
     "ARCHILLESITE": {"kind": "held", "note": "mega stone"},

@@ -156,6 +156,20 @@ STARTER_SPECIES: tuple[SpeciesSpec, ...] = (
     SpeciesSpec(29, "FELENG"),
     SpeciesSpec(30, "FELUNGE"),
     SpeciesSpec(31, "FELIGER"),
+    # --- CH09 (Route 3) families (2026-10-22) -------------------------------
+    # SMORE (trainers Sack/Shauna, land table) and SPONEE (trainers Sack/Marc)
+    # are trainer-party species (slice_pins gate); BRAILIP is in map 59's
+    # water and Super Rod tables. Whole lines staged so no evolution target
+    # dangles: SMORE -> FIROKE, BRAILIP -> BRAINOAR, SPONEE -> SPONAREE.
+    SpeciesSpec(40, "SMORE"),
+    SpeciesSpec(41, "FIROKE"),
+    SpeciesSpec(42, "BRAILIP"),
+    SpeciesSpec(43, "BRAINOAR"),
+    SpeciesSpec(48, "SPONEE"),
+    SpeciesSpec(49, "SPONAREE"),
+    # SEIKAMATER (terminal; Bug/Normal): the Seikamater-method (26) evolution
+    # target of both SMORE and SPONEE, so staged to keep those targets undangling.
+    SpeciesSpec(190, "SEIKAMATER"),
 )
 
 

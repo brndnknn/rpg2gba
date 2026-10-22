@@ -46,7 +46,10 @@ SLICE_MAP_IDS: list[int] = expand_split_ids([
 # CH06 Nowtoch City: 40 (the city), 41 (Poke Mart), 42 (Gym), 43 (Pokemon Center), 46/47 (interior canvases).
 # The Metro station/platform (44/45) are parked in chapters.json's unbound_maps
 # (operator, 2026-10-10) until the Metro is worked back into a chapter.
-    40, 41, 42, 43, 46, 47
+    40, 41, 42, 43, 46, 47,
+# CH09 Route 3: 59 (the route, entered over the Moki E seam), 1 (gatehouse to
+# Burole), 54 (house). The dojo 177 is parked in unbound_maps (Surf-only door).
+    59, 1, 54,
 ])
 
 # Converter-level collision unblocks (user-approved fidelity calls, one entry per

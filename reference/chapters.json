@@ -141,7 +141,7 @@
     {
       "id": "CH09", "act": "A2", "title": "Route 3", "wiki_page": "Route 3",
       "visit": 1, "outdoor": 59, "maps": [59, 1, 54],
-      "predecessor": "CH08", "tier": "thin", "status": "planned",
+      "predecessor": "CH08", "tier": "thin", "status": "in_progress",
       "notes": "Reached via the Moki Town E <-> Route 03 seam (connections.json 32 E <-> 59 W). CH01 only proved the seam fails cleanly (SLICE1_TODO #9); converting it -- the first of 14 connections.dat seams -- is PROJECT_TODO.md #27, off-frontier because this chapter is 7 chapters past CH02. Map 177 (Route 3 dojo) removed 2026-10-22 (operator): its only door, Map059 EV008 at (106,20), sits in a Surf-only east pocket that no west-edge foot component reaches, and a map with no reachable entrance is not built. It joins whichever later chapter first reaches that pocket with Surf (none revisits Route 3 yet)."
     },
     {

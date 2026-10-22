@@ -422,5 +422,45 @@
     "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_130",
     "fallback": "OBJ_EVENT_GFX_WOMAN_3",
     "note": "HGSS overworld sheet: woman, dark grey-green hair under a cross-marked cap, pink top with teal overalls. Used by Map040 EV009/EV018 (Nowtoch City) - chapter-6 Nowtoch City expansion"
+  },
+  "HGSS_281": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_281",
+    "fallback": "OBJ_EVENT_GFX_TUBER_F",
+    "note": "HGSS overworld sheet: girl, brown hair, pink swim ring (tuber). 256x256, standard 4x4 walk sheet. Map059 EV012 Trainer(3), class TUBER_FEMALE - chapter-9 expansion. No code-41 swaps"
+  },
+  "HGSS_280": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_280",
+    "fallback": "OBJ_EVENT_GFX_TUBER_M",
+    "note": "HGSS overworld sheet: boy, brown hair, blue swim ring (tuber). 256x256, standard 4x4 walk sheet. Map059 EV027 Trainer(3), class TUBER_MALE - chapter-9 expansion. No code-41 swaps"
+  },
+  "HGSS_053": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_053",
+    "fallback": "OBJ_EVENT_GFX_SAILOR",
+    "note": "HGSS overworld sheet: sailor, white cap and navy/white uniform. 256x256, standard 4x4 walk sheet. Map059 EV029 Trainer(4), class SAILOR - chapter-9 expansion. No code-41 swaps"
+  },
+  "HGSS_050": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_050",
+    "fallback": "OBJ_EVENT_GFX_PICNICKER",
+    "note": "HGSS overworld sheet: girl, green cap with red badge, teal/green outfit. 256x256, standard 4x4 walk sheet. Map059 EV032/EV050 Trainer(4), class PICNICKER - chapter-9 expansion. No code-41 swaps"
+  },
+  "HGSS_124": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_124",
+    "fallback": "OBJ_EVENT_GFX_WOMAN_2",
+    "note": "HGSS overworld sheet: woman, long light-brown hair, purple top. 256x256, standard 4x4 walk sheet. Map054 EV003 npc - chapter-9 expansion. No code-41 swaps"
+  },
+  "berrytreeRAWSTBERRY": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_BERRYTREERAWSTBERRY",
+    "fallback": "OBJ_EVENT_GFX_BERRY_TREE",
+    "note": "Rawst Berry plant prop (Map059 EV006 BerryPlant). Used by Map059 (chapter-9 expansion). 128x256 sheet: green sprout row + 3 rows of growth stages; same family as berrytreeORANBERRY. No code-41 graphic swaps on the event pages (page 1 shows the sheet, page 2 blank) - plain sheet entry, no states needed. PROP, not a walking NPC"
+  },
+  "berrytreeCHERIBERRY": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_BERRYTREECHERIBERRY",
+    "fallback": "OBJ_EVENT_GFX_BERRY_TREE",
+    "note": "Cheri Berry plant prop (Map059 EV007 BerryPlant). Used by Map059 (chapter-9 expansion). 128x256 sheet: green sprout row + 3 rows of growth stages; same family as berrytreeORANBERRY. No code-41 graphic swaps on the event pages (page 1 shows the sheet, page 2 blank) - plain sheet entry, no states needed. PROP, not a walking NPC"
+  },
+  "berrytreeLIECHIBERRY": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_BERRYTREELIECHIBERRY",
+    "fallback": "OBJ_EVENT_GFX_BERRY_TREE",
+    "note": "Liechi Berry plant prop (Map059 EV011 BerryPlant). Used by Map059 (chapter-9 expansion). 128x256 sheet: green sprout row + 3 rows of growth stages; same family as berrytreeORANBERRY. No code-41 graphic swaps on the event pages (page 1 shows the sheet, page 2 blank) - plain sheet entry, no states needed. PROP, not a walking NPC"
   }
 }

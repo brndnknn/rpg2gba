@@ -61,6 +61,16 @@ EXPECTED_ICON_PAL_INDEX = {
     "ARCHILLES": 1,
     "ELETUX": 3,
     "ELECTRUXO": 3,
+    # Pinned 2026-10-22 for CH09's Smore/Brailip/Sponee families + Seikamater.
+    # Computed via convert_species_icon (all within 0..5); not eyeballed on a
+    # contact sheet.
+    "SMORE": 1,
+    "FIROKE": 1,
+    "BRAILIP": 1,
+    "BRAINOAR": 1,
+    "SPONEE": 3,
+    "SPONAREE": 3,
+    "SEIKAMATER": 2,
     # Pinned 2026-08-05 against the same real Uranium assets + vendored
     # engine icon palettes, for the Route-1 trainer-party species (+ their
     # evolution-chain closure, see common.py's STARTER_SPECIES comment).
