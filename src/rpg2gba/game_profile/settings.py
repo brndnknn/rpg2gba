@@ -68,3 +68,28 @@ def badge_requirements(settings: dict[str, int | bool]) -> dict[str, int]:
         if const in settings:
             out[key] = require_int(settings, const)
     return out
+
+
+_DEX_NAMES_START = re.compile(r"^def\s+pbDexNames\b")
+_DEX_NAME = re.compile(r'_INTL\("([^"]+)"\)')
+# The dump's "Pokédex" is mojibake ("PokÃ©dex"), so match any spelling.
+_POKEDEX_SUFFIX = re.compile(r"\s+Pok\S*dex$", re.IGNORECASE)
+
+
+def regional_dex_name(path: Path = DEFAULT_SETTINGS_RB) -> str:
+    """The region of the game's first dex, from `pbDexNames` ("Tandor Pokédex" ->
+    "Tandor"). Essentials unlocks only dex 0 at the start
+    (`107__PField_Map.rb:204`). Fails loud if the block or its first name is missing."""
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    for i, raw in enumerate(lines):
+        if _DEX_NAMES_START.match(raw.strip()):
+            for body in lines[i:]:
+                m = _DEX_NAME.search(body)
+                if m:
+                    name = _POKEDEX_SUFFIX.sub("", m.group(1)).strip()
+                    if not name:
+                        raise SettingsError(f"Settings.rb: pbDexNames' first entry {m.group(1)!r} names no region")
+                    return name
+                if body.strip().startswith("]"):
+                    break
+    raise SettingsError("Settings.rb: no pbDexNames entry")

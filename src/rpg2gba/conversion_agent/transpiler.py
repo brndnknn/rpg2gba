@@ -585,16 +585,13 @@ _SEEN_STORAGE_CREATOR_OPEN_RE = re.compile(
 # Birch/Oak-lab script uses. Exact literal only (the corpus has no `=false`
 # variant); anything else still queues.
 #
-# `EnableNationalPokedex` (specials.inc:518) is ours to add on top, and is not
-# optional for this corpus: Uranium species are chained past
-# NATIONAL_DEX_PECHARUNT and have no regional dex number, but a dex without
-# national mode is pinned to DEX_MODE_HOENN (pokedex.c:2031) and
-# CreatePokedexList then enumerates only `i < REGIONAL_DEX_COUNT`, mapping
-# outward via RegionalToNationalOrder (pokedex.c:2194-2218). Every Uranium
-# species would be caught-but-invisible. Setting FLAG_SYS_NATIONAL_DEX alone
-# is NOT sufficient — IsNationalPokedexEnabled also requires
-# pokedex.nationalMagic == 0xDA and VAR_NATIONAL_DEX == 0x302
-# (event_data.c:101), which only the special sets.
+# No `EnableNationalPokedex` (#31, operator 2026-10-21): the regional dex IS
+# the game's own (Tandor, generated from regionals.dat by
+# `species_converter.stage.build_regional_dex`, which fails loud on any staged
+# species without a regional number), and Uranium never unlocks a second dex
+# (`pbUnlockDex` has no call site). Before #31 this grant also enabled National
+# mode, because staged species had no regional number and would have been
+# caught-but-invisible in the Hoenn list.
 _POKEDEX_GRANT_RE = re.compile(r"^\s*\$Trainer\.pokedex\s*=\s*true\s*$")
 
 # $Trainer.pokegear=true — Theo's father hands over the PokéPod (Map172 EV4
@@ -3530,7 +3527,9 @@ class _PageEmitter:
         if not then_lines and not else_lines:
             # Both arms empty (Map049 EV18, user-approved) — no branch at all.
             return [give_line]
-        lines = [give_line, "if (var(VAR_RESULT) != 0) {"]
+        # Std_ObtainItem (engine/data/scripts/obtain_item.inc) leaves the bag
+        # add's success in VAR_0x8007; VAR_RESULT is the pocket id (#146).
+        lines = [give_line, "if (var(VAR_0x8007) == TRUE) {"]
         lines += [f"    {ln}" for ln in then_lines]
         if else_lines:
             lines.append("} else {")
@@ -5147,7 +5146,6 @@ class _PageEmitter:
             return [
                 "setflag(FLAG_SYS_POKEDEX_GET)",
                 "special(SetUnlockedPokedexFlags)",
-                "special(EnableNationalPokedex)",
             ]
 
         # -- Ruby locals / arrays / argmax (C8 stage 6) -----------------------

@@ -607,3 +607,62 @@ def test_ability_gate_fails_loud_on_an_undefined_ability(tmp_path) -> None:
     with pytest.raises(ValueError, match="ABILITY_GEIGER_SENSE"):
         st.assert_fork_constants_exist(tmp_path, {"ABILITY_GEIGER_SENSE"},
                                        "include/constants/abilities.h", "ABILITY")
+
+
+# ===========================================================================
+# Regional dex (#31)
+# ===========================================================================
+
+
+def _staged_testmon() -> stage.StagedSpecies:
+    return _make_staged(SpeciesSpec(1, "TESTMON"), _make_species())
+
+
+def test_regional_dex_maps_staged_stock_and_unbuilt_slots() -> None:
+    staged = [_staged_testmon()]
+    dex = stage.build_regional_dex(
+        {"SPECIES_AMPHAROS": 1, staged[0].spec.constant: 2, "SPECIES_NOTBUILT": 3},
+        staged,
+        stock_species=frozenset({"SPECIES_AMPHAROS"}),
+        stock_national=frozenset({"NATIONAL_DEX_AMPHAROS"}),
+        name="Tandor",
+    )
+    assert dex.name == "TANDOR"
+    assert dex.order == ("NATIONAL_DEX_AMPHAROS", staged[0].spec.dex_constant, None)
+
+
+def test_regional_dex_fails_loud_on_a_staged_species_with_no_number() -> None:
+    with pytest.raises(ValueError, match="invisible in the dex"):
+        stage.build_regional_dex({}, [_staged_testmon()], frozenset(), frozenset(), "Tandor")
+
+
+def test_regional_dex_fails_loud_on_a_missing_stock_national_constant() -> None:
+    with pytest.raises(ValueError, match="no stock NATIONAL_DEX_AMPHAROS"):
+        stage.build_regional_dex(
+            {"SPECIES_AMPHAROS": 1}, [], frozenset({"SPECIES_AMPHAROS"}), frozenset(), "Tandor"
+        )
+
+
+def test_regional_dex_fails_loud_on_numbering_gaps() -> None:
+    with pytest.raises(ValueError, match="without gaps"):
+        stage.build_regional_dex({"SPECIES_A": 1, "SPECIES_B": 3}, [], frozenset(), frozenset(), "Tandor")
+
+
+def test_regional_dex_lines_skip_empty_slots_and_carry_labels() -> None:
+    dex = stage.RegionalDex(name="TANDOR", order=("NATIONAL_DEX_A", None, "NATIONAL_DEX_C"))
+    text = "\n".join(stage._regional_dex_lines(dex))
+    assert "#define RPG2GBA_REGIONAL_DEX_COUNT 4" in text
+    assert "[0] = NATIONAL_DEX_A, \\" in text
+    assert "[1] =" not in text
+    assert "[2] = NATIONAL_DEX_C, \\" in text
+    assert '#define RPG2GBA_REGIONAL_DEX_TITLE _("TANDOR DEX")' in text
+    assert '#define RPG2GBA_REGIONAL_DEX_NAME _("TANDOR")' in text
+
+
+def test_regional_dex_written_from_real_data(uranium_src: Path, engine_dir: Path, tmp_path: Path) -> None:
+    """Tandor has 200 slots; Orchynx (the first starter) is number 1."""
+    stage.write_all(uranium_src=uranium_src, engine_dir=engine_dir, out_dir=tmp_path)
+    text = (tmp_path / "rpg2gba_pokedex_ids.h").read_text(encoding="utf-8")
+    assert "#define RPG2GBA_REGIONAL_DEX_COUNT 201" in text
+    assert "[0] = NATIONAL_DEX_ORCHYNX, \\" in text
+    assert 'RPG2GBA_REGIONAL_DEX_TITLE _("TANDOR DEX")' in text

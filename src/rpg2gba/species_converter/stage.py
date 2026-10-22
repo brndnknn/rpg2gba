@@ -87,11 +87,12 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from rpg2gba.game_profile import settings as game_settings
 from rpg2gba.pbs_converter import pokemon
 from rpg2gba.pbs_converter._c_emit import generated_banner, wrap_header
 from rpg2gba.pbs_converter._id_map import IdMap
 from rpg2gba.pbs_converter._naming import load_fork_constants
-from rpg2gba.species_converter import common, teachables
+from rpg2gba.species_converter import common, profile, teachables
 from rpg2gba.species_converter.common import STARTER_SPECIES, SpeciesSpec, gfx_ident
 from rpg2gba.text_validator.engine_metrics import (
     DEX_DESCRIPTION_MAX_LINES,
@@ -466,7 +467,82 @@ def emit_species_constants(staged: list[StagedSpecies], anchor: str) -> str:
     return wrap_header("GUARD_URANIUM_SPECIES_CONSTANTS_H", "\n".join(lines), banner=banner)
 
 
-def emit_pokedex_ids(staged: list[StagedSpecies], anchor: str) -> str:
+@dataclass(frozen=True)
+class RegionalDex:
+    """The game's regional dex (#31): `order[n - 1]` is regional number n's
+    `NATIONAL_DEX_*`, or None for a species not built yet (an unseen slot)."""
+
+    name: str  # region, as the dex labels show it ("TANDOR")
+    order: tuple[str | None, ...]
+
+
+_NATIONAL_ENUM = re.compile(r"^\s*(NATIONAL_DEX_[A-Z0-9_]+)\s*,", re.MULTILINE)
+
+
+def build_regional_dex(
+    regional: dict[str, int],
+    staged: list[StagedSpecies],
+    stock_species: frozenset[str],
+    stock_national: frozenset[str],
+    name: str,
+) -> RegionalDex:
+    """Map each regional number to a national one. `regional` is the game's
+    `SPECIES_*` -> regional number (regionals.dat). A staged species maps to its
+    generated `NATIONAL_DEX_*`; a stock species to the stock enum's entry of the
+    same name; a game species not built yet leaves its slot empty. Fails loud
+    on a staged species with no regional number (it would be caught but never
+    listed, the bug #31 exists to stop) and on a stock species whose national
+    constant doesn't exist."""
+    staged_dex = {s.spec.constant: s.spec.dex_constant for s in staged}
+    unlisted = sorted(c for c in staged_dex if c not in regional)
+    if unlisted:
+        raise ValueError(
+            f"staged species with no regional dex number would be invisible in the dex: {unlisted}"
+        )
+    numbers = sorted(regional.values())
+    if numbers != list(range(1, len(numbers) + 1)):
+        raise ValueError("regional dex numbers are not 1..N without gaps or repeats")
+    order: list[str | None] = [None] * len(numbers)
+    for const, n in regional.items():
+        if const in staged_dex:
+            order[n - 1] = staged_dex[const]
+        elif const in stock_species:
+            national = "NATIONAL_DEX_" + const.removeprefix("SPECIES_")
+            if national not in stock_national:
+                raise ValueError(f"{const} (regional {n}): no stock {national}")
+            order[n - 1] = national
+    return RegionalDex(name=name.upper(), order=tuple(order))
+
+
+def stock_national_constants(engine_dir: Path) -> frozenset[str]:
+    """`NATIONAL_DEX_*` enumerators of the stock `enum NationalDexOrder`."""
+    text = (engine_dir / "include" / "constants" / "pokedex.h").read_text(encoding="utf-8")
+    return frozenset(_NATIONAL_ENUM.findall(text))
+
+
+def _regional_dex_lines(dex: RegionalDex) -> list[str]:
+    """The macros the fenced hooks read: the count (HOENN_DEX_COUNT's meaning,
+    last number + 1), the order table's initializer, and the dex labels."""
+    lines = [
+        "",
+        f"// The game's regional dex ({len(dex.order)} slots) replaces Hoenn's. Empty slots are",
+        "// species not built yet; GetSetPokedexFlag reads them as unseen.",
+        f"#define RPG2GBA_REGIONAL_DEX_COUNT {len(dex.order) + 1}",
+        "#define RPG2GBA_REGIONAL_DEX_ORDER \\",
+    ]
+    filled = [(i, nat) for i, nat in enumerate(dex.order) if nat is not None]
+    for i, nat in filled:
+        lines.append(f"    [{i}] = {nat}, \\")
+    lines.append("")
+    lines.append(f'#define RPG2GBA_REGIONAL_DEX_TITLE _("{dex.name} DEX")')
+    lines.append(f'#define RPG2GBA_REGIONAL_DEX_DESCRIPTION _("{dex.name} region\'s POKéDEX")')
+    lines.append(f'#define RPG2GBA_REGIONAL_DEX_NAME _("{dex.name}")')
+    return lines
+
+
+def emit_pokedex_ids(
+    staged: list[StagedSpecies], anchor: str, regional: RegionalDex | None = None
+) -> str:
     """`rpg2gba_pokedex_ids.h`: chained `NATIONAL_DEX_*` #defines off `anchor`
     (the enum's real last member — NOT `NATIONAL_DEX_COUNT`, which this same
     header redefines below; chaining off a value we're about to rewrite would
@@ -489,6 +565,8 @@ def emit_pokedex_ids(staged: list[StagedSpecies], anchor: str) -> str:
     lines.append("")
     lines.append("#undef NATIONAL_DEX_COUNT")
     lines.append(f"#define NATIONAL_DEX_COUNT {staged[-1].spec.dex_constant}")
+    if regional is not None:
+        lines += _regional_dex_lines(regional)
     return wrap_header("GUARD_URANIUM_POKEDEX_IDS_H", "\n".join(lines), banner=banner)
 
 
@@ -1053,14 +1131,26 @@ def write_all(
             "include/constants/abilities.h", "ABILITY",
             generated=generated_battle_constants(),
         )
+        regional = build_regional_dex(
+            {
+                resolver.species_constant(s.id): s.regional_dex_number
+                for s in species
+                if s is not None and s.regional_dex_number
+            },
+            staged,
+            profile.stock_species(engine_dir),
+            stock_national_constants(engine_dir),
+            game_settings.regional_dex_name(),
+        )
     else:
         resolver = None
         staged = []
+        regional = None
 
     _write(out_dir / "rpg2gba_species_constants.h", emit_species_constants(staged, anchor))
     _write(
         out_dir / "rpg2gba_pokedex_ids.h",
-        emit_pokedex_ids(staged, common.PRISTINE_NATIONAL_DEX_ANCHOR),
+        emit_pokedex_ids(staged, common.PRISTINE_NATIONAL_DEX_ANCHOR, regional),
     )
     learnsets_text, dropped_moves = emit_learnsets(staged, resolver, fork_moves)
     _write(out_dir / "rpg2gba_learnsets.h", learnsets_text)

@@ -2,6 +2,9 @@
 #include "strings.h"
 #include "battle_pyramid_bag.h"
 #include "item_menu.h"
+// BEGIN RPG2GBA GAME PROFILE — the game's regional dex labels (RPG2GBA_REGIONAL_DEX_*), if generated.
+#include "constants/pokedex.h"
+// END RPG2GBA GAME PROFILE
 
 ALIGNED(4)
 const u8 gText_ExpandedPlaceholder_Empty[] = _("");
@@ -71,7 +74,13 @@ const u8 gText_ListByFirstLetter[] = _("List by the first letter in the name.\nS
 const u8 gText_ListByBodyColor[] = _("List by body color.\nSpotted POKéMON only.");
 const u8 gText_ListByType[] = _("List by type.\nOwned POKéMON only.");
 const u8 gText_ExecuteSearchSwitch[] = _("Execute search/switch.");
+// BEGIN RPG2GBA GAME PROFILE — the regional dex's title names the game's region.
+#ifdef RPG2GBA_REGIONAL_DEX_TITLE
+const u8 gText_DexHoennTitle[] = RPG2GBA_REGIONAL_DEX_TITLE;
+#else
 const u8 gText_DexHoennTitle[] = _("HOENN DEX");
+#endif
+// END RPG2GBA GAME PROFILE
 const u8 gText_DexNatTitle[] = _("NATIONAL DEX");
 const u8 gText_DexSortNumericalTitle[] = _("NUMERICAL MODE");
 const u8 gText_DexSortAtoZTitle[] = _("A TO Z MODE");
@@ -98,7 +107,13 @@ const u8 gText_DexSearchColorPurple[] = _("PURPLE");
 const u8 gText_DexSearchColorGray[] = _("GRAY");
 const u8 gText_DexSearchColorWhite[] = _("WHITE");
 const u8 gText_DexSearchColorPink[] = _("PINK");
+// BEGIN RPG2GBA GAME PROFILE
+#ifdef RPG2GBA_REGIONAL_DEX_DESCRIPTION
+const u8 gText_DexHoennDescription[] = RPG2GBA_REGIONAL_DEX_DESCRIPTION;
+#else
 const u8 gText_DexHoennDescription[] = _("HOENN region's POKéDEX");
+#endif
+// END RPG2GBA GAME PROFILE
 const u8 gText_DexNatDescription[] = _("National edition POKéDEX");
 const u8 gText_DexSortNumericalDescription[] = _("POKéMON are listed according to their\nnumber.");
 const u8 gText_DexSortAtoZDescription[] = _("Spotted and owned POKéMON are listed\nalphabetically.");
@@ -1002,7 +1017,13 @@ const u8 gText_EventSafelyLoaded[] = _("The event was safely loaded.");
 const u8 gText_LoadErrorEndingSession[] = _("Loading error.\nEnding session.");
 const u8 gJPText_Player[] = _("プレイヤー"); // Unused
 const u8 gJPText_Sama[] = _("さま"); // Unused
+// BEGIN RPG2GBA GAME PROFILE — the diploma's dex name.
+#ifdef RPG2GBA_REGIONAL_DEX_NAME
+const u8 gText_DexHoenn[] = RPG2GBA_REGIONAL_DEX_NAME;
+#else
 const u8 gText_DexHoenn[] = _("HOENN");
+#endif
+// END RPG2GBA GAME PROFILE
 const u8 gText_DexNational[] = _("NATIONAL");
 const u8 gText_PokedexDiploma[] = _("PLAYER: {CLEAR 0x10}{COLOR RED}{SHADOW LIGHT_RED}{PLAYER}{COLOR DARK_GRAY}{SHADOW LIGHT_GRAY}\n\nThis document certifies\nthat you have successfully\ncompleted your\n{STR_VAR_1} POKéDEX.\n\n{CLEAR_TO 0x42}{COLOR RED}{SHADOW LIGHT_RED}GAME FREAK");
 const u8 gJPText_GameFreak[] = _("{COLOR RED}{SHADOW LIGHT_RED}ゲ-ムフリ-ク"); // Unused

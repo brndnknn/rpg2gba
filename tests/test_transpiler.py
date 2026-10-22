@@ -1303,7 +1303,7 @@ def test_receive_item_type12_condition_nonempty_then_body_branches_on_result(
     res = run_event(ctx, [commands], trigger=1)
     assert res.unhandled == []
     assert "giveitem(ITEM_NUGGET)" in res.text
-    assert "if (var(VAR_RESULT) != 0) {" in res.text
+    assert "if (var(VAR_0x8007) == TRUE) {" in res.text
     assert "Thanks!" in res.text
 
 

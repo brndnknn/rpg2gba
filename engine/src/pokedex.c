@@ -2432,6 +2432,12 @@ static void CreateMonDexNum(u16 entryNum, u8 left, u8 top, u16 unused)
     u16 dexNum, offset = 2;
 
     dexNum = sPokedexView->pokedexList[entryNum].dexNum;
+    // BEGIN RPG2GBA GAME PROFILE — an empty regional slot has no national number to look up;
+    // only the numerical list holds them, one per regional number, so its number is entryNum + 1.
+    if (sPokedexView->dexMode == DEX_MODE_HOENN && dexNum == NATIONAL_DEX_NONE)
+        dexNum = entryNum + 1;
+    else
+    // END RPG2GBA GAME PROFILE
     if (sPokedexView->dexMode == DEX_MODE_HOENN)
         dexNum = NationalToRegionalOrder(dexNum);
     memcpy(text, sText_No0000, ARRAY_COUNT(sText_No0000));
@@ -4515,6 +4521,11 @@ s8 GetSetPokedexFlag(enum NationalDexOrder nationalDexNo, u8 caseID)
     u32 index, bit, mask;
     s8 retVal = 0;
 
+    // BEGIN RPG2GBA GAME PROFILE — an empty regional-dex slot (a species not built yet) has
+    // national number NONE: read it as unseen/uncaught and never write, instead of indexing -1.
+    if (nationalDexNo == NATIONAL_DEX_NONE)
+        return 0;
+    // END RPG2GBA GAME PROFILE
     nationalDexNo--;
     index = nationalDexNo / 8;
     bit = nationalDexNo % 8;

@@ -388,6 +388,14 @@ static const enum NationalDexOrder sKantoToNationalOrder[KANTO_DEX_COUNT] =
 };
 
 
+// BEGIN RPG2GBA GAME PROFILE — the game's regional dex (generated) replaces Hoenn's order.
+#ifdef RPG2GBA_REGIONAL_DEX_COUNT
+static const enum NationalDexOrder sHoennToNationalOrder[HOENN_DEX_COUNT - 1] =
+{
+    RPG2GBA_REGIONAL_DEX_ORDER
+};
+#else
+// END RPG2GBA GAME PROFILE
 // Assigns all Hoenn Dex Indexes to a National Dex Index
 static const enum NationalDexOrder sHoennToNationalOrder[HOENN_DEX_COUNT - 1] =
 {
@@ -630,6 +638,9 @@ static const enum NationalDexOrder sHoennToNationalOrder[HOENN_DEX_COUNT - 1] =
     HOENN_TO_NATIONAL(JIRACHI),
     HOENN_TO_NATIONAL(DEOXYS),
 };
+// BEGIN RPG2GBA GAME PROFILE
+#endif
+// END RPG2GBA GAME PROFILE
 
 const struct SpindaSpot gSpindaSpotGraphics[] =
 {

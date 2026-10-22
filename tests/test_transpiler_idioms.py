@@ -239,7 +239,7 @@ def test_receive_item_then_only_omits_else(ctx: T.TranspileContext) -> None:
     ]
     res = run_event(ctx, [commands], map_id=32, event_id=27)
     assert "giveitem(ITEM_RARE_CANDY)" in res.text
-    assert "if (var(VAR_RESULT) != 0) {" in res.text
+    assert "if (var(VAR_0x8007) == TRUE) {" in res.text
     assert "} else {" not in res.text
     assert f"setflag({self_switch_flag_name(32, 27, 'A')})" in res.text
 
@@ -255,7 +255,7 @@ def test_receive_item_then_and_else_with_quantity(ctx: T.TranspileContext) -> No
     ]
     res = run_event(ctx, [commands])
     assert "giveitem(ITEM_POKE_BALL, 5)" in res.text
-    assert "if (var(VAR_RESULT) != 0) {" in res.text
+    assert "if (var(VAR_0x8007) == TRUE) {" in res.text
     assert "} else {" in res.text
     assert 'msgbox(format("placeholder success text"))' in res.text
     assert 'msgbox(format("placeholder failure text"))' in res.text
@@ -1491,15 +1491,11 @@ def test_pokedex_grant_idiom(ctx: T.TranspileContext) -> None:
     assert res.unhandled == []
 
 
-def test_pokedex_grant_enables_national_mode(ctx: T.TranspileContext) -> None:
-    """The grant must also enable National mode, or every Uranium species is
-    caught-but-invisible: they are chained past NATIONAL_DEX_PECHARUNT with no
-    regional number, and a Hoenn-mode dex enumerates only the regional range
-    (`pokedex.c` CreatePokedexList). Setting FLAG_SYS_NATIONAL_DEX by hand
-    would not do it -- IsNationalPokedexEnabled also checks nationalMagic and
-    VAR_NATIONAL_DEX, which only the special writes."""
+def test_pokedex_grant_leaves_national_mode_locked(ctx: T.TranspileContext) -> None:
+    """#31: the regional dex is the game's own (Tandor), and Uranium never
+    unlocks a second one, so the grant no longer enables National mode."""
     res = run_event(ctx, [[cmd(T.SCRIPT, ["$Trainer.pokedex=true"])]])
-    assert "special(EnableNationalPokedex)" in res.text
+    assert "EnableNationalPokedex" not in res.text
     assert res.unhandled == []
 
 

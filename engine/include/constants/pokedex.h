@@ -1607,6 +1607,13 @@ enum KantoDexOrder
 
 #define KANTO_DEX_COUNT (KANTO_DEX_MEW + 1)
 #define HOENN_DEX_COUNT (HOENN_DEX_DEOXYS + 1)
+// BEGIN RPG2GBA GAME PROFILE — the game's regional dex replaces Hoenn's when generated
+// (constants/rpg2gba_pokedex_ids.h, included above; sHoennToNationalOrder in pokemon.c).
+#ifdef RPG2GBA_REGIONAL_DEX_COUNT
+#undef HOENN_DEX_COUNT
+#define HOENN_DEX_COUNT RPG2GBA_REGIONAL_DEX_COUNT
+#endif
+// END RPG2GBA GAME PROFILE
 
 #define REGIONAL_DEX_COUNT (IS_FRLG ? KANTO_DEX_COUNT : HOENN_DEX_COUNT)
 

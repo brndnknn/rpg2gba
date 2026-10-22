@@ -1057,6 +1057,12 @@ suite rather than reaching a ROM.
 
 ### 31. Give the Pokédex Uranium's real Tandor regional dex
 
+**2026-10-21, operator rulings (they settle the open questions below):**
+- **Tandor only.** Stop unlocking National mode. A build check fails loud if a species the
+  game hands out has no Tandor number.
+- **All 200 Tandor slots are listed.** A species not built yet shows as an unseen slot.
+- **The dex UI says TANDOR, not HOENN.** Palettes stay stock.
+
 **User decision 2026-08-11: wanted, not deferred.** The current dex is
 National mode with the staged Uranium species grafted onto the end of the
 vanilla national list, past `NATIONAL_DEX_PECHARUNT`. That was the minimum fix
