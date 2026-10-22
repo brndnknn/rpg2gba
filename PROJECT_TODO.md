@@ -812,50 +812,53 @@ emulator) playthrough of stock Uranium's lab scene to settle. Migrated from
 `reference/findings/lab_starter_scene_positioning_2026-07-27.md` §4,
 2026-08-04.
 
-### 27. Moki Town east seam → Route 03: connections + border-strip import
+### 27. Moki Town east seam → Route 03: the first remapped E/W seam (CH09) — REPLANNED 2026-10-22
 
-Was `SLICE2_TODO.md` #3, moved here 2026-08-05 during the slice→chapter
-reorientation: under the chapter model Route 03 is **CH09, in Act 2** — seven
-chapters past the current frontier — so the Moki↔Route 03 seam is not CH02
-work. It stays prerequisite-chained on per-map tileset packing
-(`CH02_TODO.md` #4), and it should resurface when CH09 is planned, or earlier
-if a CH01/CH02 boot-walk shows the east map edge needs real neighbour art.
-This is the first of 14 `connections.dat` seams, and no seam anywhere in the
-corpus is converted yet, so this item is the whole seams feature, not just
-one map pair.
+*Replanned 2026-10-22 at CH09 open. The pre-2026-10 text (per-map packing, pinned palette
+families, border-strip import, an unconverted seams feature) is superseded: CH04/CH06 and I4
+built that machinery (`connections.py`, `connection_remap.py` design R, the seam swap), and it is
+live on 31<->35 (shared tileset) and 40<->35 (remapped). History: `git log -S "### 27." --
+PROJECT_TODO.md`.*
 
-Originally migrated from SLICE1_TODO #9, 2026-08-04. CH01 only proved the seam
-fails *cleanly* (blocked, no walk-into-void); converting it for real is this
-item — Moki Town↔Route 03 (`[32,E,26, 59,W,0]`) is the first of 14
-`connections.dat` seams and the nearest one to the frontier.
+**Measured 2026-10-22** (`output/scratch/ch09_seam_budget.py`, `ch09_seam_align.py`):
+- **Gating.** The row `[32,E,26,59,W,0]` goes live as soon as 59 is in `SLICE_MAP_IDS`
+  (`map_set.py:31`); `connections.emitted_rows` only drops rows with a map outside the set. No
+  other switch. The same rows feed `tileset_groups` and `load_slice_remap_directions`.
+- **Kind.** 32 (ts22) and 59 (ts24) are a two-map component on different tilesets, so a
+  remapped seam: `RemapDirection(32→59, right, +26)` and `(59→32, left, −26)`.
+- **Fit.** 59 alone 745 metatiles / 673 tiles; 59 plus Moki's W strip (depth 7) 749 / 680;
+  32 plus Route 3's E strip (depth 8) 724 / 697. All under 1024/1024, 13 palettes. **Route 3 is
+  not streamed.**
+- **Offset.** Route 3 y = Moki y − 26 (Moki E rows 26–63 meet Route 3 rows 0–37); 31 of 32
+  walkable Moki edge rows meet walkable Route 3 rows. The same convention picks the live
+  offsets on 31<->35 and 40<->35.
+- **Oversize.** 59's backup grid is 145×80 = 11600 > 10240, so it loads through the windowed
+  grid (#148): 2 source rectangles (layout + W connection), limit 8.
 
-Architecture decided in `reference/guides/connections_and_palette_families.md`
-(2026-07-14, user-approved by eye) — three parts:
+**Plan:**
+1. Add 59, 1, 54 to `SLICE_MAP_IDS`. The seam, both remap tables and the strip imports follow
+   with no new code expected.
+2. Build the chain (transpile → stage → assemble → `make modern`) and `build_report` (ROM size,
+   EWRAM).
+3. In-ROM checks, each a probe with numbers, not a look:
+   a. `playtest.screen_check` on 59 and on 32's E edge, VRAM vs layout. This is the first
+      oversized map with a **remapped** connection; the Walker run behind #148 had no seam.
+   b. #150's E/W residual: adapt `seam_rows_probe.py` to columns/HOFS and cross both ways. If
+      the west side shows a border-block column mid-step, decide then (engine copy of an 8th
+      west column vs accept).
+   c. Seam swap on a stock↔stock crossing: scanlines used (40↔35 measured 21 of 67).
+   d. Collision: cross on a few aligned rows both ways.
+4. Earlier suites: the `map032/seam/E/map059` row is `later` in CH01 and `later: CH09` in
+   CH08. Regenerate the CH01/CH08 manifests and suites after the seam is live; operator
+   approves the deltas (§9). CH09's own suite claims the crossing (arriving chapter owns it).
 
-1. **Per-map tileset packing** must land first (`CH02_TODO.md` #4) — shared
-   per-RMXP tilesets are arithmetically impossible for this seam (Map032 ∪
-   Map033 on ts22 = 1607 metatiles / 1611 tiles, over both 1024 caps).
-2. **Palette families pinned per seam component** — Moki+R03 is one of 8
-   `connections.dat` components; quantize both maps' tile union against ONE
-   pinned palette set (new SoT artifact `reference/palette_families.gen.json`
-   or per-component files) so seam colors match exactly. Consumer:
-   `build_slice_tilesets` (`src/rpg2gba/tileset_converter/graphics/build_slice_tilesets.py`)
-   quantizes member maps against the pinned set instead of deriving per-pack.
-3. **Border-strip import** — emit the neighbor's visible border strip (≤ ~8
-   metatiles deep past the seam) into each map's own tileset as extra
-   columns, so the engine's native `connections` renderer (porymap
-   `map.json` direction/offset/map schema) draws real neighbor art instead of
-   VRAM garbage ("tileset bleed"). Exact sampling mechanism (map.json border
-   block vs neighbor's real map data) needs a fork read of `fieldmap.c`
-   connection handling before coding (§4.7) — not yet done.
+**Not needed any more:** per-map packing (done), a pinned palette-family SoT (seam colours
+come from each map's own quantize; judged by eye on 40↔35, judge again on the walk), the
+streaming opt-in, and the fork read of `fieldmap.c` (done in CH04).
 
-**Also open, not yet resolved:** RMXP offset-sign → GBA offset-convention
-worked example (Kevlar N offset 11 vs Moki E offset 26) — verify in-ROM at
-the boot gate, per the design doc's own open note.
-
-**Done looks like:** Map032 emits a real `connections` entry to Map033 (and
-vice versa) in map.json; crossing the seam in mGBA shows continuous art with
-no palette snap and no garbage strip; collision at the boundary is sane.
+**Done looks like:** CH09's gen suite crosses Moki E ↔ Route 3 W both ways green from boot;
+the probes in step 3 report 0 mismatches / no empty band / swap inside VBlank; the operator's
+walk shows continuous art across the seam.
 
 ### 28. Time-of-day encounter tables are dropped corpus-wide (Cave half RESOLVED 2026-09-02)
 
