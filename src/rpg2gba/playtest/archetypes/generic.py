@@ -2275,9 +2275,17 @@ def transit_beat(
     beat_name: str,
     hops: Sequence[Hop],
     group: str | None = None,
+    reclear: Sequence[tuple[str, str]] = (),
 ) -> None:
     """Register one travel beat: cross each hop's warp, in order, to reach
     the map the next beat is on (C6 part two, `beat_gen/continuity.py`).
+
+    `reclear` is `(page row, capability)` for obstacles on the LAST hop's
+    destination that an earlier beat cleared: obstacles respawn on a map
+    reload (`smash_beat`), and arriving here reloaded the map. Each one still
+    standing is cleared again the way `smash_beat` clears it; one already gone
+    is skipped. Claims and declares nothing for them (CH09: CH08's walk back to
+    Moki's east edge from the lab met the rock wall standing again).
 
     Claims no rows and declares nothing. It is not a test of these warps --
     each is asserted by its own warp beat -- only the way between two
@@ -2310,5 +2318,47 @@ def transit_beat(
             else:
                 assertions.cross_threshold(emu, beat_name, (x, y), press, dest)
             emu.settle_field()
+        if reclear:
+            _reclear_obstacles(emu, beat_name, hops[-1][4], reclear)
 
     del body
+
+
+def _reclear_obstacles(emu: "Emulator", beat_name: str, map_constant: str,
+                       reclear: Sequence[tuple[str, str]]) -> None:
+    """Clear each `(page row, capability)` obstacle still standing on
+    `map_constant` (`transit_beat`'s `reclear`), in the live order
+    `_next_reachable_obstacle` picks."""
+    assertions.require_map(emu, beat_name, map_constant)
+    present = {ev.local_id for ev in emu.object_events() if ev.active}
+    standing = {row_id: capability for row_id, capability in reclear
+                if local_id(map_constant, parse_row_id(row_id).event_id) in present}
+    for capability in sorted(set(standing.values())):
+        if capability not in TEACHABLE_CAPABILITIES:
+            raise ScenarioError(f"{beat_name}: no HM/move known for capability {capability!r}")
+        move = TEACHABLE_CAPABILITIES[capability][1]
+        if not assertions.party_knows_move(emu, move):
+            raise ScenarioError(f"{beat_name}: an obstacle respawned and no party member "
+                                f"knows {move} to clear it again")
+    remaining = list(standing)
+    while remaining:
+        row_id, approach, avoid = _next_reachable_obstacle(
+            emu, beat_name, map_constant, remaining, None)
+        remaining.remove(row_id)
+        event_id = parse_row_id(row_id).event_id
+        lid = local_id(map_constant, event_id)
+        ox, oy = event_cell(map_constant, event_id)
+        logger.info("%s: %s respawned on the map reload; clearing it again with %s",
+                    beat_name, row_id, standing[row_id])
+        emu.walk_to(*approach, absorb_wild=True, avoid=avoid)
+        emu.face(facing_toward(approach, (ox, oy), caller="transit_beat"))
+        emu.interact()
+        emu.advance_dialog(answers=[0])
+        if not _wait_for(emu, lambda: not emu.field_locked()):
+            shot = emu.screenshot(f"{beat_name}_{row_id}_locked")
+            raise ScenarioError(f"{beat_name}: {row_id}: field controls still locked after "
+                                f"the {standing[row_id]} prompt ({shot})")
+        if any(ev.local_id == lid for ev in emu.object_events()):
+            shot = emu.screenshot(f"{beat_name}_{row_id}_still_there")
+            raise ScenarioError(f"{beat_name}: {row_id}: respawned obstacle at ({ox},{oy}) is "
+                                f"still present after answering YES ({shot})")

@@ -174,3 +174,50 @@ def test_transit_over_a_gated_door_after_its_warp_beat_has_run_passes():
     out = _thread(beats, start_map=1, warp_dest={"w1": 2}, nudge_source={},
                       route_between=_route_via_gate, gated_doors=frozenset({(1, 7)}))
     assert [b.name for b in out] == ["w1", "y_transit", "y", "z_transit", "z"]
+
+
+# -- attach_reclears: a transit's arrival respawns walls cleared earlier -----
+
+def _smash(name: str, map_id: int, rows: tuple[str, ...]) -> PlannedBeat:
+    return PlannedBeat(name=name, template="smash", map_id=map_id, rows=rows, group=name,
+                       kwargs=make_kwargs(capability="rock_smash"))
+
+
+def _transit(name: str, dest: str) -> PlannedBeat:
+    return PlannedBeat(name=name, template="transit", map_id=50, rows=(), group=name,
+                       kwargs=make_kwargs(hops=(("MAP_50", 14, 18, "DOWN", dest),)))
+
+
+def test_transit_back_to_a_smashed_map_reclears_the_walls_the_next_beat_waits_on():
+    from rpg2gba.beat_gen.continuity import attach_reclears
+
+    beats = (_smash("s", 32, ("map032/ev014/p0", "map032/ev014/p0/b2", "map032/ev033/p0")),
+             _beat("lab", 50), _transit("t", "MAP_32"), _beat("edge", 32))
+    passage = {"edge/r": ("map032/ev014/p0", "map032/ev014/p0/b0", "map032/ev033/p0")}
+    out = attach_reclears(beats, lambda m: f"MAP_{m}", passage)
+
+    assert dict(out[2].kwargs)["reclear"] == (
+        ("map032/ev014/p0", "rock_smash"), ("map032/ev033/p0", "rock_smash"))
+    assert out[0] == beats[0] and out[3] == beats[3]
+
+
+def test_transit_whose_next_beat_needs_no_wall_gets_no_reclear():
+    # CH08's Route 1 transit to a stair the smashed rocks never walled.
+    from rpg2gba.beat_gen.continuity import attach_reclears
+
+    beats = (_smash("s", 32, ("map032/ev014/p0",)), _transit("t", "MAP_32"), _beat("stair", 32))
+    out = attach_reclears(beats, lambda m: f"MAP_{m}", {"other/r": ("map032/ev014/p0",)})
+
+    assert "reclear" not in dict(out[1].kwargs)
+
+
+def test_transit_before_the_smash_or_to_another_map_gets_no_reclear():
+    from rpg2gba.beat_gen.continuity import attach_reclears
+
+    beats = (_transit("t0", "MAP_32"), _beat("a", 32), _smash("s", 32, ("map032/ev014/p0",)),
+             _transit("t1", "MAP_33"), _beat("b", 33))
+    passage = {"a/r": ("map032/ev014/p0",), "b/r": ("map032/ev014/p0",)}
+    out = attach_reclears(beats, lambda m: f"MAP_{m}", passage)
+
+    assert "reclear" not in dict(out[0].kwargs)
+    assert "reclear" not in dict(out[3].kwargs)

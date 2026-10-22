@@ -232,3 +232,37 @@ def thread_maps(
         if beat.template == "escort":
             arrived_from, cur = (here[0], None), warp_dest[beat.name]
     return tuple(out)
+
+
+def attach_reclears(beats: Sequence[PlannedBeat],
+                    map_constant_for: Callable[[int], str],
+                    passage: Mapping[str, Sequence[str]]) -> tuple[PlannedBeat, ...]:
+    """Give a transit the obstacles it must clear again on arrival
+    (`generic.transit_beat`'s `reclear`).
+
+    Obstacles respawn on a map reload, and a transit's arrival is one, so a
+    wall the chain treats as released (`__main__`'s `released`) is standing
+    again when the transit lands. That only matters when the beat right after
+    the transit is reachable only THROUGH such a wall: `passage` is
+    `_passage_enablers`' row -> the clearing rows it waits on. The transit
+    gets those walls that an EARLIER smash beat cleared on its destination
+    map, page rows only (an arm row shares its page's event); the transit
+    skips any already gone. CH09 (2026-10-22): CH08's walk from the lab to
+    Moki's east edge met Moki's rock wall, smashed earlier in CH08; Route 1's
+    transit to a stair the rocks don't wall gets nothing."""
+    cleared: dict[str, dict[str, str]] = {}
+    out: list[PlannedBeat] = []
+    for i, beat in enumerate(beats):
+        kw = dict(beat.kwargs)
+        if beat.template == "smash":
+            pages = [r for r in beat.rows if not r.rsplit("/", 1)[-1].startswith("b")]
+            cleared.setdefault(map_constant_for(beat.map_id), {}).update(
+                (r, kw["capability"]) for r in pages)
+        elif beat.template == "transit" and kw["hops"] and i + 1 < len(beats):
+            on_dest = cleared.get(kw["hops"][-1][4], {})
+            waits = {w for r in beats[i + 1].rows for w in passage.get(r, ())}
+            need = tuple((r, cap) for r, cap in on_dest.items() if r in waits)
+            if need:
+                beat = dataclasses.replace(beat, kwargs=make_kwargs(**kw, reclear=need))
+        out.append(beat)
+    return tuple(out)

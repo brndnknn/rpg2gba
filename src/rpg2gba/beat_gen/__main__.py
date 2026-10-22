@@ -52,7 +52,7 @@ from rpg2gba.beat_gen.adapt import (
 from rpg2gba.pbs_converter._naming import to_constant
 from rpg2gba.beat_gen.arms import annotate_random_arms, blocked_arms, split_choice_arms
 from rpg2gba.beat_gen.boundary import inbound_rows, split_outbound
-from rpg2gba.beat_gen.continuity import thread_maps
+from rpg2gba.beat_gen.continuity import attach_reclears, thread_maps
 from rpg2gba.beat_gen.interiors import (
     arrival_nudge_edges,
     gated_entry_edges,
@@ -2296,6 +2296,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         story_enabled_by[rid] = tuple(story_enabled_by.get(rid, ())) + groups
     killers = killed_before(beats, wm=wm, seed=seeds[chapter_id],
                             claimed_rows=claimed_rows)
+    passage: dict[str, tuple[str, ...]] = {}  # row -> the released walls' clearers it waits on
     if released:
         released = _expand_to_pages(released, claimed_rows)
         # Passage through a released actor waits on its clearers; the wall's
@@ -2322,6 +2323,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                 exclude_rows=excluded).items():
             logger.info("passage through released actor: %s waits on any of %s",
                         rid, list(writers))
+            passage[rid] = writers
             story_enabled_by[rid] = tuple(story_enabled_by.get(rid, ())) + (writers,)
     # 2026-09-28 ruling (one-way warps): enter a dead-end interior, do its
     # first-visit beats, leave; an arrival nudge after the warp landing on it.
@@ -2470,6 +2472,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         route_between=route_between, door_steps=door_steps,
         gated_doors=gated,
     )
+    # 7b. A transit's arrival reloads its map: walls cleared earlier there stand again.
+    beats = attach_reclears(beats, _map_constant_for, passage)
 
     # 8. White-out fork beats ride after their enablers (`beat_gen/whiteout.py`).
     heal_entries = json.loads(

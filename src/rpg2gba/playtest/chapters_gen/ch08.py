@@ -427,6 +427,7 @@ transit_beat(
     beat_name='m032seamE059_transit',
     group='m032seamE059',
     hops=(('MAP_MOKI_TOWN_PROFESSOR_LAB', 14, 18, 'DOWN', 'MAP_MOKI_TOWN'),),
+    reclear=(('map032/ev014/p0', 'rock_smash'), ('map032/ev015/p0', 'rock_smash'), ('map032/ev033/p0', 'rock_smash')),
 )
 
 seam_beat(
