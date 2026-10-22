@@ -584,9 +584,19 @@ def _route_between(world: WorldGraph, maps: frozenset[int],
         hop can stand on it and hold the edge press."""
         out = []
         loaded = None
+        reached_maps = {m for m, _ in reach}
         for m in sorted(maps):
             for e in world.edges_from(m):
                 if e.kind != "connection" or e.dst_map not in maps:
+                    continue
+                if e.src_map not in reached_maps or e.dst_map not in reached_maps:
+                    # Outside this chapter's reachable world (CH09 enters at
+                    # Moki's east edge; Kevlar/Route 2/Nowtoch are behind the
+                    # rock wall): no crossing to pick, nothing to fail on. A
+                    # connection both of whose maps ARE reached still has to
+                    # line up, below.
+                    logger.info("connection %d -> %d: a side is unreached from the entry "
+                                "-- not a route edge", e.src_map, e.dst_map)
                     continue
                 if loaded is None:
                     loaded = load_connections()

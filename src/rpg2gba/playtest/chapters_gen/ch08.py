@@ -421,6 +421,23 @@ generic_beat(
     choice_answers=((4, 1),),
 )
 
+transit_beat(
+    ch08,
+    chapter_id='CH08',
+    beat_name='m032seamE059_transit',
+    group='m032seamE059',
+    hops=(('MAP_MOKI_TOWN_PROFESSOR_LAB', 14, 18, 'DOWN', 'MAP_MOKI_TOWN'),),
+)
+
+seam_beat(
+    ch08,
+    chapter_id='CH08',
+    beat_name='m032seamE059',
+    group='m032seamE059',
+    rows=('map032/seam/E/map059',),
+    approach_prefer='RIGHT@(71,45)',
+)
+
 NEVER_FIRES: dict[str, str] = {
     'map031/ev034/p1': "archetype_kwargs: map031/ev034/p1: no warp lands on this arrival autorun's cell (13,7) on map 31 -- it never fires",
     'map031/ev034/p1/b0': "archetype_kwargs: map031/ev034/p1: no warp lands on this arrival autorun's cell (13,7) on map 31 -- it never fires",
@@ -690,7 +707,6 @@ ELSEWHERE: dict[str, str] = {
     'map032/ev080/p0/b2': 'unreachable',
     'map032/ev080/p0/b3': 'unreachable',
     'map032/ev080/p1': 'unreachable',
-    'map032/seam/E/map059': 'later: CH09',
     'map033/ev002/p0': 'later: CH02',
     'map033/ev002/p0/b0': 'later: CH02',
     'map033/ev002/p0/b1': 'later: CH02',

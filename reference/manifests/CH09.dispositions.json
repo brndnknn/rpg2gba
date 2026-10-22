@@ -1,0 +1,53 @@
+{
+  "map059/ev008/p0": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "ac1c9abbdeb5cc83"
+  },
+  "map059/ev008/p1": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "5539cd09d8efee80"
+  },
+  "map059/ev008/p1/b0": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "483613f75931ffe6"
+  },
+  "map059/ev008/p1/b1": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "4f8217c3e24208a2"
+  },
+  "map059/ev009/p0": {
+    "disposition": "beat:m059e009p0",
+    "affirmed_hash": "a15857790071d93b",
+    "archetype_exempt": "phone-rematch trainer: the generator refuses its rematch count (story-state unmodelled_outcome:phone_battle_count), so the battle page is walked by a generic beat, not the trainer template; same shape as CH08 map033/ev039 (operator-approved 2026-10-15)"
+  },
+  "map059/ev009/p1": {
+    "disposition": "cosmetic",
+    "affirmed_hash": "1c3750ed3fff8775",
+    "archetype_exempt": "phone-rematch trainer: the rematch-count retalk page is refused (story-state unmodelled_outcome:phone_battle_count); same shape as CH08 map033/ev039 (operator-approved 2026-10-15)"
+  },
+  "map059/ev009/p2": {
+    "disposition": "beat:m059e009p2",
+    "affirmed_hash": "e0d32e2bb69ceb8e",
+    "archetype_exempt": "phone-rematch trainer: the retalk page is walked by a generic beat because the rematch count is unmodelled (story-state unmodelled_outcome:phone_battle_count); same shape as CH08 map033/ev039 (operator-approved 2026-10-15)"
+  },
+  "map059/ev011/p0": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "05ae1f0edb135466"
+  },
+  "map059/ev011/p0/b0": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "7186c1f9771d491b"
+  },
+  "map059/ev011/p0/b1": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "b9075f3b514adea4"
+  },
+  "map059/ev011/p1": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "e3273445c72667a1"
+  },
+  "map059/ev015/p0": {
+    "disposition": "blocked:surf",
+    "affirmed_hash": "f8f3d1beba6b5312"
+  }
+}

@@ -200,6 +200,42 @@ def test_arrival_nudge_transit_uses_door_steps_when_the_route_picks_another_door
     assert dict(transit.kwargs)["hops"] == (("back",), ("ev23",))
 
 
+# -- a real connection outside the reached world is not an edge ----------------
+
+def _connection_route(monkeypatch, reach):
+    """`_route_between` over one synthetic connection, map 1 -> map 2, whose
+    only crossing is (9,0) -> (0,0)."""
+    from types import SimpleNamespace
+
+    from rpg2gba.beat_gen import __main__ as bg
+
+    crossing = SimpleNamespace(exit_cell=(9, 0), entry_cell=(0, 0), press="RIGHT")
+    monkeypatch.setattr(bg, "load_connections", lambda: ["conn"])
+    monkeypatch.setattr(bg, "connections_between", lambda loaded, a, b: ["conn"])
+    monkeypatch.setattr(bg, "connection_crossings", lambda conn, **kw: [crossing])
+    monkeypatch.setattr(bg, "_map_constant_for", lambda m: f"MAP_{m}")
+    edge = SimpleNamespace(kind="connection", src_map=1, dst_map=2, event_id=None,
+                           src_cell=None, dst_cell=None)
+    world = SimpleNamespace(edges_from=lambda m: [edge] if m == 1 else [])
+    graphs = {1: SimpleNamespace(warp_exits={}), 2: SimpleNamespace(warp_exits={})}
+    rooms = SimpleNamespace(place_of=lambda m, cell: (m, 0),
+                            landing_place=lambda e: (e.dst_map, 0))
+    return bg._route_between(world, frozenset({1, 2}), frozenset(reach), graphs, rooms=rooms)
+
+
+def test_connection_with_an_unreached_map_is_skipped(monkeypatch):
+    # 2026-10-22, CH09: entered at Moki's east edge, Kevlar/Route 2 are never
+    # reached, and their connection used to fail the whole plan.
+    route, _ = _connection_route(monkeypatch, {(1, (5, 0))})
+    with pytest.raises(ValueError, match="no warp route"):
+        route((1, 0), (2, 0))
+
+
+def test_connection_reached_on_both_maps_but_misaligned_still_raises(monkeypatch):
+    with pytest.raises(ValueError, match="no edge cell is passable"):
+        _connection_route(monkeypatch, {(1, (5, 0)), (2, (5, 5))})
+
+
 # -- a seam hop must land on a cell the walker can leave -----------------------
 
 def _seam_route(monkeypatch, pairs, *, press="UP", reach_extra=()):
