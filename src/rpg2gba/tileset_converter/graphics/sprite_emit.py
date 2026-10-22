@@ -195,14 +195,17 @@ _FRAME_BYTES = GBA_FRAME_PX * GBA_FRAME_PX // 2  # 512: one 4bpp 32x32 frame
 # can never collide with an NPC tag even on a run that used fewer NPC palettes.
 _PLAYER_PAL_TAG = "OBJ_EVENT_PAL_TAG_URANIUM_PLAYER"
 _PLAYER_PAL_TAG_VALUE = _PAL_TAG_BASE + MAX_PALETTES
-_PLAYER_IDENT = "UraniumPlayerNormal"  # matches the symbol the lead's pointers-file
-                                       # entry already references verbatim
+_PLAYER_IDENT = "UraniumPlayerNormal"
 _PLAYER_PALETTE_SLOT = "PALSLOT_PLAYER"
 _PLAYER_ANIM_TABLE = "sAnimTable_BrendanMayNormal"
 _PLAYER_PICS_STEM = "hero"
+# The tracked pointers file names the player by this game-neutral alias, never
+# by the game's own symbol; the decls header #defines it to the generated
+# struct when the player is staged.
+_PLAYER_ALIAS = "Rpg2gbaPlayerNormal"
 # The vanilla Brendan struct the stub #define falls back to on a fresh clone
 # (no sprites staged yet) so the tracked pointers file's unconditional reference
-# to gObjectEventGraphicsInfo_UraniumPlayerNormal still compiles.
+# to gObjectEventGraphicsInfo_Rpg2gbaPlayerNormal still compiles.
 _PLAYER_STUB_FALLBACK = "gObjectEventGraphicsInfo_BrendanNormal"
 
 # --- Player FIELD-MOVE variant (rock smash pose) -----------------------------
@@ -217,6 +220,7 @@ _PLAYER_STUB_FALLBACK = "gObjectEventGraphicsInfo_BrendanNormal"
 # would leave SpriteAnimEnded() permanently false and softlock the smash.
 _PLAYER_FIELD_MOVE_IDENT = "UraniumPlayerFieldMove"
 _PLAYER_FIELD_MOVE_ANIM_TABLE = "sUraniumAnimTable_PlayerFieldMove"
+_PLAYER_FIELD_MOVE_ALIAS = "Rpg2gbaPlayerFieldMove"
 # The vanilla field-move struct the stub #define falls back to on a fresh
 # clone, mirroring _PLAYER_STUB_FALLBACK's rationale above.
 _PLAYER_FIELD_MOVE_STUB_FALLBACK = "gObjectEventGraphicsInfo_BrendanFieldMove"
@@ -868,16 +872,29 @@ def _render_graphics_info_decls(
             f"extern const struct ObjectEventGraphicsInfo "
             f"gObjectEventGraphicsInfo_{_PLAYER_FIELD_MOVE_IDENT};\n"
         )
+        lines.append(_player_alias_defines(
+            f"gObjectEventGraphicsInfo_{_PLAYER_IDENT}",
+            f"gObjectEventGraphicsInfo_{_PLAYER_FIELD_MOVE_IDENT}",
+        ))
     return "".join(lines)
+
+
+def _player_alias_defines(normal: str, field_move: str) -> str:
+    """The `#define`s that point the tracked pointers file's game-neutral
+    player names at `normal` / `field_move`."""
+    return (
+        f"#define gObjectEventGraphicsInfo_{_PLAYER_ALIAS} {normal}\n"
+        f"#define gObjectEventGraphicsInfo_{_PLAYER_FIELD_MOVE_ALIAS} {field_move}\n"
+    )
 
 
 def _render_graphics_info_pointers(
     sprites: list[ConvertedSprite], units: dict[str, list[_EmissionUnit]]
 ) -> str:
-    # Deliberately no player branch here: the lead session repoints the vanilla
-    # [OBJ_EVENT_GFX_BRENDAN_NORMAL] pointers-array entry at
-    # gObjectEventGraphicsInfo_UraniumPlayerNormal directly in the tracked
-    # pointers file, so this generated fragment never references the player.
+    # Deliberately no player branch here: the tracked pointers file repoints the
+    # vanilla [OBJ_EVENT_GFX_BRENDAN_NORMAL] entry at
+    # gObjectEventGraphicsInfo_Rpg2gbaPlayerNormal (aliased in the decls header),
+    # so this generated fragment never references the player.
     lines = [_GENERATED_HEADER, _POINTERS_COMMENT]
     for sprite in sprites:
         for unit in units[sprite.name]:
@@ -918,19 +935,14 @@ def write_stub_gen_files(engine_root: Path) -> None:
         "graphics": _STUB_HEADER,
         "pic_tables": _STUB_HEADER,
         "graphics_info": _STUB_HEADER,
-        # The tracked pointers file (owned by the lead session) references
-        # gObjectEventGraphicsInfo_UraniumPlayerNormal unconditionally, and the
-        # lead's field-move pointer entry references
-        # gObjectEventGraphicsInfo_UraniumPlayerFieldMove unconditionally too, so a
-        # fresh clone with no sprites staged needs SOMETHING both names resolve to;
-        # alias each to its vanilla struct. The REAL decls output
-        # (_render_graphics_info_decls) emits the true `extern` declarations instead
-        # and never also emits these #defines.
+        # The tracked pointers file references the player's two game-neutral
+        # aliases unconditionally, so a fresh clone with no sprites staged needs
+        # SOMETHING both names resolve to: alias each to its vanilla struct. The
+        # REAL decls output (_render_graphics_info_decls) aliases them to the
+        # generated structs instead.
         "graphics_info_decls": (
             _STUB_HEADER
-            + f"#define gObjectEventGraphicsInfo_{_PLAYER_IDENT} {_PLAYER_STUB_FALLBACK}\n"
-            + f"#define gObjectEventGraphicsInfo_{_PLAYER_FIELD_MOVE_IDENT} "
-            + f"{_PLAYER_FIELD_MOVE_STUB_FALLBACK}\n"
+            + _player_alias_defines(_PLAYER_STUB_FALLBACK, _PLAYER_FIELD_MOVE_STUB_FALLBACK)
         ),
         "graphics_info_pointers": _STUB_HEADER + _POINTERS_COMMENT,
         "palettes": _STUB_HEADER + _PALETTES_COMMENT,
@@ -959,14 +971,15 @@ def emit_sprites(
     `max_palettes=1` forced, see `_quantize_player`), its own indexed strip PNG
     (`hero.png`), and its own `ObjectEventGraphicsInfo`/pic-table/palette-tag
     entries. It deliberately gets no `OBJ_EVENT_GFX_URANIUM_*` id and no
-    `gObjectEventGraphicsInfoPointers[]` entry -- the lead session repoints the
-    vanilla `[OBJ_EVENT_GFX_BRENDAN_NORMAL]` entry at
-    `gObjectEventGraphicsInfo_UraniumPlayerNormal` directly. A second struct,
+    `gObjectEventGraphicsInfoPointers[]` entry -- the tracked pointers file
+    repoints the vanilla `[OBJ_EVENT_GFX_BRENDAN_NORMAL]` entry at the neutral
+    alias `gObjectEventGraphicsInfo_Rpg2gbaPlayerNormal`, which the decls header
+    `#define`s to `gObjectEventGraphicsInfo_UraniumPlayerNormal`. A second struct,
     `gObjectEventGraphicsInfo_UraniumPlayerFieldMove`, is always emitted
     alongside it (same pic table/palette tag, its own 1-tick terminating anim
-    table -- see `_render_player_field_move_graphics_info`) so the lead's
-    `[OBJ_EVENT_GFX_BRENDAN_FIELD_MOVE]` pointer entry has a non-softlocking
-    target for the rock-smash pose.
+    table -- see `_render_player_field_move_graphics_info`) so the
+    `[OBJ_EVENT_GFX_BRENDAN_FIELD_MOVE]` entry (alias `Rpg2gbaPlayerFieldMove`)
+    has a non-softlocking target for the rock-smash pose.
 
     A sheet with selectable states (a large prop -- see `_emission_units`)
     expands into one `ObjectEventGraphicsInfo` + pic table + gfx id PER STATE,

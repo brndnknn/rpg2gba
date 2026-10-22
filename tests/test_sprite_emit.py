@@ -750,8 +750,13 @@ def test_player_field_move_extern_decl_in_decls_file(tmp_path: Path) -> None:
         "extern const struct ObjectEventGraphicsInfo "
         "gObjectEventGraphicsInfo_UraniumPlayerFieldMove;" in text
     )
-    # The real decls output never emits the stub's #define fallback.
-    assert "#define gObjectEventGraphicsInfo_UraniumPlayerFieldMove" not in text
+    # The real decls output aliases the neutral name to the generated struct,
+    # never to the stub's vanilla fallback.
+    assert (
+        "#define gObjectEventGraphicsInfo_Rpg2gbaPlayerFieldMove "
+        "gObjectEventGraphicsInfo_UraniumPlayerFieldMove\n" in text
+    )
+    assert "BrendanFieldMove" not in text
 
 
 def test_player_graphics_info_struct_shape(tmp_path: Path) -> None:
@@ -809,8 +814,13 @@ def test_player_extern_decl_in_decls_file(tmp_path: Path) -> None:
         "extern const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_UraniumPlayerNormal;"
         in text
     )
-    # The real decls output never also emits the stub's #define fallback.
-    assert "#define gObjectEventGraphicsInfo_UraniumPlayerNormal" not in text
+    # The real decls output aliases the neutral name to the generated struct,
+    # never to the stub's vanilla fallback.
+    assert (
+        "#define gObjectEventGraphicsInfo_Rpg2gbaPlayerNormal "
+        "gObjectEventGraphicsInfo_UraniumPlayerNormal\n" in text
+    )
+    assert "BrendanNormal" not in text
 
 
 def test_player_palette_registration_entry(tmp_path: Path) -> None:
@@ -977,9 +987,9 @@ def test_stub_writer_pins_literal_content(tmp_path: Path) -> None:
     assert graphics_info == stub_header
 
     # The decls stub carries TWO extra lines the other empty stubs don't: the
-    # tracked pointers file (owned by the lead session, outside this module)
-    # references gObjectEventGraphicsInfo_UraniumPlayerNormal AND
-    # gObjectEventGraphicsInfo_UraniumPlayerFieldMove unconditionally, so a
+    # tracked pointers file references the player's game-neutral aliases
+    # gObjectEventGraphicsInfo_Rpg2gbaPlayerNormal AND
+    # gObjectEventGraphicsInfo_Rpg2gbaPlayerFieldMove unconditionally, so a
     # fresh clone needs a name for each to resolve to even with zero sprites
     # staged -- aliased to their vanilla structs.
     graphics_info_decls = (tmp_path / _GEN_RELPATHS["graphics_info_decls"]).read_text(
@@ -987,9 +997,9 @@ def test_stub_writer_pins_literal_content(tmp_path: Path) -> None:
     )
     assert graphics_info_decls == (
         stub_header
-        + "#define gObjectEventGraphicsInfo_UraniumPlayerNormal "
+        + "#define gObjectEventGraphicsInfo_Rpg2gbaPlayerNormal "
         + "gObjectEventGraphicsInfo_BrendanNormal\n"
-        + "#define gObjectEventGraphicsInfo_UraniumPlayerFieldMove "
+        + "#define gObjectEventGraphicsInfo_Rpg2gbaPlayerFieldMove "
         + "gObjectEventGraphicsInfo_BrendanFieldMove\n"
     )
 

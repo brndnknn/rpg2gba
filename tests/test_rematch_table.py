@@ -489,7 +489,7 @@ def _resolved(engine: Path, name: str) -> int:
 def test_macro_resolution_uses_fallbacks_without_generated_sizes(tmp_path: Path) -> None:
     eng = _mini_engine(tmp_path, None)
     assert _resolved(eng, "RPG2GBA_SELFSWITCH_FLAGS_COUNT") == 0x500
-    assert _resolved(eng, "MAX_TRAINERS_COUNT") == 1280
+    assert _resolved(eng, "MAX_TRAINERS_COUNT") == 864  # stock's
 
 
 def test_macro_resolution_generated_sizes_win(tmp_path: Path) -> None:

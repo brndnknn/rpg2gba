@@ -46,20 +46,6 @@ after it. Research and options: `reference/intermission_a1_a2.md` §1 I6.
 - **Related:** #85 (the boot-walk seeding recipe in `BUILD_PLAN.md`), #21 (no
   freshness guard on the ROM under test).
 
-### 152. Two small Uranium leftovers in tracked engine code (I3 S7 audit)
-
-Filed 2026-10-21 at the I3 gate. The S7 audit of `git diff 80cdfce2 HEAD -- engine/` found
-nothing hand-typed that the build actually uses, apart from S3's ruled ability-behaviour C.
-Two tidy-ups remain, neither of which changes the Uranium build:
-- `include/constants/opponents.h`: the `#else` fallback for `TRAINERS_COUNT_EMERALD` (1189 /
-  1280) is stock + Uranium's 331 trainers. The generated `rpg2gba_sizes.gen.h` always
-  overrides it, but a stock build should fall back to stock values. Its stale
-  "854 + 331 = 1185" comment goes too.
-- `src/data/object_events/object_event_graphics_info_pointers.h`: the Brendan rows name
-  `gObjectEventGraphicsInfo_UraniumPlayerNormal` / `...FieldMove` directly. A neutral
-  `Rpg2gba*` alias defined in the generated decls header would keep game names out of
-  the engine.
-
 ### 151. Map viewer / oracle don't read the streamed tileset format or the windowed grid
 
 Filed 2026-10-18 when I4 closed (operator: backlog it). Streamed tilesets (`reference/streamed_maps.json`:
@@ -2262,6 +2248,25 @@ maintainer. Evidence is recorded in
 `reference/frozen/ch05_surf_expectations.json`'s `granting_chapter` block.
 
 ## Done
+
+### 152. DONE 2026-10-21 — Two small Uranium leftovers in tracked engine code (I3 S7 audit)
+
+**DONE 2026-10-21 (intermission).**
+- `opponents.h` falls back to stock's 855/864, and the stale comment is gone.
+- The pointers file names `gObjectEventGraphicsInfo_Rpg2gbaPlayerNormal` / `...FieldMove`. `sprite_emit` `#define`s them in the generated decls header: to the game's structs when the player is staged, and to stock Brendan in the stub.
+- The rebuilt ROM is byte-identical (`a593c317`).
+
+Filed 2026-10-21 at the I3 gate. The S7 audit of `git diff 80cdfce2 HEAD -- engine/` found
+nothing hand-typed that the build actually uses, apart from S3's ruled ability-behaviour C.
+Two tidy-ups remain, neither of which changes the Uranium build:
+- `include/constants/opponents.h`: the `#else` fallback for `TRAINERS_COUNT_EMERALD` (1189 /
+  1280) is stock + Uranium's 331 trainers. The generated `rpg2gba_sizes.gen.h` always
+  overrides it, but a stock build should fall back to stock values. Its stale
+  "854 + 331 = 1185" comment goes too.
+- `src/data/object_events/object_event_graphics_info_pointers.h`: the Brendan rows name
+  `gObjectEventGraphicsInfo_UraniumPlayerNormal` / `...FieldMove` directly. A neutral
+  `Rpg2gba*` alias defined in the generated decls header would keep game names out of
+  the engine.
 
 ### 96. DONE 2026-10-21 — Pokémon Centers heal but never become the respawn point
 
