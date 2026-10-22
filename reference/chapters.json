@@ -140,9 +140,9 @@
     },
     {
       "id": "CH09", "act": "A2", "title": "Route 3", "wiki_page": "Route 3",
-      "visit": 1, "outdoor": 59, "maps": [59, 1, 54, 177],
+      "visit": 1, "outdoor": 59, "maps": [59, 1, 54],
       "predecessor": "CH08", "tier": "thin", "status": "planned",
-      "notes": "Reached via the Moki Town E <-> Route 03 seam (connections.json 32 E <-> 59 W). CH01 only proved the seam fails cleanly (SLICE1_TODO #9); converting it -- the first of 14 connections.dat seams -- is PROJECT_TODO.md #27, off-frontier because this chapter is 7 chapters past CH02."
+      "notes": "Reached via the Moki Town E <-> Route 03 seam (connections.json 32 E <-> 59 W). CH01 only proved the seam fails cleanly (SLICE1_TODO #9); converting it -- the first of 14 connections.dat seams -- is PROJECT_TODO.md #27, off-frontier because this chapter is 7 chapters past CH02. Map 177 (Route 3 dojo) removed 2026-10-22 (operator): its only door, Map059 EV008 at (106,20), sits in a Surf-only east pocket that no west-edge foot component reaches, and a map with no reachable entrance is not built. It joins whichever later chapter first reaches that pocket with Surf (none revisits Route 3 yet)."
     },
     {
       "id": "CH10", "act": "A2", "title": "Burole Town", "wiki_page": "Burole Town",
@@ -455,6 +455,7 @@
     "124": "'Gym3' -- unreachable orphaned draft of the Bealbeach gym; STRIP-listed 2026-09-17 (strip_list.json)",
     "183": "'Rochfale Town' -- unreachable orphaned duplicate of map 12; STRIP-listed 2026-09-17 (strip_list.json)",
     "44": "'Nowtoch City Metro Station' -- PARKED 2026-10-10 (operator), moved out of CH06: Tandor Underground station (ticket kiosk, NPC, map signs, door to the platform). Rebind once every stop's location is known or at the first other station the chain reaches -- decide then: fold it into that chapter, or wait and do one Metro chapter once all stations are hit. Not a strip: nothing here is never-port.",
-    "45": "'Nowtoch City Metro Platform' -- PARKED 2026-10-10 with map 44 (same rebind rule). Conductor EV003's destination menu warps to maps 6/168/11, none bound before CH10+; also an item ball and an NPC."
+    "45": "'Nowtoch City Metro Platform' -- PARKED 2026-10-10 with map 44 (same rebind rule). Conductor EV003's destination menu warps to maps 6/168/11, none bound before CH10+; also an item ball and an NPC.",
+    "177": "'Route 03' dojo (Super Training Tent) -- PARKED 2026-10-22 (operator), moved out of CH09: its only door (Map059 EV008 at (106,20)) is in a Surf-only east pocket of Route 3 that no foot path from the Moki seam reaches, so it has no reachable entrance at CH09 and is not built. Rebind to the first chapter that reaches that pocket with Surf. Holds the Power Bracer gift and the pbPunchBag EV minigame (7 dojo maps share it; how to port it is decided at rebind). Not a strip."
   }
 }

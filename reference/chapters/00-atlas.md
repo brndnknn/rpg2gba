@@ -125,7 +125,7 @@ Tier legend: **F** full, **M** medium, **T** thin. Status is from the binding.
 | CH06 | Nowtoch City | A1 | M | 8 | 6 | 11 | **Gym 1**, Rock Smash (metro maps 44/45 parked to `unbound_maps` 2026-10-10) |
 | CH07 | Route 2 (revisit) | A1 | T | 1 | 4 | 3 | overland seam opens |
 | CH08 | Route 1 + Moki Town (revisit) | A1 | T | 10 | 10 | 14 | absorbed CH07A (Route 1 revisit, maps 33/81) 2026-10-15, see §7; rides Kevlar (31) as entry leg; `08-route-1-moki-revisit.md` |
-| CH09 | Route 3 | A2 | T | 4 | 8 | 9 | Moki E seam |
+| CH09 | Route 3 | A2 | T | 3 | 8 | 8 | Moki E seam; dojo map 177 parked to `unbound_maps` 2026-10-22 (Surf-only door) |
 | CH10 | Burole Town | A2 | T | 9 | 8 | 3 | **Gym 2** |
 | CH11 | Route 4 | A3 | T | 2 | 8 | 11 | |
 | CH12 | Comet Cave | A3 | T | 3 | 1 | 12 | |
