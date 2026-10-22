@@ -14,15 +14,14 @@ from dataclasses import dataclass, field
 
 from rpg2gba.map_split.ids import piece_uid
 from rpg2gba.map_split.spec import SplitSpec
-from rpg2gba.tileset_converter.connection_remap import STRIP_DEPTH_EW, STRIP_DEPTH_NS
-
 Cell = tuple[int, int]
 
 # The camera's visible extent around the player (field_camera.c, verified
 # 2026-10-07): a piece needs real art for every cell this far from anywhere the
-# player can stand in it.
-VIEW_H = STRIP_DEPTH_EW
-VIEW_V = STRIP_DEPTH_NS
+# player can stand in it. (Was tied to connection_remap's strip depth until #150
+# raised that to the engine's full copy depth on 2026-10-22.)
+VIEW_H = 7
+VIEW_V = 5
 
 # pokeemerald's backup map buffer: (width + 15) * (height + 14) <= 10240
 # (engine/include/fieldmap.h MAX_MAP_DATA_SIZE, fieldmap.c:181).

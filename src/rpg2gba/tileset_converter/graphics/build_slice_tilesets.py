@@ -435,7 +435,7 @@ def build_slice_tilesets(
     `remap_directions` (`map_set.load_slice_remap_directions`) are the id-remapped
     seams between maps on different tilesets (design R, `connection_remap`): for each
     direction, the neighbour's border strip (`strip_depth` deep, default per axis:
-    `connection_remap.strip_depth`, N/S 5, E/W 7 — the cells
+    `connection_remap.strip_depth`, N/S/W 7, E 8 — the cells
     `FillConnection` copies) is resolved to the neighbour's final metatile ids; every
     strip metatile whose pre-quantization art (`connection_remap.source_key`, then
     `composite_key`) is not already in the current tileset is appended to it (the

@@ -57,16 +57,16 @@ def test_strip_cells_geometry(edge, origin, a, b, expect) -> None:
 
 
 def test_strip_depth_clamped_to_small_neighbour() -> None:
-    cells = mvc.seam_strip_cells("S", (0, 4), (2, 4), (2, 1))  # default depth 5, B 1 row tall
+    cells = mvc.seam_strip_cells("S", (0, 4), (2, 4), (2, 1))  # default depth 7, B 1 row tall
     assert cells == [(0, 0), (1, 0)]
 
 
-def test_strip_default_depth_is_per_axis() -> None:
-    # Matches the ROM build (connection_remap.strip_depth): N/S 5 rows, E/W 7 columns.
+def test_strip_default_depth_matches_rom_build() -> None:
+    # Matches the ROM build (connection_remap.strip_depth): N/S/W 7, E 8 (#150).
     south = mvc.seam_strip_cells("S", (0, 4), (1, 4), (1, 10))
-    assert sorted({y for _, y in south}) == list(range(0, 5))
+    assert sorted({y for _, y in south}) == list(range(0, 7))
     east = mvc.seam_strip_cells("E", (1, 0), (1, 1), (10, 1))
-    assert sorted({x for x, _ in east}) == list(range(0, 7))
+    assert sorted({x for x, _ in east}) == list(range(0, 8))
 
 
 def test_seam_entry_counts_by_unique_image_and_skips_empty() -> None:

@@ -65,19 +65,6 @@ tileset id, and stitched mode can't show ROM seams). So the viewer is wrong for 
 ROM is right (`playtest.screen_check` proves VRAM against the ROM data). Do it when the viewer is
 next needed on a streamed map.
 
-### 150. Remapped seams import one row too few: a black band while the camera is mid-step
-
-Found 2026-10-17 (streaming stage 3, Nowtoch ↔ Route 2). A remapped seam imports the
-neighbour's edge `STRIP_DEPTH_NS = 5` rows deep (`EW = 7` columns,
-`tileset_converter/connection_remap.py:45`). Five metatile rows is what a resting camera shows
-beyond the player. While the camera is mid-step, a sixth row is partly on screen, and it has no
-art (tilemap word 0, so the backdrop shows). Measured on the 40→35 crossing: BG rows 0–5 of the
-ring buffer are empty, and VOFS 41–47 puts up to 7 px of them at the top of the screen for the
-rest of that step. It's identical in the pre-seam-swap build, where the garbage frames hid it
-(`output/scratch/seam_rows_probe.py`). The fix is probably depth 6 / 8. That costs imported
-metatiles and tiles on stock maps (tight caps), and nothing on streamed maps. Check the EW
-case the same way.
-
 ### 149. Tests tied to the engine's build state break on any rebuild or Walker build
 
 `tests/test_playtest_teach_hm.py` boots `output/playtest-gen/walk/CH07-m035seamN14000_transit.gba`,
@@ -2140,6 +2127,26 @@ maintainer. Evidence is recorded in
 `reference/frozen/ch05_surf_expectations.json`'s `granting_chapter` block.
 
 ## Done
+
+### 150. DONE 2026-10-22 — Remapped seams import one row too few: a black band while the camera is mid-step
+
+Found 2026-10-17 (streaming stage 3, Nowtoch ↔ Route 2). A remapped seam imported the
+neighbour's edge `STRIP_DEPTH_NS = 5` rows deep (`EW = 7` columns). Five metatile rows is what a
+resting camera shows beyond the player; while the camera is mid-step after a crossing a sixth
+row is partly on screen, and it had no art (tilemap word 0, so the backdrop showed). Measured on
+the 40→35 crossing: BG3 rows 0–5 of the ring buffer empty, VOFS 41–47 putting up to 7 px of
+them at the top of the screen (`output/scratch/seam_rows_probe.py`).
+
+**Fix (2026-10-22, before CH09's Moki E seam, operator-ordered):** the import depth is now
+everything the engine copies — `fieldmap.c` `Fill{North,South,West}Connection` copy
+`MAP_OFFSET` (7), `FillEastConnection` 8 — so `connection_remap.strip_depth` is N/S/W 7, E 8.
+`map_split.derive`'s camera extent (7/5) no longer borrows the strip constants. Evidence: ROM
+`bb72ff62` → `91f797fb`; the 40→35 probe now leaves only BG3 rows 0–1 empty, which VOFS
+41–48 never shows; tileset 1031 (Route 2) 705 metatiles / 772 tiles after the deeper import
+(58 strip metatiles from 40), 40 streamed so free; CH08 gen 500/500 from boot.
+**Residual (E/W):** a west neighbour is only copied 7 columns by the engine, so if the camera
+shows part of an 8th column mid-step on a west-side crossing it reads the border block, not
+black. No remapped E/W seam exists yet; probe it on the first one (CH09, Moki E ↔ Route 3 W).
 
 ### 140. DONE 2026-10-22 — Every built map's name popup reads "LITTLEROOT TOWN"
 

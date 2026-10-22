@@ -51,23 +51,23 @@ def test_check_both_directions_fails_loud_on_one_sided_seam() -> None:
 
 def test_strip_north_route2_sees_nowtoch_bottom_rows_clipped() -> None:
     # 35 (42x57) sees 40 (79x74) above at offset -15: 40-cols 8..64 (cur x -7..49);
-    # default N/S depth 5 -> 40's bottom 5 rows.
+    # default N/S depth 7 -> 40's bottom 7 rows.
     cells = strip_cells(42, 57, 79, 74, "up", -15)
     xs = sorted({x for x, _ in cells})
     ys = sorted({y for _, y in cells})
     assert xs == list(range(8, 65))
-    assert ys == list(range(69, 74))
+    assert ys == list(range(67, 74))
 
 
 def test_strip_south_nowtoch_sees_route2_top_rows() -> None:
     cells = strip_cells(79, 74, 42, 57, "down", 15)
     assert sorted({x for x, _ in cells}) == list(range(0, 42))
-    assert sorted({y for _, y in cells}) == list(range(0, 5))
+    assert sorted({y for _, y in cells}) == list(range(0, 7))
 
 
-def test_strip_depth_is_per_axis() -> None:
-    # field_camera.c: 5 cells visible up/down, 7 left/right.
-    assert [strip_depth(d) for d in ("up", "down", "left", "right")] == [5, 5, 7, 7]
+def test_strip_depth_is_the_engine_copy_depth() -> None:
+    # fieldmap.c Fill*Connection: MAP_OFFSET (7) rows/cols, east one more (#150).
+    assert [strip_depth(d) for d in ("up", "down", "left", "right")] == [7, 7, 7, 8]
     with pytest.raises(ValueError):
         strip_depth("north")
 
@@ -78,12 +78,12 @@ def test_strip_depth_limits_rows() -> None:
 
 
 def test_strip_west_and_east_columns() -> None:
-    west = strip_cells(10, 10, 20, 30, "left", 0)  # default E/W depth 7
+    west = strip_cells(10, 10, 20, 30, "left", 0)  # default W depth 7
     assert sorted({x for x, _ in west}) == list(range(13, 20))
     # backup height 10+15=25, offset 0 -> pos 7, 7+30 >= 25 -> 18 rows
     assert sorted({y for _, y in west}) == list(range(0, 18))
-    east = strip_cells(10, 10, 20, 30, "right", -10)
-    assert sorted({x for x, _ in east}) == list(range(0, 7))
+    east = strip_cells(10, 10, 20, 30, "right", -10)  # default E depth 8
+    assert sorted({x for x, _ in east}) == list(range(0, 8))
     # pos -3 -> start 3, count min(27, 25) = 25 -> rows 3..27
     assert sorted({y for _, y in east}) == list(range(3, 28))
 
@@ -94,6 +94,9 @@ def test_strip_no_overlap_is_empty_and_bad_args_fail() -> None:
         strip_cells(10, 10, 5, 5, "north", 0)
     with pytest.raises(ValueError):
         strip_cells(10, 10, 5, 5, "down", 0, depth=8)
+    with pytest.raises(ValueError):
+        strip_cells(10, 10, 5, 5, "right", 0, depth=9)
+    assert strip_cells(10, 10, 20, 5, "right", 0, depth=8)  # east copies one extra column
 
 
 # --- art keys ----------------------------------------------------------------------

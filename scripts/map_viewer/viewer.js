@@ -756,7 +756,7 @@ function drawSeamCheck(cp) {
   if (d === 'loading' || !d) { updateSeamSummary('ROM seam check: loading…'); return; }
   if (d === 'error') { updateSeamSummary('ROM seam check: failed (see console)'); return; }
   const pad3 = function(n) { return String(n).padStart(3, '0'); };
-  const lines = ['ROM seam check for Map' + pad3(d.map_id) + ' (pool ' + d.pool_unique + ' metatiles; ' + 'strips ' + d.depth_ns + ' deep N/S, ' + d.depth_ew + ' E/W, by image hash)'];
+  const lines = ['ROM seam check for Map' + pad3(d.map_id) + ' (pool ' + d.pool_unique + ' metatiles; ' + 'strips ' + d.depth_ns + ' deep N/S, ' + d.depth_ew + ', by image hash)'];
   ctx.save();
   ctx.strokeStyle = 'rgba(255,60,60,0.95)';
   ctx.lineWidth = Math.max(1, cp / 10);

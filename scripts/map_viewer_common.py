@@ -31,7 +31,12 @@ from rpg2gba.tileset_converter.connections import (
     ConnectionRow,
     parse_connections,
 )
-from rpg2gba.tileset_converter.connection_remap import STRIP_DEPTH_EW, STRIP_DEPTH_NS, strip_depth
+from rpg2gba.tileset_converter.connection_remap import (
+    STRIP_DEPTH_EAST,
+    STRIP_DEPTH_NS,
+    STRIP_DEPTH_WEST,
+    strip_depth,
+)
 from rpg2gba.tileset_converter.graphics.autotile import autotile_frame_count
 from rpg2gba.tileset_converter.graphics.build_slice_tilesets import (
     _render_column,
@@ -1536,7 +1541,7 @@ def render_map_png(map_id: int) -> bytes:
 # ROM seam check: cost of border-strip import
 # ---------------------------------------------------------------------------
 # fieldmap.c draws a connected map's metatile IDs through the CURRENT map's tileset;
-# the visible part is connection_remap.strip_depth deep (N/S 5, E/W 7), the depth the
+# the copied part is connection_remap.strip_depth deep (N/S/W 7, E 8), the depth the
 # ROM build imports. A neighbour strip metatile whose image is not in the
 # current map's own pool therefore has nothing to resolve to; the count of those is
 # what importing the strip into A's tileset would cost.
@@ -1647,7 +1652,8 @@ def seam_check(map_id: int) -> dict:
             a_hashes, b_hash_at,
         ))
     return {
-        "map_id": map_id, "depth_ns": STRIP_DEPTH_NS, "depth_ew": STRIP_DEPTH_EW,
+        "map_id": map_id, "depth_ns": STRIP_DEPTH_NS,
+        "depth_ew": f"{STRIP_DEPTH_WEST}/{STRIP_DEPTH_EAST} W/E",
         "pool_unique": len(a_hashes), "seams": seams,
     }
 
