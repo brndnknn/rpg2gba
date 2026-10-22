@@ -1232,9 +1232,20 @@ def compute_autorun_entries(
             # OTHER flag the guard never looks at (findings: Map031 EV049
             # page 2, FLAG_SYS_PC_LANETTE vs. guard FLAG_DEFEATED_GYM1_LEADER).
             written_flags = list(dict.fromkeys(_page_body_written_flags(page, flag_registry)))
-            for written in written_flags:
-                if f"flag({written})" not in " ".join(guard_terms):
-                    guard_terms.append(f"!flag({written})")
+            # A page whose guard already carries `!flag(X)` for some X its body
+            # turns on is already switched off by its own run (usually its
+            # self-switch, via the negated higher page); negating its OTHER
+            # writes too would stop it running at all when one of those was set
+            # elsewhere first. CH09: Map059 EV024 writes GAME_RUNNING (already
+            # set in Moki by Map048 EV005) and self-switch A; RMXP runs it once.
+            switches_off = written_flags + [
+                self_switch_flag_name(uid, eid, letter)
+                for letter in sorted(_self_switch_letters_set_on(page))
+            ]
+            if not any(f"!flag({flag})" in guard_terms for flag in switches_off):
+                for written in written_flags:
+                    if f"flag({written})" not in " ".join(guard_terms):
+                        guard_terms.append(f"!flag({written})")
             if trigger == TRIGGER_PARALLEL:
                 # A parallel page runs every frame for as long as it is the
                 # active page. Admitted only when a write in its own body

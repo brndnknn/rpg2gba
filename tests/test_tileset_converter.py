@@ -4537,6 +4537,11 @@ def test_compute_autorun_entries_admits_run_once_parallel_page() -> None:
     entry = entries[0]
     assert entry.page_label == "Map048_EV005_Page1"
     assert "!flag(FLAG_MAP048_EVENT005_SSA)" in entry.guard.split(" && ")
+    # Switched off by its own self-switch already: the switches it turns on
+    # are not negated too, or it would never run once FLAG_GAME_RUNNING is set
+    # elsewhere first (CH09: Map059 EV024, the same shape, after Map048 EV005).
+    assert "!flag(FLAG_GAME_RUNNING)" not in entry.guard.split(" && ")
+    assert "!flag(FLAG_JUKEBOX)" not in entry.guard.split(" && ")
 
 
 @pytest.mark.parametrize("cmds", [

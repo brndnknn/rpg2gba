@@ -19,6 +19,7 @@ from ..text_validator.engine_metrics import load_charmap
 from ..tileset_converter.map_constants import DEFAULT_STATE_PATH as _DEFAULT_MAP_CONSTANTS_STATE
 from ..tileset_converter.map_constants import MapConstantRegistry
 from ..tileset_converter.tile_map import COLLISION_MASK as _MAPGRID_COLLISION_MASK
+from ..tileset_converter.tile_map import METATILE_ID_MASK as _MAPGRID_UNDEFINED
 from ..traversal.graph import MapGraph, build_map_graph
 from .charmap import invert_charmap_english_first
 from .contact_sheet import Waypoint
@@ -111,6 +112,10 @@ _MAX_INTERRUPTION_RESOLUTIONS = 3
 # input-free, so a scene waiting on a button is left exactly as it was.
 _MAX_ABSORBED_WILD = 12
 _WILD_BATTLE_WAIT = 600  # 10s
+
+
+def _s16(v: int) -> int:
+    return v - 0x10000 if v & 0x8000 else v
 
 # `_walk_greedy`'s grace period for a mid-walk lock that might be a
 # self-resolving scene -- an autorun cameo that plays out with no input and
@@ -1916,8 +1921,58 @@ class Emulator:
                 f"gBackupMapLayout is {width}x{height} but map_location() "
                 f"{self.map_location()} wants {expected[0]}x{expected[1]} — "
                 "the map is still loading; call wait_for_map_grid() first")
+        if "gBigMap" in self.symbols and self.u8(
+                self.symbols["gBigMap"] + o["off_bigmap_active"]) != 0:
+            return width, height, self._bigmap_grid(width, height, ptr)
         raw = self.read_bytes(ptr, width * height * 2)
         return width, height, struct.unpack(f"<{width * height}H", raw)
+
+    def _bigmap_grid(self, width: int, height: int, ptr: int) -> tuple[int, ...]:
+        """The full grid of an oversized map (#148, `fieldmap.h` "windowed
+        backup grid"): `sBackupMapData` holds only a 128x64 ring window, so
+        reading it as `width * height` cells (as for a map that fits) indexes
+        garbage. A port of `fieldmap.c` `BigMapGetBlock`: in-window cells from
+        the ring, others from the overlay of runtime edits, else the last load
+        rectangle covering the cell (layout or connection). A cell no rectangle
+        covers is the engine's MAPGRID_UNDEFINED; the planner gets it as
+        impassable (it is off the map). Collision is all the planner reads, so a
+        connection rectangle's id remap is not applied. CH09's Route 3 (130x66)
+        is the first oversized map a chapter walks."""
+        o = self.offsets
+        bm = self.symbols["gBigMap"]
+        win_w, win_h = o["val_bigmap_win_w"], o["val_bigmap_win_h"]
+        rect_count = self.u8(bm + o["off_bigmap_rect_count"])
+        ox = _s16(self.u16(bm + o["off_bigmap_ox"]))
+        oy = _s16(self.u16(bm + o["off_bigmap_oy"]))
+        overlay_count = self.u16(bm + o["off_bigmap_overlay_count"])
+        ring = struct.unpack(f"<{win_w * win_h}H", self.read_bytes(ptr, win_w * win_h * 2))
+        rects = []
+        for i in range(rect_count):
+            base = bm + o["off_bigmap_rects"] + i * o["sizeof_bigmap_rect"]
+            x, y, w, h = (_s16(self.u16(base + o[f"off_bigmap_rect_{k}"])) for k in "xywh")
+            rects.append((self.u32(base + o["off_bigmap_rect_src"]), x, y, w, h,
+                          self.u16(base + o["off_bigmap_rect_src_width"])))
+        overlay = {}
+        for i in range(overlay_count):
+            base = bm + o["off_bigmap_overlay"] + i * o["sizeof_bigmap_cell"]
+            overlay[(self.u16(base + o["off_bigmap_cell_x"]),
+                     self.u16(base + o["off_bigmap_cell_y"]))] = self.u16(
+                base + o["off_bigmap_cell_block"])
+        blocks = []
+        for y in range(height):
+            for x in range(width):
+                if 0 <= x - ox < win_w and 0 <= y - oy < win_h:
+                    blocks.append(ring[(y % win_h) * win_w + (x % win_w)])
+                elif (x, y) in overlay:
+                    blocks.append(overlay[(x, y)])
+                else:
+                    for src, rx, ry, rw, rh, src_width in reversed(rects):
+                        if 0 <= x - rx < rw and 0 <= y - ry < rh:
+                            blocks.append(self.u16(src + 2 * ((y - ry) * src_width + (x - rx))))
+                            break
+                    else:
+                        blocks.append(_MAPGRID_COLLISION_MASK | _MAPGRID_UNDEFINED)
+        return tuple(blocks)
 
     def _warp_event_tiles(self) -> set[tuple[int, int]]:
         """Map-relative coordinates of every entry in the current map's warp

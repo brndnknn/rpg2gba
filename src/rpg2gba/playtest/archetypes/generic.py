@@ -2330,16 +2330,17 @@ def _reclear_obstacles(emu: "Emulator", beat_name: str, map_constant: str,
     `map_constant` (`transit_beat`'s `reclear`), in the live order
     `_next_reachable_obstacle` picks."""
     assertions.require_map(emu, beat_name, map_constant)
-    present = {ev.local_id for ev in emu.object_events() if ev.active}
-    standing = {row_id: capability for row_id, capability in reclear
-                if local_id(map_constant, parse_row_id(row_id).event_id) in present}
+    standing = dict(reclear)
     for capability in sorted(set(standing.values())):
         if capability not in TEACHABLE_CAPABILITIES:
             raise ScenarioError(f"{beat_name}: no HM/move known for capability {capability!r}")
         move = TEACHABLE_CAPABILITIES[capability][1]
         if not assertions.party_knows_move(emu, move):
-            raise ScenarioError(f"{beat_name}: an obstacle respawned and no party member "
-                                f"knows {move} to clear it again")
+            raise ScenarioError(f"{beat_name}: obstacles to clear again and no party member "
+                                f"knows {move}")
+    # The engine spawns object events only near the camera, so whether an
+    # obstacle is standing is read once the walk is beside it, not on arrival
+    # (CH09: arriving from the lab, Moki's rocks were not yet spawned).
     remaining = list(standing)
     while remaining:
         row_id, approach, avoid = _next_reachable_obstacle(
@@ -2348,9 +2349,12 @@ def _reclear_obstacles(emu: "Emulator", beat_name: str, map_constant: str,
         event_id = parse_row_id(row_id).event_id
         lid = local_id(map_constant, event_id)
         ox, oy = event_cell(map_constant, event_id)
+        emu.walk_to(*approach, absorb_wild=True, avoid=avoid)
+        if not any(ev.local_id == lid for ev in emu.object_events()):
+            logger.info("%s: %s is not standing; nothing to clear", beat_name, row_id)
+            continue
         logger.info("%s: %s respawned on the map reload; clearing it again with %s",
                     beat_name, row_id, standing[row_id])
-        emu.walk_to(*approach, absorb_wild=True, avoid=avoid)
         emu.face(facing_toward(approach, (ox, oy), caller="transit_beat"))
         emu.interact()
         emu.advance_dialog(answers=[0])

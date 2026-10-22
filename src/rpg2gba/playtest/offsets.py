@@ -112,6 +112,12 @@ _PROBE_ENTRIES: dict[str, str] = {
     # the probed value differs (see battle.py's in-battle detection notes).
     "off_battlepkmn_hp": "offsetof(struct BattlePokemon, hp)",
     "sizeof_battlepkmn": "sizeof(struct BattlePokemon)",
+    # The level-up "delete a move?" / "stop learning?" yes/no boxes
+    # (battle_script_commands.c Cmd_yesnoboxlearnmove / ..stoplearningmove):
+    # win_battle reads the opcode at gBattlescriptCurrInstr to answer them
+    # without opening the summary screen (CH09: Raptorch learning Mud-Slap).
+    "val_bscr_op_yesnoboxlearnmove": "B_SCR_OP_YESNOBOXLEARNMOVE",
+    "val_bscr_op_yesnoboxstoplearningmove": "B_SCR_OP_YESNOBOXSTOPLEARNINGMOVE",
     # TrainerBattleParameter (include/battle_setup.h): which trainer the
     # in-progress battle actually belongs to. `_trigger_trainer` asserted
     # only that *a* trainer battle had started, which let a Timothy win
@@ -145,6 +151,33 @@ _PROBE_ENTRIES: dict[str, str] = {
     "off_backup_height": "offsetof(struct BackupMapLayout, height)",
     "off_backup_map": "offsetof(struct BackupMapLayout, map)",
     "val_map_offset": "MAP_OFFSET",
+    # An oversized map's grid is a ring window plus load rectangles and an edit
+    # overlay (fieldmap.h "windowed backup grid", #148); _bigmap_grid ports
+    # BigMapGetBlock over these. CH09's Route 3 is the first chapter map using it.
+    "val_bigmap_win_w": "BIGMAP_WIN_W",
+    "val_bigmap_win_h": "BIGMAP_WIN_H",
+    "off_bigmap_active": "offsetof(struct BigMap, active)",
+    "off_bigmap_rect_count": "offsetof(struct BigMap, rectCount)",
+    "off_bigmap_ox": "offsetof(struct BigMap, ox)",
+    "off_bigmap_oy": "offsetof(struct BigMap, oy)",
+    "off_bigmap_overlay_count": "offsetof(struct BigMap, overlayCount)",
+    "off_bigmap_rects": "offsetof(struct BigMap, rects)",
+    "off_bigmap_overlay": "offsetof(struct BigMap, overlay)",
+    "sizeof_bigmap_rect": "sizeof(struct BigMapRect)",
+    "off_bigmap_rect_src": "offsetof(struct BigMapRect, src)",
+    "off_bigmap_rect_x": "offsetof(struct BigMapRect, x)",
+    "off_bigmap_rect_y": "offsetof(struct BigMapRect, y)",
+    "off_bigmap_rect_w": "offsetof(struct BigMapRect, w)",
+    "off_bigmap_rect_h": "offsetof(struct BigMapRect, h)",
+    "off_bigmap_rect_src_width": "offsetof(struct BigMapRect, srcWidth)",
+    "sizeof_bigmap_cell": "sizeof(struct BigMapCell)",
+    "off_bigmap_cell_x": "offsetof(struct BigMapCell, x)",
+    "off_bigmap_cell_y": "offsetof(struct BigMapCell, y)",
+    "off_bigmap_cell_block": "offsetof(struct BigMapCell, block)",
+    # The seam swap's own timing (field_stream.c SeamCommit): VCOUNT at the last
+    # commit's start and end, for a crossing probe to check it fits in VBlank.
+    "off_fieldstream_seam_vcount_start": "offsetof(struct FieldStream, seamVcountStart)",
+    "off_fieldstream_seam_vcount_end": "offsetof(struct FieldStream, seamVcountEnd)",
     # gMapHeader.mapLayout's own dimensions: the authority on which map the
     # backup grid *should* be describing. A warp writes SaveBlock1.location
     # (ApplyCurrentWarp, overworld.c:620) long before it rebuilds the grid
@@ -338,6 +371,7 @@ _PROBE_TEMPLATE = """\
 #include "item_menu.h"
 #include "party_menu.h"
 #include "constants/item.h"
+#include "constants/battle_script_commands.h"
 {entries}
 """
 

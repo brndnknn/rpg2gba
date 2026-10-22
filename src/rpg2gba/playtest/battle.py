@@ -270,11 +270,31 @@ def _submit_first_move(emu: Emulator, frame_budget: int) -> None:
             raise ScenarioError(
                 f"never reached move selection within {frame_budget} frames ({shot})"
             )
-        emu.tap("A")
+        # A zeroed enemy can faint before the player chooses, and its EXP can
+        # level the lead into the move-learn prompt right here (CH09).
+        emu.tap(_advance_key(emu))
         emu.run(20)
         spent += 26
     emu.tap("A")  # commit move slot 0
     emu.run(20)
+
+
+def _advance_key(emu: Emulator) -> str:
+    """The key that advances the battle without changing the party.
+
+    A, except at a level-up move-learn prompt: A on "delete a move to make
+    room?" opens the summary screen, which takes the main callback off
+    `BattleMainCB2` (so `in_battle` reads false mid-battle) and waits for a
+    move choice. So B there ("don't delete"), then A on "stop learning?"
+    (cursor on YES) -- the mon keeps its moves. CH09: a wild win levelled
+    Raptorch into Mud-Slap with four moves known."""
+    o = emu.offsets
+    op = emu.u8(emu.u32(emu.symbols["gBattlescriptCurrInstr"]))
+    if op == o["val_bscr_op_yesnoboxlearnmove"]:
+        return "B"
+    if op == o["val_bscr_op_yesnoboxstoplearningmove"]:
+        return "A"  # YES, stop learning (the cursor opens on YES)
+    return "A"
 
 
 def win_battle(
@@ -331,7 +351,7 @@ def win_battle(
                 f"battle did not end within {end_budget} frames after "
                 f"zeroing enemy HP ({shot})"
             )
-        emu.tap("A")
+        emu.tap(_advance_key(emu))
         emu.run(20)
         spent += 26
 
