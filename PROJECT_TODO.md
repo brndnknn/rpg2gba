@@ -227,6 +227,8 @@ page is TEMP-switch gated and the walk re-enters its map.
 
 ### 122. C10 deferred to CH06: offline verdict head, offline checker, ROM sample selection
 
+**2026-10-21:** operator: waits. Not picked up in the A1→A2 intermission.
+
 `reference/archive/REDERIVATION_PLAN.md` §16.3 C10 (rulings R2/R3). Operator ruled 2026-10-03:
 defer past the `rederive-ch01-ch04` merge. Only the eligibility flag exists
 (`beat_floor/assertion.py` `RowFloor.offline_eligible`, surfaced as the review
@@ -695,6 +697,8 @@ Slice boots MALE hardcoded. HEROINE sheets are exact-2× and convert cleanly
 with the existing `sprites.convert_player_sheets` path whenever wanted —
 mechanical, not blocked on anything.
 
+**2026-10-21:** operator: wait on this; not needed now.
+
 ### 8. Bike / surf / fish / field-move player poses beyond rock smash
 
 HERO-BIKE/SURF/FISH etc. exist but are nonstandard grids (264×288, 384×384 —
@@ -857,6 +861,8 @@ needs a build and a boot-walk to confirm. Migrated from
 
 ### 21. No freshness guard: ROM under test vs currently staged source
 
+**2026-10-21:** operator: waits. It rides with I6 (#153).
+
 The playtest runner enforces ROM-vs-seed-blob provenance (sha256) but has no
 check that the ROM binary is newer than staged source. Has bitten twice: a
 2026-07-25 harness run against a 45-minute-stale binary, and 2026-07-30 three
@@ -920,6 +926,8 @@ call, not a bug — the scene itself boot-walked and passed 2026-08-02
 (ROM `e0f6d30f`). The user's explicit sign-off on the substitution (accept
 vanilla ball vs. convert Uranium's sheet) is still outstanding. Migrated
 from SLICE1_TODO #23, 2026-08-04.
+
+**2026-10-21: SIGNED OFF.** The operator accepts the stock Poké Ball sprite. Move to Done.
 
 ### 26. Lab starter scene: what puts Uranium's own player on (14,7)? — unresolved, plus a fidelity call riding on the answer
 
@@ -1670,6 +1678,8 @@ Surf-sealed room, `blocked:surf`, not reachable until Act 5 — which is
 exactly why a wrong mapping would otherwise go unnoticed until then.
 
 ### 85. `BUILD_PLAN.md`'s boot-walk seeding recipe is broken for every chapter
+
+**2026-10-21:** operator: waits. It rides with I6 (#153).
 
 `BUILD_PLAN.md`'s step 8 (BOOT) instructs seeding the walk from the
 predecessor chapter's `--at-end` blob (`playtest seeds --chapter <prev>` then

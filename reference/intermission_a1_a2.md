@@ -966,3 +966,18 @@ nothing in §1 touches.
   branch `i2b-boulder-palette` merged to `main`.
 - **2026-10-21, I6 deferred:** operator wants more of the game built first. Filed as
   `PROJECT_TODO.md` #153, to revisit at the end of every act.
+- **2026-10-21, §2 shortlist triage (operator):**
+  - **Do now:**
+    - the close-outs: #41, #35, #96, #20, #127, #92/#128, #44/#50/#69/#70
+      (already Done);
+    - #152;
+    - #140 (map name popups), #31 (Tandor dex), #141/#142 (phone);
+    - #144–#147 (CH08 leftovers), #63 (CH04 rock beats).
+  - **#24 signed off:** the stock Poké Ball sprite stays.
+  - **Later:**
+    - #7 HEROINE sprite;
+    - everything in graphics and tooling (#23, #34, #14, #10, #37; #27
+      stays CH09's);
+    - #21, #85 (both ride with I6, #153) and #122.
+  - **#22 audio:** the operator asked for a deeper look before deciding.
+    Recorded with the answer once it is given.
