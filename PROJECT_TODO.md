@@ -600,65 +600,6 @@ reached by incrementing" has this shape, so this is the difference between a der
 hand-annotated capability across the whole corpus — directly relevant to the cross-game goal,
 where hand annotation does not transfer.
 
-### 96. Pokémon Centers heal but never become the respawn point
-
-**Found 2026-09-11 while walking `reference/archive/REDERIVATION_PLAN.md` §14's Q1. Found ONCE BEFORE and
-never filed** — `src/rpg2gba/playtest/chapters/ch03.py:83-88` finding #7 recorded it at
-chapter scope (*"No healing-location/respawn metadata write anywhere — `grep -i respawn`
-over the Center's whole compiled output: zero hits"*) and it never left that file. This
-entry exists so it cannot happen a third time.
-
-The `heal` effect converts, so the nurse heals the party. What does **not** convert is the
-respawn anchor:
-
-- `src/rpg2gba/conversion_agent/deterministic.py:91` classifies `Kernel.pbSetPokemonCenter`
-  as **STRIP**, justified by *"respawn is wired from metadata, not events."*
-  **That wiring does not exist.**
-- `src/rpg2gba/pbs_converter/metadata.py:13` parses Uranium's `HealingSpot` field into
-  `map_metadata.json` and stops there.
-- `grep -rn "HEAL_LOCATION" src/` → **zero hits**. Nothing in the pipeline touches
-  `engine/src/data/heal_locations.json`, which is still 100% stock Hoenn/Kanto — so no
-  `HEAL_LOCATION_*` constant exists for any Uranium Center even if a script emitted one.
-- Uranium side: `reference/scripts_dump/101__PField_Field.rb:1666-1676` stamps
-  map/x/y/direction into one global "last Center wins" slot.
-
-**Full native analog exists — no custom C** (§4.7 reverse gate, verified):
-`setrespawn <HEAL_LOCATION_*>` (`engine/asm/macros/event.inc:1455-1459`) →
-`ScrCmd_setrespawn` → `SetLastHealLocationWarp` with `SCREFF_SAVE`
-(`engine/src/scrcmd.c:2699-2706`). Struct and accessors at `engine/include/heal_location.h`.
-
-Work: mint a `HEAL_LOCATION_*` entry per Uranium Center into
-`engine/src/data/heal_locations.json` (it generates `include/constants/heal_locations.h`),
-and emit `setrespawn` from the nurse idiom instead of stripping the call. Currently blocks
-manifest row `map068/ev001/p0` (CH03, Kevlar's Center) and is item 3 of
-`reference/archive/REDERIVATION_PLAN.md` §14.1's ten.
-
-**Why a §9 boot walk never caught it:** a missing respawn anchor is only observable if the
-walk white-outs, and no beat does. Gate-passed chapters ship this.
-
-**RULED IN 2026-09-12 (`reference/archive/REDERIVATION_PLAN.md` §14.7): build the generic emitter, not two
-hand-minted constants.** The derivation source is already parsed and unconsumed — measured 22
-maps carry `HealingSpot`, all Center interiors pointing at outdoor coords (maps 49/50 →
-`[32,28,32]` Moki, 68 → `[31,20,13]` Kevlar), a 1:1 fit for a `heal_locations.json` entry.
-66 `pbSetPokemonCenter` call sites collapse onto those 22 locations; this branch touches two.
-`reference/recon/uranium_script_calls.md:71`'s STRIP ruling is corrected in place — its premise
-("the agent can't derive the constant from the event JSON") was true of the LLM and false of
-the transpiler.
-
-**SECOND BUG, same anchor, worse blast radius (found 2026-09-12):** the *initial* anchor is
-never set either, so a white-out today lands in **vanilla Petalburg City**. The spawn override
-(`engine/src/new_game.c:172-208`) sets a warp destination and no heal location; our boot path
-skips the intro, so no script runs `setrespawn`; `ClearSav1` zeroes `lastHealLocation`, and
-`SetWarpDestinationToLastHealLocation` (`overworld.c:758-763`) reads zero as mapGroup 0 /
-mapNum 0 = `MAP_PETALBURG_CITY` (`constants/map_groups.h:15`). Fix belongs in the same fenced
-`new_game.c` block as the spawn override.
-
-**Standing precedent set by the same ruling:** a white-out beat goes in the chapter AFTER the
-one that establishes or changes an anchor — initial Moki anchor (CH01) is asserted in **CH02**,
-the Kevlar Center anchor (CH03) in **CH04**, and every future chapter with a Center owes its
-successor the same. CH02's beat doubles as the regression test for the Petalburg bug and is
-expected to FAIL until the `new_game.c` fix lands.
-
 ### 2. Locate the Nuclear type's 1/8-HP-per-turn out-of-battle effect
 
 Not in `217_Nuclear_Forms_Moves.rb`; likely a field/step hook or
@@ -846,18 +787,6 @@ open" (harness items excluded — another agent tracks those):
   confirm or correct the substitution.
 
 Migrated from hand-conversion audit §6, 2026-08-04.
-
-### 20. Map050 EV026 — dead lab PC, one-line fix, never boot-walked
-
-Real, unreported bug found while compiling `SLICE1_EVENTS.md` (§11.11), not
-from a device walk. The lab PC's `pbPokeCenterPC` call sits inside an
-unhandled code-111 character-facing conditional, so it was never emitted —
-the event compiles to a bg event whose body is just `lock`/`release`/`end`.
-Interacting with the PC does nothing. Map048 EV004's PC works because its
-call isn't wrapped in a conditional. Fix: emit `goto(EventScript_PC)` for
-this event, same as Map048 EV004 (`data/scripts/pc.inc`, vanilla). One line,
-needs a build and a boot-walk to confirm. Migrated from
-`SLICE1_EVENTS.md` §11.11, 2026-08-04.
 
 ### 21. No freshness guard: ROM under test vs currently staged source
 
@@ -1211,6 +1140,8 @@ waterfall autotile quantized cleanly and has passed a still-frame eye gate, but
 has **never been looked at in motion on hardware**.
 
 ### 35. Uranium-original moves silently absent from staged learnsets
+
+**2026-10-21: NARROWED.** All that is left is the 14 blocked moves (12 Nuclear-type moves, Thunderstorm, Sticky Terrain). Everything else is generated by `battle_converter`.
 
 *Migrated from `CH02_TODO.md` #11 on the CH02 gate pass 2026-08-12; user-ruled
 accepted debt, not a defect.*
@@ -1945,6 +1876,8 @@ checking then whether any other page-3-style postgame page hides the same shape.
 
 ### 41. 106 items the id map names and the fork does not define — plus Phase 2's item output is a dead end
 
+**2026-10-21: NARROWED.** All that is left is the 5 blocked items (Hafli Berry, Atom Ball, Nuclear Ball, which wait on the Nuclear type; Air Mail; the Uranium Core form toggle) and the inert behaviours listed below. Everything else is generated by `item_converter`.
+
 *(2026-10-04: still open. Moved back from the Done section, where it sat by position only.)*
 
 **2026-10-19: resolved by I3 S2 on `intermission-engine-layers`, apart from 5
@@ -2061,6 +1994,10 @@ be mechanical after all — CH01–CH03 have no manifest to cross-reference.
 
 ### 92. The capability model cannot see field capabilities, because their grants are not switch/var writes
 
+**2026-10-21: NARROWED.** Rock Smash is modelled: held iff badge count ≥ 1 AND (`HM06` OR `BOXINGGLOVES`) is in the bag (`capability_sites.FIELD_CAPABILITY_ITEMS`), with a teach-HM setup beat (CH08 §9). What remains:
+- each other field capability (Surf, Strength, …) joins `FIELD_CAPABILITY_ITEMS` once its HM and gadget item are verified against the corpus, in the chapter that first needs it;
+- the engine has no item fallback for a gadget standing in for a known move. That needs fenced C when Legen Town grants the gloves (#143).
+
 *(2026-10-14: **retargeted to CH07A** (operator) — CH07's rockslide is cleared by the ev19
 cutscene with no capability; Route 1's six rocks are the first unavoidable smash.
 2026-10-15: CH07A folded into **CH08**, so this is now CH08's, which also has Moki's three rocks.)*
@@ -2152,6 +2089,11 @@ tables dropped corpus-wide) and #36 (Luz strip). Source: `reference/archive/REDE
 
 ### 127. No real party/dex model: the `party_model` refusal blocks 68+ CH01 rows
 
+**2026-10-21: NARROWED.** The model was built in CH08: party-move and dex-count reads, the HM-teach setup beat, the display-only-variable exemption and the CH01 lab rows. What remains:
+- 3 rows still refused `story-state: party_model`: `map046/ev002/p0/b7`–`b9` (CH06);
+- the lab's live dex-count dialogue (#144);
+- the higher reward rungs (#145).
+
 *(2026-10-15: **built in CH08** (operator). It is needed for Rock Smash's party-knows-move
 check, the lab's Poké Ball scene (Map050 EV027) and the Pokédex reward NPC (Map050 EV005
 p5–p7). See `reference/chapters/08-route-1-moki-revisit.md` §7 rulings.)*
@@ -2162,6 +2104,8 @@ green". Graphics-only vars 43 and 131 are already exempt via `story_state/graphi
 still refuse. Source: `reference/archive/REDERIVATION_PLAN.md` §16.3 "C8 shape".
 
 ### 128. `blocked:` is held back from clerical derivation; revisit at CH08 (was CH06, then CH07, then CH07A)
+
+**2026-10-21: NARROWED.** The capability model is real for `rock_smash` (#92), but `blocked:` is still a proposal. Only the arms of a hand-`blocked:` page derive clerically (#124). The remaining decision, the operator's, is whether a `blocked:` that a held-capability model confirms may derive clerically. Take it when a chapter next proposes one.
 
 *(2026-10-14: moved to CH07A with #92 — CH07 smashes no rock. 2026-10-15: CH07A folded into CH08.)*
 
@@ -2318,6 +2262,85 @@ maintainer. Evidence is recorded in
 `reference/frozen/ch05_surf_expectations.json`'s `granting_chapter` block.
 
 ## Done
+
+### 96. DONE 2026-10-21 — Pokémon Centers heal but never become the respawn point
+
+**DONE 2026-10-21 (intermission close-out).** Built by `6df46066`:
+- `pbs_converter/heal_locations.py` generates `HEAL_LOCATION_*`;
+- `pbSetPokemonCenter` emits `setrespawn`;
+- `new_game.c` sets the initial anchor (`HEAL_LOCATION_URANIUM_START`).
+The white-out beats in the generated suites (`whiteout_fork_beat` in ch01/ch03/ch06) assert each anchor, and every CH08 run from boot replays them green.
+
+**Found 2026-09-11 while walking `reference/archive/REDERIVATION_PLAN.md` §14's Q1. Found ONCE BEFORE and
+never filed** — `src/rpg2gba/playtest/chapters/ch03.py:83-88` finding #7 recorded it at
+chapter scope (*"No healing-location/respawn metadata write anywhere — `grep -i respawn`
+over the Center's whole compiled output: zero hits"*) and it never left that file. This
+entry exists so it cannot happen a third time.
+
+The `heal` effect converts, so the nurse heals the party. What does **not** convert is the
+respawn anchor:
+
+- `src/rpg2gba/conversion_agent/deterministic.py:91` classifies `Kernel.pbSetPokemonCenter`
+  as **STRIP**, justified by *"respawn is wired from metadata, not events."*
+  **That wiring does not exist.**
+- `src/rpg2gba/pbs_converter/metadata.py:13` parses Uranium's `HealingSpot` field into
+  `map_metadata.json` and stops there.
+- `grep -rn "HEAL_LOCATION" src/` → **zero hits**. Nothing in the pipeline touches
+  `engine/src/data/heal_locations.json`, which is still 100% stock Hoenn/Kanto — so no
+  `HEAL_LOCATION_*` constant exists for any Uranium Center even if a script emitted one.
+- Uranium side: `reference/scripts_dump/101__PField_Field.rb:1666-1676` stamps
+  map/x/y/direction into one global "last Center wins" slot.
+
+**Full native analog exists — no custom C** (§4.7 reverse gate, verified):
+`setrespawn <HEAL_LOCATION_*>` (`engine/asm/macros/event.inc:1455-1459`) →
+`ScrCmd_setrespawn` → `SetLastHealLocationWarp` with `SCREFF_SAVE`
+(`engine/src/scrcmd.c:2699-2706`). Struct and accessors at `engine/include/heal_location.h`.
+
+Work: mint a `HEAL_LOCATION_*` entry per Uranium Center into
+`engine/src/data/heal_locations.json` (it generates `include/constants/heal_locations.h`),
+and emit `setrespawn` from the nurse idiom instead of stripping the call. Currently blocks
+manifest row `map068/ev001/p0` (CH03, Kevlar's Center) and is item 3 of
+`reference/archive/REDERIVATION_PLAN.md` §14.1's ten.
+
+**Why a §9 boot walk never caught it:** a missing respawn anchor is only observable if the
+walk white-outs, and no beat does. Gate-passed chapters ship this.
+
+**RULED IN 2026-09-12 (`reference/archive/REDERIVATION_PLAN.md` §14.7): build the generic emitter, not two
+hand-minted constants.** The derivation source is already parsed and unconsumed — measured 22
+maps carry `HealingSpot`, all Center interiors pointing at outdoor coords (maps 49/50 →
+`[32,28,32]` Moki, 68 → `[31,20,13]` Kevlar), a 1:1 fit for a `heal_locations.json` entry.
+66 `pbSetPokemonCenter` call sites collapse onto those 22 locations; this branch touches two.
+`reference/recon/uranium_script_calls.md:71`'s STRIP ruling is corrected in place — its premise
+("the agent can't derive the constant from the event JSON") was true of the LLM and false of
+the transpiler.
+
+**SECOND BUG, same anchor, worse blast radius (found 2026-09-12):** the *initial* anchor is
+never set either, so a white-out today lands in **vanilla Petalburg City**. The spawn override
+(`engine/src/new_game.c:172-208`) sets a warp destination and no heal location; our boot path
+skips the intro, so no script runs `setrespawn`; `ClearSav1` zeroes `lastHealLocation`, and
+`SetWarpDestinationToLastHealLocation` (`overworld.c:758-763`) reads zero as mapGroup 0 /
+mapNum 0 = `MAP_PETALBURG_CITY` (`constants/map_groups.h:15`). Fix belongs in the same fenced
+`new_game.c` block as the spawn override.
+
+**Standing precedent set by the same ruling:** a white-out beat goes in the chapter AFTER the
+one that establishes or changes an anchor — initial Moki anchor (CH01) is asserted in **CH02**,
+the Kevlar Center anchor (CH03) in **CH04**, and every future chapter with a Center owes its
+successor the same. CH02's beat doubles as the regression test for the Petalburg bug and is
+expected to FAIL until the `new_game.c` fix lands.
+
+### 20. DONE 2026-10-21 — Map050 EV026 — dead lab PC, one-line fix, never boot-walked
+
+**DONE 2026-10-21 (intermission close-out).** The transpiler now emits the lab PC: `goto(EventScript_PC)` under the facing-north check (`Map050.pory`). CH01's beats `m050e026p0` and `m050e026p0_face_north_east_west` exercise it on every run from boot.
+
+Real, unreported bug found while compiling `SLICE1_EVENTS.md` (§11.11), not
+from a device walk. The lab PC's `pbPokeCenterPC` call sits inside an
+unhandled code-111 character-facing conditional, so it was never emitted —
+the event compiles to a bg event whose body is just `lock`/`release`/`end`.
+Interacting with the PC does nothing. Map048 EV004's PC works because its
+call isn't wrapped in a conditional. Fix: emit `goto(EventScript_PC)` for
+this event, same as Map048 EV004 (`data/scripts/pc.inc`, vanilla). One line,
+needs a build and a boot-walk to confirm. Migrated from
+`SLICE1_EVENTS.md` §11.11, 2026-08-04.
 
 ### 148. DONE 2026-10-18 — 15 maps exceed the engine's map-data buffer and load as border only
 
