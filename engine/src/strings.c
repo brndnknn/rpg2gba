@@ -2,8 +2,10 @@
 #include "strings.h"
 #include "battle_pyramid_bag.h"
 #include "item_menu.h"
-// BEGIN RPG2GBA GAME PROFILE — the game's regional dex labels (RPG2GBA_REGIONAL_DEX_*), if generated.
+// BEGIN RPG2GBA GAME PROFILE — generated game labels: regional dex (RPG2GBA_REGIONAL_DEX_*)
+// and the phone's name (RPG2GBA_PHONE_MENU_LABEL), when generated.
 #include "constants/pokedex.h"
+#include "config/rpg2gba.h"
 // END RPG2GBA GAME PROFILE
 
 ALIGNED(4)
@@ -990,7 +992,13 @@ const u8 gText_UpdatedTime[] = _("Updated time"); // Unused
 const u8 gText_MenuPokedex[] = _("POKéDEX");
 const u8 gText_MenuPokemon[] = _("POKéMON");
 const u8 gText_MenuBag[] = _("BAG");
+// BEGIN RPG2GBA GAME PROFILE — the game's name for its phone (config/rpg2gba_game.gen.h).
+#ifdef RPG2GBA_PHONE_MENU_LABEL
+const u8 gText_MenuPokenav[] = RPG2GBA_PHONE_MENU_LABEL;
+#else
 const u8 gText_MenuPokenav[] = _("POKéNAV");
+#endif
+// END RPG2GBA GAME PROFILE
 const u8 gText_MenuPlayer[] = _("{PLAYER}");
 const u8 gText_MenuSave[] = _("SAVE");
 const u8 gText_MenuOption[] = _("OPTION");

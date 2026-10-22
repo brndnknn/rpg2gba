@@ -229,8 +229,8 @@ def fold_one_shot_arms(
     `one_shot_pages`) whose trunk row another beat claims would step into an
     event that ended itself on that beat's walk (CH08: Moki Town ev078 p0
     sets its own A, lifting p1; the `_arms` beat's second bump started no
-    script). Its arms ran inside that single firing, so each becomes an
-    `unselected_arm` elsewhere entry naming the trunk beat and the ender. An
+    script). Its arms ran inside that single firing, so each becomes a
+    `walked_with_page` elsewhere entry (#147) naming the trunk beat and the ender. An
     arm whose floor holds anything beyond `trigger`/`completes` has an
     assertion that firing does not evidence: fail loud. Any other beat, and a
     beat with an arm of a page that is not one-shot, is untouched."""
@@ -266,7 +266,7 @@ def fold_one_shot_arms(
                     "a second bump would start no script")
             turn = "on, lifting a higher page," if info.lifts else "off"
             elsewhere.append(Elsewhere(
-                r, "unselected_arm",
+                r, "walked_with_page",
                 detail=(f"ran inside the single firing of {owner} by beat {trunk}: the page "
                         f"turns self switch {info.switch} {turn} at its top level "
                         f"({info.ender}), so it fires once and a second bump starts no "

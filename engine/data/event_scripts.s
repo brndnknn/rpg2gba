@@ -1446,9 +1446,18 @@ gText_MomExplainHPGetPotions::
 	.string "Make me proud, honey!\p"
 	.string "Take care!$"
 
+@ BEGIN RPG2GBA GAME PROFILE — the registration line names the game's phone when the
+@ profile generates it (config/rpg2gba_game.gen.h, data/scripts/rpg2gba_phone_text.inc).
+#ifdef RPG2GBA_PHONE_TEXT_INC
+	.include "data/scripts/rpg2gba_phone_text.inc"
+#else
+@ END RPG2GBA GAME PROFILE
 gText_RegisteredTrainerinPokeNav::
 	.string "Registered {STR_VAR_1} {STR_VAR_2}\n"
 	.string "in the POKéNAV.$"
+@ BEGIN RPG2GBA GAME PROFILE
+#endif
+@ END RPG2GBA GAME PROFILE
 
 gText_ComeBackWithSecretPower::
 	.string "Do you know the TM SECRET POWER?\p"

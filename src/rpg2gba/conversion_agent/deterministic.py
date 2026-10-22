@@ -1385,11 +1385,13 @@ def classify_trainer_battle(
 # ``createPhoneTrainer`` calls.
 
 _PHONE_TRAINER_INTRO_RE = re.compile(r"^pbTrainerIntro\(:(\w+)\)$")
+# Uranium's `$Trainer.pokegear` (the transpiler's `$Trainer.pokegear=true` sets it).
+_POKEGEAR_FLAG = "FLAG_SYS_POKENAV_GET"
 _PHONE_NOTICE_PLAYER = "Kernel.pbNoticePlayer(get_character(0))"
 _PHONE_CALLBUB_RE = re.compile(r"^pbCallBub\(\d+\)$")
 _PHONE_TRAINER_END = "pbTrainerEnd"
 _PHONE_REGISTER_BATTLE_RE = re.compile(
-    r'^pbPhoneRegisterBattle\(_I\("(?:[^"\\]|\\.)*"\),'
+    r'^pbPhoneRegisterBattle\(_I\("((?:[^"\\]|\\.)*)"\),'
     r'get_character\(0\),(?:::)?PBTrainers::(\w+),"([^"]*)",\d+\)$'
 )
 _PHONE_BATTLE_COUNT_RE = re.compile(
@@ -1408,7 +1410,24 @@ _PHONE_INCREMENT_RE = re.compile(
 )
 
 
-def _join_script_run(cmds: list[dict], idx: int) -> tuple[str, int] | None:
+_PHONE_QUESTION_RE = re.compile(r'^pbPhoneRegisterBattle\(_I\("((?:[^"\\]|\\.)*)"\)')
+
+
+def _phone_question(cmds: list[dict], idx: int) -> str | None:
+    """The question a ``pbPhoneRegisterBattle`` call at ``cmds[idx]`` asks
+    (#141). Its literal may span script lines; a line break inside a Ruby
+    literal is part of the string, and RMXP layout, so it becomes a space
+    (``format()`` re-wraps the text)."""
+    joined = _join_script_run(cmds, idx, sep="\n")
+    if joined is None:
+        return None
+    m = _PHONE_QUESTION_RE.match(joined[0])
+    if not m:
+        return None
+    return " ".join(m.group(1).split())
+
+
+def _join_script_run(cmds: list[dict], idx: int, sep: str = "") -> tuple[str, int] | None:
     """Join a code-355 SCRIPT command with any immediately-following code-655
     SCRIPT_CONT commands into one logical script line.
 
@@ -1431,7 +1450,7 @@ def _join_script_run(cmds: list[dict], idx: int) -> tuple[str, int] | None:
         c = cmds[idx] if 0 <= idx < len(cmds) else None
         if c is not None and c.get("code") == SCRIPT_CONT:
             p = c.get("parameters", [""])
-            text += p[0] if p else ""
+            text += sep + (p[0] if p else "")
             idx += 1
         else:
             break
@@ -1440,9 +1459,10 @@ def _join_script_run(cmds: list[dict], idx: int) -> tuple[str, int] | None:
 
 def _parse_phone_idle_page(
     cmds2: list[dict], class_sym: str, name: str
-) -> str | None:
+) -> tuple[str, str] | None:
     """Walk RGSS page 3 (self-switch A idle/re-offer, python var ``page2``)
-    and return its idle Show-Text, or ``None`` on any deviation.
+    and return its (idle Show-Text, registration question), or ``None`` on any
+    deviation.
 
     Expected shape (see module comment): a code-111 conditional on
     ``pbPhoneBattleCount(...)>=1`` gating [optional pbCallBub, a Show-Text
@@ -1455,9 +1475,9 @@ def _parse_phone_idle_page(
     def _at(i: int) -> dict | None:
         return cmds2[i] if 0 <= i < len(cmds2) else None
 
-    def _walk_branch(idx: int) -> tuple[str, int] | None:
+    def _walk_branch(idx: int) -> tuple[str, str, int] | None:
         """Parse [optional pbCallBub, Show-Text run, pbPhoneRegisterBattle]
-        starting at ``idx``; returns (idle_raw, next_idx) or None."""
+        starting at ``idx``; returns (idle_raw, question_raw, next_idx) or None."""
         c = _at(idx)
         if c is not None and c.get("code") == SCRIPT:
             p = c.get("parameters", [""])
@@ -1480,15 +1500,16 @@ def _parse_phone_idle_page(
                 break
         idle_raw = join_text_lines(parts).strip()
 
+        question = _phone_question(cmds2, idx)
         joined = _join_script_run(cmds2, idx)
-        if joined is None:
+        if joined is None or question is None:
             return None
         reg_text, idx = joined
         m_reg = _PHONE_REGISTER_BATTLE_RE.match(reg_text)
-        if not m_reg or m_reg.group(1) != class_sym or m_reg.group(2) != name:
+        if not m_reg or m_reg.group(2) != class_sym or m_reg.group(3) != name:
             return None
 
-        return idle_raw, idx
+        return idle_raw, question, idx
 
     idx = 0
     c = _at(idx)
@@ -1505,7 +1526,7 @@ def _parse_phone_idle_page(
     result = _walk_branch(idx)
     if result is None:
         return None
-    idle_a, idx = result
+    idle_a, question_a, idx = result
 
     c = _at(idx)
     if c is None or c.get("code") != EXIT_EVENT_PROCESSING:
@@ -1527,7 +1548,7 @@ def _parse_phone_idle_page(
     result = _walk_branch(idx)
     if result is None:
         return None
-    idle_b, idx = result
+    idle_b, question_b, idx = result
 
     while True:
         c = _at(idx)
@@ -1538,10 +1559,10 @@ def _parse_phone_idle_page(
     if idx != len(cmds2):
         return None  # trailing junk on page 3 — deviation, fail loud
 
-    if idle_a != idle_b:
+    if idle_a != idle_b or question_a != question_b:
         return None  # the two idle copies disagree — deviation, fail loud
 
-    return idle_a
+    return idle_a, question_a
 
 
 def classify_phone_rematch_trainer_battle(
@@ -1632,14 +1653,15 @@ def classify_phone_rematch_trainer_battle(
         return None
     idx += 1
 
+    question_raw = _phone_question(cmds0, idx)
     joined = _join_script_run(cmds0, idx)
-    if joined is None:
+    if joined is None or question_raw is None:
         return None
     reg_text, idx = joined
     m_reg = _PHONE_REGISTER_BATTLE_RE.match(reg_text)
     if not m_reg:
         return None
-    if m_reg.group(1) != class_sym:
+    if m_reg.group(2) != class_sym:
         return None
 
     c = _at(cmds0, idx)
@@ -1694,7 +1716,7 @@ def classify_phone_rematch_trainer_battle(
     party_id = parsed.party_id
 
     name = parsed.display_name
-    if name != m_reg.group(2):
+    if name != m_reg.group(3):
         return None
 
     trainer_const = ctx.trainers.get((class_const, name, party_id))
@@ -1706,6 +1728,9 @@ def classify_phone_rematch_trainer_battle(
         return None
     defeat = _translate_text(defeat_raw)
     if defeat is None:
+        return None
+    question = _translate_text(question_raw)
+    if question is None:
         return None
 
     # ---- walk page 1: the phone rematch ----------------------------------
@@ -1869,11 +1894,15 @@ def classify_phone_rematch_trainer_battle(
 
     # ---- walk page 2: the idle re-offer (B11) -----------------------------
     cmds2 = [c for c in page2.get("list", []) if c.get("code") not in (COMMENT, COMMENT_CONT)]
-    idle_raw = _parse_phone_idle_page(cmds2, class_sym, name)
-    if idle_raw is None:
+    parsed_idle = _parse_phone_idle_page(cmds2, class_sym, name)
+    if parsed_idle is None:
         return None
+    idle_raw, re_question_raw = parsed_idle
     idle = _translate_text(idle_raw)
     if idle is None:
+        return None
+    re_question = _translate_text(re_question_raw)
+    if re_question is None:
         return None
 
     # ---- emit -------------------------------------------------------------
@@ -1884,10 +1913,10 @@ def classify_phone_rematch_trainer_battle(
     # line. Only the four-argument ``trainerbattle_single`` continue-script
     # form (TRAINER_BATTLE_CONTINUE_SCRIPT) is reachable post-battle — see
     # engine/data/maps/Route102/scripts.inc:20-41 for the vanilla shape this
-    # mirrors. Two deliberate deviations from that vanilla shape:
-    #   1. No ``goto_if_set FLAG_HAS_MATCH_CALL`` gate — this pipeline has no
-    #      equivalent flag grant wired up, so gating would make registration
-    #      dead code again (the exact bug this fixes). Register unconditionally.
+    # mirrors. Two notes on that vanilla shape:
+    #   1. The gate is the Pokégear's ``FLAG_SYS_POKENAV_GET``, not
+    #      ``FLAG_HAS_MATCH_CALL``: this pipeline never grants the latter, and
+    #      Uranium's own gate is ``$Trainer.pokegear`` (#141, ``_offer`` below).
     #   2. ``special(PlayerFaceTrainerAfterBattle)`` + ``waitmovement(0)`` are
     #      kept (verified present: engine/data/specials.inc:538 and the
     #      ``special``/``waitmovement`` macros in engine/asm/macros/event.inc)
@@ -1957,12 +1986,30 @@ def classify_phone_rematch_trainer_battle(
     # `setflag` stays — `metadata_wiring` mints and reads the same
     # self-switch for page conditions, so the event's own page state must
     # still advance.
+    # #141 (operator 2026-10-21): Uranium's pbPhoneRegisterBattle
+    # (scripts_dump/133_PScreen_Phone.rb:91) does nothing without the Pokégear,
+    # skips a trainer already registered, and otherwise asks its message as a
+    # yes/no and registers only on yes. Built from Emerald's own pieces:
+    # Calvin's Match Call gate (Route102/scripts.inc, here the Pokégear's
+    # FLAG_SYS_POKENAV_GET, which `$Trainer.pokegear=true` sets), a
+    # MSGBOX_YESNO, `register_matchcall`, and `IsTrainerRegistered` for the
+    # re-offer on a later talk.
+    def _offer(text: str) -> list[str]:
+        return [
+            f"if (flag({_POKEGEAR_FLAG})) {{",
+            f"    msgbox({format_pory_dialogue(text)}, MSGBOX_YESNO)",
+            "    if (var(VAR_RESULT) == YES) {",
+            f"        register_matchcall({trainer_const})",
+            "    }",
+            "}",
+        ]
+
     register_block = _block(
         register_label,
         [
             "special(PlayerFaceTrainerAfterBattle)",
             "waitmovement(0)",
-            f"register_matchcall({trainer_const})",
+            *_offer(question),
             f"setflag({ssa_flag})",
             "release",
             "end",
@@ -1971,6 +2018,14 @@ def classify_phone_rematch_trainer_battle(
     rematch_block = _block(
         _page_label(map_id, event, 2),
         [
+            f"setvar(VAR_0x8004, {trainer_const})",
+            "specialvar(VAR_RESULT, IsTrainerRegistered)",
+            "if (var(VAR_RESULT) == FALSE) {",
+            f"    msgbox({format_pory_dialogue(idle)})",
+            *[f"    {ln}" for ln in _offer(re_question)],
+            "    release",
+            "    end",
+            "}",
             "specialvar(VAR_RESULT, IsTrainerReadyForRematch)",
             "if (var(VAR_RESULT) == FALSE) {",
             f"    msgbox({format_pory_dialogue(idle)})",

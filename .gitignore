@@ -51,6 +51,9 @@ engine/src/data/region_map/region_map_sections.gen.json
 # S8d: pre-planted berry-tree seed table (pulled in by the committed RPG2GBA
 # GAME PROFILE include-hook right after ClearBerryTrees() in src/new_game.c).
 engine/data/scripts/rpg2gba_berry_trees.h
+# The game's phone name in the Match Call registration line (game_profile.header; included
+# by event_scripts.s under RPG2GBA_PHONE_TEXT_INC).
+engine/data/scripts/rpg2gba_phone_text.inc
 # S8a tileset graphics: generated engine fragments (pulled in by committed sentinel
 # #include hooks in src/data/tilesets/*.h + include/tilesets.h) and the emitted art.
 engine/src/data/tilesets/rpg2gba_graphics.gen.h

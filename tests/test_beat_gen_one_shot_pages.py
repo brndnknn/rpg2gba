@@ -77,7 +77,7 @@ def test_arms_beat_of_one_shot_page_becomes_elsewhere():
     kept, elsewhere = fold_one_shot_arms(beats, _SHOT, floors)
     assert [b.name for b in kept] == ["m009e001_warp"]
     (e,) = elsewhere
-    assert (e.row_id, e.status) == (ARM, "unselected_arm")
+    assert (e.row_id, e.status) == (ARM, "walked_with_page")
     assert "m009e001_warp" in e.detail and "A" in e.detail and "completes, trigger" in e.detail
 
 

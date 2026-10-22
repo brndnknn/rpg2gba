@@ -93,3 +93,26 @@ def regional_dex_name(path: Path = DEFAULT_SETTINGS_RB) -> str:
                 if body.strip().startswith("]"):
                     break
     raise SettingsError("Settings.rb: no pbDexNames entry")
+
+
+DEFAULT_PHONE_RB = REPO_ROOT / "reference" / "scripts_dump" / "133_PScreen_Phone.rb"
+_PHONE_REGISTERED = re.compile(r'_INTL\("Registered \{1\} in the ([^"]+)\."')
+
+
+def _fix_mojibake(text: str) -> str:
+    """The scripts dump decoded UTF-8 bytes as cp1252 ("PokÃ©pod"); undo that
+    when it applies, else return the text unchanged."""
+    try:
+        return text.encode("cp1252").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text
+
+
+def phone_name(path: Path = DEFAULT_PHONE_RB) -> str:
+    """The game's name for its phone, from `pbPhoneRegisterBattle`'s
+    "Registered {1} in the <name>." message ("Poképod"). Fails loud if absent
+    or if the dump's spellings disagree."""
+    names = {_fix_mojibake(m) for m in _PHONE_REGISTERED.findall(Path(path).read_text(encoding="utf-8"))}
+    if len(names) != 1:
+        raise SettingsError(f"{path}: expected one phone name in 'Registered {{1}} in the ...', got {sorted(names)}")
+    return names.pop()

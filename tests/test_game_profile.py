@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from rpg2gba.game_profile import header
+from rpg2gba.game_profile import header, settings
 from rpg2gba.game_profile.settings import (
     DEFAULT_SETTINGS_RB,
     SettingsError,
@@ -150,15 +150,38 @@ def test_c_macros_all_emitted():
     engine = Path("engine")
     used: set[str] = set()
     import re
-    pat = re.compile(r"\bRPG2GBA_(?:FIELD_MOVE_BADGE\w*|WHITEOUT_FLAG|NEW_GAME_\w+)\b")
-    for rel in ("src/field_move.c", "src/overworld.c", "src/new_game.c"):
+    pat = re.compile(r"\bRPG2GBA_(?:FIELD_MOVE_BADGE\w*|WHITEOUT_FLAG|NEW_GAME_\w+|PHONE_\w+)\b")
+    for rel in ("src/field_move.c", "src/overworld.c", "src/new_game.c", "src/strings.c",
+                "data/event_scripts.s"):
         used |= set(pat.findall((engine / rel).read_text(encoding="utf-8")))
     facts = header.GameFacts(
         badges_count_mode=True,
         badge_requirements={k: 1 for k in header._BADGE_ORDER},
         whiteout_flag="FLAG_X", new_game_map="MAP_X", new_game_x=1, new_game_y=1,
-        new_game_heal_location="HEAL_LOCATION_X")
+        new_game_heal_location="HEAL_LOCATION_X", phone_name="POKéPOD")
     text = header.render_header(facts)
     # Names ending in _X/_CUT style are matched by prefix only where C builds the name by token paste.
     for name in used:
         assert f"#define {name} " in text, name
+
+
+def test_phone_name_from_the_games_registration_message():
+    """#141: the dump says "PokÃ©pod" (mojibake); the reader returns the real word,
+    and the UI form keeps the accented e lower case, as in POKéNAV."""
+    assert settings.phone_name() == "Poképod"
+    assert header.ui_caps("Poképod") == "POKéPOD"
+
+
+def test_phone_text_redefines_the_registration_line():
+    facts = header.GameFacts(
+        badges_count_mode=None, badge_requirements={}, whiteout_flag="FLAG_X",
+        new_game_map="MAP_X", new_game_x=1, new_game_y=1,
+        new_game_heal_location="HEAL_LOCATION_X", phone_name="POKéPOD")
+    text = header.render_phone_text(facts)
+    assert "gText_RegisteredTrainerinPokeNav::" in text
+    assert '.string "in the POKéPOD.$"' in text
+    assert '#define RPG2GBA_PHONE_MENU_LABEL _("POKéPOD")' in header.render_header(facts)
+
+
+def test_regional_dex_name_from_dex_names():
+    assert settings.regional_dex_name() == "Tandor"

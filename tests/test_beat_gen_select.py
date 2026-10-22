@@ -325,3 +325,38 @@ def test_dropped_event_rows_are_converter_dropped_not_owned():
     assert sel.owned == () and sel.refusals == ()
     assert [(e.row_id, e.status) for e in sel.elsewhere] == [
         ("map033/ev147/p0", "converter_dropped")]
+
+
+# --- #63: an obstacle's empty post-clear page --------------------------------
+
+def _rock_rows() -> tuple[ManifestRow, ManifestRow]:
+    rock = ManifestRow(row_id="map035/ev014/p0", kind="page", map_id=35, content_hash="x",
+                       requires=("rock_smash",), event_id=14, page_idx=0)
+    smashed = ManifestRow(row_id="map035/ev014/p1", kind="page", map_id=35, content_hash="x",
+                          requires=("rock_smash",), event_id=14, page_idx=1)
+    return rock, smashed
+
+
+_ROCK_MAP = {35: {"events": [None, *([None] * 13), {
+    "id": 14,
+    "pages": [{"list": [{"code": 355}, {"code": 0}]}, {"list": [{"code": 0}]}],
+}]}}
+
+
+def test_obstacle_empty_page_is_found():
+    rock, smashed = _rock_rows()
+    floors = {rock.row_id: _obstacle_floor(rock.row_id), smashed.row_id: _floor(smashed.row_id)}
+    assert select.cleared_obstacle_pages([rock, smashed], floors, _ROCK_MAP) == {smashed.row_id}
+    # An obstacle the walk clears itself is beat_gen's to file after selection.
+    assert select.cleared_obstacle_pages([rock, smashed], floors, _ROCK_MAP,
+                                         exclude={(35, 14)}) == frozenset()
+
+
+def test_obstacle_empty_page_is_empty_page_not_blocked():
+    rock, smashed = _rock_rows()
+    floors = {rock.row_id: _obstacle_floor(rock.row_id), smashed.row_id: _floor(smashed.row_id)}
+    sel = select.select_rows([rock, smashed], {r.row_id: _verdict(r.row_id) for r in (rock, smashed)},
+                             floors, cleared_pages={smashed.row_id})
+    assert [r.row_id for r in sel.owned] == [rock.row_id]
+    assert sel.elsewhere == (Elsewhere(smashed.row_id, "empty_page",
+                                       detail=select.CLEARED_OBSTACLE_PAGE_DETAIL),)

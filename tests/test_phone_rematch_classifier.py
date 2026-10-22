@@ -270,6 +270,8 @@ def test_ev039_brandon_matches_and_emits_both_blocks() -> None:
 def test_ev039_golden_output() -> None:
     ev = _make_event(_BRANDON, id=39)
     out = D.classify_phone_rematch_trainer_battle(33, ev, _BRANDON_CTX)
+    # #141: the registration question, asked as a yes/no (its literal's line break is a space).
+    question = 'format("I need some more water Pokémon... Hook me up on PokePod if you want to battle again!")'
     expected = (
         "script Map033_Trainer_5_Page1 {\n"
         '    trainerbattle_single(TRAINER_BRANDON_16, format("Water Pokémon are the best."), '
@@ -280,12 +282,30 @@ def test_ev039_golden_output() -> None:
         "script Map033_Trainer_5_Page1_RegisterMatchCall {\n"
         "    special(PlayerFaceTrainerAfterBattle)\n"
         "    waitmovement(0)\n"
-        "    register_matchcall(TRAINER_BRANDON_16)\n"
+        "    if (flag(FLAG_SYS_POKENAV_GET)) {\n"
+        f"        msgbox({question}, MSGBOX_YESNO)\n"
+        "        if (var(VAR_RESULT) == YES) {\n"
+        "            register_matchcall(TRAINER_BRANDON_16)\n"
+        "        }\n"
+        "    }\n"
         "    setflag(FLAG_MAP033_EVENT039_SSA)\n"
         "    release\n"
         "    end\n"
         "}\n\n"
         "script Map033_Trainer_5_Page2 {\n"
+        "    setvar(VAR_0x8004, TRAINER_BRANDON_16)\n"
+        "    specialvar(VAR_RESULT, IsTrainerRegistered)\n"
+        "    if (var(VAR_RESULT) == FALSE) {\n"
+        '        msgbox(format("This place is perfect for fishing!"))\n'
+        "        if (flag(FLAG_SYS_POKENAV_GET)) {\n"
+        f"            msgbox({question}, MSGBOX_YESNO)\n"
+        "            if (var(VAR_RESULT) == YES) {\n"
+        "                register_matchcall(TRAINER_BRANDON_16)\n"
+        "            }\n"
+        "        }\n"
+        "        release\n"
+        "        end\n"
+        "    }\n"
         "    specialvar(VAR_RESULT, IsTrainerReadyForRematch)\n"
         "    if (var(VAR_RESULT) == FALSE) {\n"
         '        msgbox(format("This place is perfect for fishing!"))\n'

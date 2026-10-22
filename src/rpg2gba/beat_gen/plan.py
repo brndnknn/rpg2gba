@@ -108,19 +108,21 @@ class Elsewhere:
     2026-09-29 operator ruling -- an empty page superseding a non-empty one
     is still walked), or the converter drops its event so the ROM never
     carries it (`converter_dropped`, 2026-09-30 operator ruling --
-    `detail` names the drop rule and quotes the script, PROJECT_TODO #119)."""
+    `detail` names the drop rule and quotes the script, PROJECT_TODO #119), or
+    it is an arm of a one-shot page another beat fires, so it ran inside that
+    single firing (`walked_with_page`, #147 -- `detail` names the firing beat)."""
 
     row_id: str
     status: Literal["later", "unreachable", "blocked", "boundary", "never_fires",
-                    "unselected_arm", "stripped", "arm_gated", "empty_page",
-                    "converter_dropped"]
+                    "unselected_arm", "walked_with_page", "stripped", "arm_gated",
+                    "empty_page", "converter_dropped"]
     owner: str | None = None             # the owning chapter for `later`/`boundary`, else None
     requires: tuple[str, ...] = ()       # the capabilities, for `blocked`
     detail: str = ""                     # required non-empty for `never_fires`: the proof
 
     def __post_init__(self) -> None:
-        if self.status in ("never_fires", "unselected_arm", "stripped", "arm_gated",
-                           "empty_page", "converter_dropped") and not self.detail:
+        if self.status in ("never_fires", "unselected_arm", "walked_with_page", "stripped",
+                           "arm_gated", "empty_page", "converter_dropped") and not self.detail:
             raise ValueError(f"{self.row_id}: {self.status} requires a non-empty detail")
 
 

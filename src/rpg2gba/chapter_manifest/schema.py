@@ -150,8 +150,8 @@ _VERDICTS: frozenset[str] = frozenset({
 #
 #   elsewhere:<status>[: <detail>]  -- <status> in `ELSEWHERE_STATUSES`: the
 #       generator places the row outside this chapter's walk (`later`,
-#       `unselected_arm`, `stripped`, `arm_gated`, `empty_page`,
-#       `never_fires`, `converter_dropped`). The generator's `unreachable`
+#       `unselected_arm`, `walked_with_page`, `stripped`, `arm_gated`,
+#       `empty_page`, `never_fires`, `converter_dropped`). The generator's `unreachable`
 #       status is NOT spelled `elsewhere:unreachable` -- it means "live in no
 #       chapter", which is exactly this file's `unreachable:` (ruling R8), so
 #       it derives to that head. `blocked`/`boundary` are not spelled here
@@ -171,7 +171,7 @@ _ARGUMENT_REQUIRED: frozenset[str] = frozenset(
 #: `beat_gen`, so the grammar does not depend on the generator; a test pins
 #: the two in agreement.
 ELSEWHERE_STATUSES: frozenset[str] = frozenset({
-    "later", "unselected_arm", "stripped", "arm_gated", "empty_page",
+    "later", "unselected_arm", "walked_with_page", "stripped", "arm_gated", "empty_page",
     "never_fires", "converter_dropped"})
 
 #: `refused:` blocker tokens -- the same set as `beat_gen.plan.BLOCKERS`

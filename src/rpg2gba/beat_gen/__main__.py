@@ -110,7 +110,12 @@ from rpg2gba.beat_gen.seam import (
 from rpg2gba.beat_gen.seed import deferred_loader, route_winner, walked_loader
 from rpg2gba.beat_gen.page_sim import Firing
 from rpg2gba.beat_gen.smash_lanes import sight_trainers_for, split_lane_gated, wait_edges
-from rpg2gba.beat_gen.select import dropped_events, empty_events, select_rows
+from rpg2gba.beat_gen.select import (
+    cleared_obstacle_pages,
+    dropped_events,
+    empty_events,
+    select_rows,
+)
 from rpg2gba.beat_gen.round_trip import find_round_trip
 from rpg2gba.beat_gen.state_arms import FIRING_TEMPLATES, Taint, fired_pages, select_state_arms
 from rpg2gba.conversion_agent.flag_registry import load_label_tables
@@ -1887,11 +1892,17 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     held = _held_capabilities(binding, chapter_id)
     held_obstacles, foreign_cleared = _smashable_by_walk(
         held, chain_maps, build_dir, _row_states_for(build_dir, resolved))
+    cleared_pages = cleared_obstacle_pages(
+        rows, floors,
+        {m: load_map_json(m, build_dir / "maps")
+         for m in sorted({r.map_id for r in rows if r.map_id is not None})},
+        exclude=held_obstacles)
     selection = split_outbound(select_rows(rows, verdicts, floors, stripped=stripped,
                                            empty=empty,
                                            dropped=_dropped_events(rows, build_dir),
                                            held=held, held_obstacles=held_obstacles,
-                                           foreign_cleared=foreign_cleared),
+                                           foreign_cleared=foreign_cleared,
+                                           cleared_pages=cleared_pages),
                                floors, chain_maps,
                                successor.id if successor is not None else None)
     # A cleared obstacle's empty page (a rock's "smashed" page: self switch A,

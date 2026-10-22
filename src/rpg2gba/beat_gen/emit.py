@@ -139,7 +139,7 @@ def _never_fires_chunk(plan: ChapterPlan, *, status: str = "never_fires",
 #: ev057), whose page 1 is the arrival nudge for coming back out of the
 #: parked Metro.
 ELSEWHERE_EMITTED: frozenset[str] = frozenset({
-    "later", "unreachable", "unselected_arm", "stripped", "arm_gated",
+    "later", "unreachable", "unselected_arm", "walked_with_page", "stripped", "arm_gated",
     "converter_dropped"})
 _ELSEWHERE_AS: dict[str, str] = {"boundary": "later"}
 

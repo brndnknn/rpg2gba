@@ -57,3 +57,43 @@ def test_real_ceremony_row_floor_is_clean_and_carries_var_text() -> None:
     [vt] = [a for a in ceremony.assertions if a.kind == "var_text"]
     assert vt.param("var_id") == 3 and vt.param("input_vars") == (151,)
     assert not floor_for_row("map050/ev019/p0").refused
+
+
+# --- #144: dex-count lines ----------------------------------------------------
+
+from rpg2gba.beat_floor.var_text import count_text_source, expected_count_text  # noqa: E402
+from rpg2gba.beat_floor.walk import _ancestor_scripts  # noqa: E402
+
+SEEN_CAUGHT = ["So, you've seen \\r\\v[2]\\c[0] Pokémon and caught \\r\\v[3]\\c[0] of them..."]
+THRESHOLD = ["When you catch \\r\\v[1]\\c[0] Pokémon, come speak to me!"]
+
+
+def test_dex_count_line_names_its_two_sources() -> None:
+    scripts = ["pbSet(2,$Trainer.pokedexSeen)\npbSet(3,$Trainer.pokedexOwned)"]
+    assert count_text_source(SEEN_CAUGHT, scripts) == ((2, "dex_seen", 0), (3, "dex_owned", 0))
+
+
+def test_threshold_line_reads_the_rung_variable() -> None:
+    assert count_text_source(THRESHOLD, ["pbSet(1,PROFREWARDS[pbGet(22)+1][0])"]) == (
+        (1, "rung_threshold", 22),)
+
+
+def test_count_line_without_a_count_source_is_not_one() -> None:
+    assert count_text_source(THRESHOLD, ["pbSet(1,5)"]) is None
+    assert count_text_source(THRESHOLD, []) is None
+
+
+def test_count_line_drops_the_tint_and_fills_the_numbers() -> None:
+    assert expected_count_text(SEEN_CAUGHT, {2: 7, 3: 3}) == (
+        "So, you’ve seen 7 Pokémon and caught 3 of them...")
+
+
+def test_ancestor_scripts_skip_sibling_arms() -> None:
+    page = [
+        {"code": 355, "indent": 0, "parameters": ["pbSet(1,PROFREWARDS[pbGet(22)+1][0])"]},
+        {"code": 111, "indent": 0, "parameters": []},
+        {"code": 355, "indent": 1, "parameters": ["pbSet(1,99)"]},       # then-arm: a sibling
+        {"code": 411, "indent": 0, "parameters": []},
+        {"code": 101, "indent": 1, "parameters": ["When you catch \\v[1]"]},  # else-arm start
+    ]
+    assert _ancestor_scripts(page, 4, 1) == ["pbSet(1,PROFREWARDS[pbGet(22)+1][0])"]

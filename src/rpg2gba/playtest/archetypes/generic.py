@@ -152,8 +152,8 @@ logger = logging.getLogger(__name__)
 GENERIC_EXECUTED_KINDS: frozenset[str] = frozenset({
     "trigger", "completes", "text",
     "switch_write", "var_write", "self_switch_write", "engine_flag_write",
-    "visual", "heal_party", "var_text", "item_grant", "item_remove", "choice", "service",
-    "battle", "pokemon_grant", "erase_event",
+    "visual", "heal_party", "var_text", "count_text", "item_grant", "item_remove", "choice",
+    "service", "battle", "pokemon_grant", "erase_event",
 })
 
 #: Services `_handle_service` can prove opened (ruling 20). Any other service
@@ -253,7 +253,7 @@ _ARRIVAL_TRIGGERS = frozenset({"autorun", "parallel"})
 # when the page shows text; the rest stay undeclared, so they stay honestly
 # uncovered: a heal or a `\\v[N]` line can't be read back afterwards.
 _NOT_AFTER_THE_FACT = frozenset(
-    {"trigger", "text", "var_text", "heal_party", "item_grant", "choice",
+    {"trigger", "text", "var_text", "count_text", "heal_party", "item_grant", "choice",
      "service", "battle", "pokemon_grant"})
 # `item_remove` is not among them: the bag still shows it afterwards. On an
 # arrival page the pre-page count is gone, so only a KEY item's removal is
@@ -463,6 +463,36 @@ def _handle_var_text(emu: "Emulator", beat_name: str, step: Step) -> None:
                 "name in the persisted flag registry -- not guessing one")
         inputs[var_id] = emu.var(name)
     expected = expected_var_text(params["raw"], params["var_id"], params["script"], inputs)
+    _handle_text(emu, beat_name, Step(step.row_id, "text", step.list_index,
+                                      (("index", params["index"]), ("text", expected))))
+
+
+def _handle_count_text(emu: "Emulator", beat_name: str, step: Step) -> None:
+    """A dex-count line (#144): each number is predicted from ROM state the
+    script under test does not compute -- the seen/caught flags, or the
+    `PROFREWARDS` threshold at the ROM's rung variable -- and the line checked
+    like any other text."""
+    from rpg2gba.beat_floor.reward_ladder import load_profrewards
+    from rpg2gba.beat_floor.var_text import expected_count_text
+
+    params = dict(step.params)
+    seen, caught = emu.pokedex_counts()
+    values: dict[int, int] = {}
+    for var_id, kind, arg in params["sources"]:
+        if kind == "dex_seen":
+            values[var_id] = seen
+        elif kind == "dex_owned":
+            values[var_id] = caught
+        elif kind == "rung_threshold":
+            name = _flag_registry().get_var(arg)
+            if name is None:
+                raise ScenarioError(
+                    f"{beat_name}: {step.row_id}: rung var {arg} has no minted VAR_* name "
+                    "in the persisted flag registry -- not guessing one")
+            values[var_id] = load_profrewards()[emu.var(name) + 1].threshold
+        else:
+            raise ScenarioError(f"{beat_name}: {step.row_id}: unknown count source {kind!r}")
+    expected = expected_count_text(params["raw"], values)
     _handle_text(emu, beat_name, Step(step.row_id, "text", step.list_index,
                                       (("index", params["index"]), ("text", expected))))
 
@@ -1066,6 +1096,7 @@ STEP_HANDLERS.update({
     "item_remove": _handle_item_remove,
     "pokemon_grant": _handle_pokemon_grant,
     "var_text": _handle_var_text,
+    "count_text": _handle_count_text,
     "trigger": _handle_trigger,
     "completes": _handle_completes,
     "text": _handle_text,

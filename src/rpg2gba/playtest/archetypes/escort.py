@@ -54,7 +54,7 @@ if TYPE_CHECKING:  # runtime import is lazy so this module works without mGBA bi
     from rpg2gba.playtest.emulator import Emulator
 
 #: Checked while the script plays, before the transfer.
-_RIDE_KINDS: frozenset[str] = frozenset({"text", "var_text"})
+_RIDE_KINDS: frozenset[str] = frozenset({"text", "var_text", "count_text"})
 #: Checked once the player has landed and the arrival has settled.
 _STATE_KINDS: frozenset[str] = frozenset(
     {"switch_write", "var_write", "self_switch_write", "engine_flag_write"})

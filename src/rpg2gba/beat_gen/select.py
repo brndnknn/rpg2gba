@@ -106,6 +106,42 @@ def _held_obstacle(row: ManifestRow, floor: RowFloor,
             and (row.map_id, row.event_id) in held_obstacles)
 
 
+CLEARED_OBSTACLE_PAGE_DETAIL = (
+    "the obstacle's empty page, shown only once it is cleared: nothing to refuse "
+    "there; the obstacle's own page carries the negative beat")
+
+
+def cleared_obstacle_pages(
+    rows: Sequence[ManifestRow],
+    floors: Mapping[str, RowFloor],
+    map_jsons: Mapping[int, Mapping],
+    exclude: Collection[tuple[int, int]] = frozenset(),
+) -> frozenset[str]:
+    """Page rows that are the empty page an obstacle event switches to once
+    cleared (a rock's "smashed" page: no commands). Until the obstacle is
+    cleared the page never shows, and after, there is nothing on it to talk
+    to, so it is `empty_page`, not `blocked` (#63, operator 2026-10-21: CH04's
+    two Route 2 rocks). `exclude` are obstacles the walk clears itself, whose
+    empty pages `beat_gen` already files after selection (CH08 §9)."""
+    obstacles = {(r.map_id, r.event_id) for r in rows
+                 if r.event_id is not None and r.row_id in floors
+                 and _is_obstacle_row(floors[r.row_id])} - set(exclude)
+    out: set[str] = set()
+    for r in rows:
+        if r.kind != "page" or (r.map_id, r.event_id) not in obstacles or r.page_idx is None:
+            continue
+        floor = floors.get(r.row_id)
+        if floor is None or _is_obstacle_row(floor):
+            continue
+        event = next((e for e in map_jsons[r.map_id].get("events") or []
+                      if e and e["id"] == r.event_id), None)
+        pages = (event or {}).get("pages") or []
+        if r.page_idx < len(pages) and all(
+                c.get("code") == 0 for c in pages[r.page_idx].get("list") or []):
+            out.add(r.row_id)
+    return frozenset(out)
+
+
 def empty_events(map_id: int, map_json: Mapping) -> set[tuple[int, int]]:
     """The (map, event) pairs on one decoded map whose EVERY page is empty
     (only the terminating code 0). Such an event can show nothing on the
@@ -161,6 +197,7 @@ def select_rows(
     held: Collection[str] = frozenset(),
     held_obstacles: Collection[tuple[int, int]] = frozenset(),
     foreign_cleared: Collection[tuple[int, int]] = frozenset(),
+    cleared_pages: Collection[str] = frozenset(),
 ) -> Selection:
     """Sort every manifest row into owned / refused / elsewhere.
 
@@ -188,7 +225,10 @@ def select_rows(
     are `empty_page`, right after the strip rule.
 
     `dropped` is `dropped_events` over the chapter's maps: those events'
-    rows are `converter_dropped`, after the empty rule."""
+    rows are `converter_dropped`, after the empty rule.
+
+    `cleared_pages` is `cleared_obstacle_pages`: those rows are `empty_page`,
+    just before the capability rule (Rule 6) would call them `blocked`."""
     owned: list[ManifestRow] = []
     refusals: list[Refusal] = []
     elsewhere: list[Elsewhere] = []
@@ -251,6 +291,12 @@ def select_rows(
             if verdict.status == "unreachable":
                 elsewhere.append(Elsewhere(row.row_id, "unreachable", None))
                 continue
+
+        # Rule 5b: an obstacle's empty post-clear page (#63).
+        if row.row_id in cleared_pages:
+            elsewhere.append(Elsewhere(row.row_id, "empty_page",
+                                       detail=CLEARED_OBSTACLE_PAGE_DETAIL))
+            continue
 
         # Rule 6: requires a capability and isn't the obstacle itself.
         held_here = set(row.requires) <= set(held) and (

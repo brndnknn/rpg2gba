@@ -23,7 +23,10 @@ AssertionKind = Literal[
     "var_text",           # params: index, raw (source text with one \v[N]), var_id (N),
                           #   script (the 355/655 block that writes it), input_vars
                           #   -- ruling 18; ROM-only: the value comes from ROM state
-    "choice",             # params: options (tuple[str, ...], normalized)
+    "count_text",         # params: index, raw (source text with up to three \v[N]),
+                          #   sources (((N, "dex_seen"|"dex_owned"|"rung_threshold", arg), ...))
+                          #   -- #144; ROM-only: dex counts / ladder rung from ROM state
+    "choice",            # params: options (tuple[str, ...], normalized)
     "switch_write",       # params: switch_id, value
     "var_write",          # params: var_id, op, value (story_state Assign/Adjust, rendered)
     "self_switch_write",  # params: event_id, letter, value

@@ -25,7 +25,7 @@ tests can inject fakes by monkeypatching `walk.extract_script` etc. -- see
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
@@ -44,7 +44,7 @@ from rpg2gba.beat_floor.move_route import extract_move_route
 from rpg2gba.beat_floor.obstacle import obstacle_assertions
 from rpg2gba.beat_floor.script import extract_script
 from rpg2gba.beat_floor.terrain import seam_floors_for_map, stair_floors_for_map
-from rpg2gba.beat_floor.var_text import var_text_source
+from rpg2gba.beat_floor.var_text import count_text_source, var_text_source
 from rpg2gba.chapter_manifest.generator import PageScope, detect_stair_cells, iter_page_scopes
 from rpg2gba.chapter_manifest.schema import parse_row_id, row_id_sort_key
 from rpg2gba.conversion_agent.deterministic import join_text_lines, translate_text_codes
@@ -445,17 +445,36 @@ def _walk_leaf(
     return extractor(cmd, list_index, ctx)
 
 
+def _ancestor_scripts(page_list: list[dict[str, Any]], start: int, indent: int) -> list[str]:
+    """Script lines (355/655) that run before a branch arm starting at
+    `page_list[start]` (indent `indent`): those in its enclosing scopes, oldest
+    first. Walking back, a command at a lower indent opens the next enclosing
+    scope; deeper ones belong to sibling arms and are skipped."""
+    out: list[str] = []
+    level = indent
+    for c in reversed(page_list[:start]):
+        ci = c.get("indent", 0)
+        if ci < level:
+            level = ci
+        if ci == level and c.get("code") in (355, 655):
+            out.append(str((c.get("parameters") or [""])[0]))
+    return out[::-1]
+
+
 def _walk_commands(
     commands: list[dict[str, Any]],
     ctx: ExtractContext,
     index_of: dict[int, int],
     visited_ce: frozenset[int],
     stripped_ce_ids: frozenset[int],
+    inherited_scripts: Sequence[str] = (),
 ) -> ExtractResult:
     """Walks one flat scope's commands (a page trunk, a branch arm, or an
     inlined common event's own flattened body), dispatching text/script
     grouping, 117 common-event inlining, and 115 early-exit before falling
-    through to `CODE_EXTRACTORS`/`_walk_leaf` for everything else."""
+    through to `CODE_EXTRACTORS`/`_walk_leaf` for everything else.
+    `inherited_scripts` are the enclosing scopes' script lines (a branch
+    arm's), read only by the count-line rule (#144)."""
     assertions: list[FloorAssertion] = []
     refusals: list[FloorRefusal] = []
 
@@ -476,7 +495,8 @@ def _walk_commands(
             for c in commands[i:end]:
                 params = c.get("parameters") or []
                 fragments.append(str(params[0]) if params else "")
-            index_within_row = sum(1 for a in assertions if a.kind in ("text", "var_text"))
+            index_within_row = sum(1 for a in assertions
+                                   if a.kind in ("text", "var_text", "count_text"))
             if has_inline_choice(join_text_lines(fragments)):
                 a, r = _extract_inline_choice(
                     fragments, list_index, index_of.get(id(commands[end - 1]), -1),
@@ -489,7 +509,16 @@ def _walk_commands(
                 text = _normalize_fragments(fragments)
             except ValueError as exc:
                 var_text = var_text_source(fragments, earlier_scripts)
-                if var_text is None:
+                counts = (count_text_source(fragments, [*inherited_scripts, *earlier_scripts])
+                          if var_text is None else None)
+                if counts is not None:
+                    assertions.append(FloorAssertion(
+                        row_id=ctx.row_id, kind="count_text", list_index=list_index,
+                        code=SHOW_TEXT, tag="text",
+                        params=make_params(index=index_within_row, raw=tuple(fragments),
+                                           sources=counts),
+                    ))
+                elif var_text is None:
                     refusals.append(FloorRefusal(
                         row_id=ctx.row_id, reason="text_unnormalizable", list_index=list_index,
                         code=SHOW_TEXT, detail=f"code 101 @list[{list_index}]: {exc}",
@@ -836,7 +865,14 @@ def _build_row_floor(
     ]
     refusals: list[FloorRefusal] = []
 
-    a, r = _walk_commands(scope.commands, ctx, index_of, frozenset(), stripped_ce_ids)
+    inherited: list[str] = []
+    if scope.branch is not None and scope.commands:
+        start = index_of.get(id(scope.commands[0]))
+        if start is not None:
+            inherited = _ancestor_scripts(event["pages"][page_idx].get("list") or [], start,
+                                          scope.commands[0].get("indent", 0))
+    a, r = _walk_commands(scope.commands, ctx, index_of, frozenset(), stripped_ce_ids,
+                          inherited_scripts=inherited)
     assertions.extend(a)
     refusals.extend(r)
 
