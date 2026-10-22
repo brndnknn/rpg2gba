@@ -1,7 +1,7 @@
 # Intermission: between Act 1 and Act 2
 
-**Status:** collecting (opened 2026-10-16). Act 1 (CH01–CH08) is built and
-merged; Act 2 (CH09 onward) does not open until this list is worked through.
+**Status:** CLOSED 2026-10-22 (opened 2026-10-16). Every item is either done or
+deferred to the backlog (§3); Act 2 (CH09 onward) is open to start.
 
 **Purpose.** A place for the operator's non-chapter concerns that were held back
 while the chapter loop was running. First we record them. Then we decide which
@@ -1013,3 +1013,11 @@ nothing in §1 touches.
     - #147: `walked_with_page` status;
     - #63 retired: an obstacle's empty post-clear page is `empty_page`.
   - **Next:** regenerate CH01–CH08 for operator review, run CH08 from boot, walk.
+- **2026-10-22, shortlist batch CLOSED; INTERMISSION CLOSED (operator walks passed):**
+  - Suites regenerated and approved; CH08 passed 500/500 from boot (ROM `4f802fa7`).
+  - `Batch-CH06-end.gba`: the popups, Tandor dex and POKéPOD prompt were checked.
+    `Batch-CH08-end.gba`: Bamb'o's count lines were checked.
+  - #140, #141, #31, #144, #146, #147 and #63 moved to Done in `PROJECT_TODO.md`.
+  - Carried to the backlog: I6 (#153) and audio (#22), both asked about at the end of
+    every act; #142, #7, #21, #85, #122, #154; the graphics and tooling rows (#23,
+    #34, #14, #10, #37). #27 is CH09's.
