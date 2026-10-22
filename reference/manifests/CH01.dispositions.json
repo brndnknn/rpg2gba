@@ -6,10 +6,6 @@
     "negative_beat": "N4",
     "note": "Rock at (65,45), approach (65,44) facing DOWN. Rock Smash unobtainable in CH01; nothing happens."
   },
-  "map032/ev014/p1": {
-    "disposition": "blocked:rock_smash",
-    "affirmed_hash": "6c2d90d22489cb2a"
-  },
   "map032/ev015/p0": {
     "disposition": "blocked:rock_smash",
     "affirmed_hash": "a930201f885e155b",
@@ -17,20 +13,12 @@
     "negative_beat": "N4",
     "note": "Rock at (66,46), approach (65,46) facing RIGHT. Rock Smash unobtainable in CH01; nothing happens."
   },
-  "map032/ev015/p1": {
-    "disposition": "blocked:rock_smash",
-    "affirmed_hash": "6c2d90d22489cb2a"
-  },
   "map032/ev033/p0": {
     "disposition": "blocked:rock_smash",
     "affirmed_hash": "a930201f885e155b",
     "assertable": true,
     "negative_beat": "N4",
     "note": "Rock at (66,44), approach (65,44) facing RIGHT. Rock Smash unobtainable in CH01; nothing happens."
-  },
-  "map032/ev033/p1": {
-    "disposition": "blocked:rock_smash",
-    "affirmed_hash": "6c2d90d22489cb2a"
   },
   "map048/ev013/p0": {
     "disposition": "unreachable:Starting Over heal on 2F; every home white-out lands on 1F, whose own heal page clears the switch first",

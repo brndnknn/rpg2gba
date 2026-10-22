@@ -267,7 +267,10 @@ _GIFT_CEREMONY = "gift_ceremony"
 _ITEM_BOXES = "item_boxes"
 #: Re-admitted on an arrival page that shows text: its drain is found by
 #: that text, which proves it fired, and carries the bag delta.
-_FROM_THE_DRAIN = frozenset({"trigger", "text", "item_grant", "choice"})
+# `count_text` too: its numbers are computed when the drain is checked, and
+# nothing on an arrival page catches a Pokémon, so the counts the line showed
+# are the counts then (CH08's lab Poké Ball scene, #144).
+_FROM_THE_DRAIN = frozenset({"trigger", "text", "count_text", "item_grant", "choice"})
 #: State writes, read back once the page has finished (see the body).
 _STATE_WRITE_KINDS = frozenset(
     {"switch_write", "var_write", "self_switch_write", "engine_flag_write"})
@@ -472,6 +475,14 @@ def _handle_count_text(emu: "Emulator", beat_name: str, step: Step) -> None:
     script under test does not compute -- the seen/caught flags, or the
     `PROFREWARDS` threshold at the ROM's rung variable -- and the line checked
     like any other text."""
+    _handle_text(emu, beat_name, _count_text_as_text(emu, beat_name, step))
+
+
+def _count_text_as_text(emu: "Emulator", beat_name: str, step: Step) -> Step:
+    """`step` (a `count_text`) as the plain `text` step it predicts now; a
+    `text` step is returned unchanged."""
+    if step.kind != "count_text":
+        return step
     from rpg2gba.beat_floor.reward_ladder import load_profrewards
     from rpg2gba.beat_floor.var_text import expected_count_text
 
@@ -493,8 +504,8 @@ def _handle_count_text(emu: "Emulator", beat_name: str, step: Step) -> None:
         else:
             raise ScenarioError(f"{beat_name}: {step.row_id}: unknown count source {kind!r}")
     expected = expected_count_text(params["raw"], values)
-    _handle_text(emu, beat_name, Step(step.row_id, "text", step.list_index,
-                                      (("index", params["index"]), ("text", expected))))
+    return Step(step.row_id, "text", step.list_index,
+                (("index", params["index"]), ("text", expected)))
 
 
 def _written(value: object) -> tuple:
@@ -1282,7 +1293,7 @@ def generic_beat(
         # grants made. With no text, a write to its own self switch is the
         # proof it fired (the handler checks it); nothing else is.
         arrival_texts = [s for s in middle_steps
-                         if s.kind == "text" and s.row_id not in random_rows]
+                         if s.kind in ("text", "count_text") and s.row_id not in random_rows]
         if arrival_texts:
             arrival_kinds = _FROM_THE_DRAIN
             arrival_grants = [s for s in middle_steps
@@ -1548,7 +1559,9 @@ def generic_beat(
             STEP_HANDLERS[step.kind](emu, beat_name, step)
         if arrival:
             if arrival_texts:
-                _check_arrival_drain(emu, beat_name, cell.map_constant, arrival_texts,
+                _check_arrival_drain(emu, beat_name, cell.map_constant,
+                                     [_count_text_as_text(emu, beat_name, s)
+                                      for s in arrival_texts],
                                      grant_steps, grant_const, arrival_answers)
             for step in remove_steps:     # key items only (checked above): now 0
                 const = grant_const[str(dict(step.params)["item"])]

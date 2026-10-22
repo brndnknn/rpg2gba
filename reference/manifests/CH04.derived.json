@@ -120,9 +120,8 @@
     "derived_hash": "9689b7cffeb3327b"
   },
   "map035/ev014/p1": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "6c2d90d22489cb2a",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    "derived_hash": "6c2d90d22489cb2a"
   },
   "map035/ev015/p0": {
     "disposition": "blocked:rock_smash",
@@ -138,9 +137,8 @@
     "derived_hash": "9689b7cffeb3327b"
   },
   "map035/ev015/p1": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "6c2d90d22489cb2a",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    "derived_hash": "6c2d90d22489cb2a"
   },
   "map035/ev016/p0": {
     "disposition": "blocked:rock_smash",
@@ -156,9 +154,8 @@
     "derived_hash": "9689b7cffeb3327b"
   },
   "map035/ev016/p1": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "6c2d90d22489cb2a",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    "derived_hash": "6c2d90d22489cb2a"
   },
   "map035/ev017/p0": {
     "disposition": "beat:m035obstacle",
@@ -173,9 +170,8 @@
     "derived_hash": "9689b7cffeb3327b"
   },
   "map035/ev017/p1": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "6c2d90d22489cb2a",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    "derived_hash": "6c2d90d22489cb2a"
   },
   "map035/ev018/p0": {
     "disposition": "blocked:rock_smash",
@@ -191,9 +187,8 @@
     "derived_hash": "9689b7cffeb3327b"
   },
   "map035/ev018/p1": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "6c2d90d22489cb2a",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    "derived_hash": "6c2d90d22489cb2a"
   },
   "map035/ev019/p0": {
     "disposition": "blocked:rock_smash",
@@ -230,34 +225,28 @@
     "proposed": true
   },
   "map035/ev020/p0": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "b839a92a9862d52e",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "b839a92a9862d52e"
   },
   "map035/ev020/p1": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "6c2d90d22489cb2a",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "6c2d90d22489cb2a"
   },
   "map035/ev021/p0": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "3d66615cac286230",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "3d66615cac286230"
   },
   "map035/ev021/p1": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "6c2d90d22489cb2a",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "6c2d90d22489cb2a"
   },
   "map035/ev022/p0": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "eb9e2504323668de",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "eb9e2504323668de"
   },
   "map035/ev022/p1": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "6c2d90d22489cb2a",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "6c2d90d22489cb2a"
   },
   "map035/ev023/p0": {
     "disposition": "blocked:rock_smash",

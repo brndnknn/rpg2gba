@@ -272,9 +272,8 @@
     "derived_hash": "35859e2e37bc46d5"
   },
   "map032/ev014/p1": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "6c2d90d22489cb2a",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    "derived_hash": "6c2d90d22489cb2a"
   },
   "map032/ev015/p0": {
     "disposition": "beat:m032obstacle",
@@ -297,9 +296,8 @@
     "derived_hash": "35859e2e37bc46d5"
   },
   "map032/ev015/p1": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "6c2d90d22489cb2a",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    "derived_hash": "6c2d90d22489cb2a"
   },
   "map032/ev016/p0": {
     "disposition": "cosmetic",
@@ -430,9 +428,8 @@
     "derived_hash": "35859e2e37bc46d5"
   },
   "map032/ev033/p1": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "6c2d90d22489cb2a",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    "derived_hash": "6c2d90d22489cb2a"
   },
   "map032/ev034/p0": {
     "disposition": "cosmetic",

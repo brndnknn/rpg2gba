@@ -94,14 +94,12 @@
     "proposed": true
   },
   "map033/ev013/p0": {
-    "disposition": "blocked:surf",
-    "derived_hash": "dfba1cd5ea05162f",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "dfba1cd5ea05162f"
   },
   "map033/ev020/p0": {
-    "disposition": "blocked:surf",
-    "derived_hash": "2e2951ede454e802",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "2e2951ede454e802"
   },
   "map033/ev022/p0": {
     "disposition": "beat:m033e022",
@@ -571,9 +569,8 @@
     "derived_hash": "ae1add3b7d6e1007"
   },
   "map033/ev141/p0": {
-    "disposition": "blocked:rock_smash",
-    "derived_hash": "3c896bd547f9aebe",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "3c896bd547f9aebe"
   },
   "map033/ev143/p0": {
     "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: $PokemonGlobal.surfing / Kernel.pbCancelVehicles",

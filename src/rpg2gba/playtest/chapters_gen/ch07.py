@@ -152,6 +152,11 @@ NEVER_FIRES: dict[str, str] = {}
 
 EMPTY_PAGES: dict[str, str] = {
     'map035/ev008/p0': 'every page of the event is empty; nothing to check on the ROM',
+    'map035/ev014/p1': "the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    'map035/ev015/p1': "the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    'map035/ev016/p1': "the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    'map035/ev017/p1': "the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
+    'map035/ev018/p1': "the obstacle's empty page, shown only once it is cleared: nothing to refuse there; the obstacle's own page carries the negative beat",
     'map035/ev020/p0': 'every page of the event is empty; nothing to check on the ROM',
     'map035/ev020/p1': 'every page of the event is empty; nothing to check on the ROM',
     'map035/ev021/p0': 'every page of the event is empty; nothing to check on the ROM',

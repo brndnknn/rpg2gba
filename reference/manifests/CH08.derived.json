@@ -686,7 +686,7 @@
     "derived_hash": "35859e2e37bc46d5"
   },
   "map032/ev014/p1": {
-    "disposition": "cosmetic",
+    "disposition": "elsewhere:later: CH01",
     "derived_hash": "6c2d90d22489cb2a"
   },
   "map032/ev015/p0": {
@@ -710,7 +710,7 @@
     "derived_hash": "35859e2e37bc46d5"
   },
   "map032/ev015/p1": {
-    "disposition": "cosmetic",
+    "disposition": "elsewhere:later: CH01",
     "derived_hash": "6c2d90d22489cb2a"
   },
   "map032/ev016/p0": {
@@ -842,7 +842,7 @@
     "derived_hash": "35859e2e37bc46d5"
   },
   "map032/ev033/p1": {
-    "disposition": "cosmetic",
+    "disposition": "elsewhere:later: CH01",
     "derived_hash": "6c2d90d22489cb2a"
   },
   "map032/ev034/p0": {
@@ -1018,15 +1018,15 @@
     "derived_hash": "7eeb696086415e20"
   },
   "map032/ev078/p0/b0": {
-    "disposition": "elsewhere:unselected_arm: ran inside the single firing of map032/ev078/p0 by beat m032e078_warp: the page turns self switch A on, lifting a higher page, at its top level (map032/ev078/p0), so it fires once and a second bump starts no script; this arm's floor (completes, trigger) is evidenced by that firing",
+    "disposition": "elsewhere:walked_with_page: ran inside the single firing of map032/ev078/p0 by beat m032e078_warp: the page turns self switch A on, lifting a higher page, at its top level (map032/ev078/p0), so it fires once and a second bump starts no script; this arm's floor (completes, trigger) is evidenced by that firing",
     "derived_hash": "f1d111455297a1fb"
   },
   "map032/ev078/p0/b1": {
-    "disposition": "elsewhere:unselected_arm: ran inside the single firing of map032/ev078/p0 by beat m032e078_warp: the page turns self switch A on, lifting a higher page, at its top level (map032/ev078/p0), so it fires once and a second bump starts no script; this arm's floor (completes, trigger) is evidenced by that firing",
+    "disposition": "elsewhere:walked_with_page: ran inside the single firing of map032/ev078/p0 by beat m032e078_warp: the page turns self switch A on, lifting a higher page, at its top level (map032/ev078/p0), so it fires once and a second bump starts no script; this arm's floor (completes, trigger) is evidenced by that firing",
     "derived_hash": "69f3038a8101e189"
   },
   "map032/ev078/p0/b2": {
-    "disposition": "elsewhere:unselected_arm: ran inside the single firing of map032/ev078/p0 by beat m032e078_warp: the page turns self switch A on, lifting a higher page, at its top level (map032/ev078/p0), so it fires once and a second bump starts no script; this arm's floor (completes, trigger) is evidenced by that firing",
+    "disposition": "elsewhere:walked_with_page: ran inside the single firing of map032/ev078/p0 by beat m032e078_warp: the page turns self switch A on, lifting a higher page, at its top level (map032/ev078/p0), so it fires once and a second bump starts no script; this arm's floor (completes, trigger) is evidenced by that firing",
     "derived_hash": "6a91c445fe52a06d"
   },
   "map032/ev078/p0/b3": {
@@ -1170,14 +1170,12 @@
     "derived_hash": "14ed96408d12f789"
   },
   "map033/ev013/p0": {
-    "disposition": "blocked:surf",
-    "derived_hash": "dfba1cd5ea05162f",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "dfba1cd5ea05162f"
   },
   "map033/ev020/p0": {
-    "disposition": "blocked:surf",
-    "derived_hash": "2e2951ede454e802",
-    "proposed": true
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "2e2951ede454e802"
   },
   "map033/ev022/p0": {
     "disposition": "elsewhere:later: CH02",
@@ -2244,7 +2242,7 @@
     "derived_hash": "74490290038dbc23"
   },
   "map050/ev005/p5/b0": {
-    "disposition": "refused:#109: text_unnormalizable -- code 101 @list[10]: unrecognized control code in fragments [\"Hmmm\\\\wt[8].\\\\wt[8].\\\\wt[8].\\\\wt[15]So, you've seen \\\\r\\\\v[2]\\\\c[0] Pokémon\\\\nand caught \\\\r\\\\v[3]\\\\c[0] of them...\"]",
+    "disposition": "beat:m050e005p5",
     "derived_hash": "7bf52fb1cc380310"
   },
   "map050/ev005/p5/b1": {
@@ -2292,7 +2290,7 @@
     "derived_hash": "1cd7c637fececb0a"
   },
   "map050/ev005/p5/b2": {
-    "disposition": "refused:#109: text_unnormalizable -- code 101 @list[17]: unrecognized control code in fragments [\"When you catch \\\\r\\\\v[1]\\\\c[0] Pokémon, come speak to me and I'll give you a special reward!\"]",
+    "disposition": "elsewhere:unselected_arm: blocked by harness:dex_owned_tier; the walk takes the sibling arm (ruling 19)",
     "derived_hash": "82090a557b711258"
   },
   "map050/ev005/p5/b20": {
@@ -2340,7 +2338,7 @@
     "derived_hash": "6b7c4b268ca2f341"
   },
   "map050/ev005/p5/b30": {
-    "disposition": "refused:#109: text_unnormalizable -- code 101 @list[141]: unrecognized control code in fragments [\"When you catch \\\\r\\\\v[1]\\\\c[0] Pokémon, come speak to me and I'll give you a special reward!\"]",
+    "disposition": "beat:m050e005p5",
     "derived_hash": "18c0b6a3968e1cbd"
   },
   "map050/ev005/p5/b31": {
@@ -2348,7 +2346,7 @@
     "derived_hash": "aa49eea0956b64de"
   },
   "map050/ev005/p5/b32": {
-    "disposition": "elsewhere:unselected_arm: not taken on the walk: it sits inside map050/ev005/p5/b30, which the walk doesn't take (ruling 19)",
+    "disposition": "beat:m050e005p5",
     "derived_hash": "3ca2effe94750ced"
   },
   "map050/ev005/p5/b33": {
@@ -2616,11 +2614,11 @@
     "derived_hash": "8cc5d065a226330f"
   },
   "map050/ev027/p0": {
-    "disposition": "refused:#109: text_unnormalizable -- code 101 @list[12]: unrecognized control code in fragments [\"Hmmm\\\\wt[8].\\\\wt[8].\\\\wt[8].\\\\wt[15]So, you've seen \\\\r\\\\v[2]\\\\c[0] Pokémon\\\\nand caught \\\\r\\\\v[3]\\\\c[0] of them...\"]",
+    "disposition": "beat:m050e027p0",
     "derived_hash": "a2605f58e2356f58"
   },
   "map050/ev027/p0/b0": {
-    "disposition": "cosmetic",
+    "disposition": "beat:m050e027p0",
     "derived_hash": "163d5f46e562142d"
   },
   "map050/ev027/p0/b1": {

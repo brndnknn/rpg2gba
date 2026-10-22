@@ -234,8 +234,9 @@ def test_generator_status_never_overrides_an_existing_verdict():
     assert derive_entry(cosmetic, beat_model=None, boundary_model=None,
                         generator_status=status).disposition == "cosmetic"
     blocked = _row(content_hash="h1", unhandled=0, requires=("rock_smash",))
+    never = GeneratorStatus(specs={_RID: "elsewhere:never_fires: proof"})
     entry = derive_entry(blocked, beat_model=None, boundary_model=None,
-                         generator_status=status)
+                         generator_status=never)
     assert entry.disposition == "blocked:rock_smash" and entry.proposed
     beat = _row(content_hash="h1", unhandled=0, effects=("giveitem",))
     assert derive_entry(beat, beat_model=_Beats({_RID: ("B4",)}), boundary_model=None,
@@ -313,3 +314,12 @@ def test_non_arm_page_row_stays_a_proposal():
     entry = derive_entry(row, beat_model=None, boundary_model=None,
                          hand_dispositions=_hand("blocked:rock_smash"))
     assert entry is not None and entry.proposed is True
+
+
+def test_empty_page_outranks_a_requires_derived_block():
+    """#63: a rock's empty post-smash page has nothing to block."""
+    status = GeneratorStatus(specs={_RID: "elsewhere:empty_page: the obstacle's empty page"})
+    blocked = _row(content_hash="h1", unhandled=0, requires=("rock_smash",))
+    entry = derive_entry(blocked, beat_model=None, boundary_model=None, generator_status=status)
+    assert entry.disposition == "elsewhere:empty_page: the obstacle's empty page"
+    assert not entry.proposed

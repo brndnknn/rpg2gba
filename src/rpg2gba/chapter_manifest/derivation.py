@@ -141,7 +141,9 @@ def derive_entry(
        because C1 split a page the human already decided. Narrow carve-out of
        the "a `blocked:` proposal is never accepted without a human" rule;
        every other `blocked:` stays a proposal. `hand_dispositions` supplies
-       the parent lookup (None -> no carve-out).
+       the parent lookup (None -> no carve-out). EXCEPTION (#63, operator
+       2026-10-21): a row the generator records `elsewhere:empty_page` takes
+       that spec instead, CLERICAL -- an empty page has nothing to block.
     5. `row.may_be_derived` -> `"cosmetic"`, CLERICAL. (Already implies
        `requires` is empty and no citation is owed -- rule 4 above returns
        before this is ever reached when `requires` is non-empty.) EXCEPTION
@@ -174,6 +176,14 @@ def derive_entry(
             head = next(iter(heads))
             return DerivedEntry(disposition=f"beat:{head}", derived_hash=row.content_hash)
         return None
+
+    # An empty page has nothing to block or refuse: the generator's
+    # `empty_page` record outranks a `blocked:` derived from `requires`
+    # (#63, operator 2026-10-21: a rock's empty post-smash page).
+    if generator_status is not None and row.requires:
+        empty = generator_status.spec_for(row.row_id)
+        if empty is not None and empty.startswith("elsewhere:empty_page"):
+            return DerivedEntry(disposition=empty, derived_hash=row.content_hash)
 
     if row.requires:
         argument = "+".join(sorted(set(row.requires)))

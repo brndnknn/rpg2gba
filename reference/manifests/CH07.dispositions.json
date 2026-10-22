@@ -16,10 +16,6 @@
     "disposition": "blocked:rock_smash",
     "affirmed_hash": "9689b7cffeb3327b"
   },
-  "map035/ev014/p1": {
-    "disposition": "blocked:rock_smash",
-    "affirmed_hash": "6c2d90d22489cb2a"
-  },
   "map035/ev015/p0": {
     "disposition": "blocked:rock_smash",
     "affirmed_hash": "a930201f885e155b"
@@ -31,10 +27,6 @@
   "map035/ev015/p0/b1": {
     "disposition": "blocked:rock_smash",
     "affirmed_hash": "9689b7cffeb3327b"
-  },
-  "map035/ev015/p1": {
-    "disposition": "blocked:rock_smash",
-    "affirmed_hash": "6c2d90d22489cb2a"
   },
   "map035/ev016/p0": {
     "disposition": "blocked:rock_smash",
@@ -48,10 +40,6 @@
     "disposition": "blocked:rock_smash",
     "affirmed_hash": "9689b7cffeb3327b"
   },
-  "map035/ev016/p1": {
-    "disposition": "blocked:rock_smash",
-    "affirmed_hash": "6c2d90d22489cb2a"
-  },
   "map035/ev017/p0": {
     "disposition": "blocked:rock_smash",
     "affirmed_hash": "a930201f885e155b"
@@ -64,10 +52,6 @@
     "disposition": "blocked:rock_smash",
     "affirmed_hash": "9689b7cffeb3327b"
   },
-  "map035/ev017/p1": {
-    "disposition": "blocked:rock_smash",
-    "affirmed_hash": "6c2d90d22489cb2a"
-  },
   "map035/ev018/p0": {
     "disposition": "blocked:rock_smash",
     "affirmed_hash": "a930201f885e155b"
@@ -79,10 +63,6 @@
   "map035/ev018/p0/b1": {
     "disposition": "blocked:rock_smash",
     "affirmed_hash": "9689b7cffeb3327b"
-  },
-  "map035/ev018/p1": {
-    "disposition": "blocked:rock_smash",
-    "affirmed_hash": "6c2d90d22489cb2a"
   },
   "map035/ev023/p0": {
     "disposition": "beat:m035e023p0",

@@ -997,3 +997,19 @@ nothing in §1 touches.
   - 32 maps game-wide have no `ShowArea` ancestor (Route 11, the dream maps, the
     Hall of Fame, ...). They fail loud when first staged, and their section is that
     chapter's call.
+- **2026-10-21, shortlist batch BUILT (on `main`):**
+  - **Close-outs:** #96 and #20 moved to Done; #41, #35, #127, #92 and #128 narrowed;
+    #145 narrowed to Minicorn. Minicorn branches by item, and the species stager
+    accepts one evolution per species.
+  - **#152 done:** the rebuilt ROM is byte-identical.
+  - **#140 map popups:** decisions above; 6 sections in the current build.
+  - **#31 Tandor dex** (operator rulings: Tandor only, unseen slots, TANDOR labels).
+    69 of 200 slots are filled today.
+  - **#141 phone registration** (operator: yes/no, built from what Emerald uses), and
+    the POKéPOD name. #142 deferred.
+  - **Other fixes:**
+    - #146: the give-item idiom reads `VAR_0x8007`;
+    - #144: `count_text` floor kind;
+    - #147: `walked_with_page` status;
+    - #63 retired: an obstacle's empty post-clear page is `empty_page`.
+  - **Next:** regenerate CH01–CH08 for operator review, run CH08 from boot, walk.
