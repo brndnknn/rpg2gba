@@ -39,6 +39,12 @@ Pass 2.7 (S8b6) — heal-location overlay
     docstring for the RPG2GBA_HEAL_LOCATIONS hook in
     engine/json_data_rules.mk that selects it over the committed file).
 
+Pass 2.75 (S8b6b) — region-map section overlay
+    Append the build's named locations (`rpg2gba.tileset_converter.map_sections`)
+    to an overlay of the fork's `src/data/region_map/region_map_sections.json`
+    (region_map_sections.gen.json, gitignored; the RPG2GBA_REGION_MAP_SECTIONS
+    hook in engine/json_data_rules.mk selects it over the committed file).
+
 Pass 2.8 (S8b7) — teachable-learnset overlay
     Merge Uranium's TM/HM/tutor compatibility (the tm_hm.py sidecar) into an
     overlay of the fork's `src/data/pokemon/all_learnables.json`
@@ -964,6 +970,42 @@ def run_heal_location_pass(out: Path, fork: Path, consts: dict, dry_run: bool) -
 
 
 # ---------------------------------------------------------------------------
+# S8b6b: Region-map section overlay
+# ---------------------------------------------------------------------------
+
+def run_region_map_section_pass(out: Path, fork: Path, dry_run: bool) -> None:
+    """Append the build's named locations to an overlay of the fork's
+    `src/data/region_map/region_map_sections.json` (PROJECT_TODO #140).
+
+    Each staged map's section comes from `map_sections.section_for`, the same
+    call `metadata_wiring.build_slice_maps` used to write the map's
+    `region_map_section`. Writes `region_map_sections.gen.json` (gitignored);
+    `engine/json_data_rules.mk`'s `RPG2GBA_REGION_MAP_SECTIONS` prefers it when
+    present. The committed file is always the base, so re-runs are byte-stable.
+    """
+    logger.info("=== S8b6b: region-map section overlay ===")
+    from rpg2gba.tileset_converter import map_sections
+
+    base = fork / "src" / "data" / "region_map" / "region_map_sections.json"
+    upstream_text = base.read_text(encoding="utf-8")
+    map_infos, metadata = map_sections.load_inputs(
+        out / "map_infos.json", out / "intermediate" / "map_metadata.json"
+    )
+    sections = [map_sections.section_for(uid, map_infos, metadata) for uid in SLICE_MAP_IDS]
+    merged = map_sections.overlay_sections(json.loads(upstream_text), sections)
+    gen_text = json.dumps(merged, indent=2, ensure_ascii=False)
+    if upstream_text.endswith("\n"):
+        gen_text += "\n"
+    gen_path = base.with_name("region_map_sections.gen.json")
+    added = len(merged["map_sections"]) - len(json.loads(upstream_text)["map_sections"])
+    if dry_run:
+        logger.info("  [dry] would write %s (+%d section(s))", gen_path.name, added)
+        return
+    gen_path.write_text(gen_text, encoding="utf-8")
+    logger.info("  wrote %s (+%d section(s))", gen_path.name, added)
+
+
+# ---------------------------------------------------------------------------
 # S8b7: Teachable-learnset overlay
 # ---------------------------------------------------------------------------
 
@@ -1721,6 +1763,8 @@ def main() -> int:
 
     if not args.skip_heal_locations:
         run_heal_location_pass(out, fork, consts, args.dry_run)
+
+    run_region_map_section_pass(out, fork, args.dry_run)
 
     if not args.skip_teachables:
         run_teachables_pass(out, fork, args.dry_run)

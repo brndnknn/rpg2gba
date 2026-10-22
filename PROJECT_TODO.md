@@ -17,6 +17,16 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 154. Tandor region map and Fly: the region map is still Hoenn's
+
+Filed 2026-10-21 with #140. The game's map sections exist now (`map_sections.py`), but their
+region-map coordinates are zero, by operator ruling. Uranium has a position for every map
+(`map_metadata.json` `map_position` = [region, x, y], e.g. Moki Town [0, 13, 18]). On Emerald's
+Hoenn art those positions would point at the wrong places. The work:
+- convert Tandor's region-map art;
+- fill each section's x/y from `map_position`;
+- check Fly, which also needs the heal locations (#96, done).
+
 ### 153. Carry the operator's own save across builds (intermission I6) — REVISIT AFTER EACH ACT
 
 Filed 2026-10-21. **Operator decision: get more of the game built first.** At the end of
@@ -156,6 +166,16 @@ deliberate (no `FLAG_HAS_MATCH_CALL` gate); losing the line was not. Fixes, smal
 Also: the stock text says "POKéNAV", where Uranium's word is "Poképod".
 
 ### 140. Every built map's name popup reads "LITTLEROOT TOWN"
+
+**2026-10-21, operator rulings:**
+- **One section per location:** a map takes the section of its nearest self-or-ancestor
+  (MapInfos tree) that Uranium flags `ShowArea`.
+- **The popup shows only on `ShowArea` maps**, which is Uranium's own rule.
+- **Names are what Uranium displays**, in caps.
+- **Region-map/Fly coordinates stay zero** until Tandor's region map is converted.
+- **`OW_HIDE_REPEAT_MAP_POPUP` stays off.**
+
+Built in `tileset_converter/map_sections.py`.
 
 Seen by the operator on the CH07 walk (2026-10-15). `metadata_wiring.DEFAULT_MAPSEC =
 "MAPSEC_LITTLEROOT_TOWN"` is written as `region_map_section` for every slice map. It was a

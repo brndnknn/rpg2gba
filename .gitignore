@@ -45,6 +45,9 @@ engine/src/data/wild_encounters.gen.json
 # White-out heal locations overlay (picked up by the RPG2GBA_HEAL_LOCATIONS hook
 # in engine/json_data_rules.mk; absent => the committed heal_locations.json is used).
 engine/src/data/heal_locations.gen.json
+# Region-map sections overlay (picked up by the RPG2GBA_REGION_MAP_SECTIONS hook
+# in engine/json_data_rules.mk; absent => the committed region_map_sections.json is used).
+engine/src/data/region_map/region_map_sections.gen.json
 # S8d: pre-planted berry-tree seed table (pulled in by the committed RPG2GBA
 # GAME PROFILE include-hook right after ClearBerryTrees() in src/new_game.c).
 engine/data/scripts/rpg2gba_berry_trees.h

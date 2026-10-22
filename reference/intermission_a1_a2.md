@@ -984,3 +984,16 @@ nothing in §1 touches.
 - **2026-10-21, #22 audio deferred (operator):** revisit at the end of every act, as
   with #153. Format is the blocker, not only size: 80 of 84 BGM files are OGG
   recordings, and the engine plays only sequences. Details are in `PROJECT_TODO.md` #22.
+- **2026-10-21, #140 map popups (operator):**
+  - **Sections:** one per location. Each map takes the section of its nearest
+    self-or-ancestor map (MapInfos tree) flagged `ShowArea`, which is Uranium's own
+    popup flag.
+  - **When it shows:** only on `ShowArea` maps (`show_map_name`). That is 8 of the 24
+    built maps: the towns, routes and Passage Cave. Interiors never show it.
+  - **Names:** Uranium's displayed names, upper-cased.
+  - **Region map / Fly:** coordinates left zero until Tandor's region map is converted.
+  - **`OW_HIDE_REPEAT_MAP_POPUP`:** stays off (stock). Side effect: "PASSAGE CAVE"
+    re-shows when changing floors.
+  - 32 maps game-wide have no `ShowArea` ancestor (Route 11, the dream maps, the
+    Hall of Fame, ...). They fail loud when first staged, and their section is that
+    chapter's call.

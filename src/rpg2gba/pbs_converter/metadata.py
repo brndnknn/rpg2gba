@@ -99,6 +99,10 @@ def parse_maps(raw: list) -> list[MapMetadata]:
         f: dict[str, object] = {}
         if _at(record, M_OUTDOOR):
             f["outdoor"] = True
+        # ShowArea: Uranium shows the location popup on entering this map
+        # (101__PField_Field.rb:1896); the map-section pass keys on it.
+        if _at(record, M_SHOWAREA):
+            f["show_area"] = True
         weather = _weather(record)
         if weather:
             f.update(weather)

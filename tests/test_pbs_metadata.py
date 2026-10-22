@@ -52,3 +52,11 @@ def test_edge_weather_and_healing(uranium_data: Path, tmp_path: Path) -> None:
     assert by_id[12]["weather"] == "Rain"
     assert isinstance(by_id[12]["chance"], int)
     assert len(by_id[2]["healing_spot"]) == 3  # [map, x, y]
+
+
+def test_edge_show_area(uranium_data: Path, tmp_path: Path) -> None:
+    """ShowArea is kept: Moki Town (32) shows its popup, the lab inside it (50) doesn't."""
+    raw = _raw(uranium_data, tmp_path)
+    by_id = {m.map_id: m.fields for m in metadata.parse_maps(raw)}
+    assert by_id[32]["show_area"] is True
+    assert "show_area" not in by_id[50]

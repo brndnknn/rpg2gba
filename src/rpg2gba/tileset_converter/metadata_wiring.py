@@ -24,8 +24,9 @@ PATHFINDER v1 scope (user decision 2026-06-15: "build S5 now, defer dispatchers"
       - graphics: boot-state page selection + `reference/npc_gfx_map.json` (see
         `npc_gfx.py`) resolve a real per-sheet OBJ_EVENT_GFX_*; a sheet with no
         map entry fails loud rather than falling back to a generic NPC.
-      - region_map_section: a vanilla MAPSEC reused for all slice maps (the minted
-        MAPSEC_* aren't in the fork's region_map_sections enum yet — S4 open item).
+      - region_map_section: from `map_sections` (Uranium's ShowArea locations,
+        #140) when `build_slice_maps` gets `map_infos_path`; otherwise a vanilla
+        placeholder MAPSEC.
       - warp arrival: an extra plain-floor "arrival" warp_event is emitted on the
         destination map at Uranium's true arrival coords, and the source warp's
         dest_warp_id points at it (vanilla-Emerald landing trick) — exact Uranium
@@ -61,6 +62,7 @@ from ..conversion_agent.flag_registry import (
 )
 from ..conversion_agent.orchestrator import load_map_event_strips
 from ..map_split.ids import origin_of, split_blocked_cells
+from . import map_sections
 from .map_constants import MapConstantRegistry, MapConstants
 from .npc_gfx import _DIR_VECTOR as _TRAINER_DIR_VECTOR
 from .npc_gfx import _DIRECTION_TO_FACING as _TRAINER_SIGHT_FACING
@@ -82,7 +84,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_ELEVATION = 3
 DEFAULT_MUSIC = "MUS_LITTLEROOT"
 DEFAULT_WEATHER = "WEATHER_NONE"
-DEFAULT_MAPSEC = "MAPSEC_LITTLEROOT_TOWN"  # vanilla section reused (minted MAPSEC_* deferred)
+DEFAULT_MAPSEC = "MAPSEC_LITTLEROOT_TOWN"  # placeholder when no map_infos_path is given
 NO_SCRIPT = "0x0"
 
 TRANSFER_CODE = 201  # RMXP "Transfer Player"; params [method, dest_map, x, y, dir, fade]
@@ -642,6 +644,8 @@ class MapFile:
     music: str = DEFAULT_MUSIC
     weather: str = DEFAULT_WEATHER
     region_map_section: str = DEFAULT_MAPSEC
+    # None = legacy: the popup shows on MAP_TYPE_TOWN maps.
+    show_map_name: bool | None = None
     object_events: list[ObjectEvent] = field(default_factory=list)
     warp_events: list[WarpEvent] = field(default_factory=list)
     coord_events: list[CoordEvent] = field(default_factory=list)
@@ -668,7 +672,7 @@ class MapFile:
             "allow_cycling": is_town,
             "allow_escaping": False,
             "allow_running": is_town,
-            "show_map_name": is_town,
+            "show_map_name": is_town if self.show_map_name is None else self.show_map_name,
             "battle_scene": "MAP_BATTLE_SCENE_NORMAL",
             "connections": self.connections,
             "object_events": [oe.to_dict() for oe in self.object_events],
@@ -3890,10 +3894,16 @@ def build_slice_maps(
     fork_constants: set[str] | None = None,
     connections: dict[int, list[dict]] | None = None,
     extra_warps: dict[int, list["WarpSpec"]] | None = None,
+    map_infos_path: Path | None = None,
 ) -> dict[int, set[tuple[int, int]]]:
     """Assemble map.json + dispatcher .pory for every slice map. Returns the per-map
     warp-source coords (S3 walkable-overrides) so S8 can force those cells walkable.
     Warp pairing needs every map's warp list first, so this is a slice-level pass.
+
+    `map_infos_path` (the deserialized `map_infos.json`), when given, sets each
+    map's `region_map_section` and `show_map_name` from `map_sections` (Uranium's
+    `ShowArea` locations, #140). Without it every map keeps the placeholder
+    `DEFAULT_MAPSEC` and the popup follows `map_type` (synthetic test callers).
 
     `route_registry` (a `route_bytecode.RouteRegistry`), when given, is
     forwarded to every `build_object_events` call so custom-route movers across
@@ -4006,6 +4016,11 @@ def build_slice_maps(
         for uid in slice_ids
     }
     resolved = _resolve_all_warp_events(resolve_warp_lists, registry, maps)
+    section_inputs = (
+        map_sections.load_inputs(map_infos_path, metadata_path)
+        if map_infos_path is not None
+        else None
+    )
 
     overrides: dict[int, set[tuple[int, int]]] = {}
     local_id_tables: dict[int, dict[str, int]] = {}
@@ -4058,10 +4073,17 @@ def build_slice_maps(
         overrides[uid] = src_coords | result.gated_door_cells
         local_id_tables[uid] = result.local_id_map
 
+        section_fields: dict = {}
+        if section_inputs is not None:
+            section_fields = {
+                "region_map_section": map_sections.section_for(uid, *section_inputs).const,
+                "show_map_name": map_sections.shows_map_name(uid, section_inputs[1]),
+            }
         map_file = MapFile(
             consts=consts,
             map_type=_map_type_for(uid, metadata_path),
             requires_flash=_dark_map_for(uid, metadata_path),
+            **section_fields,
             object_events=result.object_events,
             warp_events=warp_events,
             coord_events=result.coord_events,

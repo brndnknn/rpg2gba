@@ -134,7 +134,7 @@ repo-root `.gitignore`) and regenerated — **never commit pipeline output as
 engine source**. The assembler does **not** edit any tracked upstream file in place;
 it writes gitignored overlays — `data/maps/map_groups.gen.json`,
 `data/layouts/layouts.gen.json`, `data/maps/rpg2gba_includes.inc`,
-`src/data/heal_locations.gen.json`, the
+`src/data/heal_locations.gen.json`, `src/data/region_map/region_map_sections.gen.json`, the
 `rpg2gba_*.h` / `*.gen.h` / `CommonEvents.inc` headers, and the per-map dirs — which the committed
 include-hooks described above pull in. So after an assembly run `git status` stays
 clean against this repo's committed state (only the tracked hook files, not the

@@ -1,14 +1,22 @@
 # JSON files are run through jsonproc, which is a tool that converts JSON data to an output file
 # based on an Inja template. https://github.com/pantor/inja
 
+# BEGIN RPG2GBA GAME PROFILE — overlay region_map_sections.json (rpg2gba). The
+# assembler writes region_map_sections.gen.json (vendored upstream sections + the
+# game's named locations, appended so no upstream MAPSEC_* renumbers), gitignored;
+# when present the build reads that, else the pristine upstream file. Same pattern
+# as RPG2GBA_HEAL_LOCATIONS below. Revert this var + its two uses to restore stock.
+RPG2GBA_REGION_MAP_SECTIONS := $(or $(wildcard $(DATA_SRC_SUBDIR)/region_map/region_map_sections.gen.json),$(DATA_SRC_SUBDIR)/region_map/region_map_sections.json)
+# END RPG2GBA GAME PROFILE
+
 AUTO_GEN_TARGETS += $(DATA_SRC_SUBDIR)/region_map/region_map_entries.h
-$(DATA_SRC_SUBDIR)/region_map/region_map_entries.h: $(DATA_SRC_SUBDIR)/region_map/region_map_sections.json $(DATA_SRC_SUBDIR)/region_map/region_map_sections.json.txt
+$(DATA_SRC_SUBDIR)/region_map/region_map_entries.h: $(RPG2GBA_REGION_MAP_SECTIONS) $(DATA_SRC_SUBDIR)/region_map/region_map_sections.json.txt
 	$(JSONPROC) $^ $@
 
 $(C_BUILDDIR)/region_map.o: c_dep += $(DATA_SRC_SUBDIR)/region_map/region_map_entries.h
 
 AUTO_GEN_TARGETS += include/constants/region_map_sections.h
-include/constants/region_map_sections.h: $(DATA_SRC_SUBDIR)/region_map/region_map_sections.json $(DATA_SRC_SUBDIR)/region_map/region_map_sections.constants.json.txt
+include/constants/region_map_sections.h: $(RPG2GBA_REGION_MAP_SECTIONS) $(DATA_SRC_SUBDIR)/region_map/region_map_sections.constants.json.txt
 	$(JSONPROC) $^ $@
 
 # BEGIN RPG2GBA GAME PROFILE — overlay heal_locations.json (rpg2gba). The

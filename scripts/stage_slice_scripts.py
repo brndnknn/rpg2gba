@@ -388,6 +388,7 @@ def _regenerate_map_json(
         maps_dir=out / "maps",
         registry=reg,
         metadata_path=out / "intermediate" / "map_metadata.json",
+        map_infos_path=out / "map_infos.json",
         out_dir=out / "porymap" / "maps",
         dispatcher_dir=out / "porymap" / "dispatch",
         pory_labels=pory_labels,
