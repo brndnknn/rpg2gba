@@ -872,7 +872,16 @@ Guard: refuse to run if anything under `engine/data` or `engine/src` is
 newer than the built ROM. Migrated from SLICE1_TODO #30 / also flagged in
 `reference/findings/gated_door_collapse_2026-07-26.md` §6, 2026-08-04.
 
-### 22. Audio — open user decision, ROM currently plays stock Emerald music
+### 22. Audio — open user decision, ROM currently plays stock Emerald music — REVISIT AFTER EACH ACT
+
+**2026-10-21, operator: deferred; ask again at the end of every act** (like #153).
+The re-examination found that file format is the real blocker. 80 of the 84 BGM files are OGG
+recordings, and the engine plays only sequences. Converting a track therefore means
+re-sequencing it by ear. ROM size only rules out streaming the OGGs, and the engine
+has no PCM streaming. The ROM is now about 12 MiB after I3, so a streamed signature subset of
+about 10 tracks might fit, but it would need a new C mixer and would sound lo-fi. Options stay:
+A, a substitution table (recommended); B, as is; C, hand-sequence a few signature tracks
+on top of A.
 
 The transpiler comments out every RMXP audio command; no Uranium BGM/SFX
 convert. The ROM currently plays whatever stock Emerald default falls out

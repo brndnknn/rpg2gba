@@ -981,3 +981,6 @@ nothing in §1 touches.
     - #21, #85 (both ride with I6, #153) and #122.
   - **#22 audio:** the operator asked for a deeper look before deciding.
     Recorded with the answer once it is given.
+- **2026-10-21, #22 audio deferred (operator):** revisit at the end of every act, as
+  with #153. Format is the blocker, not only size: 80 of 84 BGM files are OGG
+  recordings, and the engine plays only sequences. Details are in `PROJECT_TODO.md` #22.
