@@ -420,6 +420,11 @@ const struct TrainerClass gTrainerClasses[TRAINER_CLASS_COUNT] =
     [TRAINER_CLASS_RUIN_MANIAC_FRLG] =     { _("RUIN MANIAC"), 12 },
     [TRAINER_CLASS_LADY_FRLG] =            { _("LADY"), 50 },
     [TRAINER_CLASS_PAINTER_FRLG] =         { _("PAINTER"), 4 },
+
+    // BEGIN RPG2GBA GAME PROFILE — Uranium WORKER (base_money 50). The fork pays
+    // 4 * level * money where Uranium pays base_money * level, so 50 -> 12 (50 / 4).
+    [TRAINER_CLASS_WORKER] =               { _("WORKER"), 12 },
+    // END RPG2GBA GAME PROFILE
 };
 
 static void (*const sTurnActionsFuncsTable[])(void) =

@@ -552,6 +552,10 @@ enum TrainerClassID
     TRAINER_CLASS_LADY_FRLG,
     TRAINER_CLASS_PAINTER_FRLG,
 
+    // BEGIN RPG2GBA GAME PROFILE — Uranium class WORKER (trainertypes id 22) has no stock class
+    TRAINER_CLASS_WORKER,
+    // END RPG2GBA GAME PROFILE
+
     TRAINER_CLASS_COUNT,
 };
 

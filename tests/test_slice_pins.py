@@ -120,14 +120,14 @@ def test_every_gap_class_is_filed_under_the_list_that_has_to_be_edited() -> None
         "- TRAINER_C_3: TRAINER_CLASS_SAILOR: no encounter-music mapping -- "
         "_CLASS_ENCOUNTER_MUSIC must be extended",
         "- TRAINER_D_4: TRAINER_CLASS_HIKER: pic internal_name 'HIKER' is not staged "
-        "in common.SLICE_TRAINER_PICS -- append it there first",
+        "in common.SLICE_TRAINER_PICS -- append TrainerPicSpec(4, 'HIKER') there first",
         "- TRAINER_E_5: species not available (neither in the fork nor in the staged "
         "species overlay): SPECIES_GROZARD, SPECIES_TERLARD",
     ):
         slice_pins._classify_staging_error(msg, report)
 
     assert len(report.unmapped_classes) == 3  # fork-absent + pic + music
-    assert report.missing_pics == ["HIKER"]
+    assert report.missing_pics == ["TrainerPicSpec(4, 'HIKER')"]
     assert report.missing_species == ["SPECIES_GROZARD", "SPECIES_TERLARD"]
     assert report.other == []
     assert not report.ok

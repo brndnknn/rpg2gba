@@ -50,6 +50,10 @@ SLICE_MAP_IDS: list[int] = expand_split_ids([
 # CH09 Route 3: 59 (the route, entered over the Moki E seam), 1 (gatehouse to
 # Burole), 54 (house). The dojo 177 is parked in unbound_maps (Surf-only door).
     59, 1, 54,
+# CH10 Burole Town: 60 (the town, entered from gatehouse 1), 66 (Gym 2), 2 (Pokemon
+# Center), 4 (Poke Mart), 29 (school), 85/90 (houses). Metro 5/6 stay with CH28 (their
+# doors need sw85, set in CH24).
+    60, 66, 2, 4, 29, 85, 90,
 ])
 
 # Converter-level collision unblocks (user-approved fidelity calls, one entry per

@@ -390,3 +390,48 @@ def test_full_slice_against_real_intermediate_json(fork_path: Path | None) -> No
         assert "TRAINER_THEO_9" not in str(e)
         assert "TRAINER_THEO_10" not in str(e)
         assert "TRAINER_THEO_11" not in str(e)
+
+
+# ===========================================================================
+# Pics are keyed by the trainer's own Uranium class (2026-10-23 ruling)
+# ===========================================================================
+
+
+def _pic_types() -> dict:
+    return {
+        "TRAINER_CLASS_LEADER_ROXANNE": {"id": 71, "name": "LEADER"},
+        "TRAINER_CLASS_LEADER_CAFF": {"id": 87, "name": "LEADER"},
+        "TRAINER_CLASS_SCHOOLKID": {"id": 84, "name": "SCHOOL KID"},
+        "TRAINER_CLASS_SCHOOLKID_MALE": {"id": 13, "name": "SCHOOL KID"},
+        "TRAINER_CLASS_WORKER": {"id": 22, "name": "WORKER"},
+        "TRAINER_CLASS_NOPIC": {"id": 999, "name": "NOPIC"},
+    }
+
+
+_ALL_PIC_NAMES = {s.internal_name for s in common.SLICE_TRAINER_PICS}
+
+
+def test_same_fork_class_different_uranium_types_get_different_pics() -> None:
+    types = _pic_types()
+    pic = lambda c: battles.resolve_pic_constant(c, types, _ALL_PIC_NAMES)  # noqa: E731
+    assert pic("TRAINER_CLASS_LEADER_ROXANNE") == "TRAINER_PIC_FRONT_URANIUM_LEADER_ROXANNE"
+    assert pic("TRAINER_CLASS_LEADER_CAFF") == "TRAINER_PIC_FRONT_URANIUM_LEADER_CAFF"
+    assert pic("TRAINER_CLASS_SCHOOLKID") == "TRAINER_PIC_FRONT_URANIUM_SCHOOLKID"
+    assert pic("TRAINER_CLASS_SCHOOLKID_MALE") == "TRAINER_PIC_FRONT_URANIUM_SCHOOLKID_MALE"
+    assert pic("TRAINER_CLASS_WORKER") == "TRAINER_PIC_FRONT_URANIUM_WORKER"
+
+
+def test_unstaged_uranium_pic_names_class_and_spec_to_append() -> None:
+    with pytest.raises(ValueError, match=r"TRAINER_CLASS_NOPIC.*TrainerPicSpec\(999, 'NOPIC'\)"):
+        battles.resolve_pic_constant("TRAINER_CLASS_NOPIC", _pic_types(), _ALL_PIC_NAMES)
+
+
+def test_staged_pic_id_must_match_trainer_types() -> None:
+    types = _pic_types()
+    types["TRAINER_CLASS_WORKER"]["id"] = 23
+    with pytest.raises(ValueError, match="disagrees with trainer_types.json"):
+        battles.resolve_pic_constant("TRAINER_CLASS_WORKER", types, _ALL_PIC_NAMES)
+
+
+def test_worker_class_music_row() -> None:
+    assert battles._CLASS_ENCOUNTER_MUSIC["TRAINER_CLASS_WORKER"] == "TRAINER_ENCOUNTER_MUSIC_HIKER"

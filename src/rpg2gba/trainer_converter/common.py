@@ -63,9 +63,8 @@ class TrainerPicSpec:
 # sprite id, so `trainer_id` here is that trainer-type id — verified present
 # in `trainer_types.json` and cross-checked against the real
 # `Graphics/Characters/trainer<NNN>.png` files before pinning (battles.py
-# staging asserts this at runtime too). `internal_name` matches the class
-# identifiers `battles._CLASS_PIC_INTERNAL_NAME` maps real
-# `TRAINER_CLASS_*` constants onto.
+# staging asserts this at runtime too). `internal_name` is the Uranium class
+# constant minus `TRAINER_CLASS_` (`battles.pic_internal_name`).
 SLICE_TRAINER_PICS: tuple[TrainerPicSpec, ...] = (
     TrainerPicSpec(86, "RIVAL"),
     TrainerPicSpec(0, "PLAYER_MALE"),
@@ -106,6 +105,13 @@ SLICE_TRAINER_PICS: tuple[TrainerPicSpec, ...] = (
     TrainerPicSpec(25, "TUBER_MALE"),
     TrainerPicSpec(46, "SAILOR"),
     TrainerPicSpec(60, "PICNICKER"),
+    # CH10 (Burole Town). Battle pics are keyed by the trainer's own Uranium
+    # class, so internal_name is the Uranium class suffix (battles.pic_internal_name):
+    # LEADER_CAFF 87 (Davern; LEADER_ROXANNE above is Maria), SCHOOLKID_MALE 13
+    # (Tracey; SCHOOLKID above is the female type), WORKER 22 (Martin).
+    TrainerPicSpec(87, "LEADER_CAFF"),
+    TrainerPicSpec(13, "SCHOOLKID_MALE"),
+    TrainerPicSpec(22, "WORKER"),
 )
 
 #: internal_name values in `SLICE_TRAINER_PICS` that additionally get a player
@@ -188,6 +194,18 @@ SLICE_TRAINER_BATTLES: tuple[str, ...] = (
     "TRAINER_JULIANNA_250",
     "TRAINER_SOPHY_42",
     "TRAINER_SHAUNA_249",
+    # CH10 (Burole Town): Gym 2 (Map066) then the school (Map029) -- chapters.json
+    # roster order [60, 66, 2, 4, 29, 85, 90], events in map event order within
+    # each. Gym: Tod (EV001), Jang (EV002), Martin (EV003), then leader Davern
+    # (EV004). School: Diana (EV002), Rich (EV009), Tracey (EV010), James (EV011).
+    "TRAINER_TOD_30",
+    "TRAINER_JANG_31",
+    "TRAINER_MARTIN_32",
+    "TRAINER_DAVERN_29",
+    "TRAINER_DIANA_43",
+    "TRAINER_RICH_44",
+    "TRAINER_TRACEY_45",
+    "TRAINER_JAMES_46",
 )
 
 

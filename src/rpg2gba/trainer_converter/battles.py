@@ -61,34 +61,19 @@ GENERATOR = "rpg2gba.trainer_converter.battles"
 
 # --- Class -> Pic / Music resolution (verified against the fork, §4.7) ------
 
-#: Real `TRAINER_CLASS_*` constant -> the `internal_name` staged into
-#: `common.SLICE_TRAINER_PICS` for that class's battle sprite.
-_CLASS_PIC_INTERNAL_NAME: dict[str, str] = {
-    "TRAINER_CLASS_FISHERMAN": "FISHERMAN",
-    "TRAINER_CLASS_YOUNGSTER": "YOUNGSTER",
-    "TRAINER_CLASS_BUG_CATCHER": "BUGCATCHER",
-    "TRAINER_CLASS_SCHOOL_KID": "SCHOOLKID",
-    "TRAINER_CLASS_TRIATHLETE": "TRIATHLETE_MALERUNNER",
-    "TRAINER_CLASS_EXPERT": "EXPERT_FEMALE",
-    "TRAINER_CLASS_LASS": "LASS",
-    "TRAINER_CLASS_RIVAL": "RIVAL",
-    "TRAINER_CLASS_RICH_BOY": "RICHBOY",
-    "TRAINER_CLASS_HIKER": "HIKER",
-    "TRAINER_CLASS_BIRD_KEEPER": "BIRDKEEPER",
-    # CH05 (Passage Cave), Keichi. Matches the internal name pinned in
-    # common.SLICE_TRAINER_PICS for trainertypes.dat id 16.
-    "TRAINER_CLASS_BLACK_BELT": "BLACKBELT",
-    # CH06, Maria (Uranium class LEADER_ROXANNE, trainertypes id 71). NOTE the
-    # map is per real fork class, so every Uranium LEADER_* type collapses onto
-    # this one pic; a second leader needs a per-trainer pic, not this row.
-    "TRAINER_CLASS_LEADER": "LEADER_ROXANNE",
-    # CH09 (Route 3): Lara, Johnny, Marc, Shauna/Sophy. The tubers are two
-    # fork classes (see _CLASS_BY_URANIUM_CLASS), so two pics.
-    "TRAINER_CLASS_TUBER_F": "TUBER_FEMALE",
-    "TRAINER_CLASS_TUBER_M": "TUBER_MALE",
-    "TRAINER_CLASS_SAILOR": "SAILOR",
-    "TRAINER_CLASS_PICNICKER": "PICNICKER",
-}
+#: Battle pics are keyed by the trainer's own URANIUM class, not the fork class
+#: (operator ruling 2026-10-23): several Uranium types collapse onto one fork
+#: class (LEADER_ROXANNE/LEADER_CAFF -> LEADER, SCHOOLKID/SCHOOLKID_MALE ->
+#: SCHOOL_KID) yet each has its own `trainer<id>.png`. The staged
+#: `TrainerPicSpec.internal_name` is the Uranium class constant minus this
+#: prefix (verified for every staged spec against trainer_types.json).
+_URANIUM_CLASS_PREFIX = "TRAINER_CLASS_"
+
+
+def pic_internal_name(uranium_class_const: str) -> str:
+    """Staged `TrainerPicSpec.internal_name` for a Uranium class constant."""
+    return uranium_class_const.removeprefix(_URANIUM_CLASS_PREFIX)
+
 
 #: Uranium classes whose display name does not name a fork class, mapped to the
 #: fork class by hand. Both tuber types display "TUBER", and the fork has no
@@ -108,6 +93,13 @@ _CLASS_GENDER_ENCOUNTER_MUSIC: dict[str, dict[str, str]] = {
         "TRAINER_GENDER_FEMALE": "TRAINER_ENCOUNTER_MUSIC_FEMALE",
         "TRAINER_GENDER_MALE": "TRAINER_ENCOUNTER_MUSIC_MALE",
     },
+    # Vanilla's male School Kids use `Music: Male` (trainers.party:5128-5132,
+    # JERRY); the female ones keep the Girl tune this class always had. Uranium
+    # agrees: SCHOOLKID_MALE's intro bgm is PU-MaleEncounter.
+    "TRAINER_CLASS_SCHOOL_KID": {
+        "TRAINER_GENDER_FEMALE": "TRAINER_ENCOUNTER_MUSIC_GIRL",
+        "TRAINER_GENDER_MALE": "TRAINER_ENCOUNTER_MUSIC_MALE",
+    },
 }
 
 #: Real `TRAINER_CLASS_*` constant -> real `TRAINER_ENCOUNTER_MUSIC_*`
@@ -116,7 +108,6 @@ _CLASS_ENCOUNTER_MUSIC: dict[str, str] = {
     "TRAINER_CLASS_FISHERMAN": "TRAINER_ENCOUNTER_MUSIC_HIKER",
     "TRAINER_CLASS_YOUNGSTER": "TRAINER_ENCOUNTER_MUSIC_MALE",
     "TRAINER_CLASS_BUG_CATCHER": "TRAINER_ENCOUNTER_MUSIC_MALE",
-    "TRAINER_CLASS_SCHOOL_KID": "TRAINER_ENCOUNTER_MUSIC_GIRL",
     "TRAINER_CLASS_TRIATHLETE": "TRAINER_ENCOUNTER_MUSIC_MALE",
     "TRAINER_CLASS_EXPERT": "TRAINER_ENCOUNTER_MUSIC_INTENSE",
     "TRAINER_CLASS_LASS": "TRAINER_ENCOUNTER_MUSIC_FEMALE",
@@ -147,6 +138,11 @@ _CLASS_ENCOUNTER_MUSIC: dict[str, str] = {
     "TRAINER_CLASS_TUBER_M": "TRAINER_ENCOUNTER_MUSIC_GIRL",
     "TRAINER_CLASS_PICNICKER": "TRAINER_ENCOUNTER_MUSIC_GIRL",
     "TRAINER_CLASS_SAILOR": "TRAINER_ENCOUNTER_MUSIC_MALE",
+    # CH10 (Burole Town): Martin, Uranium class WORKER, whose own intro bgm is
+    # PU-CoolHikerFisherEncounter.ogg. The constant's own comment names Hikers
+    # and Fishermen (include/constants/trainers.h:569, "Used for Hikers, Ruin
+    # Maniacs, Kindlers, and Fishermen").
+    "TRAINER_CLASS_WORKER": "TRAINER_ENCOUNTER_MUSIC_HIKER",
 }
 
 _TRAINER_ANCHOR_RE_TMPL = r"^#define\s+{anchor}\s+(\d+)\s*$"
@@ -307,22 +303,36 @@ def resolve_encounter_music(
     return music
 
 
-def resolve_pic_constant(class_const: str, staged_pic_internal_names: set[str]) -> str:
-    internal_name = _CLASS_PIC_INTERNAL_NAME.get(class_const)
-    if internal_name is None:
-        raise ValueError(
-            f"{class_const}: no pic mapping -- _CLASS_PIC_INTERNAL_NAME must be extended "
-            "before this class can be staged"
-        )
+def resolve_pic_constant(
+    uranium_class_const: str, trainer_types: dict, staged_pic_internal_names: set[str]
+) -> str:
+    """Front-pic constant for a trainer's own Uranium class (trainertypes id).
+
+    Fails loud naming the class and the `TrainerPicSpec` to append when the
+    class's pic is not staged, or when the staged spec's id disagrees with
+    trainer_types.json.
+    """
+    tt = trainer_types.get(uranium_class_const)
+    if tt is None:
+        raise ValueError(f"trainer_types.json has no entry for {uranium_class_const}")
+    internal_name = pic_internal_name(uranium_class_const)
     if internal_name not in staged_pic_internal_names:
         raise ValueError(
-            f"{class_const}: pic internal_name {internal_name!r} is not staged in "
-            "common.SLICE_TRAINER_PICS -- append it there first"
+            f"{uranium_class_const}: pic internal_name {internal_name!r} is not staged in "
+            f"common.SLICE_TRAINER_PICS -- append TrainerPicSpec({tt['id']}, {internal_name!r}) there first"
         )
     for spec in common.SLICE_TRAINER_PICS:
         if spec.internal_name == internal_name:
+            if spec.trainer_id != tt["id"]:
+                raise ValueError(
+                    f"{uranium_class_const}: staged TrainerPicSpec({spec.trainer_id}, "
+                    f"{internal_name!r}) disagrees with trainer_types.json id {tt['id']}"
+                )
             return spec.pic_constant
-    raise AssertionError("unreachable: internal_name checked present above")
+    raise ValueError(
+        f"{uranium_class_const}: pic internal_name {internal_name!r} is in the staged-name set "
+        "but not in common.SLICE_TRAINER_PICS"
+    )
 
 
 def verify_party_species(
@@ -392,7 +402,9 @@ def build_staged_battles(
             tt = trainer_types[rec["trainer_class"]]
             gender_const = resolve_gender(tt["gender"], fork_genders)
             music_const = resolve_encounter_music(class_const, fork_music, gender_const)
-            pic_const = resolve_pic_constant(class_const, staged_pic_internal_names)
+            pic_const = resolve_pic_constant(
+                rec["trainer_class"], trainer_types, staged_pic_internal_names
+            )
             verify_party_species(rec["party"], fork_species, staged_species)
             verify_party_moves(rec["party"], fork_moves)
             verify_party_items(rec["party"], fork_items)

@@ -137,8 +137,8 @@ class PinReport:
             )
         if self.unmapped_classes:
             blocks.append(
-                "TRAINER CLASSES -- unmapped in _CLASS_ENCOUNTER_MUSIC / "
-                "_CLASS_PIC_INTERNAL_NAME (trainer_converter/battles.py), or absent "
+                "TRAINER CLASSES -- unmapped in _CLASS_ENCOUNTER_MUSIC "
+                "(trainer_converter/battles.py), or absent "
                 "from the fork entirely. Each stays a human call -- CH05's single new "
                 "class took two independent fork sources to justify, and that care is "
                 "correct. What is batched is the LIST, so you make every call in one "
@@ -148,7 +148,8 @@ class PinReport:
         if self.missing_pics:
             blocks.append(
                 "SLICE_TRAINER_PICS (trainer_converter/common.py) -- APPEND a "
-                "TrainerPicSpec for these internal name(s); verify the trainertypes.dat "
+                "TrainerPicSpec for each of these (pics are keyed by the trainer's own "
+                "Uranium class; internal_name is the class suffix); verify the trainertypes.dat "
                 "id against a real Graphics/Characters/trainerNNN.png before pinning.\n"
                 + "".join(f"    {p}\n" for p in self.missing_pics)
             )
@@ -246,7 +247,7 @@ def census_trainer_events(
 # error strings. Matching on them lets one staging run be re-grouped into the
 # per-list buckets a human actually has to edit, instead of one flat blob.
 _PIC_UNSTAGED = "is not staged in common.SLICE_TRAINER_PICS"
-_NO_PIC_MAPPING = "no pic mapping"
+_NO_PIC_MAPPING = "no pic mapping"  # legacy wording, kept so old messages still file here
 _NO_MUSIC_MAPPING = "no encounter-music mapping"
 _SPECIES_UNAVAILABLE = "species not available"
 _NOT_A_FORK_CLASS = "is not a TRAINER_CLASS_* constant the fork defines"
@@ -270,7 +271,10 @@ def _classify_staging_error(message: str, report: PinReport) -> None:
         report.unmapped_classes.append(message)
         return
     if _PIC_UNSTAGED in message:
-        m = re.search(r"internal_name '([^']+)'", message)
+        # Prefer the full `TrainerPicSpec(<id>, '<name>')` the resolver names.
+        m = re.search(r"append (TrainerPicSpec\([^)]*\))", message) or re.search(
+            r"internal_name '([^']+)'", message
+        )
         report.missing_pics.append(m.group(1) if m else message)
         return
     if _SPECIES_UNAVAILABLE in message:

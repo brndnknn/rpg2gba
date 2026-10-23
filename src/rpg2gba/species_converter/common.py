@@ -170,6 +170,13 @@ STARTER_SPECIES: tuple[SpeciesSpec, ...] = (
     # SEIKAMATER (terminal; Bug/Normal): the Seikamater-method (26) evolution
     # target of both SMORE and SPONEE, so staged to keep those targets undangling.
     SpeciesSpec(190, "SEIKAMATER"),
+    # --- CH10 (Burole Town) trainer-party species (2026-10-23) --------------
+    # MODRILLE (Gym 2 / school trainers, slice_pins gate) -> DRILGANN
+    # (evolutions.dat method 4, level 34), staged whole so no target dangles.
+    # BARAND is terminal, pure Dragon. No Nuclear typing in any of the three.
+    SpeciesSpec(73, "MODRILLE"),
+    SpeciesSpec(74, "DRILGANN"),
+    SpeciesSpec(94, "BARAND"),
 )
 
 
