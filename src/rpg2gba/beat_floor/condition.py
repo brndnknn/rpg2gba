@@ -31,7 +31,11 @@ from rpg2gba.beat_floor.assertion import (
     make_params,
 )
 from rpg2gba.chapter_manifest.conditions import classify_condition
-from rpg2gba.conversion_agent.transpiler import _RECEIVE_ITEM_RE
+from rpg2gba.conversion_agent.transpiler import (
+    _ADD_POKEMON_COND_RE,
+    _ADD_POKEMON_RE,
+    _RECEIVE_ITEM_RE,
+)
 
 CODE_CONDITION = 111
 
@@ -98,6 +102,23 @@ def _extract_pb_receive_item(text: str, list_index: int, ctx: ExtractContext) ->
     return (FloorAssertion(
         row_id=ctx.row_id, kind="item_grant", list_index=list_index, code=CODE_CONDITION,
         params=make_params(item=symbol, quantity=int(qty) if qty else 1), tag="state",
+    ),), ()
+
+
+# Kernel.pbAddPokemon(SPECIES, level) as a code-111 guard (CH10 Map060 EV007,
+# `:SYMBOL` form) -- the call IS the grant, like pbItemBall; then-arm = stored.
+# Reuses the transpiler's regexes (CLAUDE.md §4.3), same assertion as
+# script.py's bare-statement `_extract_add_pokemon`.
+def _extract_pb_add_pokemon(text: str, list_index: int, ctx: ExtractContext) -> ExtractResult:
+    m = _ADD_POKEMON_COND_RE.match(text) or _ADD_POKEMON_RE.match(text)
+    if not m:
+        return (), (FloorRefusal(
+            row_id=ctx.row_id, reason="non_literal_args", list_index=list_index,
+            code=CODE_CONDITION, detail=f"pbAddPokemon: not a bare literal call: {text[:120]!r}",
+        ),)
+    return (FloorAssertion(
+        row_id=ctx.row_id, kind="pokemon_grant", list_index=list_index, code=CODE_CONDITION,
+        params=make_params(species=m.group(1), level=int(m.group(2))), tag="state",
     ),), ()
 
 
@@ -241,12 +262,14 @@ CONDITION_FAMILY_EXTRACTORS: dict[str, ConditionFamilyExtractor] = {
     "pb_day_care_deposited": _no_assertion,
     "pb_egg_generated": _no_assertion,
     "time_of_day": _no_assertion,
+    "trainer_money_literal_cmp": _no_assertion,  # CH10 Map060 EV007
 
     # side-effecting.
     "pb_trainer_battle": _extract_pb_trainer_battle,
     "pb_wild_battle": _extract_pb_wild_battle,
     "pb_item_ball": _extract_pb_item_ball,
     "pb_receive_item": _extract_pb_receive_item,
+    "pb_add_pokemon": _extract_pb_add_pokemon,
     "pb_rock_smash": _extract_pb_rock_smash,
     "pb_pick_berry": _extract_pb_pick_berry,
     "uranium_jv_next_reward": _no_assertion,

@@ -410,6 +410,7 @@ CODE_EXTRACTORS: dict[int, LeafExtractor] = {
     221: _visual(221, "fade_to_black"),
     222: _visual(222, "fade_from_black"),
     223: _visual(223, "screen_tone"),
+    225: _visual(225, "screen_shake"),  # CH10 Map066 EV045 (ShakeCamera)
     241: _audio(241, 0),
     242: _audio(242, 0),
     249: _audio(249, 0),

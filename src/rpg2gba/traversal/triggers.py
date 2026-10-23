@@ -108,6 +108,13 @@ type this overlay has never been asked to model.
       via ObjectEventExecSingleMovementAction on that heading, changing tile
       position. facings = all four CARDINALS, wanders = True.
 
+  MOVEMENT_TYPE_WALK_SEQUENCE_RIGHT_UP_LEFT_DOWN
+      Callback: MovementType_WalkSequenceRightUpLeftDown (5467-5477) ->
+      MoveNextDirectionInSequence over `gRightUpLeftDownDirections`: a walk
+      action each step, heading E, N, W, S in turn around a rectangle bounded
+      by the movement range. Initial direction DIR_EAST (line 457). Added for
+      CH10's Map066 EV002. facings = all four CARDINALS, wanders = True.
+
 Certainty rule (per the brief): a trainer whose `facings` is a single
 direction AND is not `wanders` yields CERTAIN tiles (its cone is fully
 determined). Any trainer with more than one possible facing, or that
@@ -245,6 +252,7 @@ MOVEMENT_TYPE_PROFILES: dict[str, MovementProfile] = {
     "MOVEMENT_TYPE_LOOK_AROUND": MovementProfile(frozenset({N, S, E, W}), False),
     "MOVEMENT_TYPE_WALK_UP_AND_DOWN": MovementProfile(frozenset({N, S}), True),
     "MOVEMENT_TYPE_WANDER_AROUND": MovementProfile(frozenset({N, S, E, W}), True),
+    "MOVEMENT_TYPE_WALK_SEQUENCE_RIGHT_UP_LEFT_DOWN": MovementProfile(frozenset({N, S, E, W}), True),
 }
 
 

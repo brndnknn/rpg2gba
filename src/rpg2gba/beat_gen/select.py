@@ -67,6 +67,10 @@ _BLOCKER_BY_REASON: dict[str, Blocker] = {
     # pbAddPokemon grants), `unmodelled_attribute_write` 1.
     "conditional_script_effect": "floor",
     "unmodelled_attribute_write": "C8",
+    # Measured CH10 (2026-10-23): 1, map060/ev042/p0/b0 -- the interpreter has
+    # no model for `pbChooseNonEggPokemon` (the friendship rater's party pick).
+    # An interpreter gap, same owner as the other ruby_* codes.
+    "ruby_unknown_call": "C8",
 }
 
 # Row kinds that stand for themselves rather than an RMXP event page/branch:
