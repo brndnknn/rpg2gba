@@ -76,6 +76,13 @@ convert to the `01-moki.md` shape when the chapter reaches its boot gate.
 §6.1 | Mechanic | First appears here? | Disposition | Ledger row / notes |
 ```
 
+**A new player movement mode in §6.1 brings its sprite with it.** When §6.1
+records the bike, Surf, the surfboard or Dive/scuba as *first appears here*, the
+chapter also converts that mode's Uranium player sheet (`HERO-BIKE`,
+`HERO-SURF`, `HERO_SURFBOARD`, `HERO_SCUBAGEAR`) the way fishing was
+(`PROJECT_TODO.md` #8), and lists it in §6 as expected work. The engine
+otherwise shows stock Brendan for that mode, and nothing fails.
+
 **"In-chapter reachable?" is the load-bearing column.** A route's fishing table
 is in the data but unreachable without a rod; a postgame-gated item ball is in
 the map but not in the chapter. `Yes` (with the beat number) or a bolded **No**

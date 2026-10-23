@@ -563,12 +563,33 @@ mechanical, not blocked on anything.
 
 **2026-10-21:** operator: wait on this; not needed now.
 
-### 8. Bike / surf / fish / field-move player poses beyond rock smash
+### 8. Player sprites for bike / Surf / surfboard / Dive — convert in the chapter that unlocks each
 
-HERO-BIKE/SURF/FISH etc. exist but are nonstandard grids (264×288, 384×384 —
-not 4×4-of-64), so the exact-2×/majority-vote pipeline doesn't apply as-is.
-None are slice-1-reachable; needed once a later slice touches water/cycling
-routes.
+**Updated 2026-10-23.** Fishing is DONE (`9a88b039`, CH09): `HERO-FISH` → 12
+frames of 64×64 with its own palette, swapped in through the
+`Rpg2gbaPlayerFishing` alias on `OBJ_EVENT_GFX_BRENDAN_FISHING`. That is the
+pattern to copy (`sprites.convert_player_fish_sheet`, the fishing block in
+`sprite_emit.py`, the pointers-table fence). Every other mode still shows stock
+Brendan. Nothing fails or warns, so this has to be remembered. The chapter
+template's §6.1 rule now points here.
+
+| Mode | Uranium sheet | Fits | Engine slot to repoint | Converts in |
+|---|---|---|---|---|
+| Bike | `HERO-BIKE` (66×72 cells) | 32×32 once halved (~24×28) | `OBJ_EVENT_GFX_BRENDAN_MACH_BIKE` (and `_ACRO_BIKE` if both bikes exist) | the chapter that grants the Bicycle (atlas: "bike" at CH03, Bike Wheel at CH11; confirm at that chapter's open) |
+| Surf | `HERO-SURF` (66×72) | ~30×35, a few px over 32 tall | `OBJ_EVENT_GFX_BRENDAN_SURFING` | CH30 (HM03; #125 has the real grant map) |
+| Surfboard | `HERO_SURFBOARD` | not measured | not mapped yet | CH38 |
+| Dive | `HERO_SCUBAGEAR` | not measured | `OBJ_EVENT_GFX_BRENDAN_UNDERWATER` | CH45 (HM08) |
+
+Known wrinkles:
+- **Surf is a model mismatch, not just art.** Uranium draws the player and the
+  mount as one sheet; Emerald draws the player sprite plus a separate surf-blob
+  field effect. Decide whether to blank the blob or split the sheet. That is a
+  fidelity call, so ask the operator.
+- **Fishing while surfing:** `fishing.c` passes the player's `y2` to the surf
+  blob. The fishing fence zeroes the nudges for the 64×64 frame. Check it by
+  eye the first time Surf and a rod are both held.
+- **Field-move pose** already reuses the walk art (rock smash fix).
+- **HEROINE** sheets are #7 (operator: wait).
 
 ### 9. `displayNinjaLetter` card UI
 
