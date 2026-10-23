@@ -18,7 +18,10 @@ scripts / running `make`:
   3. hand the `ConvertedSprite` list AND the `ConvertedPlayer` to
      `sprite_emit.emit_sprites`, which quantizes the NPC sheets onto <=4 shared
      palettes, quantizes the player onto its own dedicated palette, and writes
-     the 7 `.gen.h` fragments + indexed PNGs (NPC strips + `hero.png`).
+     the 7 `.gen.h` fragments + indexed PNGs (NPC strips + `hero.png` +
+     `hero_fish.png`); the 64x64 fishing sheet (``HERO-FISH``, converted via
+     `sprites.convert_player_fish_sheet` on every pass, fails loud if missing)
+     shares the player's palette.
 
 Deterministic and idempotent (`convert_character_sheet`, `convert_player_sheets`,
 and `emit_sprites` all are), so the double execution — once in
@@ -34,7 +37,11 @@ import os
 from pathlib import Path
 
 from .graphics.sprite_emit import SpriteEmitResult, emit_sprites
-from .graphics.sprites import convert_character_sheet, convert_player_sheets
+from .graphics.sprites import (
+    convert_character_sheet,
+    convert_player_fish_sheet,
+    convert_player_sheets,
+)
 from .npc_gfx import DEFAULT_NPC_GFX_MAP, GFX_PREFIX, gfx_constant_for_sheet
 
 logger = logging.getLogger(__name__)
@@ -46,6 +53,7 @@ _URANIUM_GFX_PREFIX = f"{GFX_PREFIX}_"
 #: (resolved case-insensitively, same as NPC sheets — see `_resolve_sheet`).
 PLAYER_WALK_SHEET = "HERO"
 PLAYER_RUN_SHEET = "HERO-RUN"
+PLAYER_FISH_SHEET = "HERO-FISH"
 
 
 def _characters_dir() -> Path:
@@ -133,15 +141,15 @@ def run_sprite_pass(
 ) -> SpriteEmitResult:
     """Convert every Uranium NPC sheet in the gfx map plus the player's walk/run
     sheets, and emit the 7 engine `.gen.h` fragments + indexed PNGs (NPC strips
-    + `hero.png`) under `engine_root`. Deterministic + idempotent; logs the
+    + `hero.png` + `hero_fish.png`) under `engine_root`. Deterministic + idempotent; logs the
     shared-palette assignment so a build reader can see which sheets landed on
     which of the <=4 NPC palettes (the player always gets its own dedicated
     palette, never one of the four).
 
     The player conversion runs on every call — it isn't gated by the npc gfx
     map (the player carries no `OBJ_EVENT_GFX_*` id), so a missing HERO /
-    HERO-RUN sheet fails loud here rather than silently shipping a build with
-    no player art (CLAUDE.md §4.5)."""
+    HERO-RUN / HERO-FISH sheet fails loud here rather than silently shipping a
+    build with no player art (CLAUDE.md §4.5)."""
     names = sheets_to_convert(gfx_map_path)
     if not names:
         raise ValueError(
@@ -155,7 +163,8 @@ def run_sprite_pass(
         _resolve_sheet(chars_dir, PLAYER_WALK_SHEET),
         _resolve_sheet(chars_dir, PLAYER_RUN_SHEET),
     )
-    result = emit_sprites(sprites, Path(engine_root), player=player)
+    player_fish = convert_player_fish_sheet(_resolve_sheet(chars_dir, PLAYER_FISH_SHEET))
+    result = emit_sprites(sprites, Path(engine_root), player=player, player_fish=player_fish)
 
     by_palette: dict[int, list[str]] = {}
     for sheet_name, pal_idx in result.palette_index.items():

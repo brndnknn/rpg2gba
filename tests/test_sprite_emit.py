@@ -28,7 +28,9 @@ from rpg2gba.tileset_converter.graphics.sprites import (
     NUM_BREAK_PROP_FRAMES,
     LARGE_PROP_IDLE_STATE,
     NUM_OUTPUT_FRAMES,
+    NUM_PLAYER_FISH_FRAMES,
     NUM_PLAYER_OUTPUT_FRAMES,
+    PLAYER_FISH_FRAME_PX,
     ConvertedPlayer,
     ConvertedSprite,
 )
@@ -1001,6 +1003,8 @@ def test_stub_writer_pins_literal_content(tmp_path: Path) -> None:
         + "gObjectEventGraphicsInfo_BrendanNormal\n"
         + "#define gObjectEventGraphicsInfo_Rpg2gbaPlayerFieldMove "
         + "gObjectEventGraphicsInfo_BrendanFieldMove\n"
+        + "#define gObjectEventGraphicsInfo_Rpg2gbaPlayerFishing "
+        + "gObjectEventGraphicsInfo_BrendanFishing\n"
     )
 
     graphics_info_pointers = (tmp_path / _GEN_RELPATHS["graphics_info_pointers"]).read_text(
@@ -1017,3 +1021,188 @@ def test_stub_writer_pins_literal_content(tmp_path: Path) -> None:
         + "// Included INSIDE sObjectEventSpritePalettes[] BEFORE the OBJ_EVENT_PAL_TAG_NONE "
         + "terminator — entries only.\n"
     )
+
+
+# --- player fishing emission ---------------------------------------------------
+
+
+def _make_fish(colors: list[tuple[int, int, int]] | None = None) -> list[np.ndarray]:
+    """12 (64,64,4) frames, one opaque pixel per colour along frame row 0."""
+    colors = colors if colors is not None else [(0, 0, 0)]
+    frame = np.zeros((PLAYER_FISH_FRAME_PX, PLAYER_FISH_FRAME_PX, 4), dtype=np.uint8)
+    for i, (r, g, b) in enumerate(colors):
+        frame[0, i] = (r, g, b, 255)
+    return [frame.copy() for _ in range(NUM_PLAYER_FISH_FRAMES)]
+
+
+def _read(root: Path, key: str) -> str:
+    return (root / _GEN_RELPATHS[key]).read_text(encoding="utf-8")
+
+
+def test_player_fish_struct_shape(tmp_path: Path) -> None:
+    emit_sprites([], tmp_path, player=_make_player(), player_fish=_make_fish())
+    text = _read(tmp_path, "graphics_info")
+    start = text.index("gObjectEventGraphicsInfo_UraniumPlayerFishing = {")
+    body = text[start:text.index("};", start)]
+    assert ".size = 2048," in body
+    assert ".width = 64," in body
+    assert ".height = 64," in body
+    assert ".oam = &gObjectEventBaseOam_64x64," in body
+    assert ".subspriteTables = sOamTables_64x64," in body
+    assert ".anims = sAnimTable_Fishing," in body
+    assert ".images = sPicTable_UraniumPlayerFishing," in body
+    assert ".paletteTag = OBJ_EVENT_PAL_TAG_URANIUM_PLAYER_FISHING," in body
+    assert ".paletteSlot = PALSLOT_PLAYER," in body
+
+
+def test_player_fish_pic_and_pic_table(tmp_path: Path) -> None:
+    emit_sprites([], tmp_path, player=_make_player(), player_fish=_make_fish())
+    graphics = _read(tmp_path, "graphics")
+    assert (
+        'const u16 gObjectEventPic_UraniumPlayerFishing[] = '
+        'INCGFX_U16("graphics/object_events/pics/uranium/hero_fish.png", ".4bpp", '
+        '"-mwidth 8 -mheight 8");\n'
+    ) in graphics
+    tables = _read(tmp_path, "pic_tables")
+    assert "sPicTable_UraniumPlayerFishing[] = {" in tables
+    assert (
+        "overworld_ascending_frames(gObjectEventPic_UraniumPlayerFishing, 8, 8)," in tables
+    )
+
+
+def test_player_fish_decls_alias_to_uranium_when_given(tmp_path: Path) -> None:
+    emit_sprites([], tmp_path, player=_make_player(), player_fish=_make_fish())
+    text = _read(tmp_path, "graphics_info_decls")
+    assert (
+        "extern const struct ObjectEventGraphicsInfo "
+        "gObjectEventGraphicsInfo_UraniumPlayerFishing;\n"
+    ) in text
+    assert (
+        "#define gObjectEventGraphicsInfo_Rpg2gbaPlayerFishing "
+        "gObjectEventGraphicsInfo_UraniumPlayerFishing\n"
+    ) in text
+    assert "BrendanFishing" not in text
+
+
+def test_player_fish_decls_fall_back_to_brendan_otherwise(tmp_path: Path) -> None:
+    fallback = (
+        "#define gObjectEventGraphicsInfo_Rpg2gbaPlayerFishing "
+        "gObjectEventGraphicsInfo_BrendanFishing\n"
+    )
+    with_player = tmp_path / "a"
+    emit_sprites([], with_player, player=_make_player())
+    text = _read(with_player, "graphics_info_decls")
+    assert fallback in text
+    assert "UraniumPlayerFishing" not in text
+    assert "UraniumPlayerFishing" not in _read(with_player, "graphics_info")
+
+    no_player = tmp_path / "b"
+    emit_sprites([_make_sprite("HGSS_000", [(0, 0, 0)])], no_player)
+    assert fallback in _read(no_player, "graphics_info_decls")
+
+
+def test_player_fish_strip_png_shape(tmp_path: Path) -> None:
+    result = emit_sprites([], tmp_path, player=_make_player(), player_fish=_make_fish())
+    png_path = tmp_path / PICS_RELDIR / "hero_fish.png"
+    assert png_path in result.files_written
+    img = Image.open(png_path)
+    assert img.mode == "P"
+    assert img.size == (PLAYER_FISH_FRAME_PX * NUM_PLAYER_FISH_FRAMES, PLAYER_FISH_FRAME_PX)
+    assert img.getpalette()[0:3] == [0, 0, 0]
+
+
+def test_player_fish_has_its_own_palette_and_tag(tmp_path: Path) -> None:
+    player = _make_player([(0, 0, 0), (8, 0, 0)])
+    fish = _make_fish([(8, 0, 0), (0, 16, 0)])
+    result = emit_sprites([], tmp_path, player=player, player_fish=fish)
+    assert result.player_palette == [(0, 0, 0), (8, 0, 0)]  # walk/run only
+
+    constants = _read(tmp_path, "constants")
+    assert "#define OBJ_EVENT_PAL_TAG_URANIUM_PLAYER 0x1138\n" in constants
+    assert "#define OBJ_EVENT_PAL_TAG_URANIUM_PLAYER_FISHING 0x1139\n" in constants
+
+    graphics = _read(tmp_path, "graphics")
+    assert "const u16 gUraniumObjEventPal_PlayerFishing[16] = {" in graphics
+    fish_line = next(
+        ln for ln in graphics.splitlines() if "gUraniumObjEventPal_PlayerFishing" in ln
+    )
+    words = fish_line.split("{")[1].split("}")[0].split(", ")
+    assert words[0] == "0x0000"
+    assert sorted(words[1:3]) == ["0x0001", "0x0040"]  # (8,0,0) and (0,16,0) in BGR555
+    assert (
+        "{gUraniumObjEventPal_PlayerFishing, OBJ_EVENT_PAL_TAG_URANIUM_PLAYER_FISHING},\n"
+    ) in _read(tmp_path, "palettes")
+
+    info = _read(tmp_path, "graphics_info")
+    start = info.index("gObjectEventGraphicsInfo_UraniumPlayerFishing = {")
+    body = info[start:info.index("};", start)]
+    assert ".paletteTag = OBJ_EVENT_PAL_TAG_URANIUM_PLAYER_FISHING," in body
+    assert ".paletteSlot = PALSLOT_PLAYER," in body
+
+    hero = Image.open(tmp_path / PICS_RELDIR / "hero.png").getpalette()[:9]
+    fish_pal = Image.open(tmp_path / PICS_RELDIR / "hero_fish.png").getpalette()[:9]
+    assert hero != fish_pal
+    assert sorted([tuple(fish_pal[3:6]), tuple(fish_pal[6:9])]) == [(0, 16, 0), (8, 0, 0)]
+
+
+def test_player_fish_leaves_walk_run_output_identical(tmp_path: Path) -> None:
+    player = _make_player([(i * 8, 0, 0) for i in range(12)])
+    fish = _make_fish([(0, i * 8, 0) for i in range(1, 11)])
+    emit_sprites([], tmp_path / "a", player=player)
+    res = emit_sprites([], tmp_path / "b", player=player, player_fish=fish)
+    assert (tmp_path / "a" / PICS_RELDIR / "hero.png").read_bytes() == (
+        tmp_path / "b" / PICS_RELDIR / "hero.png"
+    ).read_bytes()
+    a_gfx = _read(tmp_path / "a", "graphics")
+    b_gfx = _read(tmp_path / "b", "graphics")
+    pal_a = next(ln for ln in a_gfx.splitlines() if "gUraniumObjEventPal_Player[" in ln)
+    pal_b = next(ln for ln in b_gfx.splitlines() if "gUraniumObjEventPal_Player[" in ln)
+    assert pal_a == pal_b
+    assert res.player_palette == emit_sprites([], tmp_path / "c", player=player).player_palette
+
+
+def test_player_fish_palette_over_budget_is_reduced_to_15(tmp_path: Path) -> None:
+    fish = _make_fish([(i * 8, 0, 0) for i in range(20)])
+    emit_sprites([], tmp_path, player=_make_player(), player_fish=fish)
+    pal = Image.open(tmp_path / PICS_RELDIR / "hero_fish.png").getpalette()[:48]
+    used = {tuple(pal[i:i + 3]) for i in range(3, 48, 3)} - {(0, 0, 0)}
+    assert 1 <= len(used) <= MAX_COLORS_PER_SHEET
+
+
+def test_player_without_fish_has_no_fish_palette(tmp_path: Path) -> None:
+    emit_sprites([], tmp_path, player=_make_player())
+    assert "PLAYER_FISHING" not in _read(tmp_path, "constants")
+    assert "PlayerFishing" not in _read(tmp_path, "palettes")
+    assert "PlayerFishing" not in _read(tmp_path, "graphics")
+
+
+def test_player_fish_determinism_byte_identical(tmp_path: Path) -> None:
+    for sub in ("a", "b"):
+        emit_sprites([], tmp_path / sub, player=_make_player([(8, 0, 0)]),
+                     player_fish=_make_fish([(8, 0, 0), (0, 16, 0)]))
+    paths = [
+        PICS_RELDIR / "hero.png", PICS_RELDIR / "hero_fish.png",
+        *_GEN_RELPATHS.values(),
+    ]
+    for rel in paths:
+        assert (tmp_path / "a" / rel).read_bytes() == (tmp_path / "b" / rel).read_bytes(), rel
+
+
+def test_player_fish_without_player_raises(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="requires a player"):
+        emit_sprites([_make_sprite("HGSS_000", [(0, 0, 0)])], tmp_path, player_fish=_make_fish())
+
+
+def test_player_fish_wrong_shape_raises(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="expected 12 frames"):
+        emit_sprites([], tmp_path, player=_make_player(), player_fish=_make_fish()[:11])
+    bad = _make_fish()
+    bad[3] = np.zeros((32, 32, 4), dtype=np.uint8)
+    with pytest.raises(ValueError, match="frame 3"):
+        emit_sprites([], tmp_path, player=_make_player(), player_fish=bad)
+
+
+def test_player_without_fish_output_unchanged_by_fish_support(tmp_path: Path) -> None:
+    emit_sprites([], tmp_path, player=_make_player())
+    assert not (tmp_path / PICS_RELDIR / "hero_fish.png").exists()
+    assert "Fishing" not in _read(tmp_path, "pic_tables")

@@ -616,6 +616,12 @@ static void AlignFishingAnimationFrames(void)
             animCmdIndex--;
     }
     animType = playerSprite->anims[playerSprite->animNum][animCmdIndex].type;
+    // BEGIN RPG2GBA ENGINE — these per-frame nudges fit Emerald's 32x32 fishing art, whose rod
+    // overflows the frame; a converted game's larger fishing frame already holds the whole pose
+    // at its own placement, so it is drawn unshifted.
+    if (GetObjectEventGraphicsInfo(gObjectEvents[gPlayerAvatar.objectEventId].graphicsId)->width <= 32)
+    {
+    // END RPG2GBA ENGINE
     if (animType == 1 || animType == 2 || animType == 3)
     {
         playerSprite->x2 = 8;
@@ -626,6 +632,9 @@ static void AlignFishingAnimationFrames(void)
         playerSprite->y2 = -8;
     if (animType == 10 || animType == 11)
         playerSprite->y2 = 8;
+    // BEGIN RPG2GBA ENGINE
+    }
+    // END RPG2GBA ENGINE
     if (gPlayerAvatar.flags & PLAYER_AVATAR_FLAG_SURFING)
         SetSurfBlob_PlayerOffset(gObjectEvents[gPlayerAvatar.objectEventId].fieldEffectSpriteId, TRUE, playerSprite->y2);
 }

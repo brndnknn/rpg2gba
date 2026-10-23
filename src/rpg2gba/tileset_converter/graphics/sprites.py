@@ -45,7 +45,9 @@ GBA_FRAME_PX = 32           # GBA object-event frame canvas
 NUM_OUTPUT_FRAMES = 9
 NUM_PLAYER_OUTPUT_FRAMES = 18  # player: walk half (0-8) + run half (9-17); see
                                # convert_player_sheets
-_ALPHA_THRESHOLD = 128      # >= this (out of 255) -> fully opaque
+NUM_PLAYER_FISH_FRAMES = 12    # west 0-3, north 4-7, south 8-11 (sAnimTable_Fishing)
+PLAYER_FISH_FRAME_PX = 64
+_ALPHA_THRESHOLD = 128     # >= this (out of 255) -> fully opaque
 
 # RMXP direction-code rows, top -> bottom.
 ROW_DOWN, ROW_LEFT, ROW_RIGHT, ROW_UP = 0, 1, 2, 3
@@ -322,6 +324,51 @@ def convert_player_sheets(walk_png: Path, run_png: Path) -> ConvertedPlayer:
         run_cycle=run_cycle,
         content_size=content_size,
     )
+
+
+def convert_player_fish_sheet(fish_png: Path) -> list[np.ndarray]:
+    """Convert the player's fishing sheet (`HERO-FISH`) into 12 RGBA 64x64 frames
+    in the order the engine's `sAnimTable_Fishing` expects: indices 0-3 = WEST
+    (sheet LEFT row), 4-7 = NORTH (UP row), 8-11 = SOUTH (DOWN row). East is the
+    engine's h-flip of west, so the RIGHT row is not emitted.
+
+    Within each direction the order is REVERSED relative to the sheet columns:
+    engine frame k = sheet column 3-k. Uranium's own script (pbFishingBegin)
+    plays columns 3,2,1 then rests on column 0 (rod out, waiting); the engine's
+    take-out anim plays 0,1,2,3 and rests on 3, and its "hooked" jiggle uses 2,3.
+
+    Placement is NOT union-bbox anchoring (the rod makes the bbox asymmetric and
+    would shift the body between frames). Each cell is halved and pasted at its
+    native RMXP cell placement: horizontally centred, cell bottom on the canvas
+    bottom (the engine puts a 64x64 frame centred on the tile with its bottom
+    row on the tile bottom, same as 32x32).
+
+    Fails loud on a bad grid, a halved cell over 64px, or a blank used cell."""
+    name = f"{Path(fish_png).stem} (player fishing)"
+    arr, frame_w, frame_h = _load_and_binarize(fish_png, name)
+    if arr.shape[0] != frame_h * GRID_SIZE or arr.shape[1] != frame_w * GRID_SIZE:
+        raise ValueError(f"{name}: sheet is not a {GRID_SIZE}x{GRID_SIZE} grid")
+    cw, ch = frame_w // 2, frame_h // 2
+    px = PLAYER_FISH_FRAME_PX
+    if cw > px or ch > px:
+        raise ValueError(
+            f"{name}: halved cell is {cw}x{ch}, which exceeds the {px}x{px} fishing canvas"
+        )
+    left, top = (px - cw) // 2, px - ch
+    cell = _cell_accessor(arr, frame_w, frame_h)
+    frames: list[np.ndarray] = []
+    for row in (ROW_LEFT, ROW_UP, ROW_DOWN):
+        for k in range(GRID_SIZE):
+            col = GRID_SIZE - 1 - k
+            native = _downscale_2x_majority(cell(row, col))
+            if not native[..., 3].any():
+                raise ValueError(
+                    f"{name}: used cell (row {row}, col {col}) is fully transparent"
+                )
+            canvas = np.zeros((px, px, 4), dtype=np.uint8)
+            canvas[top:top + ch, left:left + cw] = native
+            frames.append(canvas)
+    return frames
 
 
 def _binarize_alpha(arr: np.ndarray) -> np.ndarray:

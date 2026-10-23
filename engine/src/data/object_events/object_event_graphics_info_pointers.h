@@ -550,7 +550,10 @@ const struct ObjectEventGraphicsInfo *const gObjectEventGraphicsInfoPointers[NUM
     [OBJ_EVENT_GFX_STEVEN] =                   &gObjectEventGraphicsInfo_Steven,
     [OBJ_EVENT_GFX_WALLY] =                    &gObjectEventGraphicsInfo_Wally,
     [OBJ_EVENT_GFX_LITTLE_BOY_3] =             &gObjectEventGraphicsInfo_RubySapphireLittleBoy,
-    [OBJ_EVENT_GFX_BRENDAN_FISHING] =          &gObjectEventGraphicsInfo_BrendanFishing,
+    // BEGIN RPG2GBA GAME PROFILE — fishing pose: the game's converted fishing sheet when staged;
+    // the generated decls header #defines this alias, or to BrendanFishing when unstaged.
+    [OBJ_EVENT_GFX_BRENDAN_FISHING] =          &gObjectEventGraphicsInfo_Rpg2gbaPlayerFishing,
+    // END RPG2GBA GAME PROFILE
     [OBJ_EVENT_GFX_MAY_FISHING] =              &gObjectEventGraphicsInfo_MayFishing,
     [OBJ_EVENT_GFX_HOT_SPRINGS_OLD_WOMAN] =    &gObjectEventGraphicsInfo_HotSpringsOldWoman,
     [OBJ_EVENT_GFX_SS_TIDAL] =                 &gObjectEventGraphicsInfo_SSTidal,

@@ -167,7 +167,9 @@ from rpg2gba.tileset_converter.graphics.sprites import (
     LARGE_PROP_IDLE_STATE,
     NUM_BREAK_PROP_FRAMES,
     NUM_OUTPUT_FRAMES,
+    NUM_PLAYER_FISH_FRAMES,
     NUM_PLAYER_OUTPUT_FRAMES,
+    PLAYER_FISH_FRAME_PX,
     ConvertedPlayer,
     ConvertedSprite,
 )
@@ -224,6 +226,32 @@ _PLAYER_FIELD_MOVE_ALIAS = "Rpg2gbaPlayerFieldMove"
 # The vanilla field-move struct the stub #define falls back to on a fresh
 # clone, mirroring _PLAYER_STUB_FALLBACK's rationale above.
 _PLAYER_FIELD_MOVE_STUB_FALLBACK = "gObjectEventGraphicsInfo_BrendanFieldMove"
+
+# --- Player FISHING variant (64x64, shares the player palette) ---------------
+# 12 frames (west 0-3, north 4-7, south 8-11) indexed by the engine's
+# sAnimTable_Fishing. Same palette tag/slot as the walk/run struct. Aliased via
+# `Rpg2gbaPlayerFishing`; falls back to the stock Brendan fishing struct.
+_PLAYER_FISH_PAL_TAG = "OBJ_EVENT_PAL_TAG_URANIUM_PLAYER_FISHING"
+_PLAYER_FISH_PAL_TAG_VALUE = _PLAYER_PAL_TAG_VALUE + 1
+# Our tags occupy [_PAL_TAG_BASE, _PLAYER_FISH_PAL_TAG_VALUE]: NPC tags are
+# _PAL_TAG_BASE..+MAX_PALETTES-1 (reserved regardless of use), then the player,
+# then fishing. Stock OBJ_EVENT_PAL_TAG_* (engine/include/constants/
+# event_objects.h) run 0x1100-0x1133 below this block and 0x1150-0x116A above
+# it (plus 0x11FF NONE, 0x7611, 0x8001+), so the block must stay in the gap.
+_STOCK_TAG_BELOW = 0x1133
+_STOCK_TAG_ABOVE = 0x1150
+if not (_STOCK_TAG_BELOW < _PAL_TAG_BASE and _PLAYER_FISH_PAL_TAG_VALUE < _STOCK_TAG_ABOVE):
+    raise ValueError(
+        f"sprite palette tags {_PAL_TAG_BASE:#06x}..{_PLAYER_FISH_PAL_TAG_VALUE:#06x} "
+        f"collide with stock OBJ_EVENT_PAL_TAG_* (gap is "
+        f"{_STOCK_TAG_BELOW + 1:#06x}..{_STOCK_TAG_ABOVE - 1:#06x})"
+    )
+_PLAYER_FISH_IDENT = "UraniumPlayerFishing"
+_PLAYER_FISH_ANIM_TABLE = "sAnimTable_Fishing"
+_PLAYER_FISH_PICS_STEM = "hero_fish"
+_PLAYER_FISH_ALIAS = "Rpg2gbaPlayerFishing"
+_PLAYER_FISH_STUB_FALLBACK = "gObjectEventGraphicsInfo_BrendanFishing"
+_PLAYER_FISH_FRAME_BYTES = PLAYER_FISH_FRAME_PX * PLAYER_FISH_FRAME_PX // 2  # 2048
 
 _PICS_RELDIR = Path("graphics/object_events/pics/uranium")
 
@@ -430,6 +458,20 @@ def _validate_player_shape(player: ConvertedPlayer) -> None:
             )
 
 
+def _validate_player_fish_shape(fish: list[np.ndarray]) -> None:
+    if len(fish) != NUM_PLAYER_FISH_FRAMES:
+        raise ValueError(
+            f"player fishing sprite: expected {NUM_PLAYER_FISH_FRAMES} frames, "
+            f"got {len(fish)}"
+        )
+    for i, frame in enumerate(fish):
+        if frame.shape != (PLAYER_FISH_FRAME_PX, PLAYER_FISH_FRAME_PX, 4):
+            raise ValueError(
+                f"player fishing sprite: frame {i} has shape {frame.shape}, expected "
+                f"({PLAYER_FISH_FRAME_PX}, {PLAYER_FISH_FRAME_PX}, 4)"
+            )
+
+
 def _sheet_opaque_colors(sprite: ConvertedSprite) -> np.ndarray:
     """Union of RGB555-snapped opaque colours across all 9 frames of one sheet,
     as an (M,3) uint8 array of distinct display-8-bit colours (`quantize.to_5bit`
@@ -554,6 +596,36 @@ def _quantize_player(player: ConvertedPlayer) -> QuantizeResult:
     return result
 
 
+def _quantize_player_fish(fish: list[np.ndarray]) -> tuple[np.ndarray, list[np.ndarray]]:
+    """Quantize the 12 fishing frames ALONE onto their own dedicated 15-colour
+    palette (`_PLAYER_FISH_PAL_TAG`): the engine swaps palettes by tag when the
+    player's graphics id changes, so fishing need not share the walk/run palette
+    (and sharing degraded walk/run). The packer wants equal-sized units, so each
+    64x64 frame is split into four 32x32 quadrants (row-major) for packing and
+    reassembled afterwards. Returns `(palette, fish_frames)`."""
+    half = PLAYER_FISH_FRAME_PX // 2
+    quads: list[np.ndarray] = []
+    for frame in fish:
+        for qy in (0, half):
+            for qx in (0, half):
+                quads.append(frame[qy:qy + half, qx:qx + half])
+    result = build_quantized_tileset(
+        quads, max_palettes=1, colors_per_palette=MAX_COLORS_PER_SHEET
+    )
+    if len(result.palettes) != 1 or len(result.palettes[0]) > MAX_COLORS_PER_SHEET:
+        raise ValueError(
+            f"player fishing sprite: packer could not fit one "
+            f"{MAX_COLORS_PER_SHEET}-colour palette ({len(result.palettes)} palettes)"
+        )
+    fish_q: list[np.ndarray] = []
+    for i in range(len(fish)):
+        q = result.quantized[4 * i:4 * i + 4]
+        top = np.concatenate([q[0], q[1]], axis=1)
+        bottom = np.concatenate([q[2], q[3]], axis=1)
+        fish_q.append(np.concatenate([top, bottom], axis=0))
+    return result.palettes[0], fish_q
+
+
 # --- PNG emission ----------------------------------------------------------
 
 
@@ -608,6 +680,7 @@ def _render_constants(
     palette_tags: list[str],
     *,
     include_player: bool = False,
+    include_player_fish: bool = False,
 ) -> str:
     """`gfx_defines`: `OBJ_EVENT_GFX_URANIUM_*` constant -> its fully-rendered
     `#define` line, already in constant-name-sorted order (insertion order of
@@ -631,6 +704,10 @@ def _render_constants(
         lines.append(f"#define {tag} {_PAL_TAG_BASE + i:#06x}\n")
     if include_player:
         lines.append(f"#define {_PLAYER_PAL_TAG} {_PLAYER_PAL_TAG_VALUE:#06x}\n")
+        if include_player_fish:
+            lines.append(
+                f"#define {_PLAYER_FISH_PAL_TAG} {_PLAYER_FISH_PAL_TAG_VALUE:#06x}\n"
+            )
     lines.append("\n")
     lines.append(f"#endif // {_CONSTANTS_GUARD}\n")
     return "".join(lines)
@@ -642,6 +719,8 @@ def _render_graphics(
     pal_words: list[list[int]],
     *,
     player_pal_words: list[int] | None = None,
+    include_player_fish: bool = False,
+    fish_pal_words: list[int] | None = None,
 ) -> str:
     lines = [_GENERATED_HEADER, "\n"]
     for i, words in enumerate(pal_words):
@@ -650,6 +729,9 @@ def _render_graphics(
     if player_pal_words is not None:
         values = ", ".join(f"0x{w:04X}" for w in player_pal_words)
         lines.append(f"const u16 gUraniumObjEventPal_Player[16] = {{{values}}};\n")
+    if fish_pal_words is not None:
+        values = ", ".join(f"0x{w:04X}" for w in fish_pal_words)
+        lines.append(f"const u16 gUraniumObjEventPal_PlayerFishing[16] = {{{values}}};\n")
     lines.append("\n")
     for sprite in sprites:
         ident = _c_ident(sprite.name)
@@ -667,6 +749,13 @@ def _render_graphics(
             f'INCGFX_U16("{_PICS_RELDIR / _PLAYER_PICS_STEM}.png", ".4bpp", '
             f'"-mwidth 4 -mheight 4");\n'
         )
+    if include_player_fish:
+        tiles = PLAYER_FISH_FRAME_PX // 8
+        lines.append(
+            f'const u16 gObjectEventPic_{_PLAYER_FISH_IDENT}[] = '
+            f'INCGFX_U16("{_PICS_RELDIR / _PLAYER_FISH_PICS_STEM}.png", ".4bpp", '
+            f'"-mwidth {tiles} -mheight {tiles}");\n'
+        )
     return "".join(lines)
 
 
@@ -675,6 +764,7 @@ def _render_pic_tables(
     units: dict[str, list[_EmissionUnit]],
     *,
     include_player: bool = False,
+    include_player_fish: bool = False,
 ) -> str:
     lines = [_GENERATED_HEADER]
     for sprite in sprites:
@@ -704,6 +794,17 @@ def _render_pic_tables(
         lines.append(f"static const struct SpriteFrameImage sPicTable_{_PLAYER_IDENT}[] = {{\n")
         lines.append(
             f"    overworld_ascending_frames(gObjectEventPic_{_PLAYER_IDENT}, 4, 4),\n"
+        )
+        lines.append("};\n")
+    if include_player_fish:
+        tiles = PLAYER_FISH_FRAME_PX // 8
+        lines.append("\n")
+        lines.append(
+            f"static const struct SpriteFrameImage sPicTable_{_PLAYER_FISH_IDENT}[] = {{\n"
+        )
+        lines.append(
+            f"    overworld_ascending_frames(gObjectEventPic_{_PLAYER_FISH_IDENT}, "
+            f"{tiles}, {tiles}),\n"
         )
         lines.append("};\n")
     return "".join(lines)
@@ -747,6 +848,34 @@ def _render_player_graphics_info() -> str:
     return "\n" + _render_player_struct(_PLAYER_IDENT, _PLAYER_ANIM_TABLE)
 
 
+def _render_player_fishing_graphics_info() -> str:
+    """The player's FISHING `ObjectEventGraphicsInfo`: the Normal struct's palette
+    tag/slot, shadow and tracks, but 64x64 (`.size = 2048`) with the engine's
+    `sAnimTable_Fishing` over the 12-frame fishing pic table."""
+    lines = [
+        "\n",
+        f"const struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_{_PLAYER_FISH_IDENT} = {{\n",
+        "    .tileTag = TAG_NONE,\n",
+        f"    .paletteTag = {_PLAYER_FISH_PAL_TAG},\n",
+        "    .reflectionPaletteTag = OBJ_EVENT_PAL_TAG_NONE,\n",
+        f"    .size = {_PLAYER_FISH_FRAME_BYTES},\n",
+        f"    .width = {PLAYER_FISH_FRAME_PX},\n",
+        f"    .height = {PLAYER_FISH_FRAME_PX},\n",
+        f"    .paletteSlot = {_PLAYER_PALETTE_SLOT},\n",
+        "    .shadowSize = SHADOW_SIZE_M,\n",
+        "    .inanimate = FALSE,\n",
+        "    .compressed = FALSE,\n",
+        "    .tracks = TRACKS_FOOT,\n",
+        "    .oam = &gObjectEventBaseOam_64x64,\n",
+        "    .subspriteTables = sOamTables_64x64,\n",
+        f"    .anims = {_PLAYER_FISH_ANIM_TABLE},\n",
+        f"    .images = sPicTable_{_PLAYER_FISH_IDENT},\n",
+        "    .affineAnims = gDummySpriteAffineAnimTable,\n",
+        "};\n",
+    ]
+    return "".join(lines)
+
+
 def _render_player_field_move_graphics_info() -> str:
     """The player's FIELD-MOVE variant: rock smash swaps the player's gfx to
     this struct and starts anim index 0, then waits on `SpriteAnimEnded()`
@@ -780,6 +909,7 @@ def _render_graphics_info(
     palette_tags: dict[str, str],
     *,
     include_player: bool = False,
+    include_player_fish: bool = False,
 ) -> str:
     lines = [_GENERATED_HEADER]
     for sprite in sprites:
@@ -788,6 +918,8 @@ def _render_graphics_info(
     if include_player:
         lines.append(_render_player_graphics_info())
         lines.append(_render_player_field_move_graphics_info())
+    if include_player_fish:
+        lines.append(_render_player_fishing_graphics_info())
     return "".join(lines)
 
 
@@ -855,6 +987,7 @@ def _render_graphics_info_decls(
     units: dict[str, list[_EmissionUnit]],
     *,
     include_player: bool = False,
+    include_player_fish: bool = False,
 ) -> str:
     lines = [_GENERATED_HEADER, _DECLS_COMMENT]
     for sprite in sprites:
@@ -872,19 +1005,35 @@ def _render_graphics_info_decls(
             f"extern const struct ObjectEventGraphicsInfo "
             f"gObjectEventGraphicsInfo_{_PLAYER_FIELD_MOVE_IDENT};\n"
         )
+    if include_player and include_player_fish:
+        lines.append(
+            f"extern const struct ObjectEventGraphicsInfo "
+            f"gObjectEventGraphicsInfo_{_PLAYER_FISH_IDENT};\n"
+        )
+    if include_player:
         lines.append(_player_alias_defines(
             f"gObjectEventGraphicsInfo_{_PLAYER_IDENT}",
             f"gObjectEventGraphicsInfo_{_PLAYER_FIELD_MOVE_IDENT}",
+            f"gObjectEventGraphicsInfo_{_PLAYER_FISH_IDENT}"
+            if include_player_fish else _PLAYER_FISH_STUB_FALLBACK,
         ))
+    else:
+        # NPC-only emission: the Normal/FieldMove aliases are the caller's
+        # concern (unchanged), but the fishing alias must always resolve.
+        lines.append(
+            f"#define gObjectEventGraphicsInfo_{_PLAYER_FISH_ALIAS} "
+            f"{_PLAYER_FISH_STUB_FALLBACK}\n"
+        )
     return "".join(lines)
 
 
-def _player_alias_defines(normal: str, field_move: str) -> str:
+def _player_alias_defines(normal: str, field_move: str, fishing: str) -> str:
     """The `#define`s that point the tracked pointers file's game-neutral
-    player names at `normal` / `field_move`."""
+    player names at `normal` / `field_move` / `fishing`."""
     return (
         f"#define gObjectEventGraphicsInfo_{_PLAYER_ALIAS} {normal}\n"
         f"#define gObjectEventGraphicsInfo_{_PLAYER_FIELD_MOVE_ALIAS} {field_move}\n"
+        f"#define gObjectEventGraphicsInfo_{_PLAYER_FISH_ALIAS} {fishing}\n"
     )
 
 
@@ -904,12 +1053,18 @@ def _render_graphics_info_pointers(
     return "".join(lines)
 
 
-def _render_palettes(palette_tags: list[str], *, include_player: bool = False) -> str:
+def _render_palettes(
+    palette_tags: list[str], *, include_player: bool = False, include_player_fish: bool = False
+) -> str:
     lines = [_GENERATED_HEADER, _PALETTES_COMMENT]
     for i, tag in enumerate(palette_tags):
         lines.append(f"{{gUraniumObjEventPal_{i}, {tag}}},\n")
     if include_player:
         lines.append(f"{{gUraniumObjEventPal_Player, {_PLAYER_PAL_TAG}}},\n")
+        if include_player_fish:
+            lines.append(
+                f"{{gUraniumObjEventPal_PlayerFishing, {_PLAYER_FISH_PAL_TAG}}},\n"
+            )
     return "".join(lines)
 
 
@@ -942,7 +1097,11 @@ def write_stub_gen_files(engine_root: Path) -> None:
         # generated structs instead.
         "graphics_info_decls": (
             _STUB_HEADER
-            + _player_alias_defines(_PLAYER_STUB_FALLBACK, _PLAYER_FIELD_MOVE_STUB_FALLBACK)
+            + _player_alias_defines(
+                _PLAYER_STUB_FALLBACK,
+                _PLAYER_FIELD_MOVE_STUB_FALLBACK,
+                _PLAYER_FISH_STUB_FALLBACK,
+            )
         ),
         "graphics_info_pointers": _STUB_HEADER + _POINTERS_COMMENT,
         "palettes": _STUB_HEADER + _PALETTES_COMMENT,
@@ -961,6 +1120,7 @@ def emit_sprites(
     engine_root: Path,
     *,
     player: ConvertedPlayer | None = None,
+    player_fish: list[np.ndarray] | None = None,
 ) -> SpriteEmitResult:
     """Quantize + emit `sprites` as GBA object-event engine artifacts under
     `engine_root` (the 7 `.gen.h` fragments + one indexed PNG per sheet).
@@ -994,9 +1154,21 @@ def emit_sprites(
     on a duplicate sheet name, a duplicate minted constant, a malformed
     `ConvertedSprite`/`ConvertedPlayer`, a single sheet needing >15 colours, or
     the palette packer needing more than `MAX_PALETTES` shared palettes.
+
+    `player_fish` (12 RGBA 64x64 frames, requires `player`) adds the 64x64
+    fishing sprite: `hero_fish.png`, `gObjectEventPic_UraniumPlayerFishing`,
+    its pic table and `gObjectEventGraphicsInfo_UraniumPlayerFishing`. Its
+    frames are quantized ALONE onto their own palette/tag (`_quantize_player_fish`);
+    walk/run output is identical with or without fish. The decls header always defines
+    `gObjectEventGraphicsInfo_Rpg2gbaPlayerFishing` -- to the generated struct
+    when given, else to the stock Brendan fishing struct.
     """
     if not sprites and player is None:
         raise ValueError("emit_sprites requires at least one sprite or a player")
+    if player_fish is not None:
+        if player is None:
+            raise ValueError("player_fish requires a player (shared palette/slot)")
+        _validate_player_fish_shape(player_fish)
 
     for sprite in sprites:
         _validate_sprite_shape(sprite)
@@ -1071,35 +1243,54 @@ def emit_sprites(
 
     player_palette_out: list[tuple[int, int, int]] | None = None
     player_pal_words: list[int] | None = None
+    fish_pal_words: list[int] | None = None
     if player is not None:
         player_result = _quantize_player(player)
         player_palette = player_result.palettes[0]
+        walk_run_q = list(player_result.quantized)
         player_palette_out = [(int(c[0]), int(c[1]), int(c[2])) for c in player_palette]
         # Same slot-0-transparent convention as the shared NPC palettes.
         player_pal_words = [0x0000] + [_pack_bgr555(c) for c in player_palette_out]
         player_png_path = pics_dir / f"{_PLAYER_PICS_STEM}.png"
-        _write_sheet_png(player_png_path, list(player_result.quantized), player_palette)
+        _write_sheet_png(player_png_path, walk_run_q, player_palette)
         files_written.append(player_png_path)
+        if player_fish is not None:
+            fish_palette, fish_quantized = _quantize_player_fish(player_fish)
+            fish_palette_out = [(int(c[0]), int(c[1]), int(c[2])) for c in fish_palette]
+            fish_pal_words = [0x0000] + [_pack_bgr555(c) for c in fish_palette_out]
+            fish_png_path = pics_dir / f"{_PLAYER_FISH_PICS_STEM}.png"
+            _write_sheet_png(
+                fish_png_path, fish_quantized, fish_palette, frame_px=PLAYER_FISH_FRAME_PX
+            )
+            files_written.append(fish_png_path)
 
     gen_contents = {
         "constants": _render_constants(
             gfx_defines, len(all_constants), palette_tags,
             include_player=player is not None,
+            include_player_fish=player_fish is not None,
         ),
         "graphics": _render_graphics(
-            ordered, stems, pal_words, player_pal_words=player_pal_words
+            ordered, stems, pal_words, player_pal_words=player_pal_words,
+            include_player_fish=player_fish is not None, fish_pal_words=fish_pal_words,
         ),
         "pic_tables": _render_pic_tables(
-            ordered, units, include_player=player is not None
+            ordered, units, include_player=player is not None,
+            include_player_fish=player_fish is not None,
         ),
         "graphics_info": _render_graphics_info(
-            ordered, units, palette_tag_of, include_player=player is not None
+            ordered, units, palette_tag_of, include_player=player is not None,
+            include_player_fish=player_fish is not None,
         ),
         "graphics_info_decls": _render_graphics_info_decls(
-            ordered, units, include_player=player is not None
+            ordered, units, include_player=player is not None,
+            include_player_fish=player_fish is not None,
         ),
         "graphics_info_pointers": _render_graphics_info_pointers(ordered, units),
-        "palettes": _render_palettes(palette_tags, include_player=player is not None),
+        "palettes": _render_palettes(
+            palette_tags, include_player=player is not None,
+            include_player_fish=player_fish is not None,
+        ),
     }
     for key, relpath in _GEN_RELPATHS.items():
         path = engine_root / relpath

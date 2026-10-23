@@ -12,7 +12,9 @@ from PIL import Image
 from rpg2gba.tileset_converter.graphics.sprites import (
     LARGE_PROP_FRAME_PX,
     LARGE_PROP_IDLE_STATE,
+    NUM_PLAYER_FISH_FRAMES,
     NUM_PLAYER_OUTPUT_FRAMES,
+    PLAYER_FISH_FRAME_PX,
     ConvertedPlayer,
     ConvertedSprite,
     _anchor,
@@ -20,6 +22,7 @@ from rpg2gba.tileset_converter.graphics.sprites import (
     _binarize_alpha,
     _downscale_2x_majority,
     convert_character_sheet,
+    convert_player_fish_sheet,
     convert_player_sheets,
 )
 
@@ -665,3 +668,86 @@ def test_player_sheets_bad_dimensions_fails_loud(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="player walk"):
         convert_player_sheets(walk_path, run_path)
+
+
+# --- convert_player_fish_sheet --------------------------------------------------
+
+
+def _fish_sheet(tmp_path: Path, skip: tuple[int, int] | None = None) -> Path:
+    """A sheet of 24px native cells (2x upscaled by `_make_sheet`, halved back by
+    the converter), each a distinct colour keyed by (row, col); `skip` leaves
+    one cell transparent."""
+    cells = {
+        (row, col): _solid(24, (10 + row * 20, 10 + col * 20, 7, 255))
+        for row in range(4) for col in range(4) if (row, col) != skip
+    }
+    return _make_sheet(tmp_path, cells, 24, name="HERO-FISH")
+
+
+def _color(frame: np.ndarray) -> tuple[int, int, int]:
+    px = frame[63, 32]
+    assert px[3] == 255
+    return int(px[0]), int(px[1]), int(px[2])
+
+
+def test_fish_sheet_produces_12_frames_of_64x64(tmp_path: Path) -> None:
+    frames = convert_player_fish_sheet(_fish_sheet(tmp_path))
+    assert len(frames) == NUM_PLAYER_FISH_FRAMES == 12
+    for f in frames:
+        assert f.shape == (PLAYER_FISH_FRAME_PX, PLAYER_FISH_FRAME_PX, 4)
+        assert f.dtype == np.uint8
+
+
+def test_fish_frame_order_is_west_north_south_columns_reversed(tmp_path: Path) -> None:
+    frames = convert_player_fish_sheet(_fish_sheet(tmp_path))
+    # sheet rows: DOWN=0, LEFT=1, RIGHT=2, UP=3; colour = (10+20*row, 10+20*col, 7)
+    def expect(row: int, col: int) -> tuple[int, int, int]:
+        return (10 + row * 20, 10 + col * 20, 7)
+
+    assert _color(frames[0]) == expect(1, 3)    # west, engine frame 0 = LEFT col 3
+    assert _color(frames[3]) == expect(1, 0)    # west, frame 3 = LEFT col 0
+    assert _color(frames[4]) == expect(3, 3)    # north = UP row
+    assert _color(frames[7]) == expect(3, 0)
+    assert _color(frames[8]) == expect(0, 3)    # south = DOWN row
+    assert _color(frames[11]) == expect(0, 0)
+    # the RIGHT row (2) is never emitted
+    assert all(_color(f)[0] != 10 + 2 * 20 for f in frames)
+
+
+def test_fish_cell_placement_native_bottom_centred(tmp_path: Path) -> None:
+    # 48px sheet cells (the real sheet is 96px) halve to 24? Use 48px native
+    # cells -> 96px sheet cells -> halved 48x48 -> left 8, top 16 on the canvas.
+    cells = {(r, c): _solid(48, (40, 80, 120, 255)) for r in range(4) for c in range(4)}
+    path = _make_sheet(tmp_path, cells, 48, name="HERO-FISH")
+    frame = convert_player_fish_sheet(path)[0]
+    ys, xs = np.nonzero(frame[..., 3])
+    assert (xs.min(), xs.max()) == (8, 8 + 48 - 1)
+    assert (ys.min(), ys.max()) == (16, 63)
+
+
+def test_fish_transparent_used_cell_fails_loud(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="fully transparent"):
+        convert_player_fish_sheet(_fish_sheet(tmp_path, skip=(1, 2)))
+
+
+def test_fish_unused_right_row_may_be_blank(tmp_path: Path) -> None:
+    cells = {
+        (row, col): _solid(24, (9, 9, 9, 255))
+        for row in (0, 1, 3) for col in range(4)
+    }
+    path = _make_sheet(tmp_path, cells, 24, name="HERO-FISH")
+    assert len(convert_player_fish_sheet(path)) == 12
+
+
+def test_fish_oversized_cell_fails_loud(tmp_path: Path) -> None:
+    cells = {(r, c): _solid(70, (9, 9, 9, 255)) for r in range(4) for c in range(4)}
+    path = _make_sheet(tmp_path, cells, 70, name="HERO-FISH")
+    with pytest.raises(ValueError, match="exceeds"):
+        convert_player_fish_sheet(path)
+
+
+def test_fish_bad_dimensions_fail_loud(tmp_path: Path) -> None:
+    path = tmp_path / "HERO-FISH.png"
+    Image.fromarray(np.full((10, 10, 4), 255, dtype=np.uint8), "RGBA").save(path)
+    with pytest.raises(ValueError, match="player fishing"):
+        convert_player_fish_sheet(path)
