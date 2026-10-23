@@ -50,6 +50,7 @@ from .tile_map import (
     PASSABLE_COLLISION,
     PASSABLE_ELEVATION,
     PASSAGE_BLOCK_MASK,
+    WATER_ELEVATION,
     Metatile,
     TileMap,
 )
@@ -325,6 +326,7 @@ def convert_layout(
     unblocked_cells: frozenset[tuple[int, int]] | set[tuple[int, int]] | None = None,
     tileset_key: int | None = None,
     behavior_overrides: dict[tuple[int, int], str] | None = None,
+    surfable_metatiles: frozenset[int] = frozenset(),
 ) -> Layout:
     """Convert one Phase 3 map dict into a `Layout` (blockdata + metadata).
 
@@ -378,7 +380,13 @@ def convert_layout(
     collect_through_block_cells` would otherwise also mark blocked, re-creating the
     original solid-stairs bug — this check is the backstop that makes that
     regression loud). Overlap with `unblocked_cells` is redundant, not
-    contradictory (both force passable), and is allowed; the behavior stamp wins."""
+    contradictory (both force passable), and is allowed; the behavior stamp wins.
+
+    `surfable_metatiles` (`water.surfable_metatile_ids`): a cell the source passage
+    blocks whose metatile is surfable water is emitted collision 0 at
+    WATER_ELEVATION, the stock Emerald water encoding — the elevation mismatch
+    keeps it unwalkable, and the engine requires exactly that mismatch before a rod
+    or Surf can be used from the shore. Every explicit override above wins over it."""
     overrides = warp_overrides or set()
     blocked = blocked_cells or set()
     unblocked = set(unblocked_cells or set())
@@ -476,6 +484,9 @@ def convert_layout(
                 metatile = Metatile(metatile.metatile_id, BLOCKED_COLLISION, BLOCKED_ELEVATION)
             elif (x, y) in unblocked:
                 metatile = Metatile(metatile.metatile_id, PASSABLE_COLLISION, PASSABLE_ELEVATION)
+            elif (metatile.collision == BLOCKED_COLLISION
+                  and metatile.metatile_id in surfable_metatiles):
+                metatile = Metatile(metatile.metatile_id, PASSABLE_COLLISION, WATER_ELEVATION)
             blocks.append(metatile.to_block())
 
     if len(blocks) != width * height:

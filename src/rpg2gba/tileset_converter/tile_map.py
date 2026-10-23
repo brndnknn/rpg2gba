@@ -60,6 +60,24 @@ PASSABLE_COLLISION = 0
 BLOCKED_COLLISION = 1
 PASSABLE_ELEVATION = 3
 BLOCKED_ELEVATION = 0
+# Surfable water is collision 0 at elevation 1, as in stock Emerald: the land->water
+# elevation mismatch (3 vs 1) is what stops the player walking in, and it is also
+# what `IsPlayerFacingSurfableFishableWater` requires before a rod or Surf may be
+# used from the shore. Water stamped collision 1 refuses both.
+WATER_ELEVATION = 1
+ELEVATION_MASK = 0xF << ELEVATION_SHIFT
+# Elevations that never mismatch (engine `IsElevationMismatchAt`).
+_ELEVATION_WILDCARDS = (0, 15)
+
+
+def on_foot_walkable(block: int) -> bool:
+    """Whether a player on land (elevation PASSABLE_ELEVATION) may step onto `block`:
+    collision 0 and no elevation mismatch, mirroring the engine's
+    `GetCollisionAtCoords`. Surfable water (WATER_ELEVATION) reads as not walkable."""
+    if block & COLLISION_MASK:
+        return False
+    elevation = (block & ELEVATION_MASK) >> ELEVATION_SHIFT
+    return elevation in _ELEVATION_WILDCARDS or elevation == PASSABLE_ELEVATION
 
 # Required top-level keys in reference/tileset_map.json. "buckets"/"stacks" are
 # optional in the schema, but a tile with no explicit entry needs a bucket.

@@ -329,7 +329,10 @@ def run_layout_pass(
     )
     from rpg2gba.tileset_converter.streaming import check_streamed_layout
     from rpg2gba.tileset_converter.tile_map import load_tile_map
+    from rpg2gba.tileset_converter.water import surfable_behaviors, surfable_metatile_ids
 
+    # A dry run writes no metatile_attributes.bin to read the water behaviours from.
+    surfable = frozenset() if dry_run else surfable_behaviors(fork)
     tile_map = load_tile_map(
         Path("reference/tileset_map.json"),
         out / "tilesets.json",
@@ -371,6 +374,9 @@ def run_layout_pass(
                 **collect_stair_behavior_cells(map_json),
                 **seam_behavior_cells.get(map_id, {}),
             },
+            # S8a has already written this group's metatile_attributes.bin.
+            surfable_metatiles=(surfable_metatile_ids(fork, groups[map_id], surfable)
+                                if surfable else frozenset()),
         )
         entries.append(layout.to_layouts_entry())
 

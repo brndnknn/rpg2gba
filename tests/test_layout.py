@@ -1,9 +1,14 @@
 """Tests for the tileset_key override in convert_layout."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from rpg2gba.tileset_converter.layout import TileGrid, column_key, convert_layout
+from rpg2gba.tileset_converter.terrain_tags import _behavior_value
+from rpg2gba.tileset_converter.water import surfable_behaviors
 from rpg2gba.tileset_converter.tile_map import (
     METATILE_ID_MASK,
+    on_foot_walkable,
     Bucket,
     Metatile,
     TileMap,
@@ -279,6 +284,41 @@ def test_behavior_override_stamps_metatile_and_forces_passable() -> None:
     assert (layout.blocks[1] >> 12) & 0xF == 3  # PASSABLE_ELEVATION
     # untouched neighbour cell still resolves normally (passable bucket, tile 384)
     assert layout.blocks[0] & METATILE_ID_MASK == 10
+
+
+def test_surfable_blocked_cell_emits_stock_water_encoding() -> None:
+    """A passage-blocked cell whose metatile is surfable is emitted collision 0 at
+    WATER_ELEVATION (stock Emerald water) — the engine refuses a rod or Surf from
+    the shore unless the faced cell is an elevation mismatch, not a collision wall
+    (CH09 boot walk: Old Rod refused facing Route 3's sea). An explicit
+    through-blocked cell on the same metatile stays a wall."""
+    tm = _stair_tile_map()
+    g = _grid(3, 1, [384, 500, 500])  # cells 1 and 2 read blocked -> bucket metatile 11
+
+    layout = convert_layout(
+        _map_json(g, tileset_id=_REAL),
+        tm,
+        name="T",
+        layout_const="LAYOUT_T",
+        tileset_key=_SYNTH,
+        blocked_cells={(2, 0)},
+        surfable_metatiles=frozenset({11}),
+    )
+
+    assert (layout.blocks[1] >> 11) & 0x1 == 0  # collision 0
+    assert (layout.blocks[1] >> 12) & 0xF == 1  # WATER_ELEVATION
+    assert not on_foot_walkable(layout.blocks[1])  # still not walkable on foot
+    assert (layout.blocks[2] >> 11) & 0x1 == 1  # explicit blocked override wins
+    assert on_foot_walkable(layout.blocks[0])
+
+
+def test_surfable_behaviors_read_from_fork() -> None:
+    """The surfable set comes from the fork's sTileBitAttributes, not a restated list."""
+    fork = Path("engine")
+    surfable = surfable_behaviors(fork)
+    assert _behavior_value(fork, "MB_OCEAN_WATER") in surfable
+    assert _behavior_value(fork, "MB_DEEP_WATER") in surfable
+    assert _behavior_value(fork, "MB_SAND") not in surfable
 
 
 def test_behavior_override_falls_back_for_unmapped_column() -> None:
