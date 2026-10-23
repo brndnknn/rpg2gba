@@ -40,7 +40,9 @@ Mechanically the chapter is:
 3. **Optional school (map 29):** 4 talk-battles; the last gives a Nugget (§3.2).
 4. **Gym 2 (map 66):** 3 sight trainers, a 15-rock puzzle that gates the leader, leader fight, badge + TM (§3.1).
 5. **Exit to Route 4** by map 60 EV032 @(70,22) -> map 9 (4,8) (§4.4). Map 9 is CH11's; CH11 owns that crossing.
-6. **Metro maps 5, 6:** in the roster but not reachable in-chapter (§2 Wiring, §7 item 1).
+6. **Metro maps 5, 6: PARKED out of CH10 2026-10-23** (operator); no reachable entrance in CH10. They stay
+   bound to CH28, the Burole revisit after CH24 (§2 Wiring, §7 item 1). The roster is now 7 maps; census
+   figures in this doc were read with 5/6 included (+8 events; 7-map totals in §7 item 1).
 
 ## 2. Map inventory
 
@@ -79,7 +81,11 @@ NPCs EV015 @(59,21) and EV020 @(58,21) stand in front of them until `sw85` (thei
 are therefore reachable in CH10 only by a ticket ride from another town's platform. Precedent: the operator
 parked CH06's metro maps 44/45 on 2026-10-10 with the rule "rebind at the first other station the chain
 reaches; decide then between folding in and one Metro chapter" (`reference/chapters.json:457-458`,
-`reference/chapters/06-nowtoch-city.md:32-37`). **CH10 is that first other station.** Decision owed: §7 item 1.
+`reference/chapters/06-nowtoch-city.md:32-37`). **Ruled 2026-10-23 (operator): park 5/6**, per the dojo rule (no reachable entrance → not built). They
+are not in `unbound_maps`: CH28 still binds them, and a map cannot be both (`tests/test_chapter_atlas.py`
+`test_bound_and_unbound_maps_account_for_the_whole_corpus`). The 44/45 rebind is decided at CH28. Map 60
+EV008/EV009 are chapter-boundary warps (gated, never fire in CH10); NPCs EV015/EV020 stay as map-60 content.
+CH28 (Burole revisit, after CH24 sets `sw85`) already lists 5/6 and is the natural rebind point.
 
 ## 3. Gates and effects (read from the map JSON)
 
@@ -321,6 +327,9 @@ Checked against `output/uranium-build/wiki/Burole_Town.wiki` and `Burole_Town_Gy
    Options: (a) build 5/6 as roster-only, inert (departure menu skipped whole because 168 and 11 are unbuilt and 45 is
    parked, per the CH06 out-of-slice-warp precedent, `06-nowtoch-city.md:299-303`); (b) fold 44/45 in as well; (c) park 5/6 too.
    Evidence to settle: operator ruling. Also whether an all-inert pair satisfies the atlas coverage identity.
+   **RESOLVED 2026-10-23 (operator): (c) park 5/6** out of CH10; still bound to CH28 (§2 Metro disposition).
+   7-map census (2026-10-23): events=153 pages=221 commands=1702 trainer_battles=8 item_grants=3
+   switch_writes=68 var_writes=34 choices=11 conditionals=116 move_routes=98; unmapped head unchanged.
 2. **EV042 friendship readout.** Pick: lead-only approximation of `GetLeadMonFriendship`, or a new special that reads
    `MON_DATA_FRIENDSHIP` for `VAR_0x8004`, and the 200-vs-220 step (§5 item 1). Evidence: operator ruling on fidelity;
    confirm no existing macro reads another slot (searched `specials.inc`, `scrcmd.c`, `event.inc` only).
