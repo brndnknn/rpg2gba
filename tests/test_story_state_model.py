@@ -686,6 +686,18 @@ def test_map081_shape_trunk_on_arms_off_ends_off_no_raise() -> None:
     assert order_dependent == ()
 
 
+def test_adjust_of_a_top_variable_stays_top_in_end_state() -> None:
+    """An Adjust maximal writer on a key the seed already holds at TOP must
+    leave it TOP, as `_apply_write` does -- not try `TOP - 100` (raised
+    TypeError once CH10 went in_progress, 2026-10-23)."""
+    page = _page([_cmd(122, [5, 5, 2, 0, 100])])  # var 5 -= 100
+    rows = _rows([_event(1, [page])])
+    owned = set(rows)
+    seed = {Variable(5): frozenset({VARIABLE_TOP})}
+    end_state, _ = compute_end_state(seed, owned, rows, {rid: () for rid in owned})
+    assert end_state[Variable(5)] == frozenset({VARIABLE_TOP})
+
+
 def test_intra_page_shadowing_is_page_scoped_not_global() -> None:
     """FIX 1's shadowing only ever compares writes WITHIN one page -- two
     unrelated pages disagreeing with no shadowing involved still join AND

@@ -2,6 +2,30 @@
   "_comment": "Source of truth for CORRECTED map identity (CLAUDE.md §4.3). Phase-5 `mint` consults `overrides` BEFORE map_infos.json, because RMXP MapInfos editor names can be stale. `overrides` = map id -> {display_name, evidence}; mint reads ONLY this map. `reviewed` records identity questions checked against the wiki that need NO override, so they are not re-litigated. `orphans` = maps with no map_infos entry, pending disposition. `phase7_confirm` = ids to verify in the §9 #3 manual playthrough. Build-agent-maintained; arbitration is spoiler-free (location names / BGM asset / connection topology only). Wiki: https://pokemon-uranium.fandom.com/wiki/",
 
   "overrides": {
+    "66": {
+      "display_name": "Burole Town Gym",
+      "evidence": "CH10 first build (2026-10-23). map_infos name 'Burole Town(Gym)' — identity correct (map 60 cave-mouth door at (39,7) -> map 66; leader EV004 grants badge 2), override only normalizes the parenthetical. Same treatment as maps 50/67."
+    },
+    "2": {
+      "display_name": "Burole Town Pokemon Center",
+      "evidence": "CH10 first build (2026-10-23). map_infos name 'Burole Town (PC)' — identity correct (map 60 door at (21,20) -> map 2; heal counter + PC), override normalizes to the map 68 spelling."
+    },
+    "4": {
+      "display_name": "Burole Town Pokemart",
+      "evidence": "CH10 first build (2026-10-23). map_infos name 'Burole Town (Mart)' — identity correct (map 60 door at (22,45) -> map 4; pbPokemonMart), override normalizes to the map 67 spelling."
+    },
+    "29": {
+      "display_name": "Burole Town School",
+      "evidence": "CH10 first build (2026-10-23). map_infos names maps 60, 29, 85 and 90 all bare 'Burole Town' (MAP_BUROLE_TOWN collides). Map 29 (40x20, tileset 19, parent 60) is entered from map 60 at (12,41) and holds two halves joined by internal warps plus four talk-to-battle trainers and a var107 win counter (reference/chapters/10-burole-town.md §2). Spoiler-free functional label."
+    },
+    "90": {
+      "display_name": "Burole Town House 1",
+      "evidence": "CH10 first build (see map 29 for the collision). Maps 85 and 90 are single-room houses (20x15, tileset 19, parent 60). Numbered west-to-east by map-60 door X as maps 64/65 were: map 90's door is at (11,31), map 85's at (14,24), so map 90 = House 1."
+    },
+    "85": {
+      "display_name": "Burole Town House 2",
+      "evidence": "CH10 first build (see maps 29 and 90). Map 85's map-60 door is at (14,24), east of map 90's (11,31), so map 85 = House 2."
+    },
     "1": {
       "display_name": "Route 03 Gatehouse",
       "evidence": "CH09 disambiguation (2026-10-22). Maps 59, 1 and 54 all carry the map_infos name 'Route 03'. Map 1 (20x15, child of 59) is a pass-through gate: doors from Route 3 at (87,8)/(88,8) and far doors to Burole Town (map 60). Map 59 keeps the plain name. Spoiler-free positional label."

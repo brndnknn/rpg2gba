@@ -91,7 +91,9 @@ NUM_BREAK_PROP_FRAMES = 4
 # only the idle cell — what this used to do — put a single frame in the ROM, so
 # the machine in Professor Bamb'o's lab could never change state no matter what
 # the script asked for (SLICE1_TODO #25).
-LARGE_PROP_SHEETS = frozenset({"PU-PokeballMachine"})
+# PU-BurolePillar (CH10 Gym 2, Map066 EV045): 384x256, one 48x32 pillar group in
+# cell (0,0), over the 32x32 frame once halved.
+LARGE_PROP_SHEETS = frozenset({"PU-PokeballMachine", "PU-BurolePillar"})
 LARGE_PROP_FRAME_PX = 64
 
 # Grid row index -> RMXP direction code, and the cell every large prop's IDLE

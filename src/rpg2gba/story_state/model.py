@@ -1277,6 +1277,8 @@ def compute_end_state(
                     joined = _union_values(joined, w.values)
                 else:
                     cur = _get(end, key)
+                    if VARIABLE_TOP in cur:
+                        continue  # adjusting TOP is still TOP, as in _apply_write
                     joined = _union_values(
                         joined, frozenset(_apply_op(w.op, v, w.amount) for v in cur))
             end[key] = joined

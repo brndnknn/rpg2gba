@@ -462,5 +462,45 @@
     "gfx": "OBJ_EVENT_GFX_URANIUM_BERRYTREELIECHIBERRY",
     "fallback": "OBJ_EVENT_GFX_BERRY_TREE",
     "note": "Liechi Berry plant prop (Map059 EV011 BerryPlant). Used by Map059 (chapter-9 expansion). 128x256 sheet: green sprout row + 3 rows of growth stages; same family as berrytreeORANBERRY. No code-41 graphic swaps on the event pages (page 1 shows the sheet, page 2 blank) - plain sheet entry, no states needed. PROP, not a walking NPC"
+  },
+  "HGSS_047": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_047",
+    "fallback": "OBJ_EVENT_GFX_MAN_3",
+    "note": "HGSS overworld sheet: man, brown fedora, khaki vest, green backpack. 256x256, standard 4x4 walk sheet. Map060 EV007 Pokevendor npc - chapter-10 expansion. No code-41 swaps"
+  },
+  "HGSS_191": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_191",
+    "fallback": "OBJ_EVENT_GFX_PICNICKER",
+    "note": "HGSS overworld sheet: girl, blond hair, green hairband and green dress. 256x256, standard 4x4 walk sheet. Map060 EV011 npc - chapter-10 expansion. No code-41 swaps"
+  },
+  "HGSS_226": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_226",
+    "fallback": "OBJ_EVENT_GFX_MAN_2",
+    "note": "HGSS overworld sheet: man, brown hair, dark olive jacket. 256x256, standard 4x4 walk sheet. Map060 EV014 npc - chapter-10 expansion. No code-41 swaps"
+  },
+  "HGSS_052": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_052",
+    "fallback": "OBJ_EVENT_GFX_WOMAN_1",
+    "note": "HGSS overworld sheet: woman, large pink hat, pink outfit, brown hair. 256x256, standard 4x4 walk sheet. Map060 EV042 Dr Footstep npc (friendship rater) - chapter-10 expansion. No code-41 swaps"
+  },
+  "HGSS_131": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_131",
+    "fallback": "OBJ_EVENT_GFX_OLD_MAN_2",
+    "note": "HGSS overworld sheet: bearded man, wide-brim tan hat, olive coat, red/green scarf. 256x256, standard 4x4 walk sheet. Map060 EV086 npc - chapter-10 expansion. No code-41 swaps"
+  },
+  "HGSS_041": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_041",
+    "fallback": "OBJ_EVENT_GFX_HIKER",
+    "note": "HGSS overworld sheet: miner, yellow hard hat, green work clothes. 256x256, standard 4x4 walk sheet. Map066 EV003 Trainer(4), class WORKER - chapter-10 expansion. No code-41 swaps"
+  },
+  "PU-Davern": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_DAVERN",
+    "fallback": "OBJ_EVENT_GFX_BRAWLY",
+    "note": "Gym 2 leader Davern overworld sheet: green hard hat with lamp, green outfit. 256x256 RGBA, standard 4x4 walk sheet. Map066 EV004 gym leader (LEADER_Caff, 2 pages, same sheet) - chapter-10 expansion. No code-41 swaps"
+  },
+  "PU-BurolePillar": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_PU_BUROLEPILLAR",
+    "fallback": "OBJ_EVENT_GFX_SIGN",
+    "note": "Gym 2 gem-socket pillar prop: three brown stone pillars side by side in grid cell (0,0), the middle one with a dark socket. 384x256 (96x64 cells, NOT 32x32) - non-standard size, needs LARGE_PROP_SHEETS (64x64 canvas) in graphics/sprites.py. Map066 EV045 Pillar - chapter-10 expansion. No code-41 swaps (page 0 sheet, page 1 blank). PROP, not a walking NPC"
   }
 }
