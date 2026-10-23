@@ -191,6 +191,24 @@ def test_plan_segment_fallback_records_crossing_when_only_route_is_foreign():
     assert crossing.certainty == "certain"
 
 
+def test_plan_segment_records_crossing_when_goal_is_a_foreign_trigger():
+    # `path_avoiding` admits the goal even when it's in the avoid set, so an
+    # approach cell inside another trainer's sight cone must still be
+    # reported -- standing there is the crossing (CH09: Route 3 EV024's east
+    # approach sat in Julianna's lane and the solver priced it at zero).
+    graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_open_grid(3, 3))
+    overlay = TriggerOverlay(
+        map_id=1, tiles={(2, 1): [_coord_ref("map099/someone_elses_trainer")]},
+    )
+    result = plan_segment(
+        1, (0, 1), 1, (2, 1),
+        graphs={1: graph}, overlays={1: overlay},
+        destination_scripts=frozenset({"map001/ev001"}),
+    )
+    assert [c.cell for c in result.crossings] == [(2, 1)]
+    assert result.crossings[0].script == "map099/someone_elses_trainer"
+
+
 def test_plan_segment_raises_when_goal_truly_unreachable():
     walls = {(x, 1) for x in range(3)}
     graph = MapGraph(map_id=1, width=3, height=3, tileset_id=0, blocked=_walled_grid(3, 3, walls))

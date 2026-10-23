@@ -19,6 +19,7 @@ from ..text_validator.engine_metrics import load_charmap
 from ..tileset_converter.map_constants import DEFAULT_STATE_PATH as _DEFAULT_MAP_CONSTANTS_STATE
 from ..tileset_converter.map_constants import MapConstantRegistry
 from ..tileset_converter.tile_map import COLLISION_MASK as _MAPGRID_COLLISION_MASK
+from ..tileset_converter.tile_map import on_foot_walkable
 from ..tileset_converter.tile_map import METATILE_ID_MASK as _MAPGRID_UNDEFINED
 from ..traversal.graph import MapGraph, build_map_graph
 from .charmap import invert_charmap_english_first
@@ -554,7 +555,8 @@ def _read_object_event_slot(emu, base: int) -> ObjectEventState | None:
 
 def _collision_walkable(blocks: Sequence[int], width: int, off: int,
                         map_w: int, map_h: int, x: int, y: int) -> bool:
-    """Whether `(x, y)` (map-relative) is collision-0 on an already-fetched
+    """Whether `(x, y)` (map-relative) is walkable on foot (collision 0, no
+    elevation mismatch -- surfable water is collision 0 too) on an already-fetched
     `gBackupMapLayout` grid -- the single implementation `Emulator.
     tile_walkable` (a one-off public query) and `_plan_route`'s internal
     `walkable()` closure (called once per Dijkstra node, with the grid
@@ -569,7 +571,7 @@ def _collision_walkable(blocks: Sequence[int], width: int, off: int,
     """
     if not (0 <= x < map_w and 0 <= y < map_h):
         return False
-    return blocks[(x + off) + width * (y + off)] & _MAPGRID_COLLISION_MASK == 0
+    return on_foot_walkable(blocks[(x + off) + width * (y + off)])
 
 
 class _MapGraphSource:
@@ -2721,9 +2723,16 @@ class Emulator:
             raise ValueError("walk_to: avoid= is only supported with absorb_wild=True")
         if absorb_wild and not resolve_interruptions:
             for _ in range(_MAX_ABSORBED_WILD):
+                # Live trainers' lanes are a soft preference: routed around
+                # when a route exists, crossed when none does. A caller's own
+                # `avoid` already carries the lanes it cares about (smash).
+                lanes = frozenset() if avoid else _undefeated_sight_lanes(self) - {(tx, ty)}
                 try:
                     if avoid:
                         _walk_to_once(self, tx, ty, frame_budget, max_sidesteps, avoid=avoid)
+                    elif lanes:
+                        _walk_to_once(self, tx, ty, frame_budget, max_sidesteps,
+                                      prefer_avoid=lanes)
                     else:
                         _walk_to_once(self, tx, ty, frame_budget, max_sidesteps)
                     return
@@ -3384,12 +3393,46 @@ class Emulator:
             f"({shot})")
 
 
+def _undefeated_sight_lanes(emu: "Emulator") -> frozenset[tuple[int, int]]:
+    """Sight lanes (`cells.trainer_sight_lanes`) of every live trainer on the
+    current map whose defeat flag is not set -- the cells a walk should stay
+    out of so no trainer ambushes a beat that isn't its own (CH09: a
+    look-around trainer saw the walk to a neighbouring event and the run
+    whited out). A trainer whose script does not open with its
+    `trainerbattle` has unknown defeat state and is kept. Module-level and
+    empty for test fakes with no map bridge, like `_walk_to_once`."""
+    if getattr(emu, "_map_id_bridge", None) is None:
+        return frozenset()
+    from rpg2gba.playtest import cells  # lazy: cells imports chapter
+
+    group, num = emu.map_location()
+    map_constant = cells.map_constant_for(emu._map_id_bridge.resolve(group, num))
+    lanes = cells.trainer_sight_lanes(map_constant)
+    trainers = cells.trainer_constants(map_constant)
+    live = {ev.local_id for ev in emu.object_events()
+            if ev.active and (ev.map_group, ev.map_num) in ((group, num), (None, None))}
+    flags_start = emu.resolve_constant("TRAINER_FLAGS_START")
+    avoid: set[tuple[int, int]] = set()
+    for lid, lane in lanes.items():
+        if lid not in live:
+            continue
+        constant = trainers.get(lid)
+        if constant is not None and emu.flag(flags_start + emu.resolve_constant(constant)):
+            continue
+        avoid |= lane
+    return frozenset(avoid)
+
+
 def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
                   max_sidesteps: int, *,
-                  avoid: frozenset[tuple[int, int]] = frozenset()) -> None:
+                  avoid: frozenset[tuple[int, int]] = frozenset(),
+                  prefer_avoid: frozenset[tuple[int, int]] = frozenset()) -> None:
     """The body of `Emulator.walk_to`, without interruption resolution -- a
     single attempt that either arrives, raises `WalkInterrupted`, or fails
     loud with a stuck/budget diagnosis.
+
+    `prefer_avoid` is soft: each plan first routes around it on top of
+    `avoid`, and plans without it only when that finds no route.
 
     Module-level (not a method) so `walk_to`'s `resolve_interruptions=True`
     loop can retry it directly, and so unit tests exercising `walk_to`
@@ -3417,8 +3460,16 @@ def _walk_to_once(emu: "Emulator", tx: int, ty: int, frame_budget: int,
         # walk on the bare target -- B3's mechanism. If planning still fails
         # after `_MAX_REPLANS`, the diagnosis below is raised.
         try:
-            waypoints = (emu._route_waypoints(tx, ty, avoid) if avoid
-                         else emu._route_waypoints(tx, ty))
+            waypoints = None
+            if prefer_avoid:
+                try:
+                    waypoints = emu._route_waypoints(tx, ty, avoid | prefer_avoid)
+                except RoutePlanningError:
+                    logger.info("walk_to(%d,%d): no route around live trainer lanes; "
+                                "crossing them", tx, ty)
+            if waypoints is None:
+                waypoints = (emu._route_waypoints(tx, ty, avoid) if avoid
+                             else emu._route_waypoints(tx, ty))
         except RoutePlanningError as exc:
             stuck, reason, waypoints = True, str(exc), ()
         for wx, wy in waypoints:

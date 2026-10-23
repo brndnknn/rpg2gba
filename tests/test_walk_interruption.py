@@ -912,3 +912,51 @@ def test_interact_leaves_a_lock_under_a_message_box_alone(monkeypatch) -> None:
     emu.locked = True
     assert _interact(monkeypatch, emu)
     assert emu.settled == 0 and emu.shots == [] and emu.pressed == ["A"]
+
+
+class _PreferAvoidEmu:
+    """Fake for `_walk_to_once(prefer_avoid=...)`: planning fails whenever the
+    avoid set contains `lane`, and records what each plan was asked to avoid."""
+
+    def __init__(self, lane_routable: bool) -> None:
+        self.lane_routable = lane_routable
+        self.plans: list[frozenset] = []
+
+    def wait_for_map_grid(self) -> int:
+        return 0
+
+    def map_location(self) -> tuple[int, int]:
+        return (0, 0)
+
+    def field_locked(self) -> bool:
+        return False
+
+    def _route_waypoints(self, tx, ty, avoid=frozenset()):
+        from rpg2gba.playtest.errors import RoutePlanningError
+        self.plans.append(frozenset(avoid))
+        if (1, 1) in avoid and not self.lane_routable:
+            raise RoutePlanningError("no route around the lane")
+        return [(tx, ty)]
+
+    def _walk_greedy(self, wx, wy, budget, sidesteps, start_map, *, start_locked):
+        return True, 1, ""
+
+
+@needs_mgba
+def test_walk_to_once_routes_around_live_trainer_lanes_when_it_can() -> None:
+    """Live trainers' lanes are a soft avoid: planned around first (CH09:
+    a look-around trainer ambushed a walk to a neighbouring event)."""
+    from rpg2gba.playtest.emulator import _walk_to_once
+    emu = _PreferAvoidEmu(lane_routable=True)
+    _walk_to_once(emu, 5, 5, 3000, 8, prefer_avoid=frozenset({(1, 1)}))
+    assert emu.plans == [frozenset({(1, 1)})]
+
+
+@needs_mgba
+def test_walk_to_once_crosses_lanes_when_no_route_avoids_them() -> None:
+    """With no route around the lanes the walk still goes, without them --
+    a soft preference never turns a reachable target into a failure."""
+    from rpg2gba.playtest.emulator import _walk_to_once
+    emu = _PreferAvoidEmu(lane_routable=False)
+    _walk_to_once(emu, 5, 5, 3000, 8, prefer_avoid=frozenset({(1, 1)}))
+    assert emu.plans == [frozenset({(1, 1)}), frozenset()]

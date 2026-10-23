@@ -41,6 +41,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, replace
 import os
+import re
 from pathlib import Path
 
 from ..tileset_converter.connections import ConnectionRow, load_connections
@@ -486,6 +487,56 @@ def trainer_sight_lanes(map_constant: str) -> dict[int, frozenset[Cell]]:
                     cells.add(cell)
         lanes[index + 1] = frozenset(cells)
     return lanes
+
+
+def map_constant_for(uid: int) -> str:
+    """The `MAP_*` constant minted for Uranium map `uid` (the reverse of
+    `_map_const_index`). Fails loud for a map that was never minted."""
+    for constant, minted_uid in _map_const_index().items():
+        if minted_uid == uid:
+            return constant
+    raise ValueError(f"map_constant_for: Uranium map {uid} has no minted MAP_* constant")
+
+
+_TRAINERBATTLE_HEAD = re.compile(r"^\s*trainerbattle\w*\s+(TRAINER_\w+)")
+
+
+def trainer_constants(map_constant: str) -> dict[int, str | None]:
+    """Each compiled sight trainer's `TRAINER_*` constant on `map_constant`,
+    keyed by local id. The engine reads a sight trainer's id two bytes into
+    its object script (`GetTrainerFlagFromScriptPointer`), so the script's
+    first command is its `trainerbattle`; this reads that same first command
+    from the compiled `scripts.inc`. `None` when the first command is not a
+    `trainerbattle` -- the defeat state is then unknown, and callers treat
+    the trainer as live."""
+    cached = _TRAINER_CONSTANTS_CACHE.get(map_constant)
+    if cached is not None:
+        return cached
+    maps_dir = Path(os.environ.get("RPG2GBA_POKEEMERALD", "engine")) / "data" / "maps"
+    script_dir = next(
+        (p.parent for p in sorted(maps_dir.glob("*/map.json"))
+         if json.loads(p.read_text(encoding="utf-8")).get("id") == map_constant), None)
+    if script_dir is None:
+        raise ValueError(f"trainer_constants: no map.json under {maps_dir} has id {map_constant}")
+    lines = (script_dir / "scripts.inc").read_text(encoding="utf-8").splitlines()
+    heads: dict[str, str | None] = {}
+    for i, line in enumerate(lines):
+        if not line.endswith("::"):
+            continue
+        body = (s for s in lines[i + 1:] if s.strip() and not s.lstrip().startswith("#"))
+        first = next(body, "")
+        match = _TRAINERBATTLE_HEAD.match(first)
+        heads[line[:-2]] = match.group(1) if match else None
+    result: dict[int, str | None] = {}
+    for index, obj in enumerate(_emitted_map_json(map_constant).get("object_events") or []):
+        if obj.get("trainer_type", "TRAINER_TYPE_NONE") == "TRAINER_TYPE_NONE":
+            continue
+        result[index + 1] = heads.get(str(obj.get("script", "")))
+    _TRAINER_CONSTANTS_CACHE[map_constant] = result
+    return result
+
+
+_TRAINER_CONSTANTS_CACHE: dict[str, dict[int, str | None]] = {}
 
 
 def native_berry_tree_id(map_id: int, event_id: int) -> int | None:

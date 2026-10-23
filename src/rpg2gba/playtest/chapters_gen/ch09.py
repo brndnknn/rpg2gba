@@ -314,7 +314,7 @@ trainer_beats(
     chapter_id='CH09',
     beat_prefix='m059e027_trainer',
     group='m059e027_trainer',
-    approach_prefer='north',
+    approach_prefer='west',
     defeat_flag='TRAINER_FLAGS_START + TRAINER_JOHNNY_22',
     double=False,
     event_id=27,
@@ -333,7 +333,7 @@ generic_beat(
     beat_name='m059e027_trainer_arms',
     group='m059e027_trainer',
     rows=('map059/ev027/p0/b0',),
-    approach_prefer='north',
+    approach_prefer='west',
     skip_claimed=True,
 )
 
@@ -343,7 +343,7 @@ generic_beat(
     beat_name='m059e024p1',
     group='m059e024p1',
     rows=('map059/ev024/p1',),
-    approach_prefer='east',
+    approach_prefer='north',
 )
 
 trainer_beats(
@@ -351,7 +351,7 @@ trainer_beats(
     chapter_id='CH09',
     beat_prefix='m059e031_trainer',
     group='m059e031_trainer',
-    approach_prefer='east',
+    approach_prefer='north',
     defeat_flag='TRAINER_FLAGS_START + TRAINER_JULIANNA_250',
     double=False,
     event_id=31,
@@ -370,7 +370,7 @@ generic_beat(
     beat_name='m059e031_trainer_arms',
     group='m059e031_trainer',
     rows=('map059/ev031/p0/b0',),
-    approach_prefer='east',
+    approach_prefer='north',
     skip_claimed=True,
 )
 

@@ -249,6 +249,13 @@ def _path_on_map(
 
     path = path_avoiding(graph, start, goal, avoid, blocked=blocked)
     if path is not None:
+        # `path_avoiding` always admits the goal, so a goal inside a foreign
+        # trigger -- an approach cell in another trainer's sight cone -- would
+        # otherwise cost nothing. Standing there IS the crossing (CH09: Route 3
+        # EV024's east approach sat in look-around Julianna's south lane and
+        # the run was ambushed), so it is reported like any other.
+        if goal != start and goal in avoid:
+            return path, _crossings_on_path(map_id, [goal], avoid, overlay)
         return path, ()
 
     fallback = path_avoiding(graph, start, goal, frozenset(), blocked=blocked)
