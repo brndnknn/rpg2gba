@@ -377,6 +377,25 @@ def _approach(emu: Emulator, approach: tuple[int, int]) -> bool:
     return False
 
 
+def _absorb_wild_and_retrigger(
+    emu: Emulator, beat: str, approach: tuple[int, int], facing: str, trigger: str,
+) -> bool:
+    """If a WILD battle is what the trigger produced, win it and fire the
+    trigger again; True when that happened. The trigger step itself can land
+    in grass and roll an encounter (CH09 ROM run: CH02's Route 1 trainer met a
+    wild Chyinmunk instead of showing its intro), which `walk_to`'s
+    `absorb_wild` never sees because it is not a walk. A trainer battle, or
+    anything that is not a battle, is left untouched for the checks after this
+    call, so a wrong-trainer ambush still fails loud."""
+    if not in_battle(emu) or emu.is_trainer_battle():
+        return False
+    if not emu._absorb_wild_battle(True, emu.player_pos()):
+        return False
+    logger.info("%s: absorbed a wild battle on the trigger step; triggering again", beat)
+    _start_trigger(emu, beat, approach, facing, trigger)
+    return True
+
+
 def _start_trigger(
     emu: Emulator, beat: str, approach: tuple[int, int], facing: str, trigger: str,
 ) -> None:
@@ -588,10 +607,14 @@ def trainer_beats(
                     "battle check below decides",
                     beat_prefix, approach, exc,
                 )
-        for a in intro_texts:
+        for i, a in enumerate(intro_texts):
             # The box comes up only after the "!" and the trainer's walk to
             # the player, which can outlast wait_for_field_message's default.
-            if emu.wait_for_field_message(frame_budget=_INTRO_FRAME_BUDGET) is None:
+            found = emu.wait_for_field_message(frame_budget=_INTRO_FRAME_BUDGET)
+            if found is None and i == 0 and _absorb_wild_and_retrigger(
+                    emu, beat_prefix, approach, facing, trigger):
+                found = emu.wait_for_field_message(frame_budget=_INTRO_FRAME_BUDGET)
+            if found is None:
                 shot = emu.screenshot(f"{beat_prefix}_no_intro_text")
                 raise ScenarioError(
                     f"{beat_prefix}: no intro message box appeared before the "
@@ -600,6 +623,9 @@ def trainer_beats(
             if a is not intro_texts[-1]:
                 emu.clear_field_message()
                 emu.dismiss_message()
+        if not intro_texts and _absorb_wild_and_retrigger(
+                emu, beat_prefix, approach, facing, trigger):
+            logger.info("%s: re-triggered after a wild battle", beat_prefix)
         assertions.advance_to_battle(emu)
         if not in_battle(emu):
             shot = emu.screenshot(f"{beat_prefix}_no_battle")

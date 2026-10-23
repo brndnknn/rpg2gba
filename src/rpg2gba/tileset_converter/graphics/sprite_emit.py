@@ -169,6 +169,7 @@ from rpg2gba.tileset_converter.graphics.sprites import (
     NUM_OUTPUT_FRAMES,
     NUM_PLAYER_FISH_FRAMES,
     NUM_PLAYER_OUTPUT_FRAMES,
+    PLAYER_FISH_DRAW_OFFSET_PX,
     PLAYER_FISH_FRAME_PX,
     ConvertedPlayer,
     ConvertedSprite,
@@ -232,6 +233,11 @@ _PLAYER_FIELD_MOVE_STUB_FALLBACK = "gObjectEventGraphicsInfo_BrendanFieldMove"
 # sAnimTable_Fishing. Same palette tag/slot as the walk/run struct. Aliased via
 # `Rpg2gbaPlayerFishing`; falls back to the stock Brendan fishing struct.
 _PLAYER_FISH_PAL_TAG = "OBJ_EVENT_PAL_TAG_URANIUM_PLAYER_FISHING"
+# Pixels fishing.c draws the converted fishing frame below its RMXP placement;
+# the value and its rationale live with the converter that compensates for it
+# (sprites.PLAYER_FISH_DRAW_OFFSET_PX).
+_PLAYER_FISH_Y_OFFSET_DEFINE = "RPG2GBA_PLAYER_FISHING_Y_OFFSET"
+_PLAYER_FISH_Y_OFFSET = PLAYER_FISH_DRAW_OFFSET_PX
 _PLAYER_FISH_PAL_TAG_VALUE = _PLAYER_PAL_TAG_VALUE + 1
 # Our tags occupy [_PAL_TAG_BASE, _PLAYER_FISH_PAL_TAG_VALUE]: NPC tags are
 # _PAL_TAG_BASE..+MAX_PALETTES-1 (reserved regardless of use), then the player,
@@ -707,6 +713,9 @@ def _render_constants(
         if include_player_fish:
             lines.append(
                 f"#define {_PLAYER_FISH_PAL_TAG} {_PLAYER_FISH_PAL_TAG_VALUE:#06x}\n"
+            )
+            lines.append(
+                f"#define {_PLAYER_FISH_Y_OFFSET_DEFINE} {_PLAYER_FISH_Y_OFFSET}\n"
             )
     lines.append("\n")
     lines.append(f"#endif // {_CONSTANTS_GUARD}\n")

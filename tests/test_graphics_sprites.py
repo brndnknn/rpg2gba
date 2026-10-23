@@ -14,6 +14,7 @@ from rpg2gba.tileset_converter.graphics.sprites import (
     LARGE_PROP_IDLE_STATE,
     NUM_PLAYER_FISH_FRAMES,
     NUM_PLAYER_OUTPUT_FRAMES,
+    PLAYER_FISH_DRAW_OFFSET_PX,
     PLAYER_FISH_FRAME_PX,
     ConvertedPlayer,
     ConvertedSprite,
@@ -685,8 +686,11 @@ def _fish_sheet(tmp_path: Path, skip: tuple[int, int] | None = None) -> Path:
 
 
 def _color(frame: np.ndarray) -> tuple[int, int, int]:
-    px = frame[63, 32]
-    assert px[3] == 255
+    # The bottom-most opaque row: the cells are solid, and west/north sit
+    # PLAYER_FISH_DRAW_OFFSET_PX higher than south, so no fixed row works for all.
+    ys = np.nonzero(frame[..., 3][:, 32])[0]
+    assert ys.size
+    px = frame[ys.max(), 32]
     return int(px[0]), int(px[1]), int(px[2])
 
 
@@ -719,10 +723,17 @@ def test_fish_cell_placement_native_bottom_centred(tmp_path: Path) -> None:
     # cells -> 96px sheet cells -> halved 48x48 -> left 8, top 16 on the canvas.
     cells = {(r, c): _solid(48, (40, 80, 120, 255)) for r in range(4) for c in range(4)}
     path = _make_sheet(tmp_path, cells, 48, name="HERO-FISH")
-    frame = convert_player_fish_sheet(path)[0]
-    ys, xs = np.nonzero(frame[..., 3])
+    frames = convert_player_fish_sheet(path)
+    # South (frames 8-11) sits at native placement: cell bottom on the canvas bottom.
+    ys, xs = np.nonzero(frames[8][..., 3])
     assert (xs.min(), xs.max()) == (8, 8 + 48 - 1)
     assert (ys.min(), ys.max()) == (16, 63)
+    # West/north are raised by the engine's draw offset, which lowers them back:
+    # only the south cast ends up moved on screen (operator ruling 2026-10-23).
+    for k in (0, 4):
+        ys, _xs = np.nonzero(frames[k][..., 3])
+        assert (ys.min(), ys.max()) == (16 - PLAYER_FISH_DRAW_OFFSET_PX,
+                                        63 - PLAYER_FISH_DRAW_OFFSET_PX)
 
 
 def test_fish_transparent_used_cell_fails_loud(tmp_path: Path) -> None:

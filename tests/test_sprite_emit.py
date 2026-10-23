@@ -1145,6 +1145,16 @@ def test_player_fish_has_its_own_palette_and_tag(tmp_path: Path) -> None:
     assert sorted([tuple(fish_pal[3:6]), tuple(fish_pal[6:9])]) == [(0, 16, 0), (8, 0, 0)]
 
 
+def test_player_fish_y_offset_define_only_with_fish(tmp_path: Path) -> None:
+    """fishing.c lowers a converted fishing frame by RPG2GBA_PLAYER_FISHING_Y_OFFSET
+    (operator ruling 2026-10-23: half a tile, so the cast reaches the water); it is a
+    game-profile value, emitted only when the fishing sheet is, and 0 otherwise."""
+    emit_sprites([], tmp_path / "with", player=_make_player(), player_fish=_make_fish())
+    assert "#define RPG2GBA_PLAYER_FISHING_Y_OFFSET 8\n" in _read(tmp_path / "with", "constants")
+    emit_sprites([], tmp_path / "without", player=_make_player())
+    assert "RPG2GBA_PLAYER_FISHING_Y_OFFSET" not in _read(tmp_path / "without", "constants")
+
+
 def test_player_fish_leaves_walk_run_output_identical(tmp_path: Path) -> None:
     player = _make_player([(i * 8, 0, 0) for i in range(12)])
     fish = _make_fish([(0, i * 8, 0) for i in range(1, 11)])

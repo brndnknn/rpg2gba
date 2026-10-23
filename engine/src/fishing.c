@@ -15,6 +15,15 @@
 #include "wild_encounter.h"
 #include "config/fishing.h"
 
+// BEGIN RPG2GBA GAME PROFILE — a converted game's fishing-frame offset comes from the generated
+// constants (constants/rpg2gba_event_objects.gen.h, pulled in by constants/event_objects.h); none
+// when unstaged.
+#include "constants/event_objects.h"
+#ifndef RPG2GBA_PLAYER_FISHING_Y_OFFSET
+#define RPG2GBA_PLAYER_FISHING_Y_OFFSET 0
+#endif
+// END RPG2GBA GAME PROFILE
+
 static void Task_Fishing(u8);
 static bool32 Fishing_Init(struct Task *);
 static bool32 Fishing_GetRodOut(struct Task *);
@@ -181,6 +190,11 @@ static bool32 Fishing_GetRodOut(struct Task *task)
     ObjectEventClearHeldMovementIfActive(playerObjEvent);
     playerObjEvent->enableAnim = TRUE;
     SetPlayerAvatarFishing(playerObjEvent->facingDirection);
+    // BEGIN RPG2GBA ENGINE — apply a converted fishing frame's offset from the first frame, not one
+    // tick later when AlignFishingAnimationFrames first runs.
+    if (GetObjectEventGraphicsInfo(playerObjEvent->graphicsId)->width > 32)
+        gSprites[gPlayerAvatar.spriteId].y2 = RPG2GBA_PLAYER_FISHING_Y_OFFSET;
+    // END RPG2GBA ENGINE
     task->tStep = FISHING_WAIT_BEFORE_DOTS;
     return FALSE;
 }
@@ -617,9 +631,11 @@ static void AlignFishingAnimationFrames(void)
     }
     animType = playerSprite->anims[playerSprite->animNum][animCmdIndex].type;
     // BEGIN RPG2GBA ENGINE — these per-frame nudges fit Emerald's 32x32 fishing art, whose rod
-    // overflows the frame; a converted game's larger fishing frame already holds the whole pose
-    // at its own placement, so it is drawn unshifted.
-    if (GetObjectEventGraphicsInfo(gObjectEvents[gPlayerAvatar.objectEventId].graphicsId)->width <= 32)
+    // overflows the frame; a converted game's larger fishing frame already holds the whole pose,
+    // so it gets only the game profile's constant offset (RPG2GBA_PLAYER_FISHING_Y_OFFSET).
+    if (GetObjectEventGraphicsInfo(gObjectEvents[gPlayerAvatar.objectEventId].graphicsId)->width > 32)
+        playerSprite->y2 = RPG2GBA_PLAYER_FISHING_Y_OFFSET;
+    else
     {
     // END RPG2GBA ENGINE
     if (animType == 1 || animType == 2 || animType == 3)

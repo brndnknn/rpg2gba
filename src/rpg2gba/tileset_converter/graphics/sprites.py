@@ -47,6 +47,14 @@ NUM_PLAYER_OUTPUT_FRAMES = 18  # player: walk half (0-8) + run half (9-17); see
                                # convert_player_sheets
 NUM_PLAYER_FISH_FRAMES = 12    # west 0-3, north 4-7, south 8-11 (sAnimTable_Fishing)
 PLAYER_FISH_FRAME_PX = 64
+#: The engine draws the converted fishing frame this many px below its RMXP
+#: placement (`RPG2GBA_PLAYER_FISHING_Y_OFFSET`, emitted by sprite_emit from this
+#: value). Uranium's HERO-FISH draws the SOUTH body raised (its rod tip sits on
+#: the cell bottom), so on screen the south cast ended on the player's own tile;
+#: the operator ruled (2026-10-23) to lower it half a tile. West and north
+#: already match the walk sprite's feet, so they are raised by the same amount
+#: inside the canvas and end up where RMXP draws them.
+PLAYER_FISH_DRAW_OFFSET_PX = 8
 _ALPHA_THRESHOLD = 128     # >= this (out of 255) -> fully opaque
 
 # RMXP direction-code rows, top -> bottom.
@@ -341,7 +349,9 @@ def convert_player_fish_sheet(fish_png: Path) -> list[np.ndarray]:
     would shift the body between frames). Each cell is halved and pasted at its
     native RMXP cell placement: horizontally centred, cell bottom on the canvas
     bottom (the engine puts a 64x64 frame centred on the tile with its bottom
-    row on the tile bottom, same as 32x32).
+    row on the tile bottom, same as 32x32). The engine then lowers every fishing
+    frame by `PLAYER_FISH_DRAW_OFFSET_PX`, so the west and north cells are pasted
+    that much higher to cancel it: only the south cast moves (see the constant).
 
     Fails loud on a bad grid, a halved cell over 64px, or a blank used cell."""
     name = f"{Path(fish_png).stem} (player fishing)"
@@ -355,9 +365,15 @@ def convert_player_fish_sheet(fish_png: Path) -> list[np.ndarray]:
             f"{name}: halved cell is {cw}x{ch}, which exceeds the {px}x{px} fishing canvas"
         )
     left, top = (px - cw) // 2, px - ch
+    if top < PLAYER_FISH_DRAW_OFFSET_PX:
+        raise ValueError(
+            f"{name}: no headroom to raise the west/north cells by "
+            f"{PLAYER_FISH_DRAW_OFFSET_PX}px in the {px}px canvas (cell top at {top})"
+        )
     cell = _cell_accessor(arr, frame_w, frame_h)
     frames: list[np.ndarray] = []
     for row in (ROW_LEFT, ROW_UP, ROW_DOWN):
+        row_top = top if row == ROW_DOWN else top - PLAYER_FISH_DRAW_OFFSET_PX
         for k in range(GRID_SIZE):
             col = GRID_SIZE - 1 - k
             native = _downscale_2x_majority(cell(row, col))
@@ -366,7 +382,7 @@ def convert_player_fish_sheet(fish_png: Path) -> list[np.ndarray]:
                     f"{name}: used cell (row {row}, col {col}) is fully transparent"
                 )
             canvas = np.zeros((px, px, 4), dtype=np.uint8)
-            canvas[top:top + ch, left:left + cw] = native
+            canvas[row_top:row_top + ch, left:left + cw] = native
             frames.append(canvas)
     return frames
 
