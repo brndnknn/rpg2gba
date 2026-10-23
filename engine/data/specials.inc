@@ -648,3 +648,7 @@ gSpecials::
 	@ VAR_0x8004 = DIR_*; the next `warp` arrives facing it. See src/overworld.c.
 	def_special SetWarpArrivalFacing
 	@ END RPG2GBA ENGINE
+	@ BEGIN RPG2GBA ENGINE — friendship stage 0-6 of party slot VAR_0x8004 (Uranium thresholds).
+	@ See GetPartyMonFriendshipStageRpg2gba in src/field_specials.c.
+	def_special GetPartyMonFriendshipStageRpg2gba
+	@ END RPG2GBA ENGINE

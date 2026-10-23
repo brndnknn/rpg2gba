@@ -5777,3 +5777,32 @@ bool8 CheckAddCoins(void)
     else
         return TRUE;
 }
+
+// BEGIN RPG2GBA ENGINE — friendship stage (0-6) of an arbitrary party slot, Uranium thresholds
+// GetLeadMonFriendship reads the lead mon only and steps at 200; Uranium's friendship rater
+// (Map060 EV042 "Dr Footstep") rates the mon the player picked (VAR_0x8004, from ChoosePartyMon)
+// with the ladder `stage=1 if h>=1 / 2 if h>=50 / 3 if h>=100 / 4 if h>=150 / 5 if h>=220 /
+// 6 if h>=255`. Returns 0 for an out-of-range slot (e.g. PARTY_NOTHING_CHOSEN).
+u8 GetPartyMonFriendshipStageRpg2gba(void)
+{
+    u32 friendship;
+
+    if (gSpecialVar_0x8004 >= PARTY_SIZE)
+        return 0;
+    friendship = GetMonData(&gPlayerParty[gSpecialVar_0x8004], MON_DATA_FRIENDSHIP);
+    if (friendship >= 255)
+        return 6;
+    else if (friendship >= 220)
+        return 5;
+    else if (friendship >= 150)
+        return 4;
+    else if (friendship >= 100)
+        return 3;
+    else if (friendship >= 50)
+        return 2;
+    else if (friendship >= 1)
+        return 1;
+    else
+        return 0;
+}
+// END RPG2GBA ENGINE

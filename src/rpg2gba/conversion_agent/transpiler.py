@@ -363,6 +363,22 @@ _PICK_PROC_RE = re.compile(
     r"^\s*pbChoosePokemon\(\s*(\d+)\s*,\s*(\d+)\s*,\s*proc\s*\{\s*\|(\w+)\|\s*"
     r"!\s*\3\.egg\?\s*(?:and|&&)\s*\3\.species\s*==\s*(?:::)?PBSpecies::(\w+)\s*\}\s*\)\s*$"
 )
+# Egg-filtered pick: `pbChooseNonEggPokemon(v, n)` == pbChoosePokemon with the
+# proc `!poke.egg?` (reference/scripts_dump/170__PSystem_Utilities.rb:2079).
+# Essentials' screen refuses an egg and stays in the menu, so the emission
+# re-opens the native picker until a non-egg (or cancel) is chosen.
+_PICK_NONEGG_RE = re.compile(r"^\s*pbChooseNonEggPokemon\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*$")
+# Friendship readout (Map060 EV042 "Dr Footstep", the only corpus use that reads
+# the picked mon's happiness): the exact 9-row Ruby ladder below collapses to
+# `specialvar(<var>, GetPartyMonFriendshipStageRpg2gba)` -- Uranium's thresholds
+# live in the special (engine/src/field_specials.c) and are asserted equal to
+# _FRIENDSHIP_STAGE_LADDER here, so a drifted ladder queues instead of mapping.
+_FRIEND_POKE_RE = re.compile(r"^\s*poke=pbGetPokemon\(\s*(\d+)\s*\)\s*$")
+_FRIEND_H_RE = re.compile(r"^\s*h=poke\.happiness\s*$")
+_FRIEND_STAGE0_RE = re.compile(r"^\s*stage=0\s*$")
+_FRIEND_STAGE_RE = re.compile(r"^\s*stage=(\d+)\s+if\s+h>=(\d+)\s*$")
+_FRIEND_SET_RE = re.compile(r"^\s*pbSet\(\s*(\d+)\s*,\s*stage\s*\)\s*$")
+_FRIENDSHIP_STAGE_LADDER = ((1, 1), (2, 50), (3, 100), (4, 150), (5, 220), (6, 255))
 # RMXP Control Variables comparison op codes (code 111, type 1) that mean
 # "a mon was chosen" (var != -1, >= 0, > -1) / "cancelled" (< 0, == -1, <= -1).
 _PICK_CHOSEN_CMPS = frozenset({(5, -1), (1, 0), (3, -1)})
@@ -2492,6 +2508,11 @@ class _PageEmitter:
         self._pick_chosen: int | None = None
         self._pick_name: int | None = None
         self._pick_new_name: int | None = None
+        # pbChooseNonEggPokemon was the pick (eggs re-prompted), and the progress
+        # of the friendship-ladder rows after it: None (not started), "poke",
+        # "h", then the list of matched `stage=K if h>=T` pairs.
+        self._pick_nonegg = False
+        self._friend_state: str | list[tuple[int, int]] | None = None
         # (spec, chosen var) while the then-arm of a PickTrade is emitting, so
         # the pbStartTrade row inside it resolves; _trade_consumed records that
         # it did.
@@ -2970,7 +2991,8 @@ class _PageEmitter:
         )
 
         def row_allowed(text: str) -> bool:
-            for rx in (_PICK_EGG_COND_RE, _PICK_FOREIGN_COND_RE, _PICK_PARTY_ROW_RE):
+            for rx in (_PICK_EGG_COND_RE, _PICK_FOREIGN_COND_RE, _PICK_PARTY_ROW_RE,
+                       _FRIEND_POKE_RE):
                 m = rx.match(text)
                 if m:
                     return int(m.group(1)) == chosen
@@ -3098,6 +3120,31 @@ class _PageEmitter:
                 return None
             self._pick_chosen, self._pick_name = chosen, name
             return ["special(ChoosePartyMon)", "waitstate"]
+        m = _PICK_NONEGG_RE.match(text)
+        if m:
+            chosen, name = int(m.group(1)), int(m.group(2))
+            if self._pick_chosen is not None or not self._pick_refs_clean(
+                    chosen, name, trade=False):
+                return None
+            self._pick_chosen, self._pick_name = chosen, name
+            self._pick_nonegg, self._friend_state = True, None
+            # Native picker can't grey eggs: re-open it while the pick is an egg.
+            # ScriptGetPartyMonSpecies indexes gPlayerParty[VAR_0x8004], so it is
+            # skipped on PARTY_NOTHING_CHOSEN (cancel falls out of the loop).
+            return [
+                "setvar(VAR_RESULT, SPECIES_EGG)",
+                "while (var(VAR_RESULT) == SPECIES_EGG) {",
+                "    special(ChoosePartyMon)",
+                "    waitstate",
+                "    setvar(VAR_RESULT, 0)",
+                "    if (var(VAR_0x8004) != PARTY_NOTHING_CHOSEN) {",
+                "        specialvar(VAR_RESULT, ScriptGetPartyMonSpecies)",
+                "    }",
+                "}",
+            ]
+        friend = self._emit_friendship_row(text)
+        if friend is not None:
+            return friend
         if self._active_trade is not None:
             m = _trades._TRADE_RE.search(text.strip())
             if m:
@@ -3119,6 +3166,44 @@ class _PageEmitter:
                     "special(DoInGameTradeScene)",
                     "waitstate",
                 ]
+        return None
+
+    def _emit_friendship_row(self, text: str) -> list[str] | None:
+        """One row of the friendship-readout ladder after a non-egg pick:
+        ``poke=pbGetPokemon(v)`` / ``h=poke.happiness`` / ``stage=0`` / six
+        ``stage=K if h>=T`` / ``pbSet(n, stage)``. Rows are consumed silently
+        (state machine, exact order, exact thresholds); the closing ``pbSet``
+        emits the one native call. Any deviation returns ``None`` (the row
+        queues -- the later rows then also fail to match, so the queue is loud).
+        """
+        if not self._pick_nonegg or self._pick_chosen is None:
+            return None
+        state = self._friend_state
+        m = _FRIEND_POKE_RE.match(text)
+        if m and state is None and int(m.group(1)) == self._pick_chosen:
+            self._friend_state = "poke"
+            return []
+        if state == "poke" and _FRIEND_H_RE.match(text):
+            self._friend_state = "h"
+            return []
+        if state == "h" and _FRIEND_STAGE0_RE.match(text):
+            self._friend_state = []
+            return []
+        if isinstance(state, list):
+            m = _FRIEND_STAGE_RE.match(text)
+            if m and len(state) < len(_FRIENDSHIP_STAGE_LADDER):
+                pair = (int(m.group(1)), int(m.group(2)))
+                if pair == _FRIENDSHIP_STAGE_LADDER[len(state)]:
+                    state.append(pair)
+                    return []
+                return None
+            m = _FRIEND_SET_RE.match(text)
+            if m and len(state) == len(_FRIENDSHIP_STAGE_LADDER):
+                var_name = self.ctx.var_for_variable(int(m.group(1)))
+                if var_name is None:
+                    return None
+                self._friend_state = None
+                return [f"specialvar({var_name}, GetPartyMonFriendshipStageRpg2gba)"]
         return None
 
     def _emit_pick_trade(self, node: PickTrade) -> list[str]:
