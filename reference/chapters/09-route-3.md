@@ -1,6 +1,6 @@
 # Chapter 9 — Route 3
 
-**Status:** authored 2026-10-22 at chapter open. *(Updated 2026-10-22: built; gen suite 567/567 from boot; seam probe passed; awaiting the operator §9 walk.)*
+**Status:** authored 2026-10-22 at chapter open. *(Updated 2026-10-23: **gate passed** — operator §9 walk; gen suite 567/567 from boot on ROM `757095f9`; seam probe passed.)*
 Branch `ch09-route-3`. Tier **thin** per `reference/chapters.json` (CH09 record), with the
 content set in §4 enumerated exhaustively (it is small). No §8. This is a spec a scenario gets
 written from; gates and effects only, no narrative. Map 177 (dojo) was removed from the roster
@@ -350,6 +350,19 @@ the four classes with tuber → fork `TUBER_F/_M`, CH08 regenerated to end at th
   8 item balls (Net Ball = map 54 beach house) and Cheri/Oran/Rawst match; Liechi is Surf-only
   on the wiki too; grass, surf and all three rod tables match on species and level. The wiki's
   Poké Radar list (Magikarp, Brailip) is not modelled. That is corpus-wide, not a CH09 item.
+
+**Lead resolutions 2026-10-23 (gate close).** Recorded from the approved suite's review doc.
+- **Item 2 (sw51):** EV024 p0's write is emitted and walked (`m059e024p0`: switch + self-switch
+  write); harmless with day/night unbuilt (#126). Not dropped.
+- **Item 3 (sw185):** EV026's on/off bracket is emitted and walked (`m059e026p0`); no reader,
+  no effect. Not dropped.
+- **Item 8 (phone rematch):** as expected. EV009 p0 is fought and p2 walked; p1 is
+  `unreachable`, and the rematch arms refuse as `unmodelled_outcome:phone_battle_count`.
+- **Item 9 (story gates):** none. `chapter_manifest check --chapter CH09` has 0 errors.
+- **Found in the walk and fixed in-chapter:** water was a collision wall, so the Old Rod
+  refused at the shore (now collision 0 / elevation 1, `cde27560`); look-around trainer
+  ambush in the suite (`5f49f7c5`); Uranium fishing sprite (`9a88b039`, `8466e5c5`; the
+  south cast is lowered half a tile on purpose, operator ruling).
 
 ---
 

@@ -833,7 +833,11 @@ emulator) playthrough of stock Uranium's lab scene to settle. Migrated from
 `reference/findings/lab_starter_scene_positioning_2026-07-27.md` §4,
 2026-08-04.
 
-### 27. Moki Town east seam → Route 03: the first remapped E/W seam (CH09) — REPLANNED 2026-10-22
+### 27. Moki Town east seam → Route 03: the first remapped E/W seam (CH09) — DONE 2026-10-23
+
+**DONE 2026-10-23:** built and walked with CH09 (gate passed). The in-ROM probe crossed both
+directions onto the right cells with 0 flash frames. The #150 E/W residual was a probe false
+positive (an off-screen column). Belongs under Done; the plan below is kept as the record.
 
 *Replanned 2026-10-22 at CH09 open. The pre-2026-10 text (per-map packing, pinned palette
 families, border-strip import, an unconverted seams feature) is superseded: CH04/CH06 and I4
