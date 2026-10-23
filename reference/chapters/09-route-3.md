@@ -1,6 +1,6 @@
 # Chapter 9 — Route 3
 
-**Status:** authored 2026-10-22 at chapter open; not yet converted, staged or boot-walked.
+**Status:** authored 2026-10-22 at chapter open. *(Updated 2026-10-22: built; gen suite 567/567 from boot; seam probe passed; awaiting the operator §9 walk.)*
 Branch `ch09-route-3`. Tier **thin** per `reference/chapters.json` (CH09 record), with the
 content set in §4 enumerated exhaustively (it is small). No §8. This is a spec a scenario gets
 written from; gates and effects only, no narrative. Map 177 (dojo) was removed from the roster
@@ -335,6 +335,21 @@ tilesets (1032 / 1059) with a remapped seam; 59 + Moki's W strip = 749 metatiles
 offset is confirmed: Route 3 y = Moki y − 26 (Moki E rows 26–63 meet Route 3 rows 0–37). The same
 convention, checked by walkable-edge alignment, picks the live offsets on 31<->35 and 40<->35. The
 plan itself is `PROJECT_TODO.md` #27.
+
+**Lead resolutions 2026-10-22 (pre-walk).** Items 1, 4 and 7 were done in the build (Luz strips,
+the four classes with tuber → fork `TUBER_F/_M`, CH08 regenerated to end at the Moki E seam).
+- **Item 6 (fishing): reachable on foot.** Terrain-tag scan (`output/scratch/ch09_fish_reach.py`,
+  SURF tags 5/7/17): 75 water cells are 4-adjacent to the west-edge foot component, in two
+  clusters (x 12–20, y 44–47; and y 16, x 18–20+), e.g. stand (12,46) facing S. Maps 1 and 54
+  have no water. Only the Old Rod is held, so only slots 0–1 (Fartog, Lotad) are live. The
+  generated suite has no fishing beat; fishing is checked by the operator walk, not the runner.
+- **Item 10 (census): done.** `output/chapter_census.json` regenerated: 3 maps, events 46,
+  pages 74, commands 539, map 177 gone; equals the CLI and this doc.
+- **Item 11 (wiki): matches.** `Route_3` fetched via `scripts/fetch_uranium_wiki.py`: all 8
+  trainers match on class, name, species and level (the wiki spells Fartog "Fortog"); the
+  8 item balls (Net Ball = map 54 beach house) and Cheri/Oran/Rawst match; Liechi is Surf-only
+  on the wiki too; grass, surf and all three rod tables match on species and level. The wiki's
+  Poké Radar list (Magikarp, Brailip) is not modelled. That is corpus-wide, not a CH09 item.
 
 ---
 
