@@ -57,6 +57,8 @@ _VANILLA_EXEMPLARS: list[tuple[str, str]] = [
     ("is_temp_switch_off", 'isTempSwitchOff?("A")'),
     ("pb_day_care_deposited", "Kernel.pbDayCareDeposited==1"),
     ("pb_egg_generated", "Kernel.pbEggGenerated?"),
+    ("pb_add_pokemon", "Kernel.pbAddPokemon(:MAREEP, 12)"),
+    ("trainer_money_literal_cmp", "3800>$Trainer.money"),
 ]
 
 _URANIUM_EXEMPLARS: list[tuple[str, str]] = [

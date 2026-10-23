@@ -149,6 +149,9 @@ MECHANIC_BY_HEAD: dict[str, str] = {
     # pbTextEntry nickname prompt are the Name Rater's other heads
     # (transpiler._emit_pick_*, Common_EventScript_NameReceivedPartyMon).
     "pbChoosePokemon": "party pick",
+    # Non-egg pick + friendship rating (Map060 EV042): ChoosePartyMon looped
+    # past eggs + GetPartyMonFriendshipStageRpg2gba (transpiler._emit_friendship_row).
+    "pbChooseNonEggPokemon": "party pick",
     "pbGetPokemon": "party pick",
     "pbTextEntry": "nickname entry",
     # REDERIVATION_PLAN.md §15.1 item 8: already handled in transpiler.py

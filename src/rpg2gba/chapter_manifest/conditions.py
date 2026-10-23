@@ -244,6 +244,36 @@ _VANILLA_FAMILIES: tuple[ConditionFamily, ...] = (
         else_outcome=ArmOutcome(kind="harness", detail="full_bag"),
     ),
     ConditionFamily(
+        name="pb_add_pokemon",
+        # CH10 Map060 EV007 (3 instances): "Kernel.pbAddPokemon(:MAREEP, 12)".
+        pattern=_rx(r"Kernel\.pbAddPokemon\(.*\)"),
+        description=(
+            "Kernel.pbAddPokemon(SPECIES, level) -- gift-Pokemon guard; "
+            "pbAddPokemon (170__PSystem_Utilities.rb) returns false only when "
+            "the party AND every box are full (pbBoxesFull?), else stores the "
+            "mon and returns true -- then=always; storage-full is not a "
+            "modelled state, so else is unmodelled (the transpiler's native "
+            "gift flow ends the script there, Common_EventScript_NoMoreRoomForPokemon)"
+        ),
+        judgment_free=True,
+        then_outcome=ArmOutcome(kind="always"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="pokemon_storage_full"),
+    ),
+    ConditionFamily(
+        name="trainer_money_literal_cmp",
+        # CH10 Map060 EV007 (3 instances): "3800>$Trainer.money" -- the
+        # literal-first spelling `trainer_attr` below does not match.
+        pattern=_rx(r"-?\d+\s*" + _CMP + r"\s*\$Trainer\.money"),
+        description=(
+            "literal <cmp> $Trainer.money -- can-afford gate (transpiled to "
+            "checkmoney); the player's money is not a modelled Switch/Variable "
+            "key -- unmodelled both arms"
+        ),
+        judgment_free=True,
+        then_outcome=ArmOutcome(kind="unmodelled", detail="$Trainer.money"),
+        else_outcome=ArmOutcome(kind="unmodelled", detail="$Trainer.money"),
+    ),
+    ConditionFamily(
         name="pb_phone_battle_count",
         # 8 staged instances, e.g. "pbPhoneBattleCount(PBTrainers::YOUNGSTER,\"Richey\")>=1".
         pattern=_rx(r"pbPhoneBattleCount\(.*\)\s*" + _CMP + r"\s*\d+"),
