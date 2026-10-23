@@ -55,11 +55,12 @@ _EXTRA_CONSTANT_HEADERS = ["engine/include/gba/defines.h"]
 _INDEX_FORMAT = 4
 
 # def_special invocations (excludes the .macro def_special line). 623 upstream
-# + 2 rpg2gba additions (RPG2GBA_SetObjectEventGfx, the RMXP move-command 41
+# + 3 rpg2gba additions (RPG2GBA_SetObjectEventGfx, the RMXP move-command 41
 # live sprite swap; SetWarpArrivalFacing, a script warp's explicit arrival
-# facing — C5b 2026-09-18). Bump deliberately when the fork gains a special —
+# facing — C5b 2026-09-18; GetPartyMonFriendshipStageRpg2gba, CH10's friendship
+# rater — 2026-10-23). Bump deliberately when the fork gains a special —
 # the whole point of the pin is that drift is noticed.
-_EXPECTED_SPECIALS_DECLS = 625
+_EXPECTED_SPECIALS_DECLS = 626
 # 385 upstream + 1 rpg2gba addition (setobjectgfx, the script-level wrapper
 # around RPG2GBA_SetObjectEventGfx above). Bump deliberately when the fork
 # gains a macro.
