@@ -868,7 +868,7 @@ def test_two_arm_choice_custom_labels_emits_yesnobox(ctx: T.TranspileContext) ->
     assert res.unhandled == []
 
 
-def test_three_arm_choice_still_queued(ctx: T.TranspileContext) -> None:
+def test_three_arm_choice_is_dynmultichoice_not_yesno(ctx: T.TranspileContext) -> None:
     commands = [
         cmd(T.SHOW_CHOICES, [["A", "B", "C"], 3], indent=0),
         cmd(T.CHOICE_WHEN, [0, "A"], indent=0),
@@ -879,10 +879,11 @@ def test_three_arm_choice_still_queued(ctx: T.TranspileContext) -> None:
         cmd(T.SHOW_TEXT, ["c path"], indent=1),
         cmd(T.CHOICES_END, indent=0),
     ]
+    # 3+ options used to queue; now the generic N-way dynmultichoice path.
     res = run_event(ctx, [commands], trigger=1)
     assert "yesnobox" not in res.text
-    assert len(res.unhandled) == 1
-    assert res.unhandled[0].command_code == T.SHOW_CHOICES
+    assert "dynmultichoice(" in res.text
+    assert res.unhandled == []
 
 
 def test_two_arm_choice_with_cancel_arm_lands_in_else(ctx: T.TranspileContext) -> None:
@@ -1601,48 +1602,176 @@ def test_starter_pick_choice_emits_dynmultichoice_and_switch(ctx: T.TranspileCon
     assert case0_idx < orchynx_idx < case1_idx < raptorch_idx < case2_idx < eletux_idx
 
 
-def test_starter_pick_choice_with_cancel_arm_falls_through_to_queue(
+def _n_way_commands(labels: list[str], cancel_type: int, cancel_arm: bool = False) -> list[dict]:
+    out = [cmd(T.SHOW_CHOICES, [labels, cancel_type], indent=0)]
+    for i, lab in enumerate(labels):
+        out += [cmd(T.CHOICE_WHEN, [i, lab], indent=0), cmd(T.SHOW_TEXT, [f"{lab} path"], indent=1)]
+    if cancel_arm:
+        out += [cmd(T.CHOICE_CANCEL, indent=0), cmd(T.SHOW_TEXT, ["cancel path"], indent=1)]
+    out.append(cmd(T.CHOICES_END, indent=0))
+    return out
+
+
+def test_n_way_choice_any_labels_emits_dynmultichoice(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [_n_way_commands(["A", "B", "C", "D"], 0)], trigger=0)
+    assert res.unhandled == []
+    assert "dynmultichoice(0, 0, TRUE, 6, 0, DYN_MULTICHOICE_CB_NONE, " in res.text
+    assert "    case 3:" in res.text
+    assert "MULTI_B_PRESSED" not in res.text
+
+
+def test_n_way_choice_cancel_type_selects_option(ctx: T.TranspileContext) -> None:
+    # cancel type 4 of 4 options: B == the last option ("No Thanks" shape)
+    res = run_event(ctx, [_n_way_commands(["A", "B", "C", "D"], 4)], trigger=0)
+    assert res.unhandled == []
+    assert "dynmultichoice(0, 0, FALSE, 6, 0, " in res.text
+    assert "if (var(VAR_RESULT) == MULTI_B_PRESSED) {" in res.text
+    assert "setvar(VAR_RESULT, 3)" in res.text
+
+
+def test_n_way_choice_cancel_branch_arm(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [_n_way_commands(["A", "B", "C"], 4, cancel_arm=True)], trigger=0)
+    assert res.unhandled == []
+    assert "    case MULTI_B_PRESSED:" in res.text
+    assert res.text.index("case MULTI_B_PRESSED:") < res.text.index("cancel path")
+    assert "setvar(VAR_RESULT" not in res.text
+
+
+def test_n_way_choice_empty_arm_gets_break(ctx: T.TranspileContext) -> None:
+    commands = _n_way_commands(["A", "B", "C"], 0)
+    # drop B's body
+    commands = [c for c in commands if c["parameters"] != ["B path"]]
+    res = run_event(ctx, [commands], trigger=0)
+    assert res.unhandled == []
+    assert "        break" in res.text
+
+
+def test_n_way_choice_cancel_arm_with_wrong_cancel_type_queues(
     ctx: T.TranspileContext,
 ) -> None:
-    # Same labels, but a cancel arm present — not the verified shape, must
-    # not silently reference the minted constant.
-    commands = [
-        cmd(T.SHOW_CHOICES, [["Orchynx", "Raptorch", "Eletux"], 3], indent=0),
-        cmd(T.CHOICE_WHEN, [0, "Orchynx"], indent=0),
-        cmd(T.SHOW_TEXT, ["orchynx path"], indent=1),
-        cmd(T.CHOICE_WHEN, [1, "Raptorch"], indent=0),
-        cmd(T.SHOW_TEXT, ["raptorch path"], indent=1),
-        cmd(T.CHOICE_WHEN, [2, "Eletux"], indent=0),
-        cmd(T.SHOW_TEXT, ["eletux path"], indent=1),
-        cmd(T.CHOICE_CANCEL, indent=0),
-        cmd(T.SHOW_TEXT, ["cancel path"], indent=1),
-        cmd(T.CHOICES_END, indent=0),
-    ]
-    res = run_event(ctx, [commands], map_id=68, event_id=3, trigger=0)
-    assert "MULTI_URANIUM_STARTER_PICK" not in res.text
+    res = run_event(ctx, [_n_way_commands(["A", "B", "C"], 3, cancel_arm=True)], trigger=0)
     assert len(res.unhandled) == 1
     assert res.unhandled[0].command_code == T.SHOW_CHOICES
 
 
-def test_different_three_option_labels_do_not_get_starter_multichoice(
+def test_n_way_choice_bad_cancel_type_or_too_many_options_queue(
     ctx: T.TranspileContext,
 ) -> None:
-    # Different labels — must keep queueing like every other 3+-option menu,
-    # not silently reuse the starter-pick constant.
+    res = run_event(ctx, [_n_way_commands(["A", "B", "C"], 9)], trigger=0)
+    assert len(res.unhandled) == 1
+    labels = [f"L{i}" for i in range(13)]
+    res = run_event(ctx, [_n_way_commands(labels, 0)], trigger=0)
+    assert len(res.unhandled) == 1
+    assert res.unhandled[0].command_code == T.SHOW_CHOICES
+
+
+# ----------------------------------------------------------------------------
+# 206 fog opacity (STRIP), 225 screen shake (WIRE), pbCaveExit (subsumed)
+# ----------------------------------------------------------------------------
+
+
+def test_fog_opacity_206_is_stripped_not_queued(ctx: T.TranspileContext) -> None:
+    commands = [cmd(206, [200, 20], indent=0), cmd(T.SHOW_TEXT, ["after"], indent=0)]
+    res = run_event(ctx, [commands], trigger=0)
+    assert res.unhandled == []
+    assert "# fog: Change Fog Opacity (206) stripped" in res.text
+    assert "after" in res.text
+
+
+def test_fog_opacity_inside_facing_conditional_is_valid(ctx: T.TranspileContext) -> None:
     commands = [
-        cmd(T.SHOW_CHOICES, [["A", "B", "C"], 3], indent=0),
-        cmd(T.CHOICE_WHEN, [0, "A"], indent=0),
-        cmd(T.SHOW_TEXT, ["a path"], indent=1),
-        cmd(T.CHOICE_WHEN, [1, "B"], indent=0),
-        cmd(T.SHOW_TEXT, ["b path"], indent=1),
-        cmd(T.CHOICE_WHEN, [2, "C"], indent=0),
-        cmd(T.SHOW_TEXT, ["c path"], indent=1),
-        cmd(T.CHOICES_END, indent=0),
+        cmd(T.CONDITIONAL_BRANCH, [6, -1, 8], indent=0),
+        cmd(206, [200, 20], indent=1),
+        cmd(T.ELSE_BRANCH, indent=0),
+        cmd(206, [140, 20], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=1)
+    assert res.unhandled == []
+
+
+def test_screen_shake_225_wires_shakecamera(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SCREEN_SHAKE, [2, 3, 20], indent=0)]], trigger=0)
+    assert res.unhandled == []
+    for line in ("setvar(VAR_0x8004, 0)", "setvar(VAR_0x8005, 2)",
+                 "setvar(VAR_0x8006, 6)", "setvar(VAR_0x8007, 3)",
+                 "special(ShakeCamera)", "waitstate"):
+        assert line in res.text
+
+
+def test_screen_shake_225_out_of_range_queues(ctx: T.TranspileContext) -> None:
+    for params in ([0, 3, 20], [2, 10, 20], [2, 3, 0], [2, 3, 999]):
+        res = run_event(ctx, [[cmd(T.SCREEN_SHAKE, params, indent=0)]], trigger=0)
+        assert len(res.unhandled) == 1, params
+        assert "ShakeCamera" not in res.text
+
+
+def test_cave_exit_script_call_is_subsumed(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["pbCaveExit"], indent=0)]], trigger=0)
+    assert res.unhandled == []
+    assert "# cave transition: pbCaveExit subsumed by native warp fade" in res.text
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["pbCaveExit(1)"], indent=0)]], trigger=0)
+    assert len(res.unhandled) == 1
+
+
+# ----------------------------------------------------------------------------
+# \\G / \\CN message windows; \\v[N] of a variable written on the same page
+# ----------------------------------------------------------------------------
+
+
+def test_gold_window_code_wraps_msgbox_with_money_box(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SHOW_TEXT, ["\\G\\bSo, you want it?"])]], trigger=0)
+    assert res.unhandled == []
+    assert "\\G" not in res.text
+    i_show = res.text.index("showmoneybox(0, 0)")
+    i_msg = res.text.index("msgbox(")
+    i_hide = res.text.index("hidemoneybox")
+    assert i_show < i_msg < i_hide
+
+
+def test_coins_window_code_wraps_msgbox_with_coins_box(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SHOW_TEXT, ["\\CN\\bSorry, no."])]], trigger=0)
+    assert res.unhandled == []
+    assert "showcoinsbox(0, 0)" in res.text
+    assert "hidecoinsbox(0, 0)" in res.text
+    assert "showmoneybox" not in res.text
+    assert "\\CN" not in res.text
+
+
+def test_gold_window_with_unknown_code_queues_unwrapped(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SHOW_TEXT, ["\\Gfoo \\zzz"])]], trigger=0)
+    assert len(res.unhandled) == 1
+    assert "showmoneybox" not in res.text
+
+
+def test_value_var_written_on_page_is_buffered(ctx: T.TranspileContext) -> None:
+    commands = [
+        cmd(T.CONTROL_VARIABLES, [1, 1, 0, 0, 3800]),
+        cmd(T.CONTROL_VARIABLES, [1, 1, 1, 0, 50]),
+        cmd(T.SHOW_TEXT, ["That'll be \\v[1]."]),
     ]
     res = run_event(ctx, [commands], trigger=0)
-    assert "MULTI_URANIUM_STARTER_PICK" not in res.text
+    assert res.unhandled == []
+    name = ctx.var_for_variable(1)
+    assert f"buffernumberstring(STR_VAR_1, {name})" in res.text
+    assert "{STR_VAR_1}" in res.text
+    assert res.text.index("addvar(") < res.text.index("buffernumberstring(")
+
+
+def test_value_var_never_written_on_page_still_queues(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SHOW_TEXT, ["That'll be \\v[1]."])]], trigger=0)
     assert len(res.unhandled) == 1
-    assert res.unhandled[0].command_code == T.SHOW_CHOICES
+    assert "buffernumberstring" not in res.text
+
+
+def test_value_var_more_than_three_distinct_queues(ctx: T.TranspileContext) -> None:
+    commands = [cmd(T.CONTROL_VARIABLES, [i, i, 0, 0, 5]) for i in (1, 2, 3, 4)]
+    commands.append(cmd(T.SHOW_TEXT, ["\\v[1] \\v[2] \\v[3] \\v[4]"]))
+    res = run_event(ctx, [commands], trigger=0)
+    named = [i for i in (1, 2, 3, 4) if ctx.var_for_variable(i) is not None]
+    if len(named) == 4:
+        assert len(res.unhandled) == 1
+        assert "buffernumberstring" not in res.text
 
 
 # ----------------------------------------------------------------------------
@@ -1867,12 +1996,134 @@ def test_leader_battle_self_switch_win_body_emits_no_intro_without_clear(
     assert not any("pbTrainerBattle" in str(u) for u in res.unhandled)
 
 
-def test_non_leader_self_switch_win_body_still_queues(ctx: T.TranspileContext) -> None:
-    """The self-switch guard stays for every non-LEADER class (Map019 EV6)."""
+def test_non_leader_self_switch_win_body_on_touch_page_still_queues(
+    ctx: T.TranspileContext,
+) -> None:
+    """A self-switch win-body off an action-button page is a sight trainer
+    (native object-template turf, Map019 EV6) -- the idiom must not fire."""
     ctx.trainers = {("TRAINER_CLASS_BIKER", "Maria", 0): "TRAINER_MARIA_15"}
-    commands = _leader_commands("BIKER", [cmd(T.CONTROL_SELF_SWITCH, ["A", 0])])
-    res = run_event(ctx, [commands], map_id=42, event_id=3)
+    for trigger in (1, 2):
+        commands = _leader_commands("BIKER", [cmd(T.CONTROL_SELF_SWITCH, ["A", 0])])
+        res = run_event(ctx, [commands], map_id=42, event_id=3, trigger=trigger)
+        assert "trainerbattle_no_intro" not in res.text
+        assert len(res.unhandled) >= 1
+
+
+def test_talk_to_one_time_duel_emits_no_intro_without_clear(
+    ctx: T.TranspileContext,
+) -> None:
+    """CH10 school kids (Map029 EV002): action-button page, Yes/No offer, win
+    body = counter write + self-switch flip -> one-time duel, no cleartrainerflag."""
+    ctx.trainers = {("TRAINER_CLASS_SCHOOLKID", "Maria", 0): "TRAINER_MARIA_15"}
+    commands = [
+        cmd(T.SHOW_CHOICES, [["Yes", "No"], 0], indent=0),
+        cmd(T.CHOICE_WHEN, [0, "Yes"], indent=0),
+        cmd(T.CONDITIONAL_BRANCH, [12, 'pbTrainerBattle(PBTrainers::SCHOOLKID,"Maria",'
+                                       '_I("There!"),false,0)'], indent=1),
+        cmd(T.CONTROL_VARIABLES, [1, 1, 1, 0, 1], indent=2),
+        cmd(T.CONTROL_SELF_SWITCH, ["A", 0], indent=2),
+        cmd(T.ELSE_BRANCH, indent=1),
+        cmd(T.BRANCH_END, indent=1),
+        cmd(T.CHOICE_WHEN, [1, "No"], indent=0),
+        cmd(T.SHOW_TEXT, ["too bad"], indent=1),
+        cmd(T.CHOICES_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], map_id=29, event_id=2, trigger=0)
+    assert res.unhandled == []
+    assert "trainerbattle_no_intro(TRAINER_MARIA_15, Map029_EV002_Page1_FacilityLoseText)" in res.text
+    assert "cleartrainerflag" not in res.text
+    assert "addvar(" in res.text
+    assert "setflag(" in res.text  # self-switch A
+
+
+def test_talk_to_duel_with_nonempty_otherwise_still_queues(ctx: T.TranspileContext) -> None:
+    ctx.trainers = {("TRAINER_CLASS_SCHOOLKID", "Maria", 0): "TRAINER_MARIA_15"}
+    commands = _leader_commands("SCHOOLKID", [cmd(T.CONTROL_SELF_SWITCH, ["A", 0])])
+    commands[-2:-1] = [cmd(T.ELSE_BRANCH, indent=0), cmd(T.SHOW_TEXT, ["lost"], indent=1)]
+    res = run_event(ctx, [commands], map_id=29, event_id=2, trigger=0)
     assert "trainerbattle_no_intro" not in res.text
+    assert len(res.unhandled) >= 1
+
+
+# ----------------------------------------------------------------------------
+# $Trainer.money checks / deduction, `if pbAddPokemon(:SYM, lvl)`
+# ----------------------------------------------------------------------------
+
+
+def test_money_short_condition_uses_checkmoney_false_arm(ctx: T.TranspileContext) -> None:
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "3800>$Trainer.money"], indent=0),
+        cmd(T.SHOW_TEXT, ["too poor"], indent=1),
+        cmd(T.ELSE_BRANCH, indent=0),
+        cmd(T.SHOW_TEXT, ["ok"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert res.unhandled == []
+    assert "checkmoney(3800)" in res.text
+    assert "if (var(VAR_RESULT) == FALSE) {" in res.text
+    assert res.text.index("too poor") < res.text.index("} else {") < res.text.index('"ok"')
+
+
+def test_money_subtract_literal_emits_removemoney(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["$Trainer.money-=500"])]], trigger=0)
+    assert res.unhandled == []
+    assert "removemoney(500)" in res.text
+
+
+def test_money_pbget_forms_still_queue(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(T.SCRIPT, ["$Trainer.money-=pbGet(7)"])]], trigger=0)
+    assert "removemoney" not in res.text
+    assert len(res.unhandled) == 1
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "$Trainer.money<pbGet(7)"], indent=0),
+        cmd(T.SHOW_TEXT, ["x"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert "checkmoney" not in res.text
+    assert len(res.unhandled) == 1
+
+
+def test_add_pokemon_symbol_condition_runs_gift_flow_then_arm(
+    ctx: T.TranspileContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(ctx, "staged_species_constant",
+                        lambda n: "SPECIES_MAREEP" if n == "MAREEP" else None)
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "Kernel.pbAddPokemon(:MAREEP, 12)"], indent=0),
+        cmd(T.SCRIPT, ["$Trainer.money-=3800"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert res.unhandled == []
+    assert "givemon(SPECIES_MAREEP, 12)" in res.text
+    assert "goto(Common_EventScript_NoMoreRoomForPokemon)" in res.text
+    assert res.text.index("givemon(") < res.text.index("removemoney(3800)")
+
+
+def test_add_pokemon_symbol_condition_unstaged_species_or_else_arm_queues(
+    ctx: T.TranspileContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(ctx, "staged_species_constant", lambda n: None)
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "Kernel.pbAddPokemon(:NOPE, 5)"], indent=0),
+        cmd(T.SHOW_TEXT, ["x"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert "givemon" not in res.text
+    assert len(res.unhandled) == 1
+    monkeypatch.setattr(ctx, "staged_species_constant", lambda n: "SPECIES_MAREEP")
+    commands = [
+        cmd(T.CONDITIONAL_BRANCH, [12, "Kernel.pbAddPokemon(:MAREEP, 5)"], indent=0),
+        cmd(T.SHOW_TEXT, ["x"], indent=1),
+        cmd(T.ELSE_BRANCH, indent=0),
+        cmd(T.SHOW_TEXT, ["y"], indent=1),
+        cmd(T.BRANCH_END, indent=0),
+    ]
+    res = run_event(ctx, [commands], trigger=0)
+    assert "givemon" not in res.text
     assert len(res.unhandled) == 1
 
 

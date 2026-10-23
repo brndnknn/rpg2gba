@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
+import dataclasses
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -90,7 +91,9 @@ CONTROL_SELF_SWITCH = 123
 TRANSFER_PLAYER = 201
 SET_EVENT_LOCATION = 202
 CHANGE_MAP_SETTINGS = 204
+CHANGE_FOG_OPACITY = 206
 SHOW_ANIMATION = 207
+SCREEN_SHAKE = 225
 CHANGE_PLAYER_TRANSPARENCY = 208
 SET_MOVE_ROUTE = 209
 WAIT_MOVE_COMPLETION = 210
@@ -492,7 +495,7 @@ _SHOW_RULESET_SETTINGS_STRIP_RE = re.compile(r"^\s*showRulesetSettings\(\s*\d*\s
 # `warp(...)` + `waitstate` — the GBA warp performs its own map-transition
 # fade), so this call is pre-warp RMXP choreography the native warp subsumes.
 # Breadcrumb strip, no queue.
-_CAVE_ENTRANCE_STRIP_RE = re.compile(r"^\s*(?:Kernel\.)?pbCaveEntrance\s*$")
+_CAVE_ENTRANCE_STRIP_RE = re.compile(r"^\s*(?:Kernel\.)?pbCave(Entrance|Exit)\s*$")
 
 # Code-204 (Change Map Settings) subtype 1 = fog (command_204 in
 # reference/scripts_dump/041_Interpreter.rb:1257 — the params[0]==1 branch
@@ -667,6 +670,16 @@ _RUBY_GUARD_RE = re.compile(
 # native-analog restoration, not an invention (§4.7).
 _ADD_POKEMON_RE = re.compile(
     r"^\s*(?:Kernel\.)?pbAddPokemon\(\s*(?:::)?PBSpecies::([A-Za-z0-9_]+)\s*,\s*(\d+)\s*\)\s*$"
+)
+# Money: `N>$Trainer.money` (script condition: TRUE when the player is SHORT
+# of N) and `$Trainer.money-=N` (literal N only; the pbGet(...) forms are not
+# handled and queue). Native: checkmoney/removemoney (event.inc:1358-1366).
+_MONEY_SHORT_COND_RE = re.compile(r"^\s*(\d+)\s*>\s*\$Trainer\.money\s*$")
+_MONEY_SUB_RE = re.compile(r"^\s*\$Trainer\.money\s*-=\s*(\d+)\s*$")
+# `if Kernel.pbAddPokemon(:SPECIES, level)` -- symbol-argument form used as a
+# script condition (pbAddPokemon returns false only when the boxes are full).
+_ADD_POKEMON_COND_RE = re.compile(
+    r"^\s*(?:Kernel\.)?pbAddPokemon\(\s*:([A-Za-z0-9_]+)\s*,\s*(\d+)\s*\)\s*$"
 )
 _ADD_POKEMON_SILENT_RE = re.compile(
     r"^\s*(?:Kernel\.)?pbAddPokemonSilent\(\s*(?:::)?PBSpecies::([A-Za-z0-9_]+)"
@@ -1299,6 +1312,9 @@ class TranspileContext:
     # stays frozen. ``None`` for pages with no lock wrapper and for common
     # events (those ``return``).
     exit_epilogue: str | None = None
+    # RMXP trigger code of the page being transpiled (None outside
+    # transpile_event, e.g. common events).
+    page_trigger: int | None = None
 
     # (uranium_map_id, x, y) -> HEAL_LOCATION_* constant for every minted heal
     # location's tile. Lets `Kernel.pbSetHealingSpot(m,x,y)` resolve ONLY when
@@ -2620,6 +2636,9 @@ class _PageEmitter:
         params = cmd.get("parameters", [])
 
         if isinstance(node, TextRun):
+            windowed = self._emit_windowed_text(node)
+            if windowed is not None:
+                return windowed
             if has_inline_choice(node.text):
                 return self._emit_inline_choice(node)
             named_text = self._emit_pick_name_text(node)
@@ -2743,6 +2762,11 @@ class _PageEmitter:
             return self._emit_set_event_location(node)
         if code == CHANGE_MAP_SETTINGS:
             return self._emit_change_map_settings(node)
+        if code == CHANGE_FOG_OPACITY:
+            # Ledger STRIP: the GBA has no fog layer (see also code 204).
+            return ["# fog: Change Fog Opacity (206) stripped (no GBA fog layer)"]
+        if code == SCREEN_SHAKE:
+            return self._emit_screen_shake(node)
         if code == SHOW_ANIMATION:
             return self._emit_show_animation(node)
         if code == CHANGE_PLAYER_TRANSPARENCY:
@@ -2779,6 +2803,40 @@ class _PageEmitter:
             node.index, code,
             f"command {code} outside the v1 deterministic tier",
         )]
+
+    def _emit_screen_shake(self, node: Node) -> list[str]:
+        """RMXP code 225 ``[power, speed, duration_frames]`` -> ``ShakeCamera``.
+
+        Fork special takes VAR_0x8004..7 = vertical pan / horizontal pan /
+        shake count / per-swing delay (frames). RMXP's shake is horizontal-
+        only, so vertical pan is 0 and horizontal pan = power (px). Swing
+        delay = max(1, 10 // speed) (faster speed -> shorter swing); count =
+        max(2, duration // delay). power/speed must be 1..9 (RMXP editor
+        range), duration 1..255; anything else queues (fail loud).
+        """
+        ctx = self.ctx
+        params = node.cmd.get("parameters", [])
+        if len(params) < 3 or not all(
+                isinstance(v, int) and not isinstance(v, bool) for v in params[:3]):
+            return [ctx.queue(node.index, SCREEN_SHAKE, "malformed 225 params")]
+        power, speed, duration = params[:3]
+        if not (1 <= power <= 9 and 1 <= speed <= 9 and 1 <= duration <= 255):
+            return [ctx.queue(
+                node.index, SCREEN_SHAKE,
+                f"screen shake params out of range (power={power}, "
+                f"speed={speed}, duration={duration})",
+            )]
+        delay = max(1, 10 // speed)
+        count = max(2, duration // delay)
+        return [
+            f"# screen shake: power={power} speed={speed} duration={duration}f",
+            "setvar(VAR_0x8004, 0)",
+            f"setvar(VAR_0x8005, {power})",
+            f"setvar(VAR_0x8006, {count})",
+            f"setvar(VAR_0x8007, {delay})",
+            "special(ShakeCamera)",
+            "waitstate",
+        ]
 
     def _emit_set_event_location(self, node: Node) -> list[str]:
         """RMXP code 202 ("Set Event Location") -> ``setobjectxy``.
@@ -2930,6 +2988,12 @@ class _PageEmitter:
         canlose_battle = self._emit_canlose_trainer_battle_idiom(node)
         if canlose_battle is not None:
             return canlose_battle
+        money_short = self._emit_money_short_idiom(node)
+        if money_short is not None:
+            return money_short
+        add_mon_cond = self._emit_add_pokemon_cond_idiom(node)
+        if add_mon_cond is not None:
+            return add_mon_cond
         facility_battle = self._emit_facility_trainer_battle_idiom(node)
         if facility_battle is not None:
             return facility_battle
@@ -4202,6 +4266,41 @@ class _PageEmitter:
         lines += self.emit_nodes(cond.then)
         return lines
 
+    def _emit_money_short_idiom(self, node: IfNode) -> list[str] | None:
+        """``if N>$Trainer.money`` -> ``checkmoney(N)`` + a VAR_RESULT branch.
+        checkmoney sets VAR_RESULT TRUE when money >= N, so Essentials'
+        "short of N" then-arm is the FALSE arm."""
+        text = _script_condition_text(node.cmd)
+        m = _MONEY_SHORT_COND_RE.match(text) if text is not None else None
+        if m is None:
+            return None
+        lines = [f"checkmoney({int(m.group(1))})", "if (var(VAR_RESULT) == FALSE) {"]
+        lines += [f"    {ln}" for ln in self.emit_nodes(node.then)]
+        if node.otherwise:
+            lines.append("} else {")
+            lines += [f"    {ln}" for ln in self.emit_nodes(node.otherwise)]
+        lines.append("}")
+        return lines
+
+    def _emit_add_pokemon_cond_idiom(self, node: IfNode) -> list[str] | None:
+        """``if Kernel.pbAddPokemon(:SPECIES, lvl)`` -> the native gift flow
+        (``_emit_give_pokemon``) then the then-arm. pbAddPokemon returns false
+        only when the boxes are full; the native flow's MON_CANT_GIVE path
+        ``goto``s Common_EventScript_NoMoreRoomForPokemon and ends the script,
+        so the then-arm (e.g. a money deduction) is correctly skipped. An
+        ``otherwise`` arm would be reachable only on that path, so any
+        non-empty one is not this shape and queues."""
+        text = _script_condition_text(node.cmd)
+        m = _ADD_POKEMON_COND_RE.match(text) if text is not None else None
+        if m is None or node.otherwise:
+            return None
+        const = self.ctx.staged_species_constant(m.group(1))
+        if const is None:
+            return None
+        lines = self._emit_give_pokemon(const, int(m.group(2)), silent=False)
+        lines += self.emit_nodes(node.then)
+        return lines
+
     def _emit_facility_trainer_battle_idiom(self, node: IfNode) -> list[str] | None:
         """A repeatable, non-canlose ``pbTrainerBattle(...)`` embedded as a
         code-111 script condition inside a Yes/No offer — CH03's Mawuli
@@ -4236,7 +4335,7 @@ class _PageEmitter:
         parsed args, a canlose arg that isn't ``false``/``0``, a
         non-digit party id, an unparseable class/name/defeat text, an
         unknown trainer in ``ctx.trainers``, a non-empty ``otherwise``, or a
-        win-body that itself writes a self-switch.
+        win-body that writes a self-switch on a non-action-button page.
 
         That last guard is load-bearing, not defensive filler: Map019 EV6
         ("Richard") wraps this exact same inner shape — 5-arg call,
@@ -4269,7 +4368,14 @@ class _PageEmitter:
         # ``trainerbattle_no_intro``; only the repeatable-facility
         # ``cleartrainerflag`` is dropped, because a leader must stay beaten.
         is_leader = m_class.group(1).startswith("LEADER_")
-        if not is_leader and _tree_writes_self_switch(node.then):
+        # A win-body that flips a self-switch is a one-time battle. On an
+        # action-button (talk-to) page that is the "offered one-time duel"
+        # shape (CH10 school kids: Yes/No offer, battle, page flips to a
+        # thank-you page) -- same battle line as a leader's, trainer flag
+        # left set. On any other trigger it is a sight trainer, which is
+        # native object-template turf, so bail.
+        one_time = not is_leader and _tree_writes_self_switch(node.then)
+        if one_time and ctx.page_trigger != ACTION_BUTTON_TRIGGER:
             return None
 
         m_name = _CANLOSE_NAME_RE.search(call)
@@ -4311,7 +4417,7 @@ class _PageEmitter:
         self.text_blocks.append((lose_label, format_pory_dialogue(defeat_result.text)))
 
         lines = [f"trainerbattle_no_intro({trainer_const}, {lose_label})"]
-        if not is_leader:
+        if not is_leader and not one_time:
             lines.append(f"cleartrainerflag({trainer_const})")
         lines += self.emit_nodes(node.then)
         return lines
@@ -4398,32 +4504,48 @@ class _PageEmitter:
             ]
         return lines
 
-    def _emit_starter_pick_choice_idiom(self, node: ChoiceNode) -> list[str] | None:
-        """The three-option starter-pick menu (Map068 EV003 page 1 cmd 3,
-        output/uranium-build/maps/Map068.json -- ``['Orchynx', 'Raptorch',
-        'Eletux']``, no cancel arm). ``_emit_choice`` below only natively
-        handles 2-way choices via ``yesnobox``. This menu is emitted as the
-        engine's generic ``dynmultichoice`` (B press ignored), the same
-        emission the inline ``\\ch[...]`` escape uses, with the option strings
-        taken from the Show Choices command itself -- no game strings live in
-        engine C. Result values are the arm indices 0/1/2 in ``VAR_RESULT``.
-        Deliberately still keyed on the exact label tuple, not on "any
-        3-option choice" (generalising is a separate decision).
+    # Largest N-way Show Choices emitted as one dynmultichoice menu. The macro
+    # takes up to 255 args and scrolls past maxBeforeScroll (6); the cap is
+    # a sanity bound, not an engine limit. Larger menus queue.
+    _MAX_MULTI_CHOICE_OPTIONS = 12
 
-        Returns ``None`` (falls through to ``_emit_choice``'s generic
-        2-way/queue handling) for: any label list other than exactly
-        ``['Orchynx', 'Raptorch', 'Eletux']``, a cancel arm present, or arm
-        indices that are not exactly ``{0, 1, 2}``."""
+    def _emit_multi_choice(self, node: ChoiceNode) -> list[str] | None:
+        """N-way (N >= 3) Show Choices -> ``dynmultichoice`` + ``switch``.
+
+        Generalises the former hard-keyed starter-pick menu (Map068 EV003:
+        ``['Orchynx', 'Raptorch', 'Eletux']``, cancel type 0, whose emitted
+        text this reproduces byte for byte). Option strings come from the
+        Show Choices command itself; each becomes a text block, like the
+        inline ``\\ch[...]`` escape (``_emit_inline_choice``). ``VAR_RESULT``
+        is the arm index 0..N-1.
+
+        RMXP 102 ``params[1]`` is the cancel type: 0 = B disallowed
+        (``ignoreBPress`` TRUE); 1..N = B selects that option (B result
+        ``MULTI_B_PRESSED`` is remapped to option ``ct-1`` before the
+        switch); N+1 = separate cancel branch (403 arm) emitted as
+        ``case MULTI_B_PRESSED``. Returns ``None`` (caller queues) for
+        malformed params, a cancel type outside 0..N+1, N out of range, or
+        arm indices not exactly ``{0..N-1}``.
+        """
         params = node.cmd.get("parameters", [])
         choices = params[0] if params else []
-        if list(choices) != ["Orchynx", "Raptorch", "Eletux"]:
+        n = len(choices)
+        if n < 3 or n > self._MAX_MULTI_CHOICE_OPTIONS or len(params) < 2:
+            return None
+        cancel_type = params[1]
+        if not isinstance(cancel_type, int) or isinstance(cancel_type, bool) \
+                or not 0 <= cancel_type <= n + 1:
             return None
         arm_children: dict[int, list[Node]] = {}
+        cancel_children: list[Node] | None = None
         for choice_idx, _text, children in node.arms:
             if choice_idx is None:
-                return None  # cancel arm present -- not this menu's verified shape
-            arm_children[choice_idx] = children
-        if set(arm_children) != {0, 1, 2}:
+                cancel_children = children
+            else:
+                arm_children[choice_idx] = children
+        if set(arm_children) != set(range(n)):
+            return None
+        if cancel_children is not None and cancel_type != n + 1:
             return None
         self._choice_count += 1
         choice_no = self._choice_count
@@ -4432,21 +4554,36 @@ class _PageEmitter:
             label = f"{self.page_label}_Choice{choice_no}_Opt{m}"
             self.text_blocks.append((label, format_pory_dialogue(str(opt_text))))
             opt_labels.append(label)
+        ignore_b = "TRUE" if cancel_type == 0 else "FALSE"
         lines = [
-            f"dynmultichoice(0, 0, TRUE, 6, 0, DYN_MULTICHOICE_CB_NONE, "
+            f"dynmultichoice(0, 0, {ignore_b}, 6, 0, DYN_MULTICHOICE_CB_NONE, "
             f"{', '.join(opt_labels)})",
-            "switch (var(VAR_RESULT)) {",
         ]
-        for i in range(3):
-            lines.append(f"    case {i}:")
-            lines += [f"        {ln}" for ln in self.emit_nodes(arm_children[i])]
+        if 1 <= cancel_type <= n:
+            lines += [
+                "if (var(VAR_RESULT) == MULTI_B_PRESSED) {",
+                f"    setvar(VAR_RESULT, {cancel_type - 1})",
+                "}",
+            ]
+        lines.append("switch (var(VAR_RESULT)) {")
+
+        def arm(label: str, children: list[Node]) -> None:
+            lines.append(f"    case {label}:")
+            body = self.emit_nodes(children)
+            # An empty poryscript case falls through to the next one.
+            lines.extend(f"        {ln}" for ln in (body or ["break"]))
+
+        for i in range(n):
+            arm(str(i), arm_children[i])
+        if cancel_children is not None:
+            arm("MULTI_B_PRESSED", cancel_children)
         lines.append("}")
         return lines
 
     def _emit_choice(self, node: ChoiceNode) -> list[str]:
-        starter_pick = self._emit_starter_pick_choice_idiom(node)
-        if starter_pick is not None:
-            return starter_pick
+        multi = self._emit_multi_choice(node)
+        if multi is not None:
+            return multi
         params = node.cmd.get("parameters", [])
         choices = params[0] if params else []
         # v1 tier: any two-way choice maps to the yesnobox/VAR_RESULT idiom,
@@ -4471,8 +4608,9 @@ class _PageEmitter:
             return lines
         return [self.ctx.queue(
             node.index, SHOW_CHOICES,
-            f"choice menu {[str(c) for c in choices]} — needs a minted MULTI_* "
-            f"multichoice; arms not emitted",
+            f"choice menu {[str(c) for c in choices]} — outside the N-way "
+            f"dynmultichoice shape (3..{self._MAX_MULTI_CHOICE_OPTIONS} options, "
+            f"cancel type 0..N+1, every arm present); arms not emitted",
         )]
 
     def _emit_control_switches(self, node: Node) -> list[str]:
@@ -4494,6 +4632,22 @@ class _PageEmitter:
         return lines
 
     def _emit_control_variables(self, node: Node) -> list[str]:
+        """Control Variables (122). Every variable cleanly written here is
+        also registered in ``_numeric_text_vars`` so a later ``\\v[N]`` on the
+        page is buffered at runtime (``_emit_numeric_var_text``); a variable
+        never written on the page stays unregistered and its text queues."""
+        before = len(self.ctx.unhandled)
+        lines = self._emit_control_variables_lines(node)
+        params = node.cmd.get("parameters", [])
+        if len(self.ctx.unhandled) == before and len(params) >= 2 \
+                and isinstance(params[0], int) and isinstance(params[1], int):
+            for variable_id in range(params[0], params[1] + 1):
+                name = self.ctx.var_for_variable(variable_id)
+                if name is not None:
+                    self._numeric_text_vars[variable_id] = name
+        return lines
+
+    def _emit_control_variables_lines(self, node: Node) -> list[str]:
         # [start_id, end_id, operation(0 set/1 add/2 sub/...), operand_kind, operand]
         params = node.cmd.get("parameters", [])
         if len(params) < 5:
@@ -5042,7 +5196,10 @@ class _PageEmitter:
         # pbCaveEntrance — pre-warp fade choreography subsumed by the native
         # warp (see _CAVE_ENTRANCE_STRIP_RE). Breadcrumb, no queue.
         if _CAVE_ENTRANCE_STRIP_RE.match(text):
-            return ["# cave transition: pbCaveEntrance subsumed by native warp fade"]
+            # pbCaveExit = pbEraseEscapePoint + the same fade (Essentials
+            # PField_Field); escape-point state has no GBA consumer here.
+            name = "pbCaveExit" if "pbCaveExit" in text else "pbCaveEntrance"
+            return [f"# cave transition: {name} subsumed by native warp fade"]
 
         # showRulesetSettings(mode) — opens the Custom Mode options UI, not
         # portable to GBA (see _SHOW_RULESET_SETTINGS_STRIP_RE). Breadcrumb,
@@ -5219,6 +5376,10 @@ class _PageEmitter:
             if const is None:
                 return None
             return self._emit_give_pokemon(const, int(m.group(2)), silent=False)
+
+        m = _MONEY_SUB_RE.match(text)
+        if m:
+            return [f"removemoney({int(m.group(1))})"]
 
         m = _SWITCH_ASSIGN_RE.match(text)
         if m:
@@ -5506,6 +5667,35 @@ class _PageEmitter:
                 node.index, SCRIPT,
                 "jvNextReward outside an `if` condition -- unsupported shape")]
         return None
+
+    def _emit_windowed_text(self, node: TextRun) -> list[str] | None:
+        """Essentials' ``\\G`` (gold/money window) and ``\\CN`` (coins window)
+        message codes: the window is shown for the duration of that one
+        message (059_Messages.rb). Native: ``showmoneybox(0, 0)`` /
+        ``hidemoneybox`` and ``showcoinsbox(0, 0)`` / ``hidecoinsbox(0, 0)``
+        (event.inc:1374-1386, 1688-1699; vanilla places the money box at 0,0,
+        e.g. data/scripts/day_care_frlg.inc:4). The code is stripped from the
+        text, the rest of the message goes through the normal text path, and
+        the show/hide pair wraps it. If the inner text queues, nothing is
+        wrapped (the queue marker stands alone)."""
+        text = node.text
+        gold, coins = "\\G" in text, "\\CN" in text
+        if not (gold or coins):
+            return None
+        stripped = text.replace("\\G", "").replace("\\CN", "")
+        before = len(self.ctx.unhandled)
+        inner = self.emit_node(dataclasses.replace(node, text=stripped))
+        if len(self.ctx.unhandled) != before:
+            return inner
+        pre: list[str] = []
+        post: list[str] = []
+        if gold:
+            pre.append("showmoneybox(0, 0)")
+            post.insert(0, "hidemoneybox")
+        if coins:
+            pre.append("showcoinsbox(0, 0)")
+            post.insert(0, "hidecoinsbox(0, 0)")
+        return [*pre, *inner, *post]
 
     def _emit_numeric_var_text(self, node: TextRun) -> list[str] | None:
         """Dialogue whose every ``\\v[N]`` names a tracked Pokédex count or
@@ -6149,10 +6339,12 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
         epilogue = {ACTION_BUTTON_TRIGGER: "release", 1: "release",
                     2: "release", 3: "releaseall"}.get(trigger)
         ctx.exit_epilogue = epilogue
+        ctx.page_trigger = trigger
         try:
             body, movements, text_blocks, hoisted, aux_blocks = transpile_page(page, ctx, label)
         finally:
             ctx.exit_epilogue = None
+            ctx.page_trigger = None
         # Hoisted label blocks are entered by `goto` with the page's lock
         # already held, so they need the epilogue but not the prologue. Without
         # it a `goto`-ed block would end without ever releasing — the exact

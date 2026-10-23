@@ -82,7 +82,7 @@ below is what those classifiers may emit.
 | 122 | Control Variables | 412 | 412 | JUDGE | `setvar(VAR_*, n)` for a literal RHS (DET); expressions → JUDGE. |
 | 208 | Change Transparent Flag | 268 | 268 | WIRE | Object visibility (`removeobject`/`addobject`/subpriority) — needs local-id. |
 | 121 | Control Switches | 246 | 246 | JUDGE | `setflag(FLAG_*)` global switch; needs registry naming (global) → Opus territory. |
-| 102/402/404 | Show Choices | 219 | 219 | JUDGE | `multichoice` + `switch(VAR_RESULT)` scaffolding is DET, but per-branch logic varies → JUDGE. |
+| 102/402/404 | Show Choices | 219 | 219 | JUDGE | `multichoice` + `switch(VAR_RESULT)` scaffolding is DET, but per-branch logic varies → JUDGE. **Implemented 2026-10-23 (`_emit_multi_choice`):** 2-way -> `yesnobox`; 3..12 options -> `dynmultichoice(0,0,<ignoreB>,6,0,DYN_MULTICHOICE_CB_NONE, <per-option text blocks>)` + `switch (var(VAR_RESULT))`, arms in index order (empty arm gets `break`). RMXP cancel type (`params[1]`): 0 -> ignoreBPress TRUE; 1..N -> B remapped (`MULTI_B_PRESSED` -> option ct-1) before the switch; N+1 -> `case MULTI_B_PRESSED:` carries the 403 arm. Anything else (N>12, ct>N+1, missing arm, 403 arm under ct<=N) queues. Replaced the hard-keyed starter-pick special case (byte-identical output). |
 | 108/408 | Comment | 201 | 92 | STRIP | — |
 | 207 | Show Animation | 116 | 116 | WIRE/JUDGE | **[A30] over-claim corrected.** `dofieldeffect` (`event.inc:1426`) + `setfieldeffectargument` (`:1432`) + `waitfieldeffect` (`:1439`), over ~40 `FLDEFF_*` constants in `include/constants/field_effects.h:4-43` (sparkle, dust, ash, emote…); `dofieldeffectsparkle` at `event.inc:2147` shows the idiom. Any RGSS animation landing on an existing `FLDEFF_*` is WIRE; only bespoke sprite animation stays C. **Split this row per-animation before costing it.** |
 | 202 | Set Event Location | 91 | 91 | WIRE | `setobjectxy(localid, …)` — needs local-id. |
@@ -90,7 +90,7 @@ below is what those classifiers may emit.
 | 204 | Change Map Settings | 82 | 82 | JUDGE | Varies (often STRIP). |
 | 117 | Call Common Event | 68 | 18 | DET | `call CommonEvent_<NNN>` (classifier 2). |
 | 115 | Exit Event Processing | 68 | 68 | DET | `return`/`end`. |
-| 206 | Change Fog Opacity | 65 | 65 | STRIP | No GBA analogue. |
+| 206 | Change Fog Opacity | 65 | 65 | STRIP | No GBA analogue. **Implemented 2026-10-23:** emits a `# fog: ... stripped` breadcrumb, never queues (a facing conditional whose arms are only breadcrumbs is still valid Poryscript). |
 | 241/242/245/246 | BGM ops | ~90 | ~90 | DET/STRIP | `playbgm`/`fadedefaultbgm`; memorize/restore → STRIP. |
 | 314 | Recover All | 54 | 54 | DET | **[A30]** `special HealPlayerParty` — `engine/data/specials.inc:20`, impl `engine/src/script_pokemon_util.c:37`, real use `engine/data/event_scripts.s:1245`. **This row previously said `healparty`, which does not exist** (`.macro healparty` matches nothing in `event.inc`); it is the canonical invented-symbol bug, recorded in CLAUDE.md §4.7/§11, and it sat here recommending itself for all 54 occurrences. |
 | 224 | Screen Flash | 50 | 50 | DET/STRIP | Brief flash; often plumbing. |
@@ -98,7 +98,7 @@ below is what those classifiers may emit.
 | 104 | Change Text Options | 35 | 35 | STRIP | — |
 | 112/413/113 | Loop / Repeat / Break | ~95 | ~95 | JUDGE | `while`/loop control (often the random-item events). |
 | 203 | Scroll Map | 33 | 33 | WIRE | **[A30] over-claim corrected — the special already exists.** `special SpawnCameraObject` (`specials.inc:298`) → `applymovement LOCALID_CAMERA, <movement>` (`LOCALID_CAMERA` = `constants/event_objects.h:511`) → `waitmovement 0` → `special RemoveCameraObject` (`:299`). Working vanilla example: `engine/data/maps/NavelRock_Top/scripts.inc:36-41,82-86`. |
-| 225 | Screen Shake | 30 | 30 | WIRE | **[A30] over-claim corrected.** `special ShakeCamera` (`specials.inc:332`), parameterised by `VAR_0x8004`–`VAR_0x8007` (vertical pan / horizontal pan / shake count / delay), then `waitstate`. Documented vanilla use: `engine/data/scripts/cave_of_origin.inc:24-34`, plus 12+ other maps. |
+| 225 | Screen Shake | 30 | 30 | WIRE | **[A30] over-claim corrected.** `special ShakeCamera` (`specials.inc:332`), parameterised by `VAR_0x8004`–`VAR_0x8007` (vertical pan / horizontal pan / shake count / delay), then `waitstate`. Documented vanilla use: `engine/data/scripts/cave_of_origin.inc:24-34`, plus 12+ other maps. **Implemented 2026-10-23 (`_emit_screen_shake`):** RMXP `[power, speed, duration_f]` -> `VAR_0x8004=0` (RMXP shake is horizontal only), `0x8005=power` (px), `0x8006=max(2, duration // delay)`, `0x8007=delay=max(1, 10 // speed)`, `special(ShakeCamera)`, `waitstate`. power/speed must be 1..9, duration 1..255, else queues. |
 | 221/222 | Transition prep/execute | 39 | 39 | STRIP | Plumbing of the warp/transition idiom. |
 | 132 | Change Battle BGM | 18 | 18 | JUDGE | `nextBattleBack`-adjacent; usually STRIP. |
 | 231/232/235/234 | Picture ops | 50 | 50 | C | Image overlays (`NeedsC` in the RGSS table). |
@@ -135,7 +135,7 @@ below is what those classifiers may emit.
 | `pbNoticePlayer` | 250 | 100 | trainer approach+`!` (native in `trainerbattle`; standalone → `applymovement`) | ✓ native; local-id |
 | `pbRockSmashRandomEncounter` | 65 | 65 | `EventScript_RockSmash` + `special RockSmashWildEncounter` | ✓VERIFIED native |
 | `pbBerryPlant` | 53 | 53 | `data/scripts/berry_tree.inc` (berry-tree object) | ✓VERIFIED native |
-| `pbCaveEntrance` / `pbCaveExit` / `…Ex` | 102 | 102 | cave-darkness map flag + `EventScript_UseFlash`; exit may be a `warp` | ✓VERIFIED native (mostly map setup) |
+| `pbCaveEntrance` / `pbCaveExit` / `…Ex` | 102 | 102 | cave-darkness map flag + `EventScript_UseFlash`; exit may be a `warp` | ✓VERIFIED native (mostly map setup). **Bare `pbCaveEntrance` and `pbCaveExit` subsumed by the native warp fade (breadcrumb, no queue) 2026-10-23**; `pbCaveExit` = `pbEraseEscapePoint` + the same fade (`101__PField_Field.rb:2047`), escape point has no GBA consumer. Argument forms and `…Ex` still queue. |
 | `pbBridgeOn` / `pbBridgeOff` | 65 | 65 | `MB_*_BRIDGE` metatile behaviors | ✓VERIFIED native (map data) |
 | `pkmn.pbLearnMove` | (≈87 in table) | — | `ChooseMonForMoveRelearner` + `TeachMoveRelearnerMove` specials | ✓VERIFIED native (move relearner) |
 | `pbStartTrade` | 5 | 5 | in-game trade (`ingame_trades` + trade scene special) | ⚠RECHECK exact special |
@@ -189,3 +189,18 @@ These are the §10 fidelity / track-assignment calls surfaced by this pass:
    This is OQ-R4.
 4. **⚠RECHECK rows** still to fork-verify (trade special, day-care call mapping,
    mystery gift, boulder, partner, code 125 money) — next pass.
+
+## Addendum 2026-10-23 (CH10 transpiler wave)
+
+| Essentials shape | Emitted | Notes |
+|---|---|---|
+| `N>$Trainer.money` (script condition, literal N) | `checkmoney(N)` + `if (var(VAR_RESULT) == FALSE) {then} else {otherwise}` | checkmoney TRUE = money >= N, so Essentials "short of N" is the FALSE arm. `$Trainer.money<pbGet(..)` queues. |
+| `$Trainer.money-=N` (literal N) | `removemoney(N)` | `-=pbGet(..)` queues. |
+| `if Kernel.pbAddPokemon(:SYM, lvl)` (symbol form, no else) | native gift flow (`_emit_give_pokemon`) then the then-arm | pbAddPokemon is false only when boxes are full; native `MON_CANT_GIVE` path ends the script, skipping the then-arm. |
+| talk-to `pbTrainerBattle(...)` whose win-body flips a self-switch, on an action-button page | `trainerbattle_no_intro(<trainer>, <lose text>)` + win-body, no `cleartrainerflag` | One-time duel (CH10 school kids). Same self-switch win-body on a touch trigger still queues (sight trainer = object-template turf). CH03 Mawuli (repeatable, no self-switch) unchanged: still `cleartrainerflag`. |
+
+| Essentials text shape | Emitted | Notes |
+|---|---|---|
+| `\G` in a Show Text | `showmoneybox(0, 0)` + normal msgbox + `hidemoneybox` | Gold window shown for that one message (059_Messages.rb); fork macros `event.inc:1374-1386`, vanilla x/y 0,0 (`day_care_frlg.inc:4`). Code stripped from the text; if the inner text queues, nothing is wrapped. |
+| `\CN` in a Show Text | `showcoinsbox(0, 0)` + msgbox + `hidecoinsbox(0, 0)` | Coins window; macros `event.inc:1688-1699`. |
+| `\v[N]` where var N was cleanly written by a Control Variables (122) earlier on the same page | `buffernumberstring(STR_VAR_k, VAR_...)` before the msgbox, `{STR_VAR_k}` in the text | Generalises `_numeric_text_vars` (previously Pokedex-count/ladder only). Never-written var, or more than 3 distinct vars in one message, still queues. Nickname path (`BufferMonNickname`, `{STR_VAR_1}`) is checked first and unchanged. |

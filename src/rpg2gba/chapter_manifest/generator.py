@@ -140,7 +140,9 @@ _CODE_EFFECT: dict[int, str] = {
     323: "graphic",
     204: "graphic",  # Change Map Settings — panorama/fog, cosmetic-safe like 322/323
     208: "graphic",  # Change Transparent Flag
+    206: "graphic",  # Change Fog Opacity — stripped (no GBA fog layer), cosmetic
     207: "animation",  # Show Animation
+    225: "screen_fx",  # Screen Shake -> special ShakeCamera
     223: "screen_fx",  # Change Screen Color Tone
     # The four codes below were `other_codes` purely because this table
     # never named them, not because the transpiler cannot emit them

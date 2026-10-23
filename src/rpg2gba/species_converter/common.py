@@ -177,6 +177,11 @@ STARTER_SPECIES: tuple[SpeciesSpec, ...] = (
     SpeciesSpec(73, "MODRILLE"),
     SpeciesSpec(74, "DRILGANN"),
     SpeciesSpec(94, "BARAND"),
+    # PAHAR (Map060 EV007 vendor gift, pbAddPokemon) -> PALIJ -> PAJAY, staged
+    # whole so no evolution target dangles. Fire/Flying, no Nuclear typing.
+    SpeciesSpec(50, "PAHAR"),
+    SpeciesSpec(51, "PALIJ"),
+    SpeciesSpec(52, "PAJAY"),
 )
 
 

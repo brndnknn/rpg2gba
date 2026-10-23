@@ -71,6 +71,15 @@ EXPECTED_ICON_PAL_INDEX = {
     "SPONEE": 3,
     "SPONAREE": 3,
     "SEIKAMATER": 2,
+    # Pinned 2026-10-23 for CH10's Modrille/Drilgann/Barand and the Pahar
+    # line (Map060 vendor gift). Computed via convert_species_icon, not
+    # eyeballed on a contact sheet.
+    "MODRILLE": 2,
+    "DRILGANN": 2,
+    "BARAND": 0,
+    "PAHAR": 1,
+    "PALIJ": 1,
+    "PAJAY": 1,
     # Pinned 2026-08-05 against the same real Uranium assets + vendored
     # engine icon palettes, for the Route-1 trainer-party species (+ their
     # evolution-chain closure, see common.py's STARTER_SPECIES comment).
