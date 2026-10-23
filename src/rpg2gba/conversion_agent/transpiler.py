@@ -1349,12 +1349,25 @@ class TranspileContext:
     # plain SSA setflag form.
     rock_event_ids: dict[int, frozenset[int]] = field(default_factory=dict)
 
+    # map_id -> RMXP ids of that map's events with no character sheet on any
+    # page (tile-graphic or blank), filled by ``register_map_rocks``. A move
+    # route on one of these that only toggles render priority has nothing to
+    # draw (``_emit_move_route``).
+    spriteless_event_ids: dict[int, frozenset[int]] = field(default_factory=dict)
+
     def register_map_rocks(self, map_id: int, events: list[dict]) -> frozenset[int]:
         """Pre-scan ``events`` (one map's full event list) for smashable
         rocks and record them under ``map_id``. Call once per map before
-        transpiling any of its events."""
+        transpiling any of its events. Also records the map's sprite-less
+        events (``spriteless_event_ids``)."""
         ids = smashable_rock_event_ids(events)
         self.rock_event_ids[map_id] = ids
+        self.spriteless_event_ids[map_id] = frozenset(
+            int(ev["id"]) for ev in events
+            if ev and not any(
+                (p.get("graphic") or {}).get("character_name") for p in ev.get("pages", [])
+            )
+        )
         return ids
 
     # map_id -> (event id, letter) pairs whose self switch, once ON, selects a
@@ -4897,6 +4910,18 @@ class _PageEmitter:
         if (target == 0 or (target != -1 and target == self.ctx.event_id)) \
                 and is_door_sheet(self.ctx.page_graphic):
             return self._emit_door_self_route(node, route)
+
+        # A route on ANOTHER event that only toggles render priority (39/40
+        # Always on Top) is a draw-order hint; if that event has no character
+        # sheet on any page it has no sprite to reorder, and placing it as an
+        # object just to receive the hint would clash with its bg/coord form
+        # (Map066 EV048-053 "Fakefloor" under the Gym 2 pillar). Drop it; the
+        # paired 210 keeps following the previous route.
+        steps = [s.get("code", 0) for s in route.get("list", []) if s.get("code", 0) != 0]
+        if (target > 0 and target != self.ctx.event_id and steps
+                and set(steps) <= {39, 40}
+                and target in self.ctx.spriteless_event_ids.get(self.ctx.map_id, frozenset())):
+            return [f"# move route: render-priority only on sprite-less event {target} — dropped"]
 
         # A code-41 Change Graphic step is script-level, not a movement token,
         # so a route carrying one is emitted as alternating applymovement runs

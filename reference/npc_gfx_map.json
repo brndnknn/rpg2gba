@@ -501,6 +501,9 @@
   "PU-BurolePillar": {
     "gfx": "OBJ_EVENT_GFX_URANIUM_PU_BUROLEPILLAR",
     "fallback": "OBJ_EVENT_GFX_SIGN",
-    "note": "Gym 2 gem-socket pillar prop: three brown stone pillars side by side in grid cell (0,0), the middle one with a dark socket. 384x256 (96x64 cells, NOT 32x32) - non-standard size, needs LARGE_PROP_SHEETS (64x64 canvas) in graphics/sprites.py. Map066 EV045 Pillar - chapter-10 expansion. No code-41 swaps (page 0 sheet, page 1 blank). PROP, not a walking NPC"
+    "note": "Gym 2 gem-socket pillar prop: three brown stone pillars side by side in the top-left grid cell, the middle one with a dark socket. 384x256 (96x64 cells, NOT 32x32) - non-standard size, in LARGE_PROP_SHEETS (64x64 canvas, graphics/sprites.py). Single STATE: the only non-empty cell is (direction 2, pattern 0), the idle cell, which keeps the bare constant. Map066 EV045 Pillar - chapter-10 expansion. No code-41 swaps (page 0 sheet, page 1 blank). PROP, not a walking NPC",
+    "states": {
+      "2,0": "OBJ_EVENT_GFX_URANIUM_PU_BUROLEPILLAR"
+    }
   }
 }

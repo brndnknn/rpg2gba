@@ -325,7 +325,13 @@ BERRY_TREE_ID_CAPACITY = BERRY_TREES_COUNT - BERRY_TREE_ID_FIRST  # 38
 # a null sentinel (FlagGet always FALSE) and would respawn the rock immediately.
 ROCK_FLAG_FIRST = 0x11
 ROCK_FLAG_LAST = 0x1F
-ROCK_FLAG_CAPACITY = ROCK_FLAG_LAST - ROCK_FLAG_FIRST + 1  # 15
+# Overflow pool, used only once 11..1F is full (CH10 Gym 2: 15 rocks + its
+# hidden actors), so every map that fit before keeps its exact assignment. The
+# fork's own flags.h marks FLAG_TEMP_5..D, F and 10 "Unused Flag"; 1..4 are
+# vanilla script temps and E suppresses the follower, so those stay out.
+ROCK_FLAG_OVERFLOW = (0x5, 0x6, 0x7, 0x8, 0x9, 0xA, 0xB, 0xC, 0xD, 0xF, 0x10)
+ROCK_FLAG_POOL = tuple(range(ROCK_FLAG_FIRST, ROCK_FLAG_LAST + 1)) + ROCK_FLAG_OVERFLOW
+ROCK_FLAG_CAPACITY = len(ROCK_FLAG_POOL)  # 26
 
 
 # Uranium per-event temp-switch page-gate idiom (Game_Event#tempSwitches, see
@@ -1721,21 +1727,19 @@ def assign_berry_tree_ids(
 def _assign_visibility_flags(
     rock_ids: list[int], actor_ids: list[int], uid: int
 ) -> dict[int, str]:
-    """FLAG_TEMP_11.._1F, shared by `smashable_rock` events AND hidden
-    cutscene actors (findings §3.3/§5) — one sequential pool, ascending
-    event-id order across BOTH kinds (vanilla obstacle-flag convention; see
-    the ROCK_FLAG_* module comment). Raises if the map has more
-    traited/choreographed events than the range holds."""
+    """FLAG_TEMP_11.._1F then the overflow pool (`ROCK_FLAG_POOL`), shared by
+    `smashable_rock` events AND hidden cutscene actors (findings §3.3/§5) —
+    one sequential pool, ascending event-id order across BOTH kinds (vanilla
+    obstacle-flag convention; see the ROCK_FLAG_* module comment). Raises if
+    the map has more traited/choreographed events than the pool holds."""
     all_ids = sorted(set(rock_ids) | set(actor_ids))
     if len(all_ids) > ROCK_FLAG_CAPACITY:
         raise ValueError(
             f"map {uid}: {len(all_ids)} smashable_rock/hidden-actor events "
-            f"exceed the FLAG_TEMP_{ROCK_FLAG_FIRST:X}..FLAG_TEMP_{ROCK_FLAG_LAST:X} "
-            f"capacity ({ROCK_FLAG_CAPACITY})"
+            f"exceed the temp-flag pool (FLAG_TEMP_{ROCK_FLAG_FIRST:X}..FLAG_TEMP_"
+            f"{ROCK_FLAG_LAST:X} + overflow; capacity {ROCK_FLAG_CAPACITY})"
         )
-    return {
-        eid: f"FLAG_TEMP_{ROCK_FLAG_FIRST + i:X}" for i, eid in enumerate(all_ids)
-    }
+    return {eid: f"FLAG_TEMP_{ROCK_FLAG_POOL[i]:X}" for i, eid in enumerate(all_ids)}
 
 
 def _visibility_expr(

@@ -3195,18 +3195,30 @@ def test_build_object_events_object_cap_exceeded_fails_loud() -> None:
 
 
 def test_build_object_events_rock_flags_capacity_exceeded() -> None:
-    """More than 15 (FLAG_TEMP_11..FLAG_TEMP_1F) smashable_rock events on one map
-    is a fail-loud error, not silent flag reuse/overflow."""
+    """More smashable_rock events on one map than the temp-flag pool holds
+    (FLAG_TEMP_11..1F + the overflow pool, ROCK_FLAG_CAPACITY) is a fail-loud
+    error, not silent flag reuse."""
     consts = mc.MapConstantRegistry(Path("x")).mint(49, "Moki Town Player's House 1F")
+    n = mw.ROCK_FLAG_CAPACITY + 1
     map_json = {
         "map_id": 49,
-        "events": [_event(i, i, 0, [_page(name="HGSS_000")]) for i in range(1, 17)],
+        "events": [_event(i, i, 0, [_page(name="HGSS_000")]) for i in range(1, n + 1)],
     }
     with pytest.raises(ValueError):
         mw.build_object_events(
             map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture(),
-            event_traits={i: ["smashable_rock"] for i in range(1, 17)},
+            event_traits={i: ["smashable_rock"] for i in range(1, n + 1)},
         )
+
+
+def test_rock_flags_overflow_keeps_first_15_and_spills_to_unused_temps() -> None:
+    """The first 15 events keep FLAG_TEMP_11..1F exactly as before the overflow
+    pool existed; the 16th onward take the fork's unused FLAG_TEMP_5.. (CH10
+    Gym 2)."""
+    flags = mw._assign_visibility_flags(list(range(1, 18)), [], 66)
+    assert [flags[i] for i in range(1, 16)] == [f"FLAG_TEMP_{0x11 + i:X}" for i in range(15)]
+    assert flags[16] == "FLAG_TEMP_5"
+    assert flags[17] == "FLAG_TEMP_6"
 
 
 def test_build_object_events_unknown_trait_fails_loud() -> None:
