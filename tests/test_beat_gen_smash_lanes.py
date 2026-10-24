@@ -99,6 +99,35 @@ def test_fixed_facing_lane_free_approach_stays():
     assert split.gates == {}
 
 
+def _stair(cells: tuple[tuple[int, int], ...]) -> PlannedBeat:
+    name = f"m033stair{cells[0][0]}x{cells[0][1]}"
+    rows = tuple(f"map033/terrain/stairs/{x},{y}" for x, y in cells)
+    return PlannedBeat(name=name, template="stair", map_id=MAP, rows=rows, group=name,
+                       kwargs=make_kwargs())
+
+
+def test_stair_in_battled_trainer_lane_waits_on_it():
+    """CH10 Gym 2 shape: a run whose top cell is in trainer 35's lane."""
+    stair = _stair(((15, 23), (14, 22)))
+    split = _split([stair, _trainer(35), _trainer(39, "generic")])
+    assert [b.name for b in split.beats] == [stair.name, "m033e035_trainer", "m033e039_generic"]
+    assert split.gates == {stair.name: (35,)}
+    assert sl.wait_edges(split, split.beats) == {
+        "map033/terrain/stairs/15,23": (("map033/ev035/p0",),)}
+
+
+def test_stair_clear_of_lanes_or_in_generic_lane_does_not_wait():
+    assert _split([_stair(((1, 1), (1, 2))), _trainer(35)]).gates == {}
+    assert _split([_stair(((13, 37),)), _trainer(39, "generic")]).gates == {}
+
+
+def test_lane_beside_the_run_gates_the_stair():
+    """(15,23) is in trainer 35's lane: a run ending on (14,23) is stepped on
+    and off from it."""
+    split = _split([_stair(((14, 23), (13, 24))), _trainer(35)])
+    assert split.gates == {"m033stair14x23": (35,)}
+
+
 def test_inbound_trainer_does_not_gate():
     split = _split([_smash((42,)), _trainer(35, manifest_chapter_id="CH07")])
     assert split.gates == {}

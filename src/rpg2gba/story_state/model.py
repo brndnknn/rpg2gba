@@ -972,6 +972,56 @@ def _write_satisfies(write: Write, test: Test) -> bool:
     return True  # Adjust: key matches, treated as a candidate
 
 
+def _exhaustive_arm_parents(
+    candidates: Sequence[str],
+    rows_by_id: dict[str, RowState],
+    seed: State,
+    live_rows: Mapping[str, object],
+) -> tuple[str, ...] | None:
+    """The "one of N" rule (CH10 Gym 2 gem puzzle, operator ruling
+    2026-10-24): when EVERY enabler candidate is a branch arm guarded only by
+    `var == k` on one shared variable, and those k cover every value the
+    variable can hold in scope (seed plus every live `Assign` to it; any
+    `Adjust` or havoc on it refuses), then the write is certain once every
+    arm's PARENT row has run -- whichever value the variable holds, one arm
+    fires. Returns those parent rows (each becomes its own `enabled_by`
+    group: all must run) or None when the rule does not apply.
+
+    Assumes the variable is not re-rolled between the parents' runs (Gym 2's
+    roll is a one-shot autorun); the ROM run catches a puzzle that breaks it."""
+    if len(candidates) < 2:
+        return None
+    var: Key | None = None
+    covered: set[Any] = set()
+    parents: list[str] = []
+    for rid in candidates:
+        row = rows_by_id[rid]
+        guard = row.arm_guard
+        if guard is None or row.parent_row_id is None or len(guard.tests) != 1:
+            return None
+        (t,) = guard.tests
+        if t.op != "==" or not isinstance(t.key, Variable) or var not in (None, t.key):
+            return None
+        var = t.key
+        covered.add(t.value)
+        parents.append(row.parent_row_id)
+    assert var is not None
+    domain = set(_get(seed, var))
+    for rid in live_rows:
+        row = rows_by_id[rid]
+        if var in row.havoc_keys:
+            return None
+        for w in row.writes:
+            if w.key != var:
+                continue
+            if not isinstance(w, Assign):
+                return None
+            domain |= w.values
+    if VARIABLE_TOP in domain or not domain <= covered:
+        return None
+    return tuple(sorted(set(parents)))
+
+
 def compute_enabled_by(
     row_id: str,
     rows_by_id: dict[str, RowState],
@@ -997,6 +1047,10 @@ def compute_enabled_by(
                 f"but no in-scope live row writes a value satisfying {test!r} "
                 "-- enabler search found nothing (bug)"
             )
+        parents = _exhaustive_arm_parents(candidates, rows_by_id, seed, live_rows)
+        if parents is not None:
+            groups.extend((p,) for p in parents)
+            continue
         groups.append(tuple(candidates))
     return tuple(groups)
 

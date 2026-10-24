@@ -7,6 +7,10 @@ spotted mid-smash. Such a rock leaves the main `smash` group for a second one
 beat (`wait_edges`). Rocks with at least one lane-free approach stay put; the
 runtime picks that approach.
 
+A stair beat stands on every cell of its run, so one whose run crosses the
+lane (or a cell beside it) of a trainer this chapter battles waits on
+that trainer (CH10).
+
 Pure: the geometry arrives as callables so tests need no map data.
 """
 from __future__ import annotations
@@ -90,6 +94,13 @@ def split_lane_gated(
     gates: dict[str, tuple[int, ...]] = {}
     waits: dict[str, tuple[str, ...]] = {}
     for b in beats:
+        if b.template == "stair":
+            out.append(b)
+            gating = _stair_gates(b, trainers, lane_of)
+            if gating:
+                gates[b.name] = gating
+                waits[b.name] = tuple(trainers[(b.map_id, t)].group for t in gating)
+            continue
         if b.template != "smash":
             out.append(b)
             continue
@@ -129,6 +140,24 @@ def split_lane_gated(
         gates[name] = gating
         waits[name] = tuple(trainers[(b.map_id, t)].group for t in gating)
     return LaneSplit(tuple(out), gates, waits)
+
+
+def _stair_gates(
+    b: PlannedBeat, trainers: Mapping[tuple[int, int], PlannedBeat],
+    lane_of: Callable[[int, int], frozenset[Cell] | None],
+) -> tuple[int, ...]:
+    """The trainers a stair beat waits on: those this chapter BATTLES on its
+    map whose lane covers a cell of the run or a cell beside it. The beat
+    stands on every cell of the run and steps on and off it from a neighbour,
+    so it has no lane-free alternative. CH10 Gym 2: look-around Tod's lane
+    ends on (14,21), the top of one run; look-around Martin's covers (25,21),
+    the cell the other run's top is stepped onto from."""
+    run = {tuple(int(v) for v in rid.rsplit("/", 1)[1].split(",")) for rid in b.rows}
+    cells = run | {(x + dx, y + dy) for x, y in run
+                   for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))}
+    return tuple(t for (m, t), beat in sorted(trainers.items())
+                 if m == b.map_id and beat.template == "trainer"
+                 and (lane := lane_of(m, t)) and lane & cells)
 
 
 def wait_edges(split: LaneSplit, beats: Sequence[PlannedBeat]

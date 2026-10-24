@@ -994,21 +994,12 @@ generic_beat(
     skip_claimed=True,
 )
 
-stair_beat(
-    ch10,
-    chapter_id='CH10',
-    beat_name='m066stair14x21',
-    group='m066stair14x21',
-    rows=('map066/terrain/stairs/14,21', 'map066/terrain/stairs/14,22', 'map066/terrain/stairs/15,23', 'map066/terrain/stairs/15,24'),
-    approach_prefer='east',
-)
-
 trainer_beats(
     ch10,
     chapter_id='CH10',
     beat_prefix='m066e001_trainer',
     group='m066e001_trainer',
-    approach_prefer='east',
+    approach_prefer='south',
     defeat_flag='TRAINER_FLAGS_START + TRAINER_TOD_30',
     deferred_retalks=('map066/ev001/p2',),
     double=False,
@@ -1028,8 +1019,17 @@ generic_beat(
     beat_name='m066e001_trainer_arms',
     group='m066e001_trainer',
     rows=('map066/ev001/p0/b0',),
-    approach_prefer='east',
+    approach_prefer='south',
     skip_claimed=True,
+)
+
+stair_beat(
+    ch10,
+    chapter_id='CH10',
+    beat_name='m066stair14x21',
+    group='m066stair14x21',
+    rows=('map066/terrain/stairs/14,21', 'map066/terrain/stairs/14,22', 'map066/terrain/stairs/15,23', 'map066/terrain/stairs/15,24'),
+    approach_prefer='east',
 )
 
 trainer_beats(
@@ -1037,7 +1037,7 @@ trainer_beats(
     chapter_id='CH10',
     beat_prefix='m066e003_trainer',
     group='m066e003_trainer',
-    approach_prefer='west',
+    approach_prefer='south',
     defeat_flag='TRAINER_FLAGS_START + TRAINER_MARTIN_32',
     deferred_retalks=('map066/ev003/p2',),
     double=False,
@@ -1057,7 +1057,7 @@ generic_beat(
     beat_name='m066e003_trainer_arms',
     group='m066e003_trainer',
     rows=('map066/ev003/p0/b0',),
-    approach_prefer='west',
+    approach_prefer='south',
     skip_claimed=True,
 )
 
@@ -1068,15 +1068,6 @@ stair_beat(
     group='m066stair23x23',
     rows=('map066/terrain/stairs/23,23', 'map066/terrain/stairs/23,24', 'map066/terrain/stairs/24,21', 'map066/terrain/stairs/24,22'),
     approach_prefer='west',
-)
-
-generic_beat(
-    ch10,
-    chapter_id='CH10',
-    beat_name='m066e045p0',
-    group='m066e045p0',
-    rows=('map066/ev045/p0', 'map066/ev045/p0/b0', 'map066/ev045/p0/b1'),
-    approach_prefer='north',
 )
 
 generic_beat(
@@ -1108,6 +1099,15 @@ smash_beat(
     approach_prefer='east',
     capability='rock_smash',
     sight_trainers=(),
+)
+
+generic_beat(
+    ch10,
+    chapter_id='CH10',
+    beat_name='m066e045p0',
+    group='m066e045p0',
+    rows=('map066/ev045/p0', 'map066/ev045/p0/b0'),
+    approach_prefer='south',
 )
 
 generic_beat(
@@ -1609,6 +1609,7 @@ ELSEWHERE: dict[str, str] = {
     'map066/ev044/p0': 'converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer)',
     'map066/ev044/p0/b0': 'converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer)',
     'map066/ev044/p0/b1': 'converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer)',
+    'map066/ev045/p0/b1': 'unselected_arm: not taken on the walk: needs switch 67 == False, and here switch 67 is [True] (ruling 19)',
 }
 
 REFUSED: dict[str, str] = {

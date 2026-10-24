@@ -172,6 +172,45 @@ def test_saturation_stage_and_enabled_by_two_step_chain() -> None:
     assert enabled == ((setter_id,),)
 
 
+def _one_of_n_rows(arm_values: tuple[int, ...]) -> dict:
+    """CH10 Gym 2 shape: an autorun rolls var 20 in 0..2; each "rock" event
+    sets switch 10 only in its `var 20 == k` arm; event 9 is gated on it."""
+    roll = _page([_cmd(122, [20, 20, 0, 2, 0, 2])], trigger=3)
+    rocks = [
+        _event(2 + i, [_page([
+            _cmd(111, [1, 20, 0, k, 0], indent=0),
+            _cmd(121, [10, 10, 0], indent=1),
+            _cmd(412, [], indent=0),
+        ])])
+        for i, k in enumerate(arm_values)
+    ]
+    gated = _page([_cmd(101, ["gem"])], condition={"switch1_valid": True, "switch1_id": 10})
+    return _rows([_event(1, [roll]), *rocks, _event(9, [gated])])
+
+
+def _enabled_by_of_gated(rows: dict) -> tuple:
+    result = saturate({}, rows, _order(rows), already_owned={},
+                      structural_refusal=_structural_refusals(rows))
+    return compute_enabled_by(page_row_id(999, 9, 0), rows, {},
+                              {r: None for r in result.newly_owned})
+
+
+def test_exhaustive_random_arms_need_every_parent() -> None:
+    """Every value of the roll has an arm: the write is certain only once
+    every rock has run, so each rock's trunk is its own enabler group."""
+    rows = _one_of_n_rows((0, 1, 2))
+    assert _enabled_by_of_gated(rows) == tuple(
+        (page_row_id(999, e, 0),) for e in (2, 3, 4))
+
+
+def test_partial_random_arms_stay_any_of() -> None:
+    """Value 2 has no arm: no set of rocks makes the write certain, so the
+    enabler stays the plain any-of group of arms."""
+    rows = _one_of_n_rows((0, 1))
+    arms = tuple(sorted(branch_row_id(page_row_id(999, e, 0), 0) for e in (2, 3)))
+    assert _enabled_by_of_gated(rows) == (arms,)
+
+
 # --- killed_by ------------------------------------------------------------
 
 

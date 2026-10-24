@@ -248,6 +248,36 @@ def apply_taint(state: dict, taint: Collection[Taint]) -> dict:
     return out
 
 
+def _one_of_n_writes(beat: PlannedBeat, row_states: Callable[[int], Mapping[str, RowState]],
+                     state: Mapping) -> dict:
+    """`state` after a smash beat, for the "one of N" rule (CH10 Gym 2 gem
+    puzzle; `story_state.model._exhaustive_arm_parents` is the story-model
+    half). A smash beat fires no page here, but when the arms under its rows
+    are each guarded only by `var == k` on one variable, every value the walk
+    state allows for that variable has an arm, and every arm makes the same
+    unconditional assignments, those are certain once the beat has run."""
+    out = dict(state)
+    claimed = set(beat.rows)
+    states = row_states(beat.map_id)
+    arms: dict[Key, list[RowState]] = {}
+    for rs in states.values():
+        guard = rs.arm_guard
+        if rs.parent_row_id in claimed and guard is not None and len(guard.tests) == 1 \
+                and guard.tests[0].op == "==" and isinstance(guard.tests[0].key, Variable):
+            arms.setdefault(guard.tests[0].key, []).append(rs)
+    for var, rows in sorted(arms.items(), key=lambda kv: repr(kv[0])):
+        domain = _get(out, var)
+        covered = {rs.arm_guard.tests[0].value for rs in rows}  # type: ignore[union-attr]
+        writes = {frozenset((w.key, w.values) for w in rs.writes
+                            if isinstance(w, Assign) and not w.conditional
+                            and not isinstance(w.key, TempSwitch)) for rs in rows}
+        if len(rows) < 2 or VARIABLE_TOP in domain or not domain <= covered or len(writes) != 1:
+            continue
+        for key, values in writes.pop():
+            out[key] = values
+    return out
+
+
 def fired_pages(beat: PlannedBeat) -> list[str]:
     walked = beat.rows + tuple(dict(beat.kwargs).get("walk_rows", ()))
     out: list[str] = []
@@ -328,6 +358,8 @@ def select_state_arms(
 
     for at, beat in enumerate(beats):
         if beat.template not in FIRING_TEMPLATES:
+            if beat.template == "smash":
+                state = apply_taint(_one_of_n_writes(beat, row_states, state), taint)
             out.append(beat)
             history.append(state)
             continue

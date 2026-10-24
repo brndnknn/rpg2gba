@@ -405,3 +405,38 @@ def test_a_page_that_ended_itself_is_not_walked_again_by_another_group(monkeypat
     assert [b.name for b in beats] == ["a"]
     assert [(e.row_id, e.status) for e in elsewhere] == [(f"{P2}/b1", "unselected_arm")]
     assert "ended itself" in elsewhere[0].detail
+
+
+# --- one of N: a smash beat's random-arm writes (CH10 Gym 2) -------------
+
+ROLL = Variable(108)
+GEM = Switch(67)
+
+
+def _rocks(values):
+    """Rock k's smash arm `map066/ev00k/p0/b0` holds a `var 108 == k` arm
+    setting switch 67."""
+    states = {}
+    for e, k in enumerate(values, start=1):
+        smash = f"map066/ev{e:03d}/p0/b0"
+        states[f"{smash}/b0"] = SimpleNamespace(
+            parent_row_id=smash, arm_guard=_guard(Test(ROLL, "==", k)),
+            writes=(Assign(GEM, frozenset({True}), conditional=False, source=f"ev{e}", list_index=e),))
+        states[f"{smash}/b1"] = SimpleNamespace(
+            parent_row_id=smash, arm_guard=_guard(Test(ROLL, "!=", k), negated=True), writes=())
+    beat = PlannedBeat(name="m066smash_rock_smash", template="smash", map_id=66,
+                       rows=tuple(f"map066/ev{e:03d}/p0/b0" for e in range(1, len(values) + 1)),
+                       group="m066smash_rock_smash")
+    return beat, states
+
+
+def test_smash_covering_every_roll_value_makes_the_write_certain():
+    beat, states = _rocks((0, 1, 2))
+    out = state_arms._one_of_n_writes(beat, lambda _m: states, {ROLL: frozenset({0, 1, 2})})
+    assert out[GEM] == frozenset({True})
+
+
+def test_smash_missing_a_roll_value_leaves_state_alone():
+    beat, states = _rocks((0, 1))
+    seed = {ROLL: frozenset({0, 1, 2})}
+    assert state_arms._one_of_n_writes(beat, lambda _m: states, seed) == seed

@@ -1856,8 +1856,10 @@ def smash_beat(
         while remaining:
             live = {ev.local_id for ev in emu.object_events() if ev.active}
             sight = frozenset().union(*(cells for lid_, cells in lanes.items() if lid_ in live))
+            standing = frozenset((obstacles[r].param("x"), obstacles[r].param("y"))
+                                 for r in remaining)
             row_id, approach, avoid = _next_reachable_obstacle(
-                emu, beat_name, map_constant, remaining, approach_prefer, sight)
+                emu, beat_name, map_constant, remaining, approach_prefer, sight, standing)
             remaining.remove(row_id)
             obstacle = obstacles[row_id]
             ox, oy = obstacle.param("x"), obstacle.param("y")
@@ -1909,6 +1911,7 @@ def _next_reachable_obstacle(
     remaining: Sequence[str],
     approach_prefer: str | None,
     sight: frozenset[tuple[int, int]] = frozenset(),
+    standing: frozenset[tuple[int, int]] = frozenset(),
 ) -> tuple[str, tuple[int, int], frozenset[tuple[int, int]]]:
     """The next obstacle to clear, the cell to approach it from, and the
     tiles the walk there must avoid.
@@ -1924,10 +1927,16 @@ def _next_reachable_obstacle(
     lane-free remains. Within a tier, the reviewed side (`approach_prefer`)
     wins, then the shortest route, then source order. Clearing only ever opens
     cells, so a greedy pick never strands the walk; no reachable approach at
-    all fails loud."""
+    all fails loud.
+
+    `standing` is the cells of obstacles known to stand, always avoided: the
+    engine spawns object events only near the camera, so the planner's live
+    object snapshot misses a far rock (CH10 Gym 2: a route to (34,24) through
+    the unspawned (33,24) rock, which appeared when the walk reached it)."""
     start = emu.player_pos()
     tried: list[str] = []
-    for avoid in ((sight, frozenset()) if sight else (frozenset(),)):
+    tiers = (sight, frozenset()) if sight else (frozenset(),)
+    for avoid in (tier | standing for tier in tiers):
         best: tuple[tuple[int, int, int], str, tuple[int, int]] | None = None
         for order, row_id in enumerate(remaining):
             event_id = parse_row_id(row_id).event_id
@@ -1956,7 +1965,7 @@ def _next_reachable_obstacle(
             if key[0]:
                 logger.info("%s: %s approached from %s, not the reviewed side %r (not "
                             "plannable from %s)", beat_name, row_id, cell, approach_prefer, start)
-            if sight and not avoid:
+            if sight and not (avoid - standing):
                 logger.warning("%s: no remaining obstacle is reachable outside the live "
                                "trainer sight lanes from %s; walking to %s for %s anyway",
                                beat_name, start, cell, row_id)

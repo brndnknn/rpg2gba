@@ -1342,9 +1342,9 @@ def _solve_with_lane_gates(gates: Mapping[str, tuple[int, ...]], solver: Callabl
         if not gates:
             raise
         raise RouteSolverError(
-            f"{exc} -- lane-gated smash group(s) {dict(gates)} must follow their gating "
-            "trainers' beats; if a gating trainer cannot be reached without smashing "
-            "that rock, the order is a cycle") from exc
+            f"{exc} -- lane-gated smash/stair beat(s) {dict(gates)} must follow their "
+            "gating trainers' beats; if a gating trainer cannot be reached without "
+            "smashing that rock, the order is a cycle") from exc
 
 
 def _with_sight_trainers(beats: Sequence[PlannedBeat]) -> tuple[PlannedBeat, ...]:
