@@ -994,17 +994,6 @@ generic_beat(
     skip_claimed=True,
 )
 
-smash_beat(
-    ch10,
-    chapter_id='CH10',
-    beat_name='m066smash2_rock_smash',
-    group='m066smash2_rock_smash',
-    rows=('map066/ev009/p0', 'map066/ev009/p0/b0', 'map066/ev016/p0', 'map066/ev016/p0/b0', 'map066/ev017/p0', 'map066/ev017/p0/b0', 'map066/ev020/p0', 'map066/ev020/p0/b0'),
-    approach_prefer='south',
-    capability='rock_smash',
-    sight_trainers=(1, 3),
-)
-
 stair_beat(
     ch10,
     chapter_id='CH10',
@@ -1041,17 +1030,6 @@ generic_beat(
     rows=('map066/ev001/p0/b0',),
     approach_prefer='east',
     skip_claimed=True,
-)
-
-smash_beat(
-    ch10,
-    chapter_id='CH10',
-    beat_name='m066smash_rock_smash',
-    group='m066smash_rock_smash',
-    rows=('map066/ev005/p0', 'map066/ev005/p0/b0', 'map066/ev006/p0', 'map066/ev006/p0/b0', 'map066/ev007/p0', 'map066/ev007/p0/b0', 'map066/ev008/p0', 'map066/ev008/p0/b0', 'map066/ev010/p0', 'map066/ev010/p0/b0', 'map066/ev011/p0', 'map066/ev011/p0/b0', 'map066/ev013/p0', 'map066/ev013/p0/b0', 'map066/ev014/p0', 'map066/ev014/p0/b0', 'map066/ev015/p0', 'map066/ev015/p0/b0', 'map066/ev018/p0', 'map066/ev018/p0/b0', 'map066/ev019/p0', 'map066/ev019/p0/b0'),
-    approach_prefer='south',
-    capability='rock_smash',
-    sight_trainers=(3,),
 )
 
 trainer_beats(
@@ -1119,6 +1097,17 @@ generic_beat(
     rows=('map066/ev004/p1',),
     approach_prefer='south',
     archetype=(('map066/ev004/p1', 'trainer'),),
+)
+
+smash_beat(
+    ch10,
+    chapter_id='CH10',
+    beat_name='m066smash_rock_smash',
+    group='m066smash_rock_smash',
+    rows=('map066/ev005/p0', 'map066/ev005/p0/b0', 'map066/ev006/p0', 'map066/ev006/p0/b0', 'map066/ev007/p0', 'map066/ev007/p0/b0', 'map066/ev008/p0', 'map066/ev008/p0/b0', 'map066/ev009/p0', 'map066/ev009/p0/b0', 'map066/ev010/p0', 'map066/ev010/p0/b0', 'map066/ev011/p0', 'map066/ev011/p0/b0', 'map066/ev013/p0', 'map066/ev013/p0/b0', 'map066/ev014/p0', 'map066/ev014/p0/b0', 'map066/ev015/p0', 'map066/ev015/p0/b0', 'map066/ev016/p0', 'map066/ev016/p0/b0', 'map066/ev017/p0', 'map066/ev017/p0/b0', 'map066/ev018/p0', 'map066/ev018/p0/b0', 'map066/ev019/p0', 'map066/ev019/p0/b0', 'map066/ev020/p0', 'map066/ev020/p0/b0'),
+    approach_prefer='east',
+    capability='rock_smash',
+    sight_trainers=(),
 )
 
 generic_beat(

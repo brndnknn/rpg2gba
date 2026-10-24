@@ -1422,11 +1422,11 @@
     "derived_hash": "c5a5bda38147360b"
   },
   "map033/ev040/p0": {
-    "disposition": "beat:m033smash",
+    "disposition": "beat:m033smash2",
     "derived_hash": "a930201f885e155b"
   },
   "map033/ev040/p0/b0": {
-    "disposition": "beat:m033smash",
+    "disposition": "beat:m033smash2",
     "derived_hash": "22ca1d7986838b74"
   },
   "map033/ev040/p0/b1": {
@@ -1462,11 +1462,11 @@
     "derived_hash": "9689b7cffeb3327b"
   },
   "map033/ev044/p0": {
-    "disposition": "beat:m033smash",
+    "disposition": "beat:m033smash2",
     "derived_hash": "a930201f885e155b"
   },
   "map033/ev044/p0/b0": {
-    "disposition": "beat:m033smash",
+    "disposition": "beat:m033smash2",
     "derived_hash": "22ca1d7986838b74"
   },
   "map033/ev044/p0/b1": {

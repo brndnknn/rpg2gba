@@ -1324,6 +1324,34 @@ def _trainer_lane(map_id: int, event_id: int) -> frozenset[tuple[int, int]] | No
     return _map_lanes(constant).get(local_id(constant, event_id))
 
 
+def _lane_free_reachable(map_id: int, lanes: frozenset[tuple[int, int]]
+                         ) -> frozenset[tuple[int, int]]:
+    """Cells reachable from the map's entries -- its warp cells and their
+    walkable neighbours, and its walkable edge cells (seams) -- without
+    stepping into `lanes` (`smash_lanes.split_lane_gated`). Rocks are not
+    modelled as blockers: the smash walk clears them in order."""
+    from collections import deque
+
+    from rpg2gba.traversal.graph import build_map_graph
+    graph = build_map_graph(map_id)
+    width, height = graph.width, graph.height
+    seeds: set[tuple[int, int]] = set()
+    for (x, y) in graph.warp_exits:
+        seeds |= {(x + dx, y + dy) for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1))}
+    seeds |= {(x, y) for x in range(width) for y in (0, height - 1)}
+    seeds |= {(x, y) for y in range(height) for x in (0, width - 1)}
+    start = {c for c in seeds if graph.is_walkable(c) and c not in lanes}
+    seen = set(start)
+    queue = deque(start)
+    while queue:
+        cur = queue.popleft()
+        for edge in graph.neighbors(cur):
+            if edge.target not in seen and edge.target not in lanes:
+                seen.add(edge.target)
+                queue.append(edge.target)
+    return frozenset(seen)
+
+
 def _solve_with_lane_gates(gates: Mapping[str, tuple[int, ...]], solver: Callable,
                            *args: object, **kwargs: object):  # noqa: ANN202
     """`solve_route`, failing loud about lane gates when the solve can't
@@ -2124,7 +2152,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     #     of which lies in a later trainer's sight lane is smashed after that
     #     trainer, in a second smash group.
     lane_split = split_lane_gated(beats, approach_cells=_rock_approach_cells,
-                                  lane_of=_trainer_lane)
+                                  lane_of=_trainer_lane,
+                                  lane_free_reachable=_lane_free_reachable)
     beats = lane_split.beats
     for name, gating in lane_split.gates.items():
         logger.info("lane-gated rocks in %s wait on trainer event(s) %s", name, list(gating))
