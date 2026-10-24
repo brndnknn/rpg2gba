@@ -453,6 +453,14 @@ _SIGHT_DELTAS: dict[str, tuple[int, int]] = {
     "UP": (0, -1), "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0)}
 
 
+def trainer_movement_type(map_constant: str, event_id: int) -> str:
+    """The compiled object's `movement_type` for an event (local id = index + 1,
+    as `trainer_sight_lanes` keys them)."""
+    lid = local_id(map_constant, event_id)
+    obj = (_emitted_map_json(map_constant).get("object_events") or [])[lid - 1]
+    return str(obj.get("movement_type", ""))
+
+
 def trainer_sight_lanes(map_constant: str) -> dict[int, frozenset[Cell]]:
     """Every compiled sight trainer's lane on `map_constant`, keyed by its
     compiled local id: the cells a player standing on would be seen from.

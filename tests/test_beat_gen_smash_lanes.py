@@ -68,23 +68,34 @@ def test_union_of_lanes_gates_and_records_each_trainer():
     assert [b.name for b in split.beats][0] == "m033smash_rock_smash"  # all gated: no rename
 
 
-def test_lane_free_approach_reachable_only_through_a_lane_is_gated():
-    """CH10 Gym 2 shape: rock 29's approaches are lane-free, but the walk
-    can reach none of them without crossing trainer 35's lane."""
+def test_look_around_trainer_gates_every_rock_on_its_map():
+    """CH10 Gym 2 shape: rock 29's approaches are lane-free, but a battled
+    look-around trainer on the map gates it anyway (random facing)."""
     split = sl.split_lane_gated(
         [_smash((29,)), _trainer(35)],
         approach_cells=lambda m, e: APPROACH[(m, e)],
         lane_of=lambda m, e: LANES.get((m, e)),
-        lane_free_reachable=lambda m, lanes: frozenset({(1, 1)}))
+        looks_around=lambda m, e: e == 35)
     assert split.gates == {"m033smash_rock_smash": (35,)}
 
 
-def test_lane_free_approach_reachable_without_a_lane_stays():
+def test_look_around_generic_beat_does_not_gate():
+    """A generic beat on a trainer event (CH08's ev039 phone rematch) is no
+    battle: its look-around lane does not gate."""
+    split = sl.split_lane_gated(
+        [_smash((29,)), _trainer(39, "generic")],
+        approach_cells=lambda m, e: APPROACH[(m, e)],
+        lane_of=lambda m, e: LANES.get((m, e)),
+        looks_around=lambda m, e: True)
+    assert split.gates == {}
+
+
+def test_fixed_facing_lane_free_approach_stays():
     split = sl.split_lane_gated(
         [_smash((29,)), _trainer(35)],
         approach_cells=lambda m, e: APPROACH[(m, e)],
         lane_of=lambda m, e: LANES.get((m, e)),
-        lane_free_reachable=lambda m, lanes: frozenset({(13, 20)}))
+        looks_around=lambda m, e: False)
     assert split.gates == {}
 
 

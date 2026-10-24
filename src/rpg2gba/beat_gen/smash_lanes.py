@@ -66,7 +66,7 @@ def split_lane_gated(
     beats: Sequence[PlannedBeat], *,
     approach_cells: Callable[[int, int], frozenset[Cell]],
     lane_of: Callable[[int, int], frozenset[Cell] | None],
-    lane_free_reachable: Callable[[int, frozenset[Cell]], frozenset[Cell]] | None = None,
+    looks_around: Callable[[int, int], bool] | None = None,
 ) -> LaneSplit:
     """Partition each smash beat's rocks into lane-free and lane-gated.
 
@@ -76,12 +76,15 @@ def split_lane_gated(
     outside the union of the lanes of this chapter's trainers on its map; its
     gates are the trainers whose lane covers at least one approach cell.
 
-    `lane_free_reachable(map, lanes)`, when given, is the set of cells the
-    walk can reach from the map's entries without entering `lanes`. A rock
-    whose lane-free approach cells are all outside it is gated too -- the
-    approach itself is clear, but every way TO it crosses a lane (CH10 Gym 2:
-    the only corridor to (25,19) runs through a look-around trainer's lane at
-    (25,21)). Its gates are then every lane trainer on the map."""
+    `looks_around(map, event)`, when given, marks a trainer whose facing
+    changes at random (`MOVEMENT_TYPE_LOOK_AROUND`). Every rock on the map of
+    such a trainer this chapter BATTLES (the `trainer` archetype) is gated
+    behind it: the walk between rocks may have to cross its lane, and no
+    crossing of a lane whose owner turns at random is safe (CH10 Gym 2: the
+    only corridor to (25,19), past the standing rocks, is look-around
+    Martin's lane at (25,21)). Fixed-facing lanes stay approach-only (the walk
+    routes around them), and generic beats on a trainer event (CH08's ev039,
+    a phone trainer beaten in CH02) are not battles."""
     trainers = this_chapter_trainers(beats, lane_of)
     out: list[PlannedBeat] = []
     gates: dict[str, tuple[int, ...]] = {}
@@ -103,9 +106,12 @@ def split_lane_gated(
             union = frozenset().union(*lanes.values()) if lanes else frozenset()
             if cells <= union:
                 gated[event_id] = tuple(t for t, lane in lanes.items() if lane & cells)
-            elif union and lane_free_reachable is not None \
-                    and not (cells - union) & lane_free_reachable(b.map_id, union):
-                gated[event_id] = tuple(lanes)
+                continue
+            lookers = tuple(t for t in lanes
+                            if trainers[(b.map_id, t)].template == "trainer"
+                            and looks_around is not None and looks_around(b.map_id, t))
+            if lookers:
+                gated[event_id] = lookers
         if not gated:
             out.append(b)
             continue
