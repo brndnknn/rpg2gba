@@ -128,6 +128,7 @@ from rpg2gba.playtest.cells import (
     event_page_empty,
     event_is_sight_trainer,
     event_page_moves,
+    ground_walkable,
     native_berry_tree_id,
     connection_arrival_cell,
     connection_exit_cells,
@@ -1884,6 +1885,10 @@ def smash_beat(
                     if a.kind == "erase_event":
                         STEP_HANDLERS["erase_event"](emu, beat_name, Step(
                             arm, a.kind, a.list_index, a.params))
+            if not ground_walkable(map_constant, (ox, oy)):
+                # The rock sat on a blocked tile (CH10 Gym 2 (9,15)): its removal,
+                # checked above, is the whole effect -- there is no cell to open.
+                continue
             before = emu.player_pos()
             if not assertions.try_step(emu, facing) or emu.player_pos() == before:
                 shot = emu.screenshot(f"{beat_name}_{row_id}_impassable")

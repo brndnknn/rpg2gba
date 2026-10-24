@@ -181,6 +181,15 @@ def _graph_for(map_constant: str, *, resolver: str) -> tuple[int, MapGraph]:
     return uid, graph
 
 
+def ground_walkable(map_constant: str, cell: Cell) -> bool:
+    """Is `cell` walkable ground in the offline graph, ignoring any event on
+    it? An obstacle can sit on a cell whose tile itself blocks (CH10 Gym 2's
+    (9,15): an RMXP up-only block the layout renders as a wall), so clearing
+    it removes the object without opening the cell."""
+    _uid, graph = _graph_for(map_constant, resolver="ground_walkable")
+    return graph.is_walkable(cell)
+
+
 def _event_lookup(uid: int, event_id: int, *, map_constant: str, resolver: str) -> dict:
     map_json = load_map_json(uid)
     for event in map_json.get("events", []):

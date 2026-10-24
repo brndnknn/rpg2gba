@@ -58,6 +58,13 @@ def test_golden_map068_kevlar_town_pokemon_center() -> None:
             x=7,
             y=7,
         ),
+        # CH10 (2026-10-23): Burole Town's Center (Map002), same layout.
+        hl.HealLocationEntry(
+            id="HEAL_LOCATION_BUROLE_TOWN_POKEMON_CENTER",
+            map="MAP_BUROLE_TOWN_POKEMON_CENTER",
+            x=8,
+            y=13,
+        ),
         hl.HealLocationEntry(
             id="HEAL_LOCATION_KEVLAR_TOWN_POKEMON_CENTER",
             map="MAP_KEVLAR_TOWN_POKEMON_CENTER",
@@ -88,12 +95,12 @@ def test_call_site_census_matches_measured_ground_truth() -> None:
     """64 `pbSetPokemonCenter` call sites across 42 distinct maps in the
     corpus (measured 2026-09-12). Staged: Map068 (CH03, Kevlar Center), and
     from CH06 Map042 (gym leader Maria's explicit-args call) + Map043
-    (Nowtoch Center nurse)."""
+    (Nowtoch Center nurse), and from CH10 Map002 (Burole Center nurse)."""
     sites = hl.find_call_sites(MAPS_DIR)
     assert len(sites) == 64
     assert len({s.map_id for s in sites}) == 42
     staged_sites = [s for s in sites if s.map_id in hl.SLICE_MAP_IDS]
-    assert [s.map_id for s in staged_sites] == [42, 43, 68]
+    assert [s.map_id for s in staged_sites] == [2, 42, 43, 68]
 
 
 def test_idempotent() -> None:
@@ -191,6 +198,7 @@ def test_call_site_heal_locations_real_corpus() -> None:
         metadata_header=METADATA_HEADER,
     )
     assert mapping == {
+        (2, 1, 0): "HEAL_LOCATION_BUROLE_TOWN_POKEMON_CENTER",
         (42, 3, 0): "HEAL_LOCATION_NOWTOCH_CITY_POKEMON_CENTER",
         (43, 1, 0): "HEAL_LOCATION_NOWTOCH_CITY_POKEMON_CENTER",
         (68, 1, 0): "HEAL_LOCATION_KEVLAR_TOWN_POKEMON_CENTER",

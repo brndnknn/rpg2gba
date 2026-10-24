@@ -615,6 +615,33 @@ class WarpSpec:
     # extra "arrival" warp_event (the two arrow-warp tiles already point at
     # each other; see `tileset_converter.seam_warps`).
     direct_pair: bool = False
+    # DIR_* the player is left facing by the door page's own pre-transfer walk
+    # (`_pre_transfer_player_step`), or None. Used only to give a retain warp
+    # that lands on a door tile a facing (`_resolve_all_warp_events`).
+    pre_step_facing: str | None = None
+
+
+# RMXP move-route codes for one step: 1 down, 2 left, 3 right, 4 up.
+_MOVE_STEP_FACING: dict[int, str] = {1: "DIR_SOUTH", 2: "DIR_WEST", 3: "DIR_EAST", 4: "DIR_NORTH"}
+_MOVE_THROUGH_TOGGLES = frozenset({37, 38})  # Through ON / OFF
+
+
+def _pre_transfer_player_step(page: dict) -> str | None:
+    """Uranium's door idiom walks the player one step (Through on/off around it)
+    right before the Transfer Player, so the player arrives facing that way
+    whatever direction they approached from. Returns that step's DIR_* when the
+    page's last player move route before its first transfer is exactly one
+    directional step; None otherwise (no route, or a longer walk)."""
+    cmds = page.get("list", [])
+    t = next((i for i, c in enumerate(cmds) if c.get("code") == 201), None)
+    if t is None:
+        return None
+    for c in reversed(cmds[:t]):
+        if c.get("code") == 209 and c["parameters"][0] == -1:
+            steps = [s.get("code", 0) for s in c["parameters"][1].get("list", [])]
+            moves = [s for s in steps if s != 0 and s not in _MOVE_THROUGH_TOGGLES]
+            return _MOVE_STEP_FACING.get(moves[0]) if len(moves) == 1 else None
+    return None
 
 
 @dataclass
@@ -848,7 +875,9 @@ def classify_event(event: dict, slice_ids: set[int]) -> tuple[str, WarpSpec | st
                 return ("object", None)
             if not gate_pages:
                 dest_uid, dx, dy, ddir = transfers[0]
-                return ("warp", WarpSpec(event["x"], event["y"], dest_uid, dx, dy, ddir))
+                step = _pre_transfer_player_step(touch_pages[0][1])
+                return ("warp", WarpSpec(event["x"], event["y"], dest_uid, dx, dy, ddir,
+                                         pre_step_facing=step))
             logger.info(
                 "EV%03d at (%d, %d): gated door — player-touch pages %s carry no "
                 "transfer, so it stays an event (dispatcher + per-page warp()), "
@@ -3761,6 +3790,22 @@ def render_map_scripts(
     return "\n\n".join([block] + scripts)
 
 
+def departure_facing(spec: WarpSpec, warp_lists: dict[int, list[WarpSpec]]) -> str:
+    """The `"facing"` a departure warp_event carries: `warp_facing_for` its
+    RMXP direction -- except that a retain warp landing ON another warp's cell
+    (a door-tile arrival, where the engine's exit step follows the arrival
+    facing) takes the facing its door page's pre-transfer walk leaves the
+    player in, as Uranium does. Without it a side approach arrives facing
+    sideways and the exit step lands on the twin door, bouncing the player
+    back (CH10 Burole <-> gatehouse; operator ruling 2026-10-23: door-tile
+    arrivals only, so no other warp's facing changes)."""
+    facing = warp_facing_for(spec.dest_dir)
+    if facing != RETAIN_FACING or spec.pre_step_facing is None:
+        return facing
+    dest_cells = {(s.src_x, s.src_y) for s in warp_lists.get(spec.dest_uid, [])}
+    return spec.pre_step_facing if (spec.dest_x, spec.dest_y) in dest_cells else facing
+
+
 def _resolve_all_warp_events(
     warp_lists: dict[int, list[WarpSpec]],
     registry: MapConstantRegistry,
@@ -3794,13 +3839,11 @@ def _resolve_all_warp_events(
     keyed by Uranium map id.
     """
     # Pass 1: source warps, stable original order/index. Each carries its own
-    # arrival facing (the RMXP transfer direction) for the engine to apply.
+    # arrival facing (`departure_facing`) for the engine to apply.
     events: dict[int, list[WarpEvent]] = {
         uid: [
-            WarpEvent(
-                s.src_x, s.src_y, registry.get(s.dest_uid).map_const,
-                facing=warp_facing_for(s.dest_dir),
-            )
+            WarpEvent(s.src_x, s.src_y, registry.get(s.dest_uid).map_const,
+                      facing=departure_facing(s, warp_lists))
             for s in specs
         ]
         for uid, specs in warp_lists.items()

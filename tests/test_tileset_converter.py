@@ -4410,6 +4410,36 @@ def test_resolved_source_warp_carries_facing_arrival_retains() -> None:
     assert [e.to_dict()["facing"] for e in events[48]] == ["0", "0"]
 
 
+def _player_route(*codes: int) -> dict:
+    return {"code": 209, "indent": 0, "parameters": [-1, {"list": [
+        *({"code": c, "parameters": []} for c in codes), {"code": 0, "parameters": []}]}]}
+
+
+def test_pre_transfer_player_step_reads_the_door_idiom() -> None:
+    """Uranium's door page walks the player one step (Through on/off around it)
+    before the transfer; a longer walk or no walk gives None."""
+    transfer = {"code": 201, "indent": 0, "parameters": [0, 1, 5, 3, 0, 0]}
+    page = lambda *cmds: {"list": [*cmds, transfer, {"code": 0, "parameters": []}]}  # noqa: E731
+    assert mw._pre_transfer_player_step(page(_player_route(37, 1, 38))) == "DIR_SOUTH"
+    assert mw._pre_transfer_player_step(page(_player_route(37, 4, 38))) == "DIR_NORTH"
+    assert mw._pre_transfer_player_step(page(_player_route(1, 1))) is None
+    assert mw._pre_transfer_player_step(page()) is None
+
+
+def test_departure_facing_uses_pre_step_only_on_a_door_tile_arrival() -> None:
+    """CH10 Burole <-> gatehouse (operator ruling 2026-10-23): a retain warp
+    landing on another warp's cell takes its pre-transfer step's facing; one
+    landing on plain floor, or with an explicit direction, is unchanged."""
+    onto_door = mw.WarpSpec(18, 58, 1, 5, 3, 0, pre_step_facing="DIR_SOUTH")
+    onto_floor = mw.WarpSpec(21, 20, 1, 9, 9, 0, pre_step_facing="DIR_NORTH")
+    explicit = mw.WarpSpec(22, 45, 1, 5, 3, 4, pre_step_facing="DIR_SOUTH")
+    warp_lists = {60: [onto_door, onto_floor, explicit],
+                  1: [mw.WarpSpec(5, 3, 60, 18, 58, 0)]}
+    assert mw.departure_facing(onto_door, warp_lists) == "DIR_SOUTH"
+    assert mw.departure_facing(onto_floor, warp_lists) == mw.RETAIN_FACING
+    assert mw.departure_facing(explicit, warp_lists) == "DIR_WEST"
+
+
 # --- compute_autorun_entries / render_map_scripts (findings §3.2 BUG B') -----
 
 def test_compute_autorun_entries_guard_negates_higher_page() -> None:

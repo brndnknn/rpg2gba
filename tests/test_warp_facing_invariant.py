@@ -259,7 +259,7 @@ def _arrivals(slice_data, reachable) -> list[Arrival]:
             dest = maps.get(spec.dest_uid)
             if dest is None or not _in_bounds(dest, spec.dest_x, spec.dest_y):
                 continue
-            facing = mw.warp_facing_for(spec.dest_dir)
+            facing = mw.departure_facing(spec, warp_lists)
             options = (
                 _approach_facings(src_uid, spec, warp_lists, reachable)
                 if facing == mw.RETAIN_FACING else {facing}
