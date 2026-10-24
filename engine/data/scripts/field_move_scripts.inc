@@ -92,6 +92,34 @@ EventScript_SmashRock:: @ fallthrough
 	releaseall
 	end
 
+@ BEGIN RPG2GBA ENGINE — rock smash that RETURNS after the rock is gone, so a
+@ converted rock whose RMXP smash arm carries its own logic (CH10 Gym 2: one
+@ rock per visit holds a gem) can run it. Same prompt/animation/removal as
+@ EventScript_RockSmash above; no encounter roll (the caller emits its own arm).
+@ The can't-smash and declined paths end the script, as stock does.
+EventScript_Rpg2gbaRockSmashReturn::
+	lockall
+	checkfieldmove FIELD_MOVE_ROCK_SMASH, TRUE
+	goto_if_eq VAR_RESULT, PARTY_SIZE, EventScript_CantSmashRock
+	setfieldeffectargument 0, VAR_RESULT
+	bufferpartymonnick STR_VAR_1, VAR_RESULT
+	buffermovename STR_VAR_2, MOVE_ROCK_SMASH
+	msgbox Text_WantToSmash, MSGBOX_YESNO
+	goto_if_eq VAR_RESULT, NO, EventScript_CancelSmash
+	msgbox Text_MonUsedFieldMove, MSGBOX_DEFAULT
+	closemessage
+	isfollowerfieldmoveuser VAR_0x8004
+	setfieldeffectargument 3, VAR_0x8004
+	dofieldeffect FLDEFF_USE_ROCK_SMASH
+	waitstate
+	setflag FLAG_SAFE_FOLLOWER_MOVEMENT
+	call_if_eq VAR_0x8004, TRUE, EventScript_FollowerFieldMove
+	applymovement VAR_LAST_TALKED, Movement_SmashRock
+	waitmovement 0
+	removeobject VAR_LAST_TALKED
+	return
+@ END RPG2GBA ENGINE
+
 EventScript_FollowerFieldMove:
 	getdirectiontoface VAR_0x8005, OBJ_EVENT_ID_FOLLOWER, OBJ_EVENT_ID_PLAYER
 	specialvar VAR_0x8006, GetPlayerFacingDirection
