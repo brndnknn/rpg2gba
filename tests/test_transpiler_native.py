@@ -114,6 +114,42 @@ def test_rock_smash_bare_variant_matches(ctx: T.TranspileContext) -> None:
     assert "goto(EventScript_RockSmash)" in res.text
 
 
+def test_rock_smash_choreography_only_arm_still_gotos_native(ctx: T.TranspileContext) -> None:
+    """The usual smash arm (sound, self route, self-switch, encounter roll,
+    erase) is all choreography the native script performs."""
+    then_body = [
+        cmd(250, [{"name": "Rock Smash"}]),
+        cmd(T.CONTROL_SELF_SWITCH, ["A", 0]),
+        cmd(355, ["Kernel.pbRockSmashRandomEncounter"]),
+        cmd(355, ["pbEraseThisEvent"]),
+    ]
+    res = run_event(ctx, [_branch("Kernel.pbRockSmash", then_body)])
+    assert res.unhandled == []
+    assert "goto(EventScript_RockSmash)" in res.text
+    assert "EventScript_Rpg2gbaRockSmashReturn" not in res.text
+
+
+def test_rock_smash_arm_with_own_logic_calls_returning_smash(ctx: T.TranspileContext) -> None:
+    """CH10 Gym 2's gem rock: logic beyond the choreography runs after the
+    returning native smash, and the encounter roll is wired natively."""
+    then_body = [
+        cmd(T.CONTROL_SELF_SWITCH, ["A", 0]),
+        cmd(T.SHOW_TEXT, ["It's a Bright Gem!"]),
+    ]
+    res = run_event(ctx, [_branch("Kernel.pbRockSmash", then_body)])
+    assert res.unhandled == []
+    assert "goto(EventScript_RockSmash)" not in res.text
+    lines = [ln.strip() for ln in res.text.splitlines()]
+    call = lines.index("call(EventScript_Rpg2gbaRockSmashReturn)")
+    assert any("Bright Gem" in ln for ln in lines[call + 1:])
+
+
+def test_rock_smash_encounter_roll_maps_to_native_special(ctx: T.TranspileContext) -> None:
+    res = run_event(ctx, [[cmd(355, ["Kernel.pbRockSmashRandomEncounter"])]])
+    assert res.unhandled == []
+    assert "special(RockSmashWildEncounter)" in res.text
+
+
 def test_rock_smash_near_miss_still_queues(ctx: T.TranspileContext) -> None:
     commands = _branch("Kernel.pbRockSmashFoo", [cmd(T.CONTROL_SELF_SWITCH, ["A", 0])])
     res = run_event(ctx, [commands])

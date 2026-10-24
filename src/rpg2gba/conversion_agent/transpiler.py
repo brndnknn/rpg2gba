@@ -312,6 +312,27 @@ _EMOTE_MOVEMENT_TOKENS = {
 # real Ruby-side gate logic is what matters; the RMXP arms are visual
 # choreography for the same interaction regardless of map.
 _ROCK_SMASH_RE = re.compile(r"^\s*(?:Kernel\.)?pbRockSmash\s*$")
+# Kernel.pbRockSmashRandomEncounter — the smash arm's encounter roll; natively
+# `special RockSmashWildEncounter` (VAR_RESULT TRUE = a battle started, then
+# `waitstate`), exactly as EventScript_RockSmash does it
+# (field_move_scripts.inc:89-91).
+_ROCK_SMASH_ENCOUNTER_RE = re.compile(r"^\s*(?:Kernel\.)?pbRockSmashRandomEncounter\s*$")
+# A smash arm's pure choreography, which the native smash already performs:
+# the break sound (250), the self move route + wait (209/509/210), the
+# self-switch A hide (123), and -- as scripts at the arm's top level -- the
+# encounter roll and pbEraseThisEvent (the native removeobject).
+_ROCK_CHOREOGRAPHY_CODES = frozenset({250, 209, 509, 210, 123})
+_ROCK_CHOREOGRAPHY_SCRIPT_RE = re.compile(
+    r"^\s*(?:(?:Kernel\.)?pbRockSmashRandomEncounter|pbEraseThisEvent)\s*$")
+
+
+def _is_rock_choreography(node: "Node") -> bool:
+    code = node.cmd.get("code")
+    if code in _ROCK_CHOREOGRAPHY_CODES:
+        return True
+    params = node.cmd.get("parameters", [])
+    return (code == 355 and bool(params) and isinstance(params[0], str)
+            and bool(_ROCK_CHOREOGRAPHY_SCRIPT_RE.match(params[0])))
 
 # pbHasSpecies?(::PBSpecies::NAME) — "does the party have this species"
 # (Auntie's farewell dialogue, Map049 EV001 page 3 — SLICE1_TODO #2, the last
@@ -3929,17 +3950,30 @@ class _PageEmitter:
             return None
         if not _ROCK_SMASH_RE.match(params[1]):
             return None
-        breadcrumb = (
-            "# rock smash: native EventScript_RockSmash supersedes RMXP "
-            "choreography (both arms dropped, slice1 2026-07-05)"
-        )
         # Upstream signal for the downstream FLAG_TEMP_* respawn-flag fix
         # (porymap ships "flag": "0" on these objects — a null sentinel that
         # never latches, so the native removeobject respawns the rock on the
         # next step). This is the component that KNOWS the event is a
         # smashable rock; the driver serializes it to the trait sidecar.
         self.ctx.record_trait("smashable_rock")
-        return [breadcrumb, "goto(EventScript_RockSmash)"]
+        extra = [n for n in node.then if not _is_rock_choreography(n)]
+        if not extra:
+            breadcrumb = (
+                "# rock smash: native EventScript_RockSmash supersedes RMXP "
+                "choreography (both arms dropped, slice1 2026-07-05)"
+            )
+            return [breadcrumb, "goto(EventScript_RockSmash)"]
+        # The smash arm carries logic of its own beyond the choreography (CH10
+        # Gym 2: `if var108 == N` gives the gem, else the encounter roll). The
+        # returning variant does the prompt/animation/removal; then the arm's
+        # remaining nodes run, with pbRockSmashRandomEncounter wired natively
+        # (`_ROCK_SMASH_ENCOUNTER_RE`). The else-arm (no Rock Smash) stays
+        # dropped: the native script ends the page on that path itself.
+        return [
+            "# rock smash: returning native smash, then the RMXP arm's own logic",
+            "call(EventScript_Rpg2gbaRockSmashReturn)",
+            *self.emit_nodes(extra),
+        ]
 
     def _emit_move_tutor_choose_idiom(self, node: IfNode) -> list[str] | None:
         """``pbMoveTutorChoose(PBMoves::X)`` as a code-111 script condition --
@@ -5220,6 +5254,14 @@ class _PageEmitter:
 
         # pbCaveEntrance — pre-warp fade choreography subsumed by the native
         # warp (see _CAVE_ENTRANCE_STRIP_RE). Breadcrumb, no queue.
+        if _ROCK_SMASH_ENCOUNTER_RE.match(text):
+            return [
+                "special(RockSmashWildEncounter)",
+                "if (var(VAR_RESULT) == TRUE) {",
+                "    waitstate",
+                "}",
+            ]
+
         if _CAVE_ENTRANCE_STRIP_RE.match(text):
             # pbCaveExit = pbEraseEscapePoint + the same fade (Essentials
             # PField_Field); escape-point state has no GBA consumer here.
