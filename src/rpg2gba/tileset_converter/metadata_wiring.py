@@ -63,6 +63,7 @@ from ..conversion_agent.flag_registry import (
 from ..conversion_agent.orchestrator import load_map_event_strips
 from ..map_split.ids import origin_of, split_blocked_cells
 from . import map_sections
+from .invisible_wall import INVISIBLE_GFX, invisible_wall_ids, is_invisible_wall_page
 from .map_constants import MapConstantRegistry, MapConstants
 from .npc_gfx import _DIR_VECTOR as _TRAINER_DIR_VECTOR
 from .npc_gfx import _DIRECTION_TO_FACING as _TRAINER_SIGHT_FACING
@@ -1776,6 +1777,7 @@ def _visibility_expr(
     uid: int,
     eid: int,
     flag_registry: FlagRegistry | None,
+    wall: bool = False,
 ) -> tuple[str | None, bool]:
     """The Poryscript condition under which a hidden actor is VISIBLE, per
     RMXP highest-active-page semantics (see `_visibility_transition_lines`,
@@ -1784,10 +1786,16 @@ def _visibility_expr(
     `always_visible`. Fails loud on an unresolvable condition term."""
     clauses: list[str] = []
     always_visible = False
+    # An invisible wall's wall pages count as present (the event spawns and
+    # blocks; it wears the transparent sprite), see `invisible_wall`.
+    wall_event = wall
     for i, p in enumerate(pages):
         gname = p.get("graphic", {}).get("character_name") or ""
         opacity = p.get("graphic", {}).get("opacity", 255)
-        if not gname or opacity <= 0:
+        if wall_event:
+            if not is_invisible_wall_page(p):
+                continue
+        elif not gname or opacity <= 0:
             continue
         own = _page_condition_terms(p["condition"], uid, eid, flag_registry)
         if own is None:
@@ -1830,6 +1838,7 @@ def _visibility_transition_lines(
     name: str,
     flag: str,
     flag_registry: FlagRegistry | None,
+    wall: bool = False,
 ) -> tuple[list[str], bool]:
     """ON_TRANSITION lines for one hidden cutscene actor: unconditionally hide
     it (`setflag`), then clear the flag when RMXP's page-selection state would
@@ -1850,7 +1859,7 @@ def _visibility_transition_lines(
     Fails loud (`ValueError`) on an unresolvable condition term — a
     story-critical cutscene actor's visibility must never silently default
     to "always hidden" or "always shown" (CLAUDE.md §4.5)."""
-    expr, always_visible = _visibility_expr(pages, uid, eid, flag_registry)
+    expr, always_visible = _visibility_expr(pages, uid, eid, flag_registry, wall)
     if always_visible:
         return [], True
 
@@ -2697,19 +2706,28 @@ def build_object_events(
     # / `render_visibility_refresh_script`). Events whose pages are all blank
     # / invisible keep the plain drop; strip-listed, stair, template and
     # Trainer(N) tripwire events are untouched.
+    wall_ids = invisible_wall_ids(map_json["events"])
     late_ids: list[int] = []
+    # Invisible walls (RMXP blocks on a named opacity-0 non-through page) join
+    # the same machinery whether or not they have a boot page: they spawn as
+    # real object_events wearing the transparent INVISIBLE_GFX, and their wall
+    # pages count as present in `_visibility_expr`.
     for ev in objects:
         lid = ev["id"]
+        wall = lid in wall_ids
         if (
             lid in hidden_actor_ids
             or lid in stair_ids
             or (stripped_event_ids is not None and lid in stripped_event_ids)
             or (template_fields is not None and lid in template_fields)
-            or select_boot_page(ev) is not None
+            or (select_boot_page(ev) is not None and not wall)
             or _TRAINER_NAME_RE.search(ev.get("name") or "")
         ):
             continue
-        if any(_page_has_visible_actor_graphic(pg) for pg in ev["pages"]):
+        if wall:
+            late_ids.append(lid)
+            logger.info("map %d EV%03d: invisible wall -> hidden actor", uid, lid)
+        elif any(_page_has_visible_actor_graphic(pg) for pg in ev["pages"]):
             late_ids.append(lid)
             logger.info("map %d EV%03d: no boot page, visible later -> hidden actor", uid, lid)
     hidden_actor_ids = sorted(set(hidden_actor_ids) | set(late_ids))
@@ -3492,6 +3510,7 @@ def build_object_events(
     for eid in hidden_actor_ids:
         actor_event = event_by_id[eid]
         actor_pages = actor_event["pages"]
+        wall_actor = eid in wall_ids
         graphic_idx = next(
             (i for i, p in enumerate(actor_pages) if _page_has_visible_actor_graphic(p)),
             None,
@@ -3508,19 +3527,24 @@ def build_object_events(
             )
         actor_page = actor_pages[graphic_idx]
         actor_name = actor_page["graphic"]["character_name"]
-        if npc_gfx is None:
-            raise KeyError(
-                f"map {uid} EV{eid:03d}: hidden cutscene actor {actor_name!r} "
-                f"needs the npc gfx map — call build_object_events(..., "
-                f"npc_gfx=load_npc_gfx_map(...))"
-            )
-        try:
-            actor_gfx = npc_gfx[actor_name]
-        except KeyError:
-            raise KeyError(
-                f"map {uid} EV{eid:03d}: sheet {actor_name!r} has no "
-                f"reference/npc_gfx_map.json entry"
-            ) from None
+        if wall_actor:
+            # Draws nothing in RMXP either: the transparent engine sprite, no
+            # sheet staging needed.
+            actor_gfx = INVISIBLE_GFX
+        else:
+            if npc_gfx is None:
+                raise KeyError(
+                    f"map {uid} EV{eid:03d}: hidden cutscene actor {actor_name!r} "
+                    f"needs the npc gfx map — call build_object_events(..., "
+                    f"npc_gfx=load_npc_gfx_map(...))"
+                )
+            try:
+                actor_gfx = npc_gfx[actor_name]
+            except KeyError:
+                raise KeyError(
+                    f"map {uid} EV{eid:03d}: sheet {actor_name!r} has no "
+                    f"reference/npc_gfx_map.json entry"
+                ) from None
 
         actor_spec = static_face_spec(
             actor_page,
@@ -3553,14 +3577,14 @@ def build_object_events(
 
         lines, always_visible = _visibility_transition_lines(
             actor_pages, uid, eid, actor_event.get("name", ""),
-            vis_flags[eid], flag_registry,
+            vis_flags[eid], flag_registry, wall_actor,
         )
         actor_flag = "0" if always_visible else vis_flags[eid]
         if lines:
             result.transition_lines.extend(lines)
         refresh_expr = None
         if not always_visible:
-            refresh_expr, _ = _visibility_expr(actor_pages, uid, eid, flag_registry)
+            refresh_expr, _ = _visibility_expr(actor_pages, uid, eid, flag_registry, wall_actor)
 
         result.object_events.append(
             ObjectEvent(

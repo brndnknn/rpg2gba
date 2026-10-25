@@ -1668,7 +1668,7 @@
     "derived_hash": "39ea4ed13183ce76"
   },
   "map066/ev045/p0/b1": {
-    "disposition": "beat:m066e045p0",
+    "disposition": "elsewhere:unselected_arm: not taken on the walk: needs switch 67 == False, and here switch 67 is [True] (ruling 19)",
     "derived_hash": "04a0ee3af745cc34"
   },
   "map066/ev045/p1": {

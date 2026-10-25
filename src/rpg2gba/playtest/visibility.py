@@ -33,6 +33,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from rpg2gba.tileset_converter.invisible_wall import invisible_wall_ids, is_invisible_wall_page
 from rpg2gba.traversal.collision import load_map_json
 
 if TYPE_CHECKING:
@@ -135,6 +136,11 @@ def _event_for_local_id(map_id: int) -> dict[int, int]:
     return {int(lid): int(eid) for eid, lid in table.items()}
 
 
+@functools.cache
+def _invisible_walls(map_id: int) -> frozenset[int]:
+    return frozenset(invisible_wall_ids(list(_map_events(map_id).values())))
+
+
 def _berry_tree(map_id: int, event_id: int) -> bool:
     from rpg2gba.playtest.cells import native_berry_tree_id
 
@@ -219,6 +225,9 @@ def object_visibility_violations(
             continue
         if live is not None and page_shows(pages[live]):
             continue
+        if (live is not None and event["id"] in _invisible_walls(map_id)
+                and is_invisible_wall_page(pages[live])):
+            continue  # RMXP has it too: solid, drawn by nothing (`invisible_wall`)
         found.append(Violation(map_id=map_id, event_id=event["id"], local_id=obj.local_id,
                                x=obj.x, y=obj.y, page=live, invisible=obj.invisible))
     return found

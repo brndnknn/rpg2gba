@@ -171,6 +171,7 @@ from rpg2gba.story_state.model import (
     _write_satisfies,
     build_chapter_stories,
 )
+from rpg2gba.tileset_converter.invisible_wall import invisible_wall_ids, is_invisible_wall_page
 from rpg2gba.tileset_converter.map_constants import load_display_names
 from rpg2gba.tileset_converter.map_set import SLICE_MAP_IDS
 from rpg2gba.traversal.collision import load_map_json
@@ -1140,8 +1141,10 @@ class _StoryOccupancy(Mapping):
 
     def __init__(self, inner: Mapping, *, build_dir: Path, candidate_for,  # noqa: ANN001
                  clear_for=None,  # noqa: ANN001
-                 walls: frozenset[tuple[int, int]] = frozenset()) -> None:
+                 walls: frozenset[tuple[int, int]] = frozenset(),
+                 dropped: frozenset[tuple[int, int]] = frozenset()) -> None:
         self._inner = inner
+        self._dropped = dropped
         self._build_dir = build_dir
         self._candidate_for = candidate_for
         self._clear_for = clear_for if clear_for is not None else candidate_for
@@ -1153,7 +1156,14 @@ class _StoryOccupancy(Mapping):
         """The same view with `extra` (map, event) pairs held as walls."""
         return _StoryOccupancy(self._inner, build_dir=self._build_dir,
                                candidate_for=self._candidate_for, clear_for=self._clear_for,
-                               walls=self._walls | frozenset(extra))
+                               walls=self._walls | frozenset(extra), dropped=self._dropped)
+
+    def with_dropped(self, extra: Collection[tuple[int, int]]) -> "_StoryOccupancy":
+        """The same view with `extra` (map, event) pairs not blocking at all
+        (a barrier group's invisible walls, flooded as already cleared)."""
+        return _StoryOccupancy(self._inner, build_dir=self._build_dir,
+                               candidate_for=self._candidate_for, clear_for=self._clear_for,
+                               walls=self._walls, dropped=self._dropped | frozenset(extra))
 
     def _rom_hidden(self, map_id: int) -> frozenset[str]:
         if map_id not in self._hidden_cache:
@@ -1163,6 +1173,8 @@ class _StoryOccupancy(Mapping):
     def _never_visible(self, map_id: int, event_id: int) -> bool:
         if (map_id, event_id) in self._walls:
             return False
+        if (map_id, event_id) in self._dropped:
+            return True
         if f"Map{map_id:03d}_EV{event_id:03d}_Dispatch" in self._rom_hidden(map_id):
             logger.info("occupancy: map %d ev %d is hidden by the map's ON_TRANSITION "
                         "(spawned only inside a script) -- not blocking", map_id, event_id)
@@ -1402,6 +1414,7 @@ def _released_walls(
     walls: Collection[tuple[int, int]], claimed_rows: Collection[str], *,
     row_states: Callable[[int], Mapping[str, RowState]],
     pages_of: Callable[[int, int], Sequence[Mapping]],
+    blocks: Callable[[Mapping], bool] = _page_visible,
 ) -> dict[tuple[int, int], tuple[str, ...]]:
     """(map, event) wall -> the claimed rows that clear it, for each wall some
     OTHER claimed beat clears (CH07: a cutscene sets the self-switch that
@@ -1410,18 +1423,20 @@ def _released_walls(
     model reads both arms of that test as live, which is wrong). A clearer is a
     row on another event whose write satisfies a test of a graphic-less page
     above every visible page of the wall's event (the clearing page
-    `actor_never_blocks` and `clearing_rows` use)."""
+    `actor_never_blocks` and `clearing_rows` use). `blocks` says which pages
+    make the event a wall (default: visible ones; `_barrier_walls` passes the
+    invisible-wall test)."""
     out: dict[tuple[int, int], tuple[str, ...]] = {}
     for map_id, event_id in sorted(walls):
         pages = pages_of(map_id, event_id)
-        visible = [i for i, p in enumerate(pages) if _page_visible(p)]
+        visible = [i for i, p in enumerate(pages) if blocks(p)]
         if not visible:
             continue
         states = row_states(map_id)
         tests = []
         for j in range(max(visible) + 1, len(pages)):
             state = states.get(f"map{map_id:03d}/ev{event_id:03d}/p{j}")
-            if not _page_visible(pages[j]) and state is not None:
+            if not blocks(pages[j]) and state is not None:
                 tests.extend(state.page_tests)
         if not tests:
             continue
@@ -1437,6 +1452,54 @@ def _released_walls(
                 clearers.append(rid)
         if clearers:
             out[(map_id, event_id)] = tuple(clearers)
+    return out
+
+
+def _barrier_walls(
+    maps: Collection[int], events_of: Callable[[int], list[dict]],
+    claimed_rows: Collection[str], *, row_states: Callable[[int], Mapping[str, RowState]],
+) -> dict[tuple[int, int], tuple[str, ...]]:
+    """(map, event) -> clearer rows, for a barrier group: each invisible wall
+    (`invisible_wall_ids`) another claimed row clears, plus the HOST pillar --
+    the visible event whose own claimed row is that clearer and whose own
+    graphic-less page above its visible ones that same row's write lifts
+    (Burole Gym EV045: its script removes 45/46/47 and sets their self-switch
+    A). The host is the one place an own-event clearer counts; rocks keep
+    their exclusion in `_released_walls`. The host carries the walls' clearers,
+    so the pillar row itself is excluded from passage enablers."""
+    def pages_of(m: int, e: int) -> Sequence[Mapping]:
+        return next((ev.get("pages", []) for ev in events_of(m) if ev and ev["id"] == e), [])
+
+    out: dict[tuple[int, int], tuple[str, ...]] = {}
+    for m in sorted(maps):
+        ids = invisible_wall_ids(events_of(m))
+        if not ids:
+            continue
+        walls = _released_walls(
+            {(m, e) for e in ids}, claimed_rows, row_states=row_states, pages_of=pages_of,
+            blocks=is_invisible_wall_page)
+        states = row_states(m)
+        for pair, clearers in walls.items():
+            out[pair] = clearers
+            logger.info("barrier wall map %d ev %d is cleared by %s", *pair, list(clearers))
+            for rid in clearers:
+                parsed = parse_row_id(rid)
+                if parsed.map_id != m or parsed.event_id == pair[1]:
+                    continue
+                pages = pages_of(m, parsed.event_id)
+                visible = [i for i, p in enumerate(pages) if _page_visible(p)]
+                if not visible:
+                    continue
+                tests = []
+                for j in range(max(visible) + 1, len(pages)):
+                    st = states.get(f"map{m:03d}/ev{parsed.event_id:03d}/p{j}")
+                    if not _page_visible(pages[j]) and st is not None:
+                        tests.extend(st.page_tests)
+                rs = states.get(rid)
+                if rs is not None and any(_write_satisfies(w, t) for w in rs.writes for t in tests):
+                    host = (m, parsed.event_id)
+                    out[host] = tuple(sorted({*out.get(host, ()), *clearers}))
+                    logger.info("barrier host map %d ev %d clears itself with %s", *host, rid)
     return out
 
 
@@ -1518,6 +1581,37 @@ def _tripwire_refusals(
                 row_id=rid, blocker="cell", reason="clearer_tripwire",
                 detail=(f"every approach crosses the sight tripwire of {sorted(owners)}, "
                         "which clears this obstacle -- it is gone before it can be refused")))
+    return out
+
+
+def _clearer_sides_with_walls(
+    records: Sequence[BeatLocationRecord],
+    walls: Mapping[tuple[int, int], tuple[str, ...]],
+    reach_with: Callable[[frozenset[tuple[int, int]]], Collection[tuple[int, tuple[int, int]]]],
+) -> list[BeatLocationRecord]:
+    """A beat that is itself a clearer of barrier `walls` is worked while those
+    walls still stand, so only the approach sides reachable with them standing
+    count (Burole Gym: the pillar row is the one link to the corridor north of
+    it, so the pillar is pressed from the south, never from the cell behind
+    it). `reach_with(own_walls)` floods from the entry with them held. Narrow
+    rule, barrier groups only; a record keeps all its candidates if none
+    survive (the old behaviour)."""
+    cache: dict[frozenset[tuple[int, int]], Collection] = {}
+    out: list[BeatLocationRecord] = []
+    for rec in records:
+        own = frozenset(p for p, cl in walls.items() if set(cl) & set(rec.rows))
+        if own and len(rec.approach_candidates) > 1:
+            if own not in cache:
+                cache[own] = reach_with(own)
+            m = map_uranium_id(rec.map_constant)
+            kept = tuple(c for c in rec.approach_candidates if (m, (c.x, c.y)) in cache[own])
+            if kept and len(kept) < len(rec.approach_candidates):
+                logger.info("%s: approach sides %s dropped -- unreachable with %s standing",
+                            rec.beat_id,
+                            sorted(c.side for c in rec.approach_candidates if c not in kept),
+                            sorted(own))
+                rec = dataclasses.replace(rec, approach_candidates=kept)
+        out.append(rec)
     return out
 
 
@@ -2159,6 +2253,14 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         obstacle_walls, {r for b in beats for r in b.rows}, row_states=row_states,
         pages_of=lambda m, e: next((ev.get("pages", []) for ev in load_map_json(
             m, build_dir / "maps").get("events", []) if ev and ev["id"] == e), []))
+    # Barrier group: invisible walls (and their host pillar) another claimed
+    # row clears -- Burole Gym's pillar row, cleared by the gem puzzle.
+    barrier = _barrier_walls(
+        chain_maps, lambda m: [ev for ev in load_map_json(m, build_dir / "maps").get("events", [])
+                               if ev],
+        {r for b in beats for r in b.rows}, row_states=row_states)
+    for pair, clearers in barrier.items():
+        released.setdefault(pair, clearers)
     # CH08 §9: a smash beat clears its own rocks (held capability).
     for b in beats:
         if b.template == "smash":
@@ -2319,11 +2421,20 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         # are placed on the way the player came in. Rocks that no beat claims
         # are in `released` too (every smashable rock is a wall).
         flood_maps = frozenset(binding.chapter(chapter_id).maps) | {entry[0]}
-        reach_open = reachable_sites(entry, graphs, world, flood_maps,
-                                     _ChainOccupancy(occupancy, flood_maps))
+        reach_open = reachable_sites(
+            entry, graphs, world, flood_maps,
+            _ChainOccupancy(occupancy.with_dropped(barrier), flood_maps))
         reach_blocked = reachable_sites(entry, graphs, world, flood_maps,
                                         _ChainOccupancy(occupancy.with_walls(released),
                                                         flood_maps))
+        records = _clearer_sides_with_walls(
+            records, {p: released[p] for p in barrier if p in released},
+            lambda own: reachable_sites(entry, graphs, world, flood_maps, _ChainOccupancy(
+                occupancy.with_walls(own), flood_maps)))
+        candidates = {   # the solver reads sides from here, not from the records
+            r.beat_id: tuple(RouteCandidate(x=c.x, y=c.y, side=c.side, resolver=c.resolver)
+                             for c in r.approach_candidates)
+            for r in records if r.approach_candidates}
         excluded = {r for b in beats if b.template in ("obstacle", "smash") for r in b.rows}
         excluded |= {w for ws in released.values() for w in ws}
         for rid, writers in _passage_enablers(

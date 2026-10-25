@@ -174,6 +174,7 @@ from rpg2gba.tileset_converter.graphics.sprites import (
     ConvertedPlayer,
     ConvertedSprite,
 )
+from rpg2gba.tileset_converter.invisible_wall import INVISIBLE_GFX
 from rpg2gba.tileset_converter.npc_gfx import GFX_PREFIX, gfx_constant_for_sheet
 
 logger = logging.getLogger(__name__)
@@ -675,6 +676,83 @@ def _pack_bgr555(color: tuple[int, int, int]) -> int:
     5-bit magnitude -- see `quantize.to_5bit`) -> a GBA hardware BGR555 u16."""
     r, g, b = (c >> 3 for c in color)
     return r | (g << 5) | (b << 10)
+
+
+# --- Invisible object graphic (engine mechanism, no Uranium sheet) -----------
+# `OBJ_EVENT_GFX_RPG2GBA_INVISIBLE`: a fully transparent 16x16 one-frame sprite
+# for RMXP invisible walls (`tileset_converter.invisible_wall`). pokeemerald-
+# expansion has no stock invisible object graphic (grepped
+# include/constants/event_objects.h + src/data/object_events/). Always emitted
+# by `emit_sprites`; its id follows the sorted URANIUM_* ids so those never
+# shift. Static (sAnimTable_Inanimate shows frame 0 only, which is all the
+# one-frame pic table has) on a stock NPC palette tag (all pixels are index 0,
+# so the palette never shows).
+_INVISIBLE_IDENT = "Rpg2gbaInvisible"
+_INVISIBLE_STEM = "rpg2gba_invisible"
+_INVISIBLE_FRAME_PX = 16
+_INVISIBLE_PAL_TAG = "OBJ_EVENT_PAL_TAG_NPC_1"
+
+
+def _write_invisible_png(pics_dir: Path) -> Path:
+    path = pics_dir / f"{_INVISIBLE_STEM}.png"
+    blank = np.zeros((_INVISIBLE_FRAME_PX, _INVISIBLE_FRAME_PX, 4), dtype=np.uint8)
+    _write_sheet_png(
+        path, [blank], np.zeros((0, 3), dtype=np.uint8), frame_px=_INVISIBLE_FRAME_PX
+    )
+    return path
+
+
+def _invisible_graphics() -> str:
+    tiles = _INVISIBLE_FRAME_PX // 8
+    return (
+        f"const u16 gObjectEventPic_{_INVISIBLE_IDENT}[] = "
+        f'INCGFX_U16("{_PICS_RELDIR / _INVISIBLE_STEM}.png", ".4bpp", '
+        f'"-mwidth {tiles} -mheight {tiles}");\n'
+    )
+
+
+def _invisible_pic_table() -> str:
+    tiles = _INVISIBLE_FRAME_PX // 8
+    return (
+        f"\nstatic const struct SpriteFrameImage sPicTable_{_INVISIBLE_IDENT}[] = {{\n"
+        f"    overworld_ascending_frames(gObjectEventPic_{_INVISIBLE_IDENT}, "
+        f"{tiles}, {tiles}),\n"
+        "};\n"
+    )
+
+
+def _invisible_graphics_info() -> str:
+    return (
+        f"\nconst struct ObjectEventGraphicsInfo gObjectEventGraphicsInfo_{_INVISIBLE_IDENT} = {{\n"
+        "    .tileTag = TAG_NONE,\n"
+        f"    .paletteTag = {_INVISIBLE_PAL_TAG},\n"
+        "    .reflectionPaletteTag = OBJ_EVENT_PAL_TAG_NONE,\n"
+        f"    .size = {_INVISIBLE_FRAME_PX * _INVISIBLE_FRAME_PX // 2},\n"
+        f"    .width = {_INVISIBLE_FRAME_PX},\n"
+        f"    .height = {_INVISIBLE_FRAME_PX},\n"
+        f"    .paletteSlot = {_PALETTE_SLOT},\n"
+        "    .shadowSize = SHADOW_SIZE_S,\n"
+        "    .inanimate = TRUE,\n"
+        "    .compressed = FALSE,\n"
+        "    .tracks = TRACKS_NONE,\n"
+        "    .oam = &gObjectEventBaseOam_16x16,\n"
+        "    .subspriteTables = sOamTables_16x16,\n"
+        "    .anims = sAnimTable_Inanimate,\n"
+        f"    .images = sPicTable_{_INVISIBLE_IDENT},\n"
+        "    .affineAnims = gDummySpriteAffineAnimTable,\n"
+        "};\n"
+    )
+
+
+def _invisible_decl() -> str:
+    return (
+        f"extern const struct ObjectEventGraphicsInfo "
+        f"gObjectEventGraphicsInfo_{_INVISIBLE_IDENT};\n"
+    )
+
+
+def _invisible_pointer() -> str:
+    return f"[{INVISIBLE_GFX}] = &gObjectEventGraphicsInfo_{_INVISIBLE_IDENT},\n"
 
 
 # --- gen-file content builders ----------------------------------------------
@@ -1238,10 +1316,14 @@ def emit_sprites(
     all_constants = sorted(owner_of)
     gfx_ids = {c: FIRST_GFX_ID + i for i, c in enumerate(all_constants)}
     gfx_defines = {c: f"#define {c} {gfx_ids[c]}" for c in all_constants}
+    # The engine-mechanism invisible graphic takes the id after the last
+    # URANIUM_* one, and counts toward NUM_RPG2GBA_OBJ_EVENT_GFX.
+    gfx_ids[INVISIBLE_GFX] = FIRST_GFX_ID + len(all_constants)
+    gfx_defines[INVISIBLE_GFX] = f"#define {INVISIBLE_GFX} {gfx_ids[INVISIBLE_GFX]}"
 
     engine_root = Path(engine_root)
     pics_dir = engine_root / _PICS_RELDIR
-    files_written: list[Path] = []
+    files_written: list[Path] = [_write_invisible_png(pics_dir)]
     for i, sprite in enumerate(ordered):
         pal_idx = palette_index[sprite.name]
         palette = result.palettes[pal_idx]
@@ -1275,7 +1357,7 @@ def emit_sprites(
 
     gen_contents = {
         "constants": _render_constants(
-            gfx_defines, len(all_constants), palette_tags,
+            gfx_defines, len(gfx_defines), palette_tags,
             include_player=player is not None,
             include_player_fish=player_fish is not None,
         ),
@@ -1301,6 +1383,11 @@ def emit_sprites(
             include_player_fish=player_fish is not None,
         ),
     }
+    gen_contents["graphics"] += _invisible_graphics()
+    gen_contents["pic_tables"] += _invisible_pic_table()
+    gen_contents["graphics_info"] += _invisible_graphics_info()
+    gen_contents["graphics_info_decls"] += _invisible_decl()
+    gen_contents["graphics_info_pointers"] += _invisible_pointer()
     for key, relpath in _GEN_RELPATHS.items():
         path = engine_root / relpath
         path.parent.mkdir(parents=True, exist_ok=True)

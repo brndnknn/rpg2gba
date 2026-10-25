@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import re
 
+from rpg2gba.tileset_converter.invisible_wall import invisible_wall_ids
 from rpg2gba.tileset_converter.local_id_remap import (
     _COMMAND_PATTERN,
     _mask_strings_and_comments,
@@ -168,10 +169,14 @@ _TURN_ONLY_RE = re.compile(r"^(face_\w+|delay_\d+)$")
 
 def never_visible_event_ids(map_json: dict) -> set[int]:
     """RMXP ids of events with no visible page: every page's graphic is blank
-    or opacity 0 (`metadata_wiring._visibility_expr`'s reading of visible)."""
+    or opacity 0 (`metadata_wiring._visibility_expr`'s reading of visible).
+    An invisible wall (`invisible_wall`) is NOT never-visible: it spawns."""
     ids: set[int] = set()
+    walls = invisible_wall_ids(map_json.get("events", []))
     for event in map_json.get("events", []):
         if not event:
+            continue
+        if event["id"] in walls:
             continue
         if not any(
             (p.get("graphic", {}).get("character_name") or "")

@@ -2419,7 +2419,7 @@ def test_build_object_events_drops_no_silent_defaults() -> None:
             _event(3, 2, 0, [_page(trigger=3)]),  # blank graphic, autorun
             _event(4, 3, 0, [_page(trigger=4)]),  # blank graphic, parallel
             _event(5, 4, 0, [_page(trigger=0, name="PU-doors1")]),  # door sheet
-            _event(6, 5, 0, [_page(trigger=0, name="HGSS_000", opacity=0)]),  # invisible, non-touch
+            _event(6, 5, 0, [_page(trigger=0, name="HGSS_000", opacity=0, cmds=[{"code": 355, "indent": 0, "parameters": ["x"]}])]),  # invisible, non-touch, scripted (an empty one is an invisible wall)
         ],
     }
     result = mw.build_object_events(map_json, consts, _SLICE, npc_gfx=_npc_gfx_fixture())
@@ -2981,7 +2981,7 @@ def test_build_object_events_hidden_actor_opacity0_never_visible() -> None:
     event = _event(
         76, 12, 44,
         [
-            _page(cond=_var_cond(101, 2), name="PU-Chyinmunk", opacity=0, direction=4),
+            _page(cond=_var_cond(101, 2), name="PU-Chyinmunk", opacity=0, direction=4, cmds=[{"code": 355, "indent": 0, "parameters": ["x"]}]),  # scripted: not an invisible wall
             _page(cond=_var_cond(101, 4)),
         ],
     )

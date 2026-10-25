@@ -240,3 +240,103 @@ def test_routing_cell_not_a_candidate_is_left_alone(monkeypatch):
     # an event cell with candidates on its sides: the player stands ON it
     kept, _ = _split(_unreachable_record(0, 55, [(20, 56), (21, 56)]), monkeypatch)
     assert (kept[0].x, kept[0].y) == (0, 55)
+
+
+# --- barrier group: invisible walls + their host pillar (Burole Gym) ----------
+
+_WALL_PAGES = [
+    {"graphic": {"character_name": "pillar", "opacity": 0}, "through": False,
+     "trigger": 0, "list": [{"code": 0}]},
+    {"graphic": {"character_name": ""}, "list": [{"code": 0}]},
+]
+_HOST_PAGES = [{"graphic": {"character_name": "pillar", "opacity": 255}, "list": [{"code": 0}]},
+               {"graphic": {"character_name": ""}, "list": [{"code": 0}]}]
+_PILLAR_ROW = "map035/ev045/p0"
+
+
+def _barrier_events():
+    return [{"id": 45, "pages": _HOST_PAGES}, {"id": 46, "pages": _WALL_PAGES},
+            {"id": 47, "pages": _WALL_PAGES}]
+
+
+def _barrier_states(host_writes_ssa=True):
+    def ssa(e):
+        return SelfSwitch(35, e, "A")
+    writes = [Assign(ssa(e), frozenset({True}), False, "t", 0) for e in (45, 46, 47)]
+    return {
+        "map035/ev045/p0": _state(writes=writes if host_writes_ssa else []),
+        "map035/ev045/p1": _state(tests=[Test(ssa(45), "==", True)]),
+        "map035/ev046/p0": _state(),
+        "map035/ev046/p1": _state(tests=[Test(ssa(46), "==", True)]),
+        "map035/ev047/p0": _state(),
+        "map035/ev047/p1": _state(tests=[Test(ssa(47), "==", True)]),
+    }
+
+
+def _barrier(claimed, states, events=None):
+    evs = events if events is not None else _barrier_events()
+    return bg._barrier_walls({35}, lambda m: evs, claimed, row_states=lambda m: states)
+
+
+def test_invisible_wall_cleared_by_another_event_is_released_with_its_clearer():
+    out = _barrier([_PILLAR_ROW], _barrier_states())
+    assert out[(35, 46)] == (_PILLAR_ROW,) and out[(35, 47)] == (_PILLAR_ROW,)
+
+
+def test_host_pillar_joins_with_the_same_clearers():
+    out = _barrier([_PILLAR_ROW], _barrier_states())
+    assert out[(35, 45)] == (_PILLAR_ROW,)
+
+
+def test_unclaimed_clearer_releases_nothing():
+    assert _barrier([], _barrier_states()) == {}
+
+
+def test_host_whose_row_does_not_lift_its_own_page_is_not_released():
+    states = _barrier_states()
+    # the row clears 46/47 only
+    states[_PILLAR_ROW] = _state(writes=[
+        Assign(SelfSwitch(35, e, "A"), frozenset({True}), False, "t", 0) for e in (46, 47)])
+    out = _barrier([_PILLAR_ROW], states)
+    assert (35, 45) not in out and (35, 46) in out
+
+
+def test_smashable_rocks_own_clearer_still_excluded():
+    # the rock is a wall of the default (visible-page) kind; its own arm never releases it
+    claimed = ["map035/ev015/p0", "map035/ev015/p0/b1"]
+    assert _released(claimed, _states(cutscene_writes=False, own_writes=True)) == {}
+
+
+def test_record_behind_the_pillar_row_waits_on_the_pillar_row():
+    released = _barrier([_PILLAR_ROW], _barrier_states())
+    out = bg._passage_enablers(
+        [_record(("map035/ev004/p0",), 5, 40)], released,
+        reach_blocked={_NORTH}, reach_open={_NORTH, _SOUTH}, exclude_rows={_PILLAR_ROW})
+    assert out == {"map035/ev004/p0": (_PILLAR_ROW,)}
+
+
+def _multi_record(rows):
+    cands = (ApproachCandidate(x=19, y=15, side="north", resolver="t"),
+             ApproachCandidate(x=19, y=17, side="south", resolver="t"))
+    return BeatLocationRecord(beat_id=rows[0], map_constant="MAP_G", x=19, y=16, resolver="t",
+                              rows=rows, candidates=(), approach_candidates=cands)
+
+
+def test_clearer_beat_keeps_only_sides_reachable_with_its_walls_standing():
+    walls = {(35, 46): (_PILLAR_ROW,), (35, 45): (_PILLAR_ROW,)}
+    seen = []
+
+    def reach_with(own):
+        seen.append(own)
+        return {(35, (19, 17))}
+    out = bg._clearer_sides_with_walls([_multi_record((_PILLAR_ROW,))], walls, reach_with)
+    assert [c.side for c in out[0].approach_candidates] == ["south"]
+    assert seen == [frozenset({(35, 46), (35, 45)})]
+
+
+def test_non_clearer_beat_and_all_unreachable_sides_are_left_alone():
+    walls = {(35, 46): (_PILLAR_ROW,)}
+    other = _multi_record(("map035/ev004/p0",))
+    assert bg._clearer_sides_with_walls([other], walls, lambda own: set()) == [other]
+    pillar = _multi_record((_PILLAR_ROW,))
+    assert bg._clearer_sides_with_walls([pillar], walls, lambda own: set()) == [pillar]

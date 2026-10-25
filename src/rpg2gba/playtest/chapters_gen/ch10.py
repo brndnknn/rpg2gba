@@ -1070,26 +1070,6 @@ stair_beat(
     approach_prefer='west',
 )
 
-generic_beat(
-    ch10,
-    chapter_id='CH10',
-    beat_name='m066e004p0',
-    group='m066e004p0',
-    rows=('map066/ev004/p0', 'map066/ev004/p0/b0', 'map066/ev004/p0/b1'),
-    approach_prefer='south',
-    archetype=(('map066/ev004/p0', 'trainer'),),
-)
-
-generic_beat(
-    ch10,
-    chapter_id='CH10',
-    beat_name='m066e004p1',
-    group='m066e004p1',
-    rows=('map066/ev004/p1',),
-    approach_prefer='south',
-    archetype=(('map066/ev004/p1', 'trainer'),),
-)
-
 smash_beat(
     ch10,
     chapter_id='CH10',
@@ -1108,6 +1088,26 @@ generic_beat(
     group='m066e045p0',
     rows=('map066/ev045/p0', 'map066/ev045/p0/b0'),
     approach_prefer='south',
+)
+
+generic_beat(
+    ch10,
+    chapter_id='CH10',
+    beat_name='m066e004p0',
+    group='m066e004p0',
+    rows=('map066/ev004/p0', 'map066/ev004/p0/b0', 'map066/ev004/p0/b1'),
+    approach_prefer='south',
+    archetype=(('map066/ev004/p0', 'trainer'),),
+)
+
+generic_beat(
+    ch10,
+    chapter_id='CH10',
+    beat_name='m066e004p1',
+    group='m066e004p1',
+    rows=('map066/ev004/p1',),
+    approach_prefer='south',
+    archetype=(('map066/ev004/p1', 'trainer'),),
 )
 
 generic_beat(

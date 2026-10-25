@@ -169,6 +169,20 @@ def test_a_never_visible_actor_is_reported_even_invisible(registry):
     assert "still blocks" in found.describe()
 
 
+def test_an_invisible_wall_on_its_wall_page_passes(registry, monkeypatch):
+    # Map066 EV046 "Pillar2": RMXP blocks on a named opacity-0 page, so the
+    # ROM spawns it invisible and solid until self switch A blanks it.
+    wall = dict(_page("HGSS_000", opacity=0), trigger=0, through=False, list=[{"code": 0}])
+    monkeypatch.setattr(visibility, "_map_events",
+                        lambda m: {14001: {141: {"id": 141, "pages": [wall]}}}[m])
+    monkeypatch.setattr(visibility, "_invisible_walls", lambda m: frozenset({141}))
+    emu = _Emu([_obj(4, invisible=True)])
+    assert object_visibility_violations(emu, registry) == []
+
+    monkeypatch.setattr(visibility, "_invisible_walls", lambda m: frozenset())
+    assert [v.event_id for v in object_visibility_violations(emu, registry)] == [141]
+
+
 def test_objects_are_read_against_their_own_map(registry):
     # Local id 2 is Fufufu on 14001 but a plain NPC on map 33: an object left
     # over from the previous map is judged by that map's events.
