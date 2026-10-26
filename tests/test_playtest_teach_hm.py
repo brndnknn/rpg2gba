@@ -2,9 +2,11 @@
 the CH07 walk ROM (party = one starter with 3 moves, HM06 in the bag).
 Skips when mgba, the ROM, or the engine build artifacts are absent.
 
-Build the fixture without walk extras, so the party stays the suite's:
-`rpg2gba playtest walk --chapter CH08 --at-beat CH07:m035seamN040_transit
---output output/playtest-gen --no-grant --no-exp-share`."""
+Build the fixture without walk extras, so the party stays the suite's, from
+whichever chapter last ran green on this build (seeds die with every rebuild):
+`rpg2gba playtest walk --chapter CHnn --at-beat CH07:m035seamN040_transit
+--output output/playtest-gen --no-grant --no-exp-share`. The newest
+`*-CH07:m035seamN040_transit.gba` is used."""
 from __future__ import annotations
 
 import importlib.util
@@ -15,7 +17,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "engine"
-WALK_ROM = ROOT / "output/playtest-gen/walk/CH08-CH07:m035seamN040_transit.gba"
+_WALKS = sorted((ROOT / "output/playtest-gen/walk").glob("*-CH07:m035seamN040_transit.gba"),
+                key=lambda p: p.stat().st_mtime)
+WALK_ROM = _WALKS[-1] if _WALKS else ROOT / "output/playtest-gen/walk/missing.gba"
 
 pytestmark = [
     pytest.mark.skipif(importlib.util.find_spec("mgba") is None,
