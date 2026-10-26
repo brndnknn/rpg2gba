@@ -257,22 +257,21 @@ def _two_map_plan(chapter_id: str = "CH99") -> RoutePlan:
 def test_beat_markers_planned_key_present_no_routes_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(mvc, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(mvc, "_output_base", lambda: tmp_path)
 
     result = mve.beat_markers(_ROUTE_MAP_A)
 
     assert result["planned"] == []
     assert any("planned tiles unavailable" in n for n in result["notes"])
-    # declared/observed still work (unaffected by the repo-root override).
-    assert isinstance(result["declared"], list)
+    assert result["declared"] == []
     assert isinstance(result["observed"], list)
 
 
 def test_beat_markers_planned_from_valid_route_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(mvc, "_repo_root", lambda: tmp_path)
-    routes_dir = tmp_path / "reference" / "routes"
+    monkeypatch.setattr(mvc, "_output_base", lambda: tmp_path)
+    routes_dir = tmp_path / "beats"
     write_plan(_two_map_plan(), routes_dir / "CH99.route.json")
 
     result_a = mve.beat_markers(_ROUTE_MAP_A)
@@ -304,11 +303,25 @@ def test_beat_markers_planned_from_valid_route_file(
     assert seg1_b["crossings"] == []
 
 
+def test_beat_markers_declared_are_the_plans_stops(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The generator's route plan, not an imported chapter module: the stop's
+    # cell and its solved position, on the stop's own map only.
+    monkeypatch.setattr(mvc, "_output_base", lambda: tmp_path)
+    write_plan(_two_map_plan(), tmp_path / "beats" / "CH99.route.json")
+
+    (stop,) = mve.beat_markers(_ROUTE_MAP_B)["declared"]
+    assert (stop["chapter"], stop["beat"], stop["x"], stop["y"], stop["order"]) == (
+        "CH99", "beat1", 1, 1, 1)
+    assert mve.beat_markers(_ROUTE_MAP_A)["declared"] == []
+
+
 def test_beat_markers_planned_skips_malformed_route_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(mvc, "_repo_root", lambda: tmp_path)
-    routes_dir = tmp_path / "reference" / "routes"
+    monkeypatch.setattr(mvc, "_output_base", lambda: tmp_path)
+    routes_dir = tmp_path / "beats"
     write_plan(_two_map_plan("CH99"), routes_dir / "CH99.route.json")
     (routes_dir / "CH98.route.json").write_text("{ not valid json", encoding="utf-8")
 
@@ -332,7 +345,7 @@ _OTHER_MAP_ID = 9002
 
 
 def _write_observed_beats(tmp_path: Path, chapter: str, payload: dict) -> None:
-    path = tmp_path / "output" / "playtest" / "observed_beats" / f"{chapter}.json"
+    path = tmp_path / "output" / "playtest-gen" / "observed_beats" / f"{chapter}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -514,7 +527,7 @@ def test_beat_markers_corrupt_observed_file_degrades_to_note(
     _patch_registry(monkeypatch, {"MAP_TARGET": _TARGET_MAP_ID})
     _patch_group_table(monkeypatch)
 
-    bad_path = tmp_path / "output" / "playtest" / "observed_beats" / "ch_bad.json"
+    bad_path = tmp_path / "output" / "playtest-gen" / "observed_beats" / "ch_bad.json"
     bad_path.parent.mkdir(parents=True, exist_ok=True)
     bad_path.write_text("{ not valid json", encoding="utf-8")
 

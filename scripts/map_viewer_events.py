@@ -241,14 +241,13 @@ def _get_map_group_table() -> tuple[dict[tuple[int, int], str], list[str]]:
 
 
 def _get_route_plans() -> tuple[list, list[str]]:
-    """Every valid route plan under ``reference/routes/*.route.json``, plus
-    degrade-notes for anything that failed to parse. An empty (or absent)
-    routes directory is normal today (most chapters have no solved route
-    yet) and degrades to ``([], [note])`` rather than raising — same
-    never-raise contract as the rest of this module."""
+    """Every chapter's solved route, ``output/beats/CHnn.route.json`` -- what
+    the last ``beat_gen generate`` wrote, so the viewer never re-runs the
+    solver. Degrade-notes for an absent directory or a file that fails to
+    parse; same never-raise contract as the rest of this module."""
     from rpg2gba.routing.plan import load_plan
 
-    routes_dir = mvc._repo_root() / "reference" / "routes"
+    routes_dir = mvc._output_base() / "beats"
     paths = sorted(routes_dir.glob("*.route.json"))
     fp = tuple((str(p), mvc._file_fingerprint(p)) for p in paths)
     global _route_plans_cache
@@ -256,7 +255,8 @@ def _get_route_plans() -> tuple[list, list[str]]:
         return _route_plans_cache[1]
 
     if not paths:
-        result = ([], [f"no route plans found in {routes_dir} — planned tiles unavailable"])
+        result = ([], [f"no route plans found in {routes_dir} — run beat_gen generate; "
+                       "beats and planned tiles unavailable"])
         _route_plans_cache = (fp, result)
         return result
 
@@ -270,46 +270,6 @@ def _get_route_plans() -> tuple[list, list[str]]:
 
     result = (plans, notes)
     _route_plans_cache = (fp, result)
-    return result
-
-
-_derived_locations_cache = None
-
-
-def _get_derived_locations() -> tuple[dict, list[str]]:
-    """Every ``reference/routes/*.locations.json``, keyed by chapter id.
-
-    These are the route solver's *derived* beat locations, produced at
-    BUILD_PLAN step 6a from the manifest and dispositions BEFORE the
-    chapter's playtest module is authored. They exist so an order can be
-    approved rather than merely graded (`routing/locations.py`), and they
-    are what lets the viewer show beat markers for a chapter whose
-    `chapters/<id>.py` does not exist yet.
-
-    Same never-raise contract as `_get_route_plans`: an absent directory or
-    an unreadable file degrades to a note.
-    """
-    from rpg2gba.routing.locations import load_locations
-
-    routes_dir = mvc._repo_root() / "reference" / "routes"
-    paths = sorted(routes_dir.glob("*.locations.json"))
-    fp = tuple((str(p), mvc._file_fingerprint(p)) for p in paths)
-    global _derived_locations_cache
-    if _derived_locations_cache is not None and _derived_locations_cache[0] == fp:
-        return _derived_locations_cache[1]
-
-    by_chapter: dict = {}
-    notes: list[str] = []
-    for path in paths:
-        try:
-            chapter_id, records = load_locations(path)
-        except Exception as exc:
-            notes.append(f"{path} unreadable/malformed locations file, skipped ({exc})")
-            continue
-        by_chapter[chapter_id] = records
-
-    result = (by_chapter, notes)
-    _derived_locations_cache = (fp, result)
     return result
 
 
@@ -649,9 +609,11 @@ def event_detail(map_id: int, event_id: int) -> dict:
 def beat_markers(map_id: int) -> dict:
     """Playtest beats (declared + observed + walked) that belong to this
     Uranium map, plus Q8's carried contradictions and Q7's conformance
-    summary. Never raises: any missing optional artifact (chapter modules,
-    the map-constant registry state, the observed-beats directory, the
-    fork's map_groups.h) degrades that half to empty plus a note.
+    summary. Never raises: any missing optional artifact (the generator's
+    route plans, the map-constant registry state, the observed-beats
+    directory, the fork's map_groups.h) degrades that half to empty plus a
+    note. Everything is read from artifacts the generator and the gen-suite
+    runner already wrote; nothing here solves or plays anything.
 
     **Schema v1/v2 compatibility.** ``observed_beats/<chapter>.json`` grew a
     ``"version": 2`` in Q13 slice 4, adding ``path``/``divergence`` per beat
@@ -661,97 +623,40 @@ def beat_markers(map_id: int) -> dict:
     an empty ``walked`` layer / no contributions to ``contradictions`` or
     ``conformance`` for that chapter, plus one explanatory note, rather than
     raising or silently pretending the data exists (CLAUDE.md §4.5)."""
-    from rpg2gba.playtest.chapter import chapter_names, load_chapter
-
     notes: list[str] = []
     by_id, by_const = _get_map_registry()
     if not by_const:
         notes.append("map-constant registry state unavailable — beats cannot be resolved to a map")
 
+    # Declared beats are the solver's stops, read from the route plans
+    # `beat_gen generate` wrote: the cell the player is walked to and the
+    # solved visit order. Importing the chapter modules instead re-solves
+    # every route (15-25s). Beats the generator adds around a stop
+    # (`_transit`, `_retalk1`, `_spent`, ...) are not stops and don't show.
+    plans, plan_notes = _get_route_plans()
+    notes += plan_notes
     declared: list[dict] = []
-    for name in chapter_names():
-        try:
-            chapter = load_chapter(name)
-        except Exception:
-            notes.append(f"chapter module {name!r} failed to load")
-            continue
-        for beat in chapter.beats:
-            if ":" in beat.name:
-                # Inherited from a predecessor chapter — that chapter's own
-                # module reports it under its own (bare) name; skip here to
-                # avoid double-counting.
+    entry = by_id.get(map_id)
+    for plan in plans:
+        position = 0
+        for node in plan.nodes:
+            if node.kind != "group":
                 continue
-            for loc in beat.locations:
-                uid = by_const.get(loc.map_constant)
-                if uid == map_id:
-                    declared.append({
-                        # `chapter.name` (the atlas id), not the module name:
-                        # the two agree today (`ch03.py` -> `"CH03"`) only up
-                        # to case, and the observed half below keys off the
-                        # file stem, which is the atlas id.
-                        "chapter": chapter.name,
-                        "beat": beat.name,
-                        "description": beat.description,
-                        "map_constant": loc.map_constant,
-                        "x": loc.x,
-                        "y": loc.y,
-                        "label": loc.label,
-                    })
-
-    # Derived-locations fallback (2026-09-04). A chapter at BUILD_PLAN step
-    # 6a has an approved-pending route but no `chapters/<id>.py` yet, so the
-    # loop above contributes nothing for it and the operator reviewing the
-    # order sees a bare polyline with no idea which stop is which beat.
-    # Fall back to the step-6a locations file for exactly those chapters --
-    # never for one whose module loaded, so a derived cell can never mask or
-    # contradict an authored one. `derived: True` is carried through to the
-    # frontend so the two are visually distinguishable; these are a proposal
-    # under review, not a chapter's committed claim about the world.
-    authored_chapters = {row["chapter"] for row in declared}
-    derived_by_chapter, derived_notes = _get_derived_locations()
-    notes.extend(derived_notes)
-    route_plans, _ = _get_route_plans()
-    for chapter_id, records in sorted(derived_by_chapter.items()):
-        if chapter_id in authored_chapters:
-            continue
-        # Beat ids are labels, not an ordering (`playtest/chapter.py`'s
-        # `beat()` docstring is explicit about this), so a marker showing
-        # "B4" says nothing about when it is visited. Carry the SOLVED
-        # position from the route plan instead -- that is the thing being
-        # approved at step 6's stop, and the only reason to look at these
-        # markers at all.
-        order_of: dict[str, int] = {}
-        for plan in route_plans:
-            if plan.chapter_id != chapter_id:
+            position += 1
+            if node.map_id != map_id:
                 continue
-            position = 0
-            for node in plan.nodes:
-                if node.kind != "group":
-                    continue
-                position += 1
-                for beat_name in node.beats:
-                    order_of[beat_name] = position
-        for record in records:
-            if by_const.get(record.map_constant) != map_id:
-                continue
-            declared.append({
-                "chapter": chapter_id,
-                "beat": record.beat_id,
-                "description": f"derived from {', '.join(record.rows)}",
-                "map_constant": record.map_constant,
-                "x": record.x,
-                "y": record.y,
-                "label": record.resolver,
-                "derived": True,
-                "order": order_of.get(record.beat_id),
-            })
-        if any(by_const.get(r.map_constant) == map_id for r in records):
-            notes.append(
-                f"{chapter_id}: beat markers are DERIVED from "
-                f"reference/routes/{chapter_id}.locations.json (step 6a) — "
-                "the chapter module is not authored yet, so these are a "
-                "proposed order under review, not registered beats"
-            )
+            approach = node.chosen_approach
+            for beat_name in node.beats:
+                declared.append({
+                    "chapter": plan.chapter_id,
+                    "beat": beat_name,
+                    "description": ", ".join(node.rows) or None,
+                    "map_constant": entry.map_const if entry else None,
+                    "x": node.cell[0],
+                    "y": node.cell[1],
+                    "label": approach.resolver if approach else None,
+                    "order": position,
+                })
 
     observed: list[dict] = []
     # Q13 slice 4 additions. `walked` mirrors `planned`'s per-beat row shape
@@ -766,7 +671,7 @@ def beat_markers(map_id: int) -> dict:
     walked: list[dict] = []
     contradictions: list[dict] = []
     conformance: dict[str, dict] = {}
-    obs_dir = mvc._output_base() / "playtest" / "observed_beats"
+    obs_dir = mvc._output_base() / "playtest-gen" / "observed_beats"
     if not obs_dir.is_dir():
         notes.append(
             f"no observed-beats directory at {obs_dir} — run the playtest runner to populate it"
@@ -918,8 +823,6 @@ def beat_markers(map_id: int) -> dict:
                 conformance[chapter_name] = data["conformance"]
 
     planned: list[dict] = []
-    plans, plan_notes = _get_route_plans()
-    notes += plan_notes
     for plan in plans:
         node_label = {
             node.index: (node.group if node.kind == "group" else node.kind)

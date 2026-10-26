@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import gzip
 import json
 import logging
 import os
@@ -143,6 +144,7 @@ _CHAPTER_ASSET_TYPES = {"js": "text/javascript; charset=utf-8",
                         "css": "text/css; charset=utf-8"}
 
 _CACHE_IMMUTABLE = "public, max-age=31536000, immutable"
+_GZIP_MIN_BYTES = 1024
 
 # Landing page: searchable, tree-grouped map index.  Data (build_index()) is
 # injected as JSON at __INDEX_DATA__ and rendered client-side, mirroring the
@@ -629,6 +631,13 @@ class _Handler(BaseHTTPRequestHandler):
     ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
+        # A map page inlines its whole dataset (1.5-3.5 MB of JSON on a big map);
+        # gzipped it is ~17x smaller, which is most of the load time over Tailscale.
+        if (len(body) > _GZIP_MIN_BYTES and not content_type.startswith("image/")
+                and "gzip" in self.headers.get("Accept-Encoding", "")):
+            body = gzip.compress(body, compresslevel=5)
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Vary", "Accept-Encoding")
         self.send_header("Content-Length", str(len(body)))
         if cache:
             self.send_header("Cache-Control", cache)

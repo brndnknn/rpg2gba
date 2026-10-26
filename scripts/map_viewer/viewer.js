@@ -131,8 +131,8 @@ function drawMeta(idx, layer, mid, dx, dy, cp) {
   if (!c) {
     imgCache.set(url, 'loading');
     const img = new Image();
-    img.onload = function() { imgCache.set(url, img); scheduleRender(); };
-    img.onerror = function() { imgCache.set(url, 'err'); };
+    img.onload = function() { imgCache.set(url, img); scheduleRender(); afterMapDrawn(); };
+    img.onerror = function() { imgCache.set(url, 'err'); afterMapDrawn(); };
     img.src = url;
   }
   if (!c || c === 'loading') { ctx.fillStyle = '#1c1c22'; ctx.fillRect(dx, dy, cp, cp); return; }
@@ -921,6 +921,14 @@ function psCounts(d) {
   return cnt;
 }
 // Tileset budget readout: fetched async AFTER the map draws (the probe takes seconds).
+// Asked for any earlier, it holds the server's one Python thread while the atlas waits.
+let budgetPending = null;
+function afterMapDrawn() {
+  if (budgetPending == null) return;
+  const id = budgetPending;
+  budgetPending = null;
+  loadBudget(id);
+}
 function loadBudget(mapId) {
   const el = document.getElementById('budget-line');
   if (!el) return;
@@ -2061,7 +2069,7 @@ function loadMemberFeedback(mem) {
   if (V.quant && V.quant.non_stock) {
     document.getElementById('nonstock-badge').classList.add('show');
   }
-  loadBudget(m.map_id);
+  budgetPending = m.map_id;       // fetched by afterMapDrawn, once the atlas is in
   renderMapNav();
   const navp = document.getElementById('nav-palettes');
   navp.href = '/palettes/' + m.map_id;
