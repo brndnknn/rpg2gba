@@ -355,6 +355,36 @@ Checked against `output/uranium-build/wiki/Burole_Town.wiki` and `Burole_Town_Gy
     leaves `sw62` OFF; not resolved here whether the suite needs a refusal beat.
 13. **Wiki check:** done (§5); only item 1 of §5 differs.
 
+### Gate close-out (2026-10-26)
+
+**CH10 GATE PASSED 2026-10-26** — operator walked the gym and the end state; gen suite 673/673 on the
+rebuilt ROM (2026-10-25). Items 2-12, as the built chapter has them:
+
+2. **Done.** New special `GetPartyMonFriendshipStageRpg2gba` (`engine/src/field_specials.c:5786-5807`) reads
+   the slot `ChoosePartyMon` picked (not lead-only); steps 255/220/150/100/50/1. The suite refuses the arms
+   (C8: `pbChooseNonEggPokemon` has no generator handler).
+3. **Done.** Each rock runs `EventScript_Rpg2gbaRockSmashReturn`, then its `var108 == N` arm (gem) or the
+   wild-encounter arm (`Map066.pory:63-81`). `var108` = `random(15)` once per save on first entry (EV021),
+   as in Uranium. The suite smashes all 15 rocks in one beat; the one-of-N rule makes the gem write certain
+   after it. **Walk finding fixed 2026-10-25:** the side pillars EV046/047 are RMXP invisible walls and were
+   hidden at load, so the leader was reachable without the gem. They now spawn as invisible solid objects
+   (`tileset_converter/invisible_wall.py`), and beat_gen orders smash → pillar → leader.
+4. **Done.** 35 map-60 `map_events` strip entries; EV041/EV071 carry `expect_name` "EV041"/"EV071".
+5. **Done.** WORKER is a new engine class (`TRAINER_CLASS_WORKER`). Battle pics are keyed by Uranium trainer
+   type (`trainer_converter/common.py:108-114`): LEADER_Caff and SCHOOLKID_MALE get their own pics.
+6. **Done.** Stubbed: common events 4/5/6 print "The Tandor Network is unavailable." (`CommonEvents.pory:1-17`).
+7. **Done.** Map 60 fits: the chapter builds and the suite is green. No fresh tile count was recorded.
+8. **Done.** The leader battles `TRAINER_DAVERN_29` (`Map066.pory:28`), the wiki-matching party.
+9. **Done.** No unmapped Ruby heads are queued for CH10 maps. The remaining queue entries are warp
+   placeholders and post-Transfer commands.
+10. **Done.** EV007 emits `checkmoney`/`removemoney` (3800/2500/500, `Map060.pory:387-537`). The suite refuses
+    the money arms (`unmodelled_outcome:$Trainer.money`) and the `\G` text (#109).
+11. **Carried → `PROJECT_TODO.md` #155.** `battle_back: Cave` is never read; the gym battles on the indoor
+    background. The engine has cave natively (`MAP_TYPE_UNDERGROUND`, `battle_setup.c:741`). Cosmetic.
+12. **Accepted.** `sw62` (`FLAG_GYM_2_TRAINERS_OFF`) is still written only inside the TM-granted arm, as in
+    Uranium. The suite takes the sibling arm (`harness:full_bag`, ruling 19), so the full-bag branch is not
+    exercised.
+
 ---
 
 *Companion docs: `reference/chapters/00-atlas.md` (lines 244, 334-336), `06-nowtoch-city.md` (Gym 1 precedent, parked metro),

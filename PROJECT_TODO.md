@@ -17,6 +17,16 @@ deleting. Facts here are pointers — the cited code/docs stay authoritative.
 
 ## Open
 
+### 155. Uranium `battle_back` is never read: cave maps battle on the indoor background
+
+Filed 2026-10-26 at CH10's gate (`10-burole-town.md` §7 item 11). Burole Gym (map 66) has
+`battle_back: Cave`, but the converter emits it as `MAP_TYPE_INDOOR` with
+`MAP_BATTLE_SCENE_NORMAL` (`metadata_wiring.py:710`), and nothing reads `battle_back` past the
+PBS parse (`pbs_converter/metadata.py:124`). The engine already does cave natively:
+`battle_setup.c:741-746` returns `BATTLE_ENVIRONMENT_CAVE` for `MAP_TYPE_UNDERGROUND` (and a cave
+transition at :796). Work: census `battle_back` over all maps, then decide per value whether it
+drives `map_type` or a battle-environment hook. Cosmetic; no gameplay effect.
+
 ### 154. Tandor region map and Fly: the region map is still Hoenn's
 
 Filed 2026-10-21 with #140. The game's map sections exist now (`map_sections.py`), but their

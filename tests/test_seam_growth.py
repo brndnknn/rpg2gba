@@ -233,7 +233,7 @@ DEFAULT_CONNECTIONS = seam_growth.DEFAULT_CONNECTIONS_JSON
 )
 def test_real_gated_chapters_reconcile_and_run() -> None:
     """The detector must at least run cleanly end-to-end over the real,
-    currently-gated chapters that add maps (CH01-CH06, CH09) without raising -- the substantive
+    currently-gated chapters that add maps (CH01-CH06, CH09, CH10) without raising -- the substantive
     findings are reported by hand, not asserted here."""
     reports = seam_growth.detect_seam_growth()
-    assert [r.chapter_id for r in reports] == ["CH01", "CH02", "CH03", "CH04", "CH05", "CH06", "CH09"]
+    assert [r.chapter_id for r in reports] == ["CH01", "CH02", "CH03", "CH04", "CH05", "CH06", "CH09", "CH10"]

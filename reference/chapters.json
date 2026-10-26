@@ -147,7 +147,7 @@
     {
       "id": "CH10", "act": "A2", "title": "Burole Town", "wiki_page": "Burole Town",
       "visit": 1, "outdoor": 60, "maps": [60, 66, 2, 4, 29, 85, 90],
-      "predecessor": "CH09", "tier": "thin", "status": "in_progress",
+      "predecessor": "CH09", "tier": "thin", "status": "built",
       "notes": "Gym 2 (map 66). Metro maps 5/6 PARKED out of CH10 2026-10-23 (operator): both town doors (Map060 EV008/EV009) are gated on sw85 METRO MASTER, written only in Legen Town (Map167, CH24), so no reachable entrance here (the 177 dojo rule). They stay bound to CH28 (Burole revisit, after CH24), not unbound_maps; rebind alongside parked 44/45 is decided there. NOTE: the wiki's own location navigation omits Burole entirely and mis-numbers later gyms; the walkthrough body and the map tree agree with each other. See atlas discrepancy list."
     },
 
