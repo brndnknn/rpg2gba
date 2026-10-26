@@ -386,6 +386,22 @@ def test_ambiguous_trainer_raises(map033, trainers, map_consts, staged, facts) -
         )
 
 
+def test_rematch_tiers_resolve_to_the_tier1_party() -> None:
+    """Sr. Goldkorn (Map076 EV071) has parties 0, 1 and 2: one phone trainer."""
+    event = rm.PhoneRematchEvent(76, 71, "Trainer(4)", "GENTLEMAN", "Sr. Goldkorn")
+    tiers = {
+        f"TRAINER_SR_GOLDKORN_{tid}": {
+            "id": tid, "trainer_class": "TRAINER_CLASS_GENTLEMAN",
+            "name": "Sr. Goldkorn", "party_id": party,
+        }
+        for tid, party in ((268, 2), (293, 1), (36, 0))
+    }
+    assert rm.resolve_trainer_key(event, tiers) == "TRAINER_SR_GOLDKORN_36"
+    tiers["TRAINER_SR_GOLDKORN_268"]["party_id"] = 0  # two tier-1 parties: still ambiguous
+    with pytest.raises(ValueError, match="is ambiguous across"):
+        rm.resolve_trainer_key(event, tiers)
+
+
 def test_duplicate_rematch_name_raises(map033, trainers, map_consts, staged, facts) -> None:
     """The same trainer registered on two maps is a REMATCH_* enum collision."""
     events = rm.detect_phone_rematch_events(map033, 33)

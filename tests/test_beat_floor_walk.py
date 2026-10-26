@@ -261,6 +261,13 @@ def test_visual_tagged_and_offline_eligible():
     assert row.offline_eligible
 
 
+def test_scroll_map_is_a_visual_not_a_refusal():
+    # CH11 Map076's cave-mouth scene pans the camera (203) before its warp.
+    row = _row([{"code": 203, "parameters": [8, 4, 4]}])
+    assert _only(row, "visual").tag == "visual"
+    assert not row.refusals
+
+
 # --- story_state write merge --------------------------------------------
 
 def test_switch_write_merged_from_story_state():

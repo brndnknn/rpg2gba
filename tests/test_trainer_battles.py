@@ -435,3 +435,17 @@ def test_staged_pic_id_must_match_trainer_types() -> None:
 
 def test_worker_class_music_row() -> None:
     assert battles._CLASS_ENCOUNTER_MUSIC["TRAINER_CLASS_WORKER"] == "TRAINER_ENCOUNTER_MUSIC_HIKER"
+
+
+def test_trainer_names_over_the_engine_limit_need_a_reviewed_short_form() -> None:
+    assert battles.resolve_trainer_name("Ogilvy") == "Ogilvy"
+    assert battles.resolve_trainer_name("Sr. Goldkorn") == "Goldkorn"  # 12 chars
+    with pytest.raises(ValueError, match="over TRAINER_NAME_LENGTH"):
+        battles.resolve_trainer_name("Tim & Trese")
+
+
+def test_trainer_name_limit_matches_the_engine() -> None:
+    global_h = Path(__file__).resolve().parents[1] / "engine/include/constants/global.h"
+    assert f"#define TRAINER_NAME_LENGTH {battles.TRAINER_NAME_LENGTH}\n" in global_h.read_text(
+        encoding="utf-8"
+    )

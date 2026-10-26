@@ -1,4 +1,14 @@
 {
+  "HGSS_122": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_122",
+    "fallback": "OBJ_EVENT_GFX_COOLTRAINER_M",
+    "note": "HGSS overworld sheet: spiky-haired man, red jacket (CH11 Route 4 Pokémon Ranger Wyle, Map076 EV009; the fork has no Ranger sprite)"
+  },
+  "HGSS_145": {
+    "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_145",
+    "fallback": "OBJ_EVENT_GFX_MAN_1",
+    "note": "HGSS overworld sheet: dark-haired man, purple shirt (CH11 Route 4 bridge NPC, Map076 EV072)"
+  },
   "HGSS_000": {
     "gfx": "OBJ_EVENT_GFX_URANIUM_HGSS_000",
     "fallback": "OBJ_EVENT_GFX_LITTLE_BOY",

@@ -143,6 +143,13 @@ _CLASS_ENCOUNTER_MUSIC: dict[str, str] = {
     # and Fishermen (include/constants/trainers.h:569, "Used for Hikers, Ruin
     # Maniacs, Kindlers, and Fishermen").
     "TRAINER_CLASS_WORKER": "TRAINER_ENCOUNTER_MUSIC_HIKER",
+    # CH11 (Route 4). The constants' own comments name each class
+    # (include/constants/trainers.h: COOL "Used for Cool Trainers, Pokémon Rangers,
+    # and Bird Keepers"; INTENSE "... Psychics ..."; RICH "Used for Rich Boys and
+    # Gentlemen").
+    "TRAINER_CLASS_PKMN_RANGER": "TRAINER_ENCOUNTER_MUSIC_COOL",
+    "TRAINER_CLASS_PSYCHIC": "TRAINER_ENCOUNTER_MUSIC_INTENSE",
+    "TRAINER_CLASS_GENTLEMAN": "TRAINER_ENCOUNTER_MUSIC_RICH",
 }
 
 _TRAINER_ANCHOR_RE_TMPL = r"^#define\s+{anchor}\s+(\d+)\s*$"
@@ -232,6 +239,34 @@ class StagedTrainerBattle:
     pic_constant: str
     items: list[str]
     party: list[dict]
+
+
+#: `TRAINER_NAME_LENGTH` (engine/include/constants/global.h). `gTrainers[].trainerName`
+#: is sized from it, so a longer name is a compile error; raising it would move
+#: save-block structs that embed trainer names.
+TRAINER_NAME_LENGTH = 10
+
+#: Shortened battle names for trainers whose Uranium name doesn't fit, one reviewed
+#: entry each. Pair names ("Tim & Trese") are left out on purpose: they belong to
+#: two-opponent battles, which are unbuilt and may not keep one name at all.
+_SHORT_TRAINER_NAMES: dict[str, str] = {
+    "Sr. Goldkorn": "Goldkorn",  # CH11 Route 4 (Map076 EV071); operator-approved 2026-10-26
+}
+
+
+def resolve_trainer_name(name: str) -> str:
+    """The battle name to emit: the Uranium name, or its reviewed short form."""
+    if len(name) <= TRAINER_NAME_LENGTH:
+        return name
+    short = _SHORT_TRAINER_NAMES.get(name)
+    if short is None:
+        raise ValueError(
+            f"trainer name {name!r} is {len(name)} characters, over TRAINER_NAME_LENGTH "
+            f"({TRAINER_NAME_LENGTH}); add a reviewed entry to _SHORT_TRAINER_NAMES"
+        )
+    if len(short) > TRAINER_NAME_LENGTH:
+        raise ValueError(f"_SHORT_TRAINER_NAMES[{name!r}] = {short!r} is still too long")
+    return short
 
 
 def _class_display_name(trainer_class_const: str, trainer_types: dict) -> str:
@@ -408,6 +443,7 @@ def build_staged_battles(
             verify_party_species(rec["party"], fork_species, staged_species)
             verify_party_moves(rec["party"], fork_moves)
             verify_party_items(rec["party"], fork_items)
+            name = resolve_trainer_name(rec["name"])
         except ValueError as e:
             errors.append(f"{key}: {e}")
             continue
@@ -417,7 +453,7 @@ def build_staged_battles(
                 trainer_key=key,
                 fork_id=pristine_trainer_anchor_value + 1 + i,
                 uranium_trainer_id=rec["id"],
-                name=rec["name"],
+                name=name,
                 trainer_class_constant=class_const,
                 gender_constant=gender_const,
                 encounter_music_constant=music_const,

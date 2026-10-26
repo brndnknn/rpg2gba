@@ -185,6 +185,12 @@ def trainer_consts_for(name: str, trainer_class: str, *, row_id: str) -> tuple[s
 def _trainer_const_for(name: str, trainer_class: str, *, row_id: str) -> str:
     candidates = trainer_consts_for(name, trainer_class, row_id=row_id)
     if len(candidates) > 1:
+        # Rematch tiers (Sr. Goldkorn, map076 EV071: parties 0, 1, 2) are one
+        # trainer: the overworld battle is party 0, as in `rematch.resolve_trainer_key`.
+        # A wrong pick fails loud in the ROM run (the beat names the wrong constant).
+        tier1 = [c for c in candidates if _trainers_json()[c].get("party_id") == 0]
+        if len(tier1) == 1:
+            return tier1[0]
         raise ValueError(
             f"archetype_kwargs: {row_id}: {len(candidates)} trainers.json "
             f"entries match name={name!r} trainer_class={trainer_class!r}: "

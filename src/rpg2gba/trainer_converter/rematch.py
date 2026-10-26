@@ -665,6 +665,13 @@ def resolve_trainer_key(event: PhoneRematchEvent, trainers: Mapping[str, Mapping
             "the trainer constant for a phone rematch"
         )
     if len(matches) > 1:
+        # A trainer with rematch tiers (Sr. Goldkorn, Map076 EV071: parties 0, 1
+        # and 2) is one phone trainer with several parties, not an ambiguity. The
+        # tier policy above reuses the tier-1 party in every slot, and the event's
+        # own battle and createPhoneTrainer both name party 0.
+        tier1 = [key for key in matches if trainers[key].get("party_id") == 0]
+        if len(tier1) == 1:
+            return tier1[0]
         raise ValueError(
             f"map {event.uranium_map_id} event {event.event_id}: class {class_const} name "
             f"{event.trainer_display_name!r} is ambiguous across {matches} — cannot pick a "

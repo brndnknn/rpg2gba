@@ -182,6 +182,18 @@ STARTER_SPECIES: tuple[SpeciesSpec, ...] = (
     SpeciesSpec(50, "PAHAR"),
     SpeciesSpec(51, "PALIJ"),
     SpeciesSpec(52, "PAJAY"),
+    # --- CH11 (Route 4) species (2026-10-26) --------------------------------
+    # JERBOLTA (trainer Carlton, land table; terminal) and TANCOON -> TANSCURE
+    # (land table; level 18). FRYNAI -> SAIDINE (level 36) -> DAIKATUNA
+    # (evolutions.dat method 7, Item) are in map 76's water and rod tables. Whole
+    # lines staged so no target dangles. EKANS/ARBOK/MANKEY/MAGIKARP are canon
+    # fork species.
+    SpeciesSpec(53, "JERBOLTA"),
+    SpeciesSpec(46, "TANCOON"),
+    SpeciesSpec(47, "TANSCURE"),
+    SpeciesSpec(118, "FRYNAI"),
+    SpeciesSpec(119, "SAIDINE"),
+    SpeciesSpec(120, "DAIKATUNA"),
 )
 
 

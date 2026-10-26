@@ -168,6 +168,24 @@ def test_stereo_wav_decodes_and_downmixes(tmp_path: Path) -> None:
     assert np.max(np.abs(mono)) == pytest.approx(0.8 / 2, abs=0.01)
 
 
+def test_ieee_float_wav_decodes(tmp_path: Path) -> None:
+    # Format 3 (22 of Uranium's cries, e.g. 053Cry): `wave` refuses it, so the
+    # reader parses the RIFF chunks itself. A LIST chunk before fmt/data must not
+    # confuse it.
+    samples = np.array([[0.5, -0.25], [1.5, -2.0]], dtype="<f4")  # out of range clips
+    fmt = (3).to_bytes(2, "little") + (2).to_bytes(2, "little") + (22050).to_bytes(4, "little")
+    fmt += (22050 * 8).to_bytes(4, "little") + (8).to_bytes(2, "little") + (32).to_bytes(2, "little")
+    body = b"WAVE" + b"LIST" + (3).to_bytes(4, "little") + b"abc\x00"
+    body += b"fmt " + len(fmt).to_bytes(4, "little") + fmt
+    body += b"data" + samples.nbytes.to_bytes(4, "little") + samples.tobytes()
+    path = tmp_path / "float.wav"
+    path.write_bytes(b"RIFF" + len(body).to_bytes(4, "little") + body)
+
+    rate, channels, width, data = cries.read_wav_as_float(path)
+    assert (rate, channels, width) == (22050, 2, 4)
+    assert data.tolist() == [[0.5, -0.25], [1.0, -1.0]]
+
+
 # --- 4. Structural test over the real six starter cries -------------------
 
 

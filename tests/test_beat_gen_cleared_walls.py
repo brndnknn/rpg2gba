@@ -12,15 +12,15 @@ import pytest
 from rpg2gba.beat_gen import __main__ as bg
 from rpg2gba.beat_gen.plan import PlannedBeat
 from rpg2gba.routing.locations import ApproachCandidate, BeatLocationRecord
-from rpg2gba.story_state.state import Assign, SelfSwitch, Test
+from rpg2gba.story_state.state import Assign, SelfSwitch, Test, Variable
 
 _ROCK = (35, 15)
 _ROCK_PAGES = [{"graphic": {"character_name": "rock"}}, {"graphic": {"character_name": ""}}]
 _SWITCH = SelfSwitch(35, 15, "A")
 
 
-def _state(tests=(), writes=()):
-    return SimpleNamespace(page_tests=tuple(tests), writes=tuple(writes))
+def _state(tests=(), writes=(), computed=None):
+    return SimpleNamespace(page_tests=tuple(tests), writes=tuple(writes), computed=computed)
 
 
 def _states(*, cutscene_writes=True, own_writes=False):
@@ -340,3 +340,45 @@ def test_non_clearer_beat_and_all_unreachable_sides_are_left_alone():
     assert bg._clearer_sides_with_walls([other], walls, lambda own: set()) == [other]
     pillar = _multi_record((_PILLAR_ROW,))
     assert bg._clearer_sides_with_walls([pillar], walls, lambda own: set()) == [pillar]
+
+
+# --- actors that clear only as the player leaves (`_exit_only_walls`, CH11) ---
+
+def _exit_events(*, scene_leaves=True, also_local_writer=False):
+    hiker = {"id": 19, "pages": [{"graphic": {"character_name": "HGSS_035"}, "list": []},
+                                 {"graphic": {"character_name": ""}, "list": []}]}
+    warp = {"code": 201, "parameters": [0, 7 if scene_leaves else 76, 10, 51, 0, 0]}
+    scene = {"id": 23, "pages": [{"graphic": {"character_name": ""}, "list": [warp]}]}
+    sign = {"id": 49, "pages": [{"graphic": {"character_name": ""}, "list": []}]}
+    events = [hiker, scene, sign]
+    var = Test(Variable(106), ">=", 1)
+    write = Assign(Variable(106), frozenset({1}), False, "t", 0)
+    # The real scene row is `computed` (var106 += 1 reads var106): no resolved
+    # writes, only its raw commands.
+    add = {"code": 122, "parameters": [106, 106, 1, 0, 1]}
+    states = {
+        "map076/ev019/p0": _state(),
+        "map076/ev019/p1": _state(tests=[var]),
+        "map076/ev023/p0": _state(computed=SimpleNamespace(commands=[warp, add])),
+        "map076/ev049/p0": _state(writes=[write] if also_local_writer else []),
+    }
+    return events, states
+
+
+def _exit_walls(events, states):
+    return bg._exit_only_walls({76}, lambda m: events, row_states=lambda m: states)
+
+
+def test_actor_cleared_only_by_a_page_leaving_the_chapter_is_a_wall():
+    events, states = _exit_events()
+    assert _exit_walls(events, states) == frozenset({(76, 19)})
+
+
+def test_actor_with_an_in_chapter_clearer_is_not_held():
+    events, states = _exit_events(also_local_writer=True)
+    assert _exit_walls(events, states) == frozenset()
+
+
+def test_a_warp_within_the_chain_does_not_count_as_leaving():
+    events, states = _exit_events(scene_leaves=False)
+    assert _exit_walls(events, states) == frozenset()

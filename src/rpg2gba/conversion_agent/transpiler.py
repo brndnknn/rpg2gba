@@ -2265,6 +2265,8 @@ _DELAY_TOKENS = [(16, "delay_16"), (8, "delay_8"), (4, "delay_4"),
 _SPEED_PREFIX = {1: "walk_slow", 2: "walk_slow", 3: "walk_slow",
                  4: "walk", 5: "walk_fast", 6: "walk_faster"}
 _WALK_CODES = {1: "down", 2: "left", 3: "right", 4: "up"}
+# Absolute face codes (16-19), for tracking facing inside one route.
+_FACE_CODES = {16: "down", 17: "left", 18: "right", 19: "up"}
 
 
 def _delay_tokens(frames: int) -> list[str]:
@@ -2310,6 +2312,7 @@ def route_tokens(route: dict) -> list[str] | None:
         return ["walk_in_place_right", "walk_in_place_right"]
     tokens: list[str] = []
     speed_prefix = "walk"
+    facing: str | None = None  # set by this route's own walk/face steps only
     for step in route.get("list", []):
         code = step.get("code", 0)
         if code == 0:
@@ -2318,8 +2321,21 @@ def route_tokens(route: dict) -> list[str] | None:
             continue
         if code in _WALK_CODES:
             tokens.append(f"{speed_prefix}_{_WALK_CODES[code]}")
+            facing = _WALK_CODES[code]
         elif code in _MOVE_TOKENS:
             tokens.append(_MOVE_TOKENS[code])
+            if code in _FACE_CODES:
+                facing = _FACE_CODES[code]
+            elif code in (25, 26):  # face (away from) the player: unknown here
+                facing = None
+        elif code == 14:
+            # Jump (x, y). Only the in-place hop (0, 0) has a token, and it keeps
+            # the current facing, which is known only once this route has walked
+            # or turned. Displaced jumps, and a hop before any facing, still queue.
+            params = step.get("parameters", [])
+            if list(params[:2]) != [0, 0] or facing is None:
+                return None
+            tokens.append(f"jump_in_place_{facing}")
         elif code == 15:
             params = step.get("parameters", [])
             frames = params[0] if params and isinstance(params[0], int) else 1

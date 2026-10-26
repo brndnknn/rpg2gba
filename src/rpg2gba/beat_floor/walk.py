@@ -402,6 +402,7 @@ CODE_EXTRACTORS: dict[int, LeafExtractor] = {
     123: _no_assertion,   # self-switch write: comes from story_state, not here
     201: _extract_warp,
     202: _extract_event_position,
+    203: _visual(203, "scroll_map"),  # CH11 Map076 EV023/034/035 (camera pan)
     204: _visual(204, "map_settings"),
     207: _visual(207, "animation"),
     208: _visual(208, "player_transparency"),

@@ -101,15 +101,56 @@ class CryConversionResult:
 
 # --- WAV I/O -----------------------------------------------------------
 
+_WAVE_FORMAT_IEEE_FLOAT = 3
+
+
+def _riff_chunks(path: Path) -> dict[bytes, bytes]:
+    """The top-level chunks of a RIFF/WAVE file, keyed by chunk id (first wins)."""
+    blob = path.read_bytes()
+    if blob[:4] != b"RIFF" or blob[8:12] != b"WAVE":
+        raise ValueError(f"{path}: not a RIFF/WAVE file")
+    chunks: dict[bytes, bytes] = {}
+    pos = 12
+    while pos + 8 <= len(blob):
+        cid = blob[pos:pos + 4]
+        size = int.from_bytes(blob[pos + 4:pos + 8], "little")
+        chunks.setdefault(cid, blob[pos + 8:pos + 8 + size])
+        pos += 8 + size + (size & 1)
+    return chunks
+
+
+def _wav_format_tag(path: Path) -> int | None:
+    fmt = _riff_chunks(path).get(b"fmt ")
+    return int.from_bytes(fmt[:2], "little") if fmt and len(fmt) >= 2 else None
+
+
+def _read_ieee_float_wav(path: Path) -> tuple[int, int, int, np.ndarray]:
+    chunks = _riff_chunks(path)
+    fmt, raw = chunks.get(b"fmt "), chunks.get(b"data")
+    if fmt is None or raw is None or len(fmt) < 16:
+        raise ValueError(f"{path}: IEEE-float WAV without fmt/data chunks")
+    channels = int.from_bytes(fmt[2:4], "little")
+    rate = int.from_bytes(fmt[4:8], "little")
+    bits = int.from_bytes(fmt[14:16], "little")
+    dtype = {32: "<f4", 64: "<f8"}.get(bits)
+    if dtype is None:
+        raise ValueError(f"{path}: unsupported IEEE-float sample width {bits} bits")
+    width = bits // 8
+    usable = len(raw) - len(raw) % (width * channels)
+    floats = np.clip(np.frombuffer(raw[:usable], dtype=dtype).astype(np.float64), -1.0, 1.0)
+    return rate, channels, width, floats.reshape(-1, channels)
+
 
 def read_wav_as_float(path: Path) -> tuple[int, int, int, np.ndarray]:
     """Decode a WAV file to float64 samples in [-1, 1].
 
     Returns `(frame_rate, channels, sample_width_bytes, data)` where `data`
-    has shape `(n_frames, channels)`. Only 8-bit unsigned and 16-bit signed
-    PCM are handled (the only widths this pipeline's inputs ever use); any
-    other width fails loud rather than guessing a decode.
+    has shape `(n_frames, channels)`. 8-bit unsigned and 16-bit signed PCM, plus
+    IEEE float (format 3, which `wave` refuses; 22 of Uranium's cries, Jerbolta's
+    053Cry first among the built species); any other encoding fails loud rather than guessing a decode.
     """
+    if _wav_format_tag(path) == _WAVE_FORMAT_IEEE_FLOAT:
+        return _read_ieee_float_wav(path)
     with wave.open(str(path), "rb") as w:
         channels = w.getnchannels()
         rate = w.getframerate()

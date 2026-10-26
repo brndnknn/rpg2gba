@@ -247,12 +247,17 @@ MOVEMENT_TYPE_PROFILES: dict[str, MovementProfile] = {
     "MOVEMENT_TYPE_FACE_LEFT": MovementProfile(frozenset({W}), False),
     "MOVEMENT_TYPE_FACE_RIGHT": MovementProfile(frozenset({E}), False),
     "MOVEMENT_TYPE_FACE_UP_AND_LEFT": MovementProfile(frozenset({N, W}), False),
+    # CH11 Map076 EV002: gUpAndRightDirections = {DIR_NORTH, DIR_EAST}
+    # (engine/src/data/object_events/movement_type_func_tables.h), turn in place only.
+    "MOVEMENT_TYPE_FACE_UP_AND_RIGHT": MovementProfile(frozenset({N, E}), False),
     "MOVEMENT_TYPE_FACE_DOWN_AND_LEFT": MovementProfile(frozenset({S, W}), False),
     "MOVEMENT_TYPE_FACE_DOWN_AND_RIGHT": MovementProfile(frozenset({S, E}), False),
     "MOVEMENT_TYPE_LOOK_AROUND": MovementProfile(frozenset({N, S, E, W}), False),
     "MOVEMENT_TYPE_WALK_UP_AND_DOWN": MovementProfile(frozenset({N, S}), True),
     "MOVEMENT_TYPE_WANDER_AROUND": MovementProfile(frozenset({N, S, E, W}), True),
     "MOVEMENT_TYPE_WALK_SEQUENCE_RIGHT_UP_LEFT_DOWN": MovementProfile(frozenset({N, S, E, W}), True),
+    # CH11 Map076 EV071 (Sr. Goldkorn): the same four-step patrol, another start.
+    "MOVEMENT_TYPE_WALK_SEQUENCE_DOWN_LEFT_UP_RIGHT": MovementProfile(frozenset({N, S, E, W}), True),
 }
 
 

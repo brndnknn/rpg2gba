@@ -176,4 +176,5 @@ _MAP_CONSTANTS = {
     40: "MAP_NOWTOCH_CITY",  # CH06: 4 diagonal-stair events (the park; unsplit since 2026-10-17)
     59: "MAP_ROUTE_03",  # CH09: 4 "Stairs" events EV041-044
     66: "MAP_BUROLE_TOWN_GYM",  # CH10: two diagonal stair runs (14,21)-(15,24), (23,23)-(24,22)
+    76: "MAP_ROUTE_04",  # CH11: one diagonal stair run (23,32)-(24,30), EV045-048
 }

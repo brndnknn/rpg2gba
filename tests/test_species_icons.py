@@ -80,6 +80,14 @@ EXPECTED_ICON_PAL_INDEX = {
     "PAHAR": 1,
     "PALIJ": 1,
     "PAJAY": 1,
+    # Pinned 2026-10-26 for CH11 Route 4 (Jerbolta, the Tancoon line, the
+    # Frynai line). Computed via convert_species_icon.
+    "JERBOLTA": 2,
+    "TANCOON": 2,
+    "TANSCURE": 2,
+    "FRYNAI": 2,
+    "SAIDINE": 1,
+    "DAIKATUNA": 1,
     # Pinned 2026-08-05 against the same real Uranium assets + vendored
     # engine icon palettes, for the Route-1 trainer-party species (+ their
     # evolution-chain closure, see common.py's STARTER_SPECIES comment).

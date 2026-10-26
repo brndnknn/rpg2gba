@@ -1,0 +1,145 @@
+{
+  "map076/ev007/p0/b0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "7a5570b1a68274f5"
+  },
+  "map076/ev007/p0/b1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "edced4516d95adfa"
+  },
+  "map076/ev007/p1/b0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "29ca29e91bb39bba"
+  },
+  "map076/ev007/p1/b1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "edced4516d95adfa"
+  },
+  "map076/ev008/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "c4ce779e158ce680"
+  },
+  "map076/ev008/p1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "5539cd09d8efee80"
+  },
+  "map076/ev008/p1/b0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "15159e8843c858aa"
+  },
+  "map076/ev008/p1/b1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "4f8217c3e24208a2"
+  },
+  "map076/ev009/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "9381d5b7598cd43d"
+  },
+  "map076/ev009/p0/b0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "3fb995c899bc6f6f"
+  },
+  "map076/ev009/p0/b1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "adb1cdfcbfd44f8a"
+  },
+  "map076/ev009/p1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "6c602b02884219cc"
+  },
+  "map076/ev036/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "c4ce779e158ce680"
+  },
+  "map076/ev036/p1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "5539cd09d8efee80"
+  },
+  "map076/ev036/p1/b0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "15159e8843c858aa"
+  },
+  "map076/ev036/p1/b1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "4f8217c3e24208a2"
+  },
+  "map076/ev037/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "c4ce779e158ce680"
+  },
+  "map076/ev037/p1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "5539cd09d8efee80"
+  },
+  "map076/ev037/p1/b0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "15159e8843c858aa"
+  },
+  "map076/ev037/p1/b1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "4f8217c3e24208a2"
+  },
+  "map076/ev041/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "cc164e5e2adf8d8e"
+  },
+  "map076/ev041/p0/b0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "b1182d25a9ae3c40"
+  },
+  "map076/ev041/p0/b1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "ee51c0b1dd043a77"
+  },
+  "map076/ev041/p1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "e3273445c72667a1"
+  },
+  "map076/ev042/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "cc164e5e2adf8d8e"
+  },
+  "map076/ev042/p0/b0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "b1182d25a9ae3c40"
+  },
+  "map076/ev042/p0/b1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "ee51c0b1dd043a77"
+  },
+  "map076/ev042/p1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "e3273445c72667a1"
+  },
+  "map076/ev071/p0": {
+    "disposition": "beat:m076e071p0",
+    "affirmed_hash": "f40cc98f061da63a",
+    "archetype_exempt": "phone-rematch trainer: the generator refuses its rematch count, so the battle page is walked by a generic beat, not the trainer template (story-state unmodelled_outcome:phone_battle_count); same shape as CH09 map059/ev009 and CH08 map033/ev039 (operator-approved 2026-10-15)"
+  },
+  "map076/ev071/p1": {
+    "disposition": "cosmetic",
+    "affirmed_hash": "6bed79e8e992ac0f",
+    "archetype_exempt": "phone-rematch trainer: the rematch-count retalk page is refused (story-state unmodelled_outcome:phone_battle_count); same shape as CH09 map059/ev009 and CH08 map033/ev039 (operator-approved 2026-10-15)"
+  },
+  "map076/ev071/p2": {
+    "disposition": "beat:m076e071p2",
+    "affirmed_hash": "2b63b0106aa4438c",
+    "archetype_exempt": "phone-rematch trainer: the retalk page is walked by a generic beat because the rematch count is unmodelled (story-state unmodelled_outcome:phone_battle_count); same shape as CH09 map059/ev009 and CH08 map033/ev039 (operator-approved 2026-10-15)"
+  },
+  "map076/ev083/p0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "b50ff17ea727fe37"
+  },
+  "map076/ev083/p0/b0": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "31fed4736a8ee783"
+  },
+  "map076/ev083/p0/b1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "b5858d7db30f1f52"
+  },
+  "map076/ev083/p1": {
+    "disposition": "blocked:strength",
+    "affirmed_hash": "6c2d90d22489cb2a"
+  }
+}

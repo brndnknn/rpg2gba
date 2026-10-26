@@ -1,0 +1,706 @@
+{
+  "map009/ev001/p0": {
+    "disposition": "beat:m009e001",
+    "derived_hash": "c29f72e71e72c2db"
+  },
+  "map009/ev002/p0": {
+    "disposition": "beat:m009e002",
+    "derived_hash": "d6ccf8f01dd2213c"
+  },
+  "map076/ev001/p0": {
+    "disposition": "beat:m076e001",
+    "derived_hash": "aa91bece42af72d4"
+  },
+  "map076/ev001/p1": {
+    "disposition": "beat:m076e001",
+    "derived_hash": "50a1f42b5255a708"
+  },
+  "map076/ev001/p1/b0": {
+    "disposition": "beat:m076e001",
+    "derived_hash": "83731c0084b833de"
+  },
+  "map076/ev001/p1/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map076/ev002/p0": {
+    "disposition": "beat:m076e002",
+    "derived_hash": "52221e9af269d985"
+  },
+  "map076/ev002/p0/b0": {
+    "disposition": "beat:m076e002",
+    "derived_hash": "c44ba6bf7d5c1a47"
+  },
+  "map076/ev002/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "1efe23cda8d8d305"
+  },
+  "map076/ev002/p1": {
+    "disposition": "beat:m076e002",
+    "derived_hash": "6b0af77fab85b4bc"
+  },
+  "map076/ev003/p0": {
+    "disposition": "beat:m076e003p0",
+    "derived_hash": "5732b616e79bc0c6"
+  },
+  "map076/ev004/p0": {
+    "disposition": "beat:m076e004",
+    "derived_hash": "16d46e84f081bbcb"
+  },
+  "map076/ev004/p0/b0": {
+    "disposition": "beat:m076e004",
+    "derived_hash": "0baa374711c825b8"
+  },
+  "map076/ev004/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "39f0ef98cfbc4171"
+  },
+  "map076/ev004/p1": {
+    "disposition": "beat:m076e004",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev005/p0": {
+    "disposition": "beat:m076e005",
+    "derived_hash": "8273242dbe363206"
+  },
+  "map076/ev007/p0": {
+    "disposition": "refused:story-state: unclassified_condition -- no family matches: 'pbPushThisBoulder'",
+    "derived_hash": "d9cbb4684db1c4a2"
+  },
+  "map076/ev007/p0/b0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "7a5570b1a68274f5",
+    "proposed": true
+  },
+  "map076/ev007/p0/b1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "edced4516d95adfa",
+    "proposed": true
+  },
+  "map076/ev007/p1": {
+    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "derived_hash": "3bc1986c78762f0d"
+  },
+  "map076/ev007/p1/b0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "29ca29e91bb39bba",
+    "proposed": true
+  },
+  "map076/ev007/p1/b1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "edced4516d95adfa",
+    "proposed": true
+  },
+  "map076/ev008/p0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "c4ce779e158ce680",
+    "proposed": true
+  },
+  "map076/ev008/p1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "5539cd09d8efee80",
+    "proposed": true
+  },
+  "map076/ev008/p1/b0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "15159e8843c858aa",
+    "proposed": true
+  },
+  "map076/ev008/p1/b1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "4f8217c3e24208a2",
+    "proposed": true
+  },
+  "map076/ev009/p0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "9381d5b7598cd43d",
+    "proposed": true
+  },
+  "map076/ev009/p0/b0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "3fb995c899bc6f6f",
+    "proposed": true
+  },
+  "map076/ev009/p0/b1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "adb1cdfcbfd44f8a",
+    "proposed": true
+  },
+  "map076/ev009/p1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "6c602b02884219cc",
+    "proposed": true
+  },
+  "map076/ev010/p0": {
+    "disposition": "beat:m076e010",
+    "derived_hash": "9f9a84628b94bad6"
+  },
+  "map076/ev010/p0/b0": {
+    "disposition": "beat:m076e010",
+    "derived_hash": "111b69144e217db2"
+  },
+  "map076/ev010/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "dcb8eb52004f6e3c"
+  },
+  "map076/ev010/p1": {
+    "disposition": "beat:m076e010",
+    "derived_hash": "e0ca6365779a3d2a"
+  },
+  "map076/ev011/p0": {
+    "disposition": "beat:m076e011p0",
+    "derived_hash": "60d1b5fff92e4155"
+  },
+  "map076/ev011/p1": {
+    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "derived_hash": "f16559db252a3670"
+  },
+  "map076/ev011/p2": {
+    "disposition": "refused:story-state: undetermined -- story model could not determine this row",
+    "derived_hash": "e9dd6988b656abaa"
+  },
+  "map076/ev013/p0": {
+    "disposition": "beat:m076e013",
+    "derived_hash": "c5df94654ce684b3"
+  },
+  "map076/ev019/p0": {
+    "disposition": "beat:m076e019",
+    "derived_hash": "d4a1fe2861564cfb"
+  },
+  "map076/ev019/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "430d7367afc5c66f"
+  },
+  "map076/ev020/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "307d3529537e5e81"
+  },
+  "map076/ev020/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "430d7367afc5c66f"
+  },
+  "map076/ev021/p0": {
+    "disposition": "elsewhere:later: CH12",
+    "derived_hash": "ee09c0344aeb4df3"
+  },
+  "map076/ev021/p1": {
+    "disposition": "elsewhere:later: CH12: its event crosses out of the chapter's map chain (to map(s) [7]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "5539cd09d8efee80"
+  },
+  "map076/ev021/p1/b0": {
+    "disposition": "elsewhere:later: CH12: its event crosses out of the chapter's map chain (to map(s) [7]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "744e1fb92a7097bb"
+  },
+  "map076/ev021/p1/b1": {
+    "disposition": "elsewhere:later: CH12: its event crosses out of the chapter's map chain (to map(s) [7]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "4f8217c3e24208a2"
+  },
+  "map076/ev022/p0": {
+    "disposition": "beat:m076e022",
+    "derived_hash": "956a42e286d2a040"
+  },
+  "map076/ev022/p0/b0": {
+    "disposition": "beat:m076e022",
+    "derived_hash": "9013a5ed6e8efb6e"
+  },
+  "map076/ev022/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "146b6e3ca43ea9c5"
+  },
+  "map076/ev022/p1": {
+    "disposition": "beat:m076e022",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev023/p0": {
+    "disposition": "beat:m076e023",
+    "derived_hash": "d54a078db5ab9e1a"
+  },
+  "map076/ev023/p1": {
+    "disposition": "elsewhere:later: CH12: its event crosses out of the chapter's map chain (to map(s) [7]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "430d7367afc5c66f"
+  },
+  "map076/ev032/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer)",
+    "derived_hash": "024e2ea4a828e949"
+  },
+  "map076/ev032/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev032/p2": {
+    "disposition": "cosmetic",
+    "derived_hash": "1298a5ef339ea5fe"
+  },
+  "map076/ev033/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer)",
+    "derived_hash": "2f8b964912319933"
+  },
+  "map076/ev033/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev033/p2": {
+    "disposition": "cosmetic",
+    "derived_hash": "1298a5ef339ea5fe"
+  },
+  "map076/ev034/p0": {
+    "disposition": "beat:m076e034",
+    "derived_hash": "3f6b1ebef0cd09e0"
+  },
+  "map076/ev034/p1": {
+    "disposition": "elsewhere:later: CH12: its event crosses out of the chapter's map chain (to map(s) [7]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "430d7367afc5c66f"
+  },
+  "map076/ev035/p0": {
+    "disposition": "beat:m076e035",
+    "derived_hash": "a4f1adca29cf6950"
+  },
+  "map076/ev035/p1": {
+    "disposition": "elsewhere:later: CH12: its event crosses out of the chapter's map chain (to map(s) [7]); the rest of the event belongs to the chapter that builds the far side",
+    "derived_hash": "430d7367afc5c66f"
+  },
+  "map076/ev036/p0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "c4ce779e158ce680",
+    "proposed": true
+  },
+  "map076/ev036/p1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "5539cd09d8efee80",
+    "proposed": true
+  },
+  "map076/ev036/p1/b0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "15159e8843c858aa",
+    "proposed": true
+  },
+  "map076/ev036/p1/b1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "4f8217c3e24208a2",
+    "proposed": true
+  },
+  "map076/ev037/p0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "c4ce779e158ce680",
+    "proposed": true
+  },
+  "map076/ev037/p1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "5539cd09d8efee80",
+    "proposed": true
+  },
+  "map076/ev037/p1/b0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "15159e8843c858aa",
+    "proposed": true
+  },
+  "map076/ev037/p1/b1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "4f8217c3e24208a2",
+    "proposed": true
+  },
+  "map076/ev038/p0": {
+    "disposition": "beat:m076e038p0",
+    "derived_hash": "7e82383645ddb19f"
+  },
+  "map076/ev038/p0/b0": {
+    "disposition": "beat:m076e038p0",
+    "derived_hash": "cf8117f11524013c"
+  },
+  "map076/ev038/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "9e47bf4f71dd8276"
+  },
+  "map076/ev038/p1": {
+    "disposition": "beat:m076e038p1",
+    "derived_hash": "e3273445c72667a1"
+  },
+  "map076/ev039/p0": {
+    "disposition": "beat:m076e039p0",
+    "derived_hash": "0c8fb9d7842cc936"
+  },
+  "map076/ev039/p0/b0": {
+    "disposition": "beat:m076e039p0",
+    "derived_hash": "f7e117b4899bf3b8"
+  },
+  "map076/ev039/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "e2ac75130542665d"
+  },
+  "map076/ev039/p1": {
+    "disposition": "beat:m076e039p1",
+    "derived_hash": "e3273445c72667a1"
+  },
+  "map076/ev040/p0": {
+    "disposition": "beat:m076e040p0",
+    "derived_hash": "50a997d98088cc02"
+  },
+  "map076/ev040/p0/b0": {
+    "disposition": "beat:m076e040p0",
+    "derived_hash": "94cf9845b37bddaa"
+  },
+  "map076/ev040/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "499736a2eedca328"
+  },
+  "map076/ev040/p1": {
+    "disposition": "beat:m076e040p1",
+    "derived_hash": "e3273445c72667a1"
+  },
+  "map076/ev041/p0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "cc164e5e2adf8d8e",
+    "proposed": true
+  },
+  "map076/ev041/p0/b0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "b1182d25a9ae3c40",
+    "proposed": true
+  },
+  "map076/ev041/p0/b1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "ee51c0b1dd043a77",
+    "proposed": true
+  },
+  "map076/ev041/p1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "e3273445c72667a1",
+    "proposed": true
+  },
+  "map076/ev042/p0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "cc164e5e2adf8d8e",
+    "proposed": true
+  },
+  "map076/ev042/p0/b0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "b1182d25a9ae3c40",
+    "proposed": true
+  },
+  "map076/ev042/p0/b1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "ee51c0b1dd043a77",
+    "proposed": true
+  },
+  "map076/ev042/p1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "e3273445c72667a1",
+    "proposed": true
+  },
+  "map076/ev043/p0": {
+    "disposition": "beat:m076e043",
+    "derived_hash": "3bd81cbb86418e35"
+  },
+  "map076/ev043/p0/b0": {
+    "disposition": "beat:m076e043",
+    "derived_hash": "0072108a358e1db2"
+  },
+  "map076/ev043/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "478e645fcb7dbad6"
+  },
+  "map076/ev043/p1": {
+    "disposition": "beat:m076e043",
+    "derived_hash": "edeeda685b847a59"
+  },
+  "map076/ev044/p0": {
+    "disposition": "beat:m076e044",
+    "derived_hash": "5dd9037b9deac2b1"
+  },
+  "map076/ev044/p0/b0": {
+    "disposition": "beat:m076e044",
+    "derived_hash": "5972f754464910b5"
+  },
+  "map076/ev044/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "deb5949c642efa4c"
+  },
+  "map076/ev044/p1": {
+    "disposition": "beat:m076e044",
+    "derived_hash": "321c81a8bcdc5655"
+  },
+  "map076/ev049/p0": {
+    "disposition": "beat:m076e049p0",
+    "derived_hash": "56ab12ab5341b100"
+  },
+  "map076/ev050/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "4f445e114cb1afd6"
+  },
+  "map076/ev051/p0": {
+    "disposition": "elsewhere:empty_page: every page of the event is empty; nothing to check on the ROM",
+    "derived_hash": "23f5533f615c6cd4"
+  },
+  "map076/ev052/p0": {
+    "disposition": "beat:m076e052",
+    "derived_hash": "75af4f4020b20bec"
+  },
+  "map076/ev052/p0/b0": {
+    "disposition": "beat:m076e052",
+    "derived_hash": "df9e59b053bc9b1f"
+  },
+  "map076/ev052/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "a94ef1de37c7df45"
+  },
+  "map076/ev052/p1": {
+    "disposition": "beat:m076e052",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev058/p0": {
+    "disposition": "beat:m076e058",
+    "derived_hash": "c3e7d6c6d028c45d"
+  },
+  "map076/ev058/p0/b0": {
+    "disposition": "beat:m076e058",
+    "derived_hash": "7ffbcfa18b20ea64"
+  },
+  "map076/ev058/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "bacd9d3bb4a707e4"
+  },
+  "map076/ev058/p1": {
+    "disposition": "beat:m076e058",
+    "derived_hash": "69a6a76bc51aeba2"
+  },
+  "map076/ev059/p0": {
+    "disposition": "beat:m076e059",
+    "derived_hash": "7f2b309b8dc4c9b8"
+  },
+  "map076/ev059/p0/b0": {
+    "disposition": "beat:m076e059",
+    "derived_hash": "4567fad4c20a5cbd"
+  },
+  "map076/ev059/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "cc8054097e5cc659"
+  },
+  "map076/ev059/p1": {
+    "disposition": "beat:m076e059",
+    "derived_hash": "ccfaa54565950515"
+  },
+  "map076/ev070/p0": {
+    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: pbCallBub(2,72,3)",
+    "derived_hash": "566a8048864c2350"
+  },
+  "map076/ev070/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "1298a5ef339ea5fe"
+  },
+  "map076/ev071/p0": {
+    "disposition": "beat:m076e071p0",
+    "derived_hash": "f40cc98f061da63a"
+  },
+  "map076/ev071/p0/b0": {
+    "disposition": "beat:m076e071p0",
+    "derived_hash": "d00aa6b4c2dace83"
+  },
+  "map076/ev071/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "47bcae30d1a79b52"
+  },
+  "map076/ev071/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "6bed79e8e992ac0f"
+  },
+  "map076/ev071/p1/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "163e20aadbc0cfd5"
+  },
+  "map076/ev071/p1/b1": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "23c1109c4a4406ac"
+  },
+  "map076/ev071/p1/b2": {
+    "disposition": "cosmetic",
+    "derived_hash": "e91d917d8267f06c"
+  },
+  "map076/ev071/p1/b3": {
+    "disposition": "cosmetic",
+    "derived_hash": "67dddec3a69416e3"
+  },
+  "map076/ev071/p2": {
+    "disposition": "beat:m076e071p2",
+    "derived_hash": "2b63b0106aa4438c"
+  },
+  "map076/ev071/p2/b0": {
+    "disposition": "refused:story-state: unmodelled_outcome:phone_battle_count(trainer)",
+    "derived_hash": "900a4508503032e7"
+  },
+  "map076/ev071/p2/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "3438b299fb09d377"
+  },
+  "map076/ev072/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "a7d4543147519186"
+  },
+  "map076/ev072/p1": {
+    "disposition": "cosmetic",
+    "derived_hash": "1298a5ef339ea5fe"
+  },
+  "map076/ev076/p0": {
+    "disposition": "refused:cell: cell_error -- approach_to: MAP_ROUTE_04 event 76 (cell (27, 79)) has no walkable adjacent cell on any side -- this event cannot be approached at all under the offline graph's collision data",
+    "derived_hash": "aa2d8fc01896f1b3"
+  },
+  "map076/ev077/p0": {
+    "disposition": "beat:m076e077",
+    "derived_hash": "b5dc4fc40dc968bc"
+  },
+  "map076/ev077/p0/b0": {
+    "disposition": "beat:m076e077",
+    "derived_hash": "f702357a9448b9fa"
+  },
+  "map076/ev077/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "142f1054b47639b1"
+  },
+  "map076/ev077/p1": {
+    "disposition": "beat:m076e077",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev078/p0": {
+    "disposition": "beat:m076e078",
+    "derived_hash": "c3fb5b08b753341e"
+  },
+  "map076/ev078/p0/b0": {
+    "disposition": "beat:m076e078",
+    "derived_hash": "f0f6c71b5c423cec"
+  },
+  "map076/ev078/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "64e81e6f54318227"
+  },
+  "map076/ev078/p1": {
+    "disposition": "beat:m076e078",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev079/p0": {
+    "disposition": "beat:m076e079",
+    "derived_hash": "072f5e46f0696ea0"
+  },
+  "map076/ev079/p0/b0": {
+    "disposition": "beat:m076e079",
+    "derived_hash": "60c9758ae5b7ac9e"
+  },
+  "map076/ev079/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "64ea8283f3717634"
+  },
+  "map076/ev079/p1": {
+    "disposition": "beat:m076e079",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev080/p0": {
+    "disposition": "beat:m076e080",
+    "derived_hash": "d21f6548f5501e3c"
+  },
+  "map076/ev080/p0/b0": {
+    "disposition": "beat:m076e080",
+    "derived_hash": "202ca8e63c75d61d"
+  },
+  "map076/ev080/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "53f898e2db89fbfb"
+  },
+  "map076/ev080/p1": {
+    "disposition": "beat:m076e080",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev081/p0": {
+    "disposition": "beat:m076e081",
+    "derived_hash": "956a42e286d2a040"
+  },
+  "map076/ev081/p0/b0": {
+    "disposition": "beat:m076e081",
+    "derived_hash": "9013a5ed6e8efb6e"
+  },
+  "map076/ev081/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "146b6e3ca43ea9c5"
+  },
+  "map076/ev081/p1": {
+    "disposition": "beat:m076e081",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev082/p0": {
+    "disposition": "beat:m076e082",
+    "derived_hash": "f63511cd82bc8bf9"
+  },
+  "map076/ev082/p0/b0": {
+    "disposition": "beat:m076e082",
+    "derived_hash": "e859701059e2acf4"
+  },
+  "map076/ev082/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "da1ac9e908c56fa4"
+  },
+  "map076/ev082/p1": {
+    "disposition": "beat:m076e082",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev083/p0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "b50ff17ea727fe37",
+    "proposed": true
+  },
+  "map076/ev083/p0/b0": {
+    "disposition": "blocked:strength",
+    "derived_hash": "31fed4736a8ee783",
+    "proposed": true
+  },
+  "map076/ev083/p0/b1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "b5858d7db30f1f52",
+    "proposed": true
+  },
+  "map076/ev083/p1": {
+    "disposition": "blocked:strength",
+    "derived_hash": "6c2d90d22489cb2a",
+    "proposed": true
+  },
+  "map076/ev084/p0": {
+    "disposition": "beat:m076e084",
+    "derived_hash": "545e1bbac322455e"
+  },
+  "map076/ev084/p0/b0": {
+    "disposition": "beat:m076e084",
+    "derived_hash": "525a28345517c855"
+  },
+  "map076/ev084/p0/b1": {
+    "disposition": "cosmetic",
+    "derived_hash": "50ab7345e09e08f6"
+  },
+  "map076/ev084/p1": {
+    "disposition": "beat:m076e084",
+    "derived_hash": "6c2d90d22489cb2a"
+  },
+  "map076/ev092/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "2e86e5578b903805"
+  },
+  "map076/ev093/p0": {
+    "disposition": "cosmetic",
+    "derived_hash": "cf6d0def600bc6e1"
+  },
+  "map076/seam/N/map142": {
+    "disposition": "elsewhere:later",
+    "derived_hash": "2fd21df871be08dc"
+  },
+  "map076/terrain/stairs/23,32": {
+    "disposition": "beat:m076stair23x32",
+    "derived_hash": "637e462c096b0b70"
+  },
+  "map076/terrain/stairs/23,33": {
+    "disposition": "beat:m076stair23x32",
+    "derived_hash": "2c1931a7a55da7bc"
+  },
+  "map076/terrain/stairs/24,30": {
+    "disposition": "beat:m076stair23x32",
+    "derived_hash": "46d1aab88893d336"
+  },
+  "map076/terrain/stairs/24,31": {
+    "disposition": "beat:m076stair23x32",
+    "derived_hash": "60d3dfad0d2f56e2"
+  }
+}

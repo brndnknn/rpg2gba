@@ -509,6 +509,21 @@ def test_route_wait_step_expands_to_delay_chain() -> None:
     assert tokens == ["delay_16", "delay_4"]
 
 
+def test_route_jump_in_place_keeps_the_routes_own_facing() -> None:
+    # Map076 EV070's bridge NPC: speed, frequency, walk down, then hop in place.
+    route = _route([{"code": 29, "parameters": [4]}, {"code": 30, "parameters": [5]},
+                    {"code": 1}, {"code": 1}, {"code": 14, "parameters": [0, 0]}])
+    assert T.route_tokens(route) == ["walk_down", "walk_down", "jump_in_place_down"]
+    turned = _route([{"code": 17}, {"code": 14, "parameters": [0, 0]}])
+    assert T.route_tokens(turned) == ["face_left", "jump_in_place_left"]
+
+
+def test_route_jump_without_known_facing_or_displaced_still_queues() -> None:
+    assert T.route_tokens(_route([{"code": 14, "parameters": [0, 0]}])) is None
+    assert T.route_tokens(_route([{"code": 25}, {"code": 14, "parameters": [0, 0]}])) is None
+    assert T.route_tokens(_route([{"code": 1}, {"code": 14, "parameters": [0, 2]}])) is None
+
+
 # ----------------------------------------------------------------------------
 # emitters — terminal hide -> removeobject (Map050 EV020 ghost-collision fix)
 # ----------------------------------------------------------------------------

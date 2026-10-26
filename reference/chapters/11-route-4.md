@@ -381,6 +381,28 @@ None of the six needs an operator ruling; each follows a standing rule or is set
 5. `blocked:strength` for all seven pocket rows. The cause is the boulder; map 143 is unreachable either way.
 6. Measured at the first real build; no action expected.
 
+### Build findings (2026-10-26)
+
+- **Item 2 resolved:** the slice-growth audit flags map 60 EV032 (as it still flags CH09's gatehouse doors after
+  CH10). CH11 claims the crossing; CH10 was regenerated only because map 9's constant changed
+  (`MAP_ROUTE_04` -> `MAP_ROUTE_04_GATEHOUSE`, override added: both maps carry the map_infos name "Route 04").
+  The module diff was that one line.
+- **Item 4 measured — the bridge scene is NOT in the ROM.** EV032/EV033 (funnels) and EV070 (the warning scene)
+  are blank-graphic player-touch events with no warp, which `metadata_wiring.blank_touch_drop` drops as inert;
+  EV072 (the warning NPC) is hidden on every load. The NPC's approach route now transpiles (in-place jump
+  token), but nothing calls it. Corpus-wide 409 blank touch events carry commands; most are deliberate drops
+  (ledge/stair helpers, Burole's invisible walls), a few are scenes (here; map 040 EV020/EV021).
+  **Operator 2026-10-26: run the suite as is, and REMIND THE OPERATOR before CH11 closes** — the open question
+  is whether to emit dialogue-carrying blank touch events as coord events (likely regenerates CH06).
+- **Cave mouth (EV021) held out of the plan:** the Hiker and Theo clear only on var106, which only the row-15
+  scene writes as the player leaves for map 7. `beat_gen._exit_only_walls` now holds such actors as walls, so
+  the route has one exit (the row-15 cells).
+- **Sr. Goldkorn** battles as "Goldkorn" (engine name limit 10; operator 2026-10-26). His three parties are
+  rematch tiers; the rematch table and the generator take party 0.
+- **Pre-existing drift, not CH11's:** regenerating CH01–CH10 on current code changes CH01, CH05 and CH06
+  (approach sides; one CH06 warp beat). Those suites were last regenerated 2026-10-17 and are left as
+  committed (green on CH10's ROM); a refresh belongs to the next intermission.
+
 ---
 
 *Companion docs: `reference/chapters/00-atlas.md` (CH11 row, revisit table), `03-kevlar-town.md` (Bike Wheel, B15b),

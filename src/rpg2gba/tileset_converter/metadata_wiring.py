@@ -3608,6 +3608,22 @@ def build_object_events(
             f"the 64-slot OBJECT_EVENT_TEMPLATES_COUNT budget"
         )
 
+    if missing_sheets:
+        # Placed before BOTH sidecar staleness checks (traits, template_fields):
+        # a skipped event has no local_id, and a missing sprite must never be
+        # reported as a stale sidecar. CH11 hit exactly that: Map076 EV009, a
+        # trainer on an unmapped sheet, surfaced as "traits sidecar references
+        # this event" while the real cause went unreported.
+        lines = "".join(
+            f"    {sheet!r}  (EV{', EV'.join(f'{e:03d}' for e in sorted(eids))})\n"
+            for sheet, eids in sorted(missing_sheets.items())
+        )
+        raise KeyError(
+            f"map {uid}: {len(missing_sheets)} sheet(s) have no "
+            f"reference/npc_gfx_map.json entry. All of them are listed here so "
+            f"the whole map's sprite choices can be made in one sitting:\n{lines}"
+        )
+
     if event_traits is not None:
         emitted_ids = {int(k) for k in result.local_id_map}
         for eid in event_traits:
@@ -3636,22 +3652,6 @@ def build_object_events(
                     f"no-op; something upstream (e.g. an always-visible "
                     f"hidden-actor classification) discarded its flag"
                 )
-
-    if missing_sheets:
-        # Placed before the template_fields staleness check purely for ordering
-        # hygiene: a skipped event has no local_id, and a missing sprite should
-        # never be reported as a stale sidecar. (No live shape reaches both --
-        # a template event is handled before the graphic lookup -- so this is
-        # defensive, not a fix for an observed bug.)
-        lines = "".join(
-            f"    {sheet!r}  (EV{', EV'.join(f'{e:03d}' for e in sorted(eids))})\n"
-            for sheet, eids in sorted(missing_sheets.items())
-        )
-        raise KeyError(
-            f"map {uid}: {len(missing_sheets)} sheet(s) have no "
-            f"reference/npc_gfx_map.json entry. All of them are listed here so "
-            f"the whole map's sprite choices can be made in one sitting:\n{lines}"
-        )
 
     if template_fields is not None:
         emitted_ids = {int(k) for k in result.local_id_map} | hidden_item_ids

@@ -1329,7 +1329,7 @@ warp_beat(
     beat_name='m060e032_warp',
     group='m060e032_warp',
     boundary=True,
-    dest_map_constant='MAP_ROUTE_04',
+    dest_map_constant='MAP_ROUTE_04_GATEHOUSE',
     direction='RIGHT',
     event_id=32,
     map_constant='MAP_BUROLE_TOWN',

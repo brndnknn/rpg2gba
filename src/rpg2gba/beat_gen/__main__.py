@@ -122,6 +122,7 @@ from rpg2gba.conversion_agent.flag_registry import load_label_tables
 from rpg2gba.conversion_agent.transpiler import _ROCK_SMASH_RE, smashable_rock_event_ids
 from rpg2gba.conversion_agent.orchestrator import load_map_event_strips
 from rpg2gba.story_state.extract import RowState, extract_map
+from rpg2gba.story_state.state import Switch, Test, Variable
 from rpg2gba.beat_gen.whiteout import place_whiteout_beats
 from rpg2gba.capability_sites import FIELD_CAPABILITY_ITEMS, teach_beat_name
 from rpg2gba.chapter_atlas.binding import ChapterBinding, load_binding
@@ -1455,6 +1456,82 @@ def _released_walls(
     return out
 
 
+def _page_leaves_chain(page: Mapping, chain_maps: Collection[int]) -> bool:
+    """Does this page transfer the player (code 201, direct designation) to a
+    map outside the chapter's chain?"""
+    return any(c.get("code") == 201 and c.get("parameters", [None])[0] == 0
+               and c["parameters"][1] not in chain_maps for c in page.get("list", []))
+
+
+def _commands_write_any(commands: Sequence[Mapping], tests: Sequence[Test]) -> bool:
+    """Does any raw command write a switch (121) or variable (122) a test reads?
+    For a `computed` row whose writes aren't resolved here: it may clear the
+    actor, so it counts as a clearer (the safe direction for `_exit_only_walls`)."""
+    switches = {t.key.id for t in tests if isinstance(t.key, Switch)}
+    variables = {t.key.id for t in tests if isinstance(t.key, Variable)}
+    for c in commands:
+        params = c.get("parameters") or []
+        if len(params) < 2:
+            continue
+        lo, hi = params[0], params[1]
+        ids = switches if c.get("code") == 121 else variables if c.get("code") == 122 else set()
+        if any(lo <= i <= hi for i in ids):
+            return True
+    return False
+
+
+def _exit_only_walls(
+    chain_maps: Collection[int], events_of: Callable[[int], list[dict]], *,
+    row_states: Callable[[int], Mapping[str, RowState]],
+) -> frozenset[tuple[int, int]]:
+    """(map, event) actors that can clear only as the player LEAVES the chapter.
+
+    `actor_never_blocks` drops an actor once its graphic-less clearing page can
+    be live. CH11 Route 4: the Hiker (map076 EV019) and Theo (EV020) block the
+    cave mouth's one-wide corridor until var106 >= 1, and var106 is written only
+    by the row-15 scene pages, which warp to Comet Cave (map 7, CH12) -- the
+    transpiler hoists the write above that warp. Inside the chapter the actors
+    stand; treating them as cleared put the cave mouth in the plan as a second
+    exit. Every writer on the chain that satisfies a clearing test must be a
+    page that leaves the chain; one in-chapter writer keeps today's rule."""
+    def pages_of(m: int, e: int) -> Sequence[Mapping]:
+        return next((ev.get("pages", []) for ev in events_of(m) if ev and ev["id"] == e), [])
+
+    writers: list[tuple[str, RowState]] = [
+        (rid, rs) for m in sorted(chain_maps) for rid, rs in row_states(m).items()]
+    out: set[tuple[int, int]] = set()
+    for map_id in sorted(chain_maps):
+        states = row_states(map_id)
+        for ev in events_of(map_id):
+            if not ev:
+                continue
+            pages = ev.get("pages", [])
+            visible = [i for i, p in enumerate(pages) if _page_visible(p)]
+            if not visible:
+                continue
+            tests = [t for j in range(max(visible) + 1, len(pages)) if not _page_visible(pages[j])
+                     for t in getattr(states.get(f"map{map_id:03d}/ev{ev['id']:03d}/p{j}"),
+                                      "page_tests", ())]
+            if not tests:
+                continue
+            clearers = [rid for rid, rs in writers
+                        if any(_write_satisfies(w, t) for w in rs.writes for t in tests)
+                        or (rs.computed is not None and not rs.writes
+                            and _commands_write_any(rs.computed.commands, tests))]
+            if not clearers:
+                continue
+            def leaves(rid: str) -> bool:
+                p = parse_row_id(rid)
+                if p.event_id is None or p.page_idx is None:
+                    return False
+                writer_pages = pages_of(p.map_id, p.event_id)
+                return (p.page_idx < len(writer_pages)
+                        and _page_leaves_chain(writer_pages[p.page_idx], chain_maps))
+            if all(leaves(rid) for rid in clearers):
+                out.add((map_id, ev["id"]))
+    return frozenset(out)
+
+
 def _barrier_walls(
     maps: Collection[int], events_of: Callable[[int], list[dict]],
     claimed_rows: Collection[str], *, row_states: Callable[[int], Mapping[str, RowState]],
@@ -2270,6 +2347,13 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     for pair, clearers in released.items():
         logger.info("obstacle wall map %d ev %d is cleared by %s -- released", *pair,
                     list(clearers))
+    exit_walls = _exit_only_walls(
+        chain_maps, lambda m: [ev for ev in load_map_json(m, build_dir / "maps").get("events", [])
+                               if ev], row_states=row_states)
+    for pair in sorted(exit_walls):
+        logger.info("actor map %d ev %d clears only on a page leaving the chapter -- held as a wall",
+                    *pair)
+    obstacle_walls = obstacle_walls | exit_walls
     occupancy = _StoryOccupancy(
         _LazyOccupancy(build_dir), build_dir=build_dir,
         candidate_for=lambda m: _page_candidate(all_verdicts, story.end_state, row_states(m)),

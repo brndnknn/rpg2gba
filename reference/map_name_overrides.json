@@ -26,6 +26,10 @@
       "display_name": "Burole Town House 2",
       "evidence": "CH10 first build (see maps 29 and 90). Map 85's map-60 door is at (14,24), east of map 90's (11,31), so map 85 = House 2."
     },
+    "9": {
+      "display_name": "Route 04 Gatehouse",
+      "evidence": "CH11 disambiguation (2026-10-26). Maps 76 and 9 both carry the map_infos name 'Route 04'. Map 9 (20x15) is a pass-through gate: west door to Burole Town (map 60 (70,22)), east door to Route 4 (map 76 (18,102)). Map 76 keeps the plain name. Same treatment as map 1."
+    },
     "1": {
       "display_name": "Route 03 Gatehouse",
       "evidence": "CH09 disambiguation (2026-10-22). Maps 59, 1 and 54 all carry the map_infos name 'Route 03'. Map 1 (20x15, child of 59) is a pass-through gate: doors from Route 3 at (87,8)/(88,8) and far doors to Burole Town (map 60). Map 59 keeps the plain name. Spoiler-free positional label."

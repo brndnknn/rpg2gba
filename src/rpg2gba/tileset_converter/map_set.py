@@ -54,6 +54,9 @@ SLICE_MAP_IDS: list[int] = expand_split_ids([
 # Center), 4 (Poke Mart), 29 (school), 85/90 (houses). Metro 5/6 stay with CH28 (their
 # doors need sw85, set in CH24).
     60, 66, 2, 4, 29, 85, 90,
+# CH11 Route 4: 9 (gatehouse from Burole 60), 76 (the route). Its map-7 exits are the
+# forward boundary (CH12); the 143 mouths sit in a Strength pocket.
+    9, 76,
 ])
 
 # Converter-level collision unblocks (user-approved fidelity calls, one entry per

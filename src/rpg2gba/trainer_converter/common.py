@@ -112,6 +112,13 @@ SLICE_TRAINER_PICS: tuple[TrainerPicSpec, ...] = (
     TrainerPicSpec(87, "LEADER_CAFF"),
     TrainerPicSpec(13, "SCHOOLKID_MALE"),
     TrainerPicSpec(22, "WORKER"),
+    # CH11 (Route 4): PKMNRANGER_MALE 49 (Wyle), GENTLEMAN 28 (Sr. Goldkorn),
+    # PSYCHIC_FEMALE 62 (Laramie), SCHOOLKID_FEMALE 63 (Marta; SCHOOLKID 84 above
+    # is a different Uranium type).
+    TrainerPicSpec(49, "PKMNRANGER_MALE"),
+    TrainerPicSpec(28, "GENTLEMAN"),
+    TrainerPicSpec(62, "PSYCHIC_FEMALE"),
+    TrainerPicSpec(63, "SCHOOLKID_FEMALE"),
 )
 
 #: internal_name values in `SLICE_TRAINER_PICS` that additionally get a player
@@ -206,6 +213,18 @@ SLICE_TRAINER_BATTLES: tuple[str, ...] = (
     "TRAINER_RICH_44",
     "TRAINER_TRACEY_45",
     "TRAINER_JAMES_46",
+    # CH11 (Route 4): Map076's eight trainers in map event order -- Carlton (EV002),
+    # Wyle (EV009, Strength pocket: unreachable this visit, but his event emits),
+    # Marta (EV010), Ogilvy (EV043), Laramie (EV044), Nelson (EV058), William
+    # (EV059), Sr. Goldkorn (EV071, phone trainer).
+    "TRAINER_CARLTON_34",
+    "TRAINER_WYLE_117",
+    "TRAINER_MARTA_33",
+    "TRAINER_OGILVY_253",
+    "TRAINER_LARAMIE_254",
+    "TRAINER_NELSON_40",
+    "TRAINER_WILLIAM_35",
+    "TRAINER_SR_GOLDKORN_36",
 )
 
 
