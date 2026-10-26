@@ -332,3 +332,28 @@ def test_golden_route02_coord_events():
             r.kind is TriggerKind.COORD_EVENT and r.script == "Map035_EV019_Dispatch"
             for r in refs
         )
+
+
+def test_patrolling_trainer_sees_from_every_cell_of_its_movement_box(tmp_path):
+    # CH11 Route 4, Sr. Goldkorn: WALK_SEQUENCE, range +-2 x +-4, sight 4. From
+    # (40,56) he sees (40,60), which the spawn-only cone (40,56..59) missed.
+    goldkorn = _trainer(40, 55, "MOVEMENT_TYPE_WALK_SEQUENCE_DOWN_LEFT_UP_RIGHT", 4, "Gold")
+    goldkorn["movement_range_x"], goldkorn["movement_range_y"] = 2, 4
+    constants_path, maps_dir = _write_fixture(tmp_path, 1, "TestMap", [goldkorn])
+    overlay = build_trigger_overlay(
+        1, graph=FakeGraph(set()), map_constants_json=constants_path, engine_maps_dir=maps_dir
+    )
+    assert (40, 60) in overlay.tiles
+    assert (40, 63) in overlay.tiles  # from (40,59), the box's south edge
+    assert (40, 64) not in overlay.tiles
+    assert all(r.certainty is Certainty.POSSIBLE for r in overlay.tiles[(40, 60)])
+
+
+def test_stationary_trainer_ignores_movement_range(tmp_path):
+    t = _trainer(10, 10, "MOVEMENT_TYPE_FACE_DOWN", 2, "S")
+    t["movement_range_x"], t["movement_range_y"] = 3, 3
+    constants_path, maps_dir = _write_fixture(tmp_path, 1, "TestMap", [t])
+    overlay = build_trigger_overlay(
+        1, graph=FakeGraph(set()), map_constants_json=constants_path, engine_maps_dir=maps_dir
+    )
+    assert set(overlay.tiles) == {(10, 11), (10, 12)}

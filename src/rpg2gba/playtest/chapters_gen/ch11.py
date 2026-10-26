@@ -337,29 +337,6 @@ generic_beat(
     skip_claimed=True,
 )
 
-item_ball_beats(
-    ch11,
-    chapter_id='CH11',
-    beat_prefix='m076e077_item_ball',
-    group='m076e077_item_ball',
-    approach_prefer='north',
-    event_id=77,
-    item='ITEM_TM10',
-    map_constant='MAP_ROUTE_04',
-    map_id=76,
-    negative_beat=True,
-)
-
-generic_beat(
-    ch11,
-    chapter_id='CH11',
-    beat_name='m076e077_item_ball_arms',
-    group='m076e077_item_ball',
-    rows=('map076/ev077/p0/b0',),
-    approach_prefer='north',
-    skip_claimed=True,
-)
-
 generic_beat(
     ch11,
     chapter_id='CH11',
@@ -381,11 +358,11 @@ generic_beat(
 item_ball_beats(
     ch11,
     chapter_id='CH11',
-    beat_prefix='m076e080_item_ball',
-    group='m076e080_item_ball',
-    approach_prefer='west',
-    event_id=80,
-    item='ITEM_NUGGET',
+    beat_prefix='m076e077_item_ball',
+    group='m076e077_item_ball',
+    approach_prefer='south',
+    event_id=77,
+    item='ITEM_TM10',
     map_constant='MAP_ROUTE_04',
     map_id=76,
     negative_beat=True,
@@ -394,10 +371,10 @@ item_ball_beats(
 generic_beat(
     ch11,
     chapter_id='CH11',
-    beat_name='m076e080_item_ball_arms',
-    group='m076e080_item_ball',
-    rows=('map076/ev080/p0/b0',),
-    approach_prefer='west',
+    beat_name='m076e077_item_ball_arms',
+    group='m076e077_item_ball',
+    rows=('map076/ev077/p0/b0',),
+    approach_prefer='south',
     skip_claimed=True,
 )
 
@@ -421,6 +398,29 @@ generic_beat(
     group='m076e022_item_ball',
     rows=('map076/ev022/p0/b0',),
     approach_prefer='north',
+    skip_claimed=True,
+)
+
+item_ball_beats(
+    ch11,
+    chapter_id='CH11',
+    beat_prefix='m076e080_item_ball',
+    group='m076e080_item_ball',
+    approach_prefer='west',
+    event_id=80,
+    item='ITEM_NUGGET',
+    map_constant='MAP_ROUTE_04',
+    map_id=76,
+    negative_beat=True,
+)
+
+generic_beat(
+    ch11,
+    chapter_id='CH11',
+    beat_name='m076e080_item_ball_arms',
+    group='m076e080_item_ball',
+    rows=('map076/ev080/p0/b0',),
+    approach_prefer='west',
     skip_claimed=True,
 )
 

@@ -155,3 +155,23 @@ def test_sight_trainers_are_those_fought_later():
     ordered = (main, t39, t35, second)
     out = sl.sight_trainers_for(ordered, lambda m, e: LANES.get((m, e)))
     assert out == {"m033smash_rock_smash": (35, 39), "m033smash2_rock_smash": ()}
+
+
+def _ball(event: int) -> PlannedBeat:
+    name = f"m033e{event:03d}_item_ball"
+    return PlannedBeat(name=name, template="item_ball", map_id=MAP,
+                       rows=(f"map033/ev{event:03d}/p0", f"map033/ev{event:03d}/p1"), group=name)
+
+
+def test_item_ball_inside_a_trainer_lane_waits_on_that_trainer():
+    # CH11 Route 4: TM10 in patrolling Sr. Goldkorn's lane on every side; his
+    # battle page is walked by a generic beat (phone trainer), which still gates.
+    split = _split([_ball(42), _trainer(35, "generic")])
+    assert split.gates == {"m033e042_item_ball": (35,)}
+    assert split.waits == {"m033e042_item_ball": ("m033e035_generic",)}
+    assert [b.name for b in split.beats] == ["m033e042_item_ball", "m033e035_generic"]
+
+
+def test_item_ball_with_a_lane_free_side_is_not_gated():
+    split = _split([_ball(29), _trainer(35)])
+    assert split.gates == {}

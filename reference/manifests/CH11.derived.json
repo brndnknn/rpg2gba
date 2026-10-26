@@ -103,13 +103,11 @@
   },
   "map076/ev008/p1/b0": {
     "disposition": "blocked:strength",
-    "derived_hash": "15159e8843c858aa",
-    "proposed": true
+    "derived_hash": "15159e8843c858aa"
   },
   "map076/ev008/p1/b1": {
     "disposition": "blocked:strength",
-    "derived_hash": "4f8217c3e24208a2",
-    "proposed": true
+    "derived_hash": "4f8217c3e24208a2"
   },
   "map076/ev009/p0": {
     "disposition": "blocked:strength",
@@ -118,13 +116,11 @@
   },
   "map076/ev009/p0/b0": {
     "disposition": "blocked:strength",
-    "derived_hash": "3fb995c899bc6f6f",
-    "proposed": true
+    "derived_hash": "3fb995c899bc6f6f"
   },
   "map076/ev009/p0/b1": {
     "disposition": "blocked:strength",
-    "derived_hash": "adb1cdfcbfd44f8a",
-    "proposed": true
+    "derived_hash": "adb1cdfcbfd44f8a"
   },
   "map076/ev009/p1": {
     "disposition": "blocked:strength",
@@ -271,13 +267,11 @@
   },
   "map076/ev036/p1/b0": {
     "disposition": "blocked:strength",
-    "derived_hash": "15159e8843c858aa",
-    "proposed": true
+    "derived_hash": "15159e8843c858aa"
   },
   "map076/ev036/p1/b1": {
     "disposition": "blocked:strength",
-    "derived_hash": "4f8217c3e24208a2",
-    "proposed": true
+    "derived_hash": "4f8217c3e24208a2"
   },
   "map076/ev037/p0": {
     "disposition": "blocked:strength",
@@ -291,13 +285,11 @@
   },
   "map076/ev037/p1/b0": {
     "disposition": "blocked:strength",
-    "derived_hash": "15159e8843c858aa",
-    "proposed": true
+    "derived_hash": "15159e8843c858aa"
   },
   "map076/ev037/p1/b1": {
     "disposition": "blocked:strength",
-    "derived_hash": "4f8217c3e24208a2",
-    "proposed": true
+    "derived_hash": "4f8217c3e24208a2"
   },
   "map076/ev038/p0": {
     "disposition": "beat:m076e038p0",
@@ -354,13 +346,11 @@
   },
   "map076/ev041/p0/b0": {
     "disposition": "blocked:strength",
-    "derived_hash": "b1182d25a9ae3c40",
-    "proposed": true
+    "derived_hash": "b1182d25a9ae3c40"
   },
   "map076/ev041/p0/b1": {
     "disposition": "blocked:strength",
-    "derived_hash": "ee51c0b1dd043a77",
-    "proposed": true
+    "derived_hash": "ee51c0b1dd043a77"
   },
   "map076/ev041/p1": {
     "disposition": "blocked:strength",
@@ -374,13 +364,11 @@
   },
   "map076/ev042/p0/b0": {
     "disposition": "blocked:strength",
-    "derived_hash": "b1182d25a9ae3c40",
-    "proposed": true
+    "derived_hash": "b1182d25a9ae3c40"
   },
   "map076/ev042/p0/b1": {
     "disposition": "blocked:strength",
-    "derived_hash": "ee51c0b1dd043a77",
-    "proposed": true
+    "derived_hash": "ee51c0b1dd043a77"
   },
   "map076/ev042/p1": {
     "disposition": "blocked:strength",
@@ -646,13 +634,11 @@
   },
   "map076/ev083/p0/b0": {
     "disposition": "blocked:strength",
-    "derived_hash": "31fed4736a8ee783",
-    "proposed": true
+    "derived_hash": "31fed4736a8ee783"
   },
   "map076/ev083/p0/b1": {
     "disposition": "blocked:strength",
-    "derived_hash": "b5858d7db30f1f52",
-    "proposed": true
+    "derived_hash": "b5858d7db30f1f52"
   },
   "map076/ev083/p1": {
     "disposition": "blocked:strength",

@@ -101,6 +101,13 @@ def split_lane_gated(
                 gates[b.name] = gating
                 waits[b.name] = tuple(trainers[(b.map_id, t)].group for t in gating)
             continue
+        if b.template == "item_ball":
+            out.append(b)
+            gating = _item_ball_gates(b, trainers, approach_cells, lane_of)
+            if gating:
+                gates[b.name] = gating
+                waits[b.name] = tuple(trainers[(b.map_id, t)].group for t in gating)
+            continue
         if b.template != "smash":
             out.append(b)
             continue
@@ -158,6 +165,27 @@ def _stair_gates(
     return tuple(t for (m, t), beat in sorted(trainers.items())
                  if m == b.map_id and beat.template == "trainer"
                  and (lane := lane_of(m, t)) and lane & cells)
+
+
+def _item_ball_gates(
+    b: PlannedBeat, trainers: Mapping[tuple[int, int], PlannedBeat],
+    approach_cells: Callable[[int, int], frozenset[Cell]],
+    lane_of: Callable[[int, int], frozenset[Cell] | None],
+) -> tuple[int, ...]:
+    """The trainers an item ball waits on: the rock rule applied to a ball. When
+    every approach cell lies in the lanes of trainers this chapter still fights
+    on its map, the ball (and its spent re-touch, same group) follows them.
+    CH11 Route 4: TM10 (40,61) sits in patrolling Sr. Goldkorn's lane on every
+    side, and both the pickup and the re-touch were stopped by his battle."""
+    cells = approach_cells(b.map_id, _event_of(b.rows[0]))
+    if not cells:
+        return ()
+    lanes = {t: lane for (m, t) in sorted(trainers) if m == b.map_id
+             for lane in [lane_of(m, t)] if lane}
+    union = frozenset().union(*lanes.values()) if lanes else frozenset()
+    if not cells <= union:
+        return ()
+    return tuple(t for t, lane in lanes.items() if lane & cells)
 
 
 def wait_edges(split: LaneSplit, beats: Sequence[PlannedBeat]

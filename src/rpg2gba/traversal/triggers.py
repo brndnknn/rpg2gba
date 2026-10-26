@@ -381,20 +381,40 @@ def build_trigger_overlay(
         )
 
         blockers = all_spawn_cells - {spawn}
-        for direction in facings:
-            line = _sight_line(
-                spawn, direction, sight_range, graph=graph, blockers=blockers
-            )
-            for cell in line:
-                tiles[cell].append(
-                    TriggerRef(
-                        kind=TriggerKind.TRAINER_SIGHT,
-                        script=script,
-                        certainty=certainty,
-                        owner_xy=spawn,
-                        detail=f"sight range {sight_range} facing {direction.name}",
-                    )
+        # A wandering/patrolling trainer looks out from wherever it stands, not
+        # just its spawn: cast from every walkable cell of its movement box
+        # (a superset of the patrol; tiles are POSSIBLE already). CH11 Route 4's
+        # Sr. Goldkorn patrols +-2 x +-4 with sight 4 and stopped a walk at
+        # (40,60), one tile past what the spawn-only cone reached.
+        origins = [spawn]
+        if wanders:
+            rx, ry = int(oe.get("movement_range_x", 0)), int(oe.get("movement_range_y", 0))
+            origins += [
+                (spawn[0] + ox, spawn[1] + oy)
+                for oy in range(-ry, ry + 1) for ox in range(-rx, rx + 1)
+                if (ox, oy) != (0, 0)
+                and (graph is None or graph.is_walkable((spawn[0] + ox, spawn[1] + oy)))
+                and (spawn[0] + ox, spawn[1] + oy) not in blockers
+            ]
+        line: list[tuple[Cell, Direction]] = []
+        seen: set[Cell] = set()
+        for origin in origins:
+            for direction in facings:
+                for cell in _sight_line(origin, direction, sight_range, graph=graph,
+                                        blockers=blockers):
+                    if cell not in seen:
+                        seen.add(cell)
+                        line.append((cell, direction))
+        for cell, direction in line:
+            tiles[cell].append(
+                TriggerRef(
+                    kind=TriggerKind.TRAINER_SIGHT,
+                    script=script,
+                    certainty=certainty,
+                    owner_xy=spawn,
+                    detail=f"sight range {sight_range} facing {direction.name}",
                 )
+            )
 
     for ce in coord_events:
         cell = (ce["x"], ce["y"])

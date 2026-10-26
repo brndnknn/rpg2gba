@@ -2306,7 +2306,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                                   looks_around=_trainer_looks_around)
     beats = lane_split.beats
     for name, gating in lane_split.gates.items():
-        logger.info("lane-gated rocks in %s wait on trainer event(s) %s", name, list(gating))
+        logger.info("lane-gated beat %s waits on trainer event(s) %s", name, list(gating))
 
     # 4. Locate. Graphs are lazy: a seam or a route may touch maps outside
     #    the chapter's own list (`routing.__main__._LazyGraphs`).
