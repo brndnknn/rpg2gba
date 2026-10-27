@@ -480,59 +480,6 @@ generic_beat(
     skip_claimed=True,
 )
 
-item_ball_beats(
-    ch11,
-    chapter_id='CH11',
-    beat_prefix='m076e078_item_ball',
-    group='m076e078_item_ball',
-    approach_prefer='north',
-    event_id=78,
-    item='ITEM_THUNDERSTONE',
-    map_constant='MAP_ROUTE_04',
-    map_id=76,
-    negative_beat=True,
-)
-
-generic_beat(
-    ch11,
-    chapter_id='CH11',
-    beat_name='m076e078_item_ball_arms',
-    group='m076e078_item_ball',
-    rows=('map076/ev078/p0/b0',),
-    approach_prefer='north',
-    skip_claimed=True,
-)
-
-flavour_npc_beat(
-    ch11,
-    chapter_id='CH11',
-    beat_name='m076e011p0_flavour_npc',
-    group='m076e011p0_flavour_npc',
-    approach_prefer='south',
-    event_id=11,
-    map_constant='MAP_ROUTE_04',
-    map_id=76,
-    variant='plain',
-)
-
-stair_beat(
-    ch11,
-    chapter_id='CH11',
-    beat_name='m076stair23x32',
-    group='m076stair23x32',
-    rows=('map076/terrain/stairs/23,32', 'map076/terrain/stairs/23,33', 'map076/terrain/stairs/24,30', 'map076/terrain/stairs/24,31'),
-    approach_prefer='east',
-)
-
-generic_beat(
-    ch11,
-    chapter_id='CH11',
-    beat_name='m076e003p0',
-    group='m076e003p0',
-    rows=('map076/ev003/p0',),
-    approach_prefer='south',
-)
-
 trainer_beats(
     ch11,
     chapter_id='CH11',
@@ -558,29 +505,6 @@ generic_beat(
     group='m076e059_trainer',
     rows=('map076/ev059/p0/b0',),
     approach_prefer='west',
-    skip_claimed=True,
-)
-
-item_ball_beats(
-    ch11,
-    chapter_id='CH11',
-    beat_prefix='m076e082_item_ball',
-    group='m076e082_item_ball',
-    approach_prefer='east',
-    event_id=82,
-    item='ITEM_DUSK_BALL',
-    map_constant='MAP_ROUTE_04',
-    map_id=76,
-    negative_beat=True,
-)
-
-generic_beat(
-    ch11,
-    chapter_id='CH11',
-    beat_name='m076e082_item_ball_arms',
-    group='m076e082_item_ball',
-    rows=('map076/ev082/p0/b0',),
-    approach_prefer='east',
     skip_claimed=True,
 )
 
@@ -675,6 +599,99 @@ flavour_npc_beat(
     variant='plain',
 )
 
+item_ball_beats(
+    ch11,
+    chapter_id='CH11',
+    beat_prefix='m076e082_item_ball',
+    group='m076e082_item_ball',
+    approach_prefer='east',
+    event_id=82,
+    item='ITEM_DUSK_BALL',
+    map_constant='MAP_ROUTE_04',
+    map_id=76,
+    negative_beat=True,
+)
+
+generic_beat(
+    ch11,
+    chapter_id='CH11',
+    beat_name='m076e082_item_ball_arms',
+    group='m076e082_item_ball',
+    rows=('map076/ev082/p0/b0',),
+    approach_prefer='east',
+    skip_claimed=True,
+)
+
+generic_beat(
+    ch11,
+    chapter_id='CH11',
+    beat_name='m076e003p0',
+    group='m076e003p0',
+    rows=('map076/ev003/p0',),
+    approach_prefer='south',
+)
+
+flavour_npc_beat(
+    ch11,
+    chapter_id='CH11',
+    beat_name='m076e011p0_flavour_npc',
+    group='m076e011p0_flavour_npc',
+    approach_prefer='south',
+    event_id=11,
+    map_constant='MAP_ROUTE_04',
+    map_id=76,
+    variant='plain',
+)
+
+stair_beat(
+    ch11,
+    chapter_id='CH11',
+    beat_name='m076stair23x32',
+    group='m076stair23x32',
+    rows=('map076/terrain/stairs/23,32', 'map076/terrain/stairs/23,33', 'map076/terrain/stairs/24,30', 'map076/terrain/stairs/24,31'),
+    approach_prefer='east',
+)
+
+item_ball_beats(
+    ch11,
+    chapter_id='CH11',
+    beat_prefix='m076e078_item_ball',
+    group='m076e078_item_ball',
+    approach_prefer='north',
+    event_id=78,
+    item='ITEM_THUNDERSTONE',
+    map_constant='MAP_ROUTE_04',
+    map_id=76,
+    negative_beat=True,
+)
+
+generic_beat(
+    ch11,
+    chapter_id='CH11',
+    beat_name='m076e078_item_ball_arms',
+    group='m076e078_item_ball',
+    rows=('map076/ev078/p0/b0',),
+    approach_prefer='north',
+    skip_claimed=True,
+)
+
+generic_beat(
+    ch11,
+    chapter_id='CH11',
+    beat_name='m076e070p0',
+    group='m076e070p0',
+    rows=('map076/ev070/p0',),
+)
+
+generic_beat(
+    ch11,
+    chapter_id='CH11',
+    beat_name='m076e070p1',
+    group='m076e070p1',
+    rows=('map076/ev070/p1',),
+    approach_prefer='north',
+)
+
 warp_beat(
     ch11,
     chapter_id='CH11',
@@ -762,8 +779,6 @@ ELSEWHERE: dict[str, str] = {
     'map076/ev052/p0/b1': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',
     'map076/ev058/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
     'map076/ev059/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
-    'map076/ev070/p0': 'converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: pbCallBub(2,72,3)',
-    'map076/ev070/p1': 'converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: pbCallBub(2,72,3)',
     'map076/ev071/p0/b1': 'unselected_arm: blocked by fork:whiteout; the walk takes the sibling arm (ruling 19)',
     'map076/ev077/p0/b1': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',
     'map076/ev078/p0/b1': 'unselected_arm: blocked by harness:full_bag; the walk takes the sibling arm (ruling 19)',

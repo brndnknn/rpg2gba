@@ -2111,10 +2111,15 @@ def test_tripwire_that_is_also_a_hidden_actor_mints_one_dispatcher() -> None:
     ]
     map_json = {"map_id": 40, "events": [_event(141, 10, 10, pages, name="Trainer(4)")]}
     labels = {"Map040_EV141_Page1", "Map040_EV141_Page2"}
+    # The blank page 1 retires the actor, so its condition must resolve
+    # (`_visibility_expr(..., graphicless_after=...)`).
+    reg = FlagRegistry()
+    reg.propose_flag(101, "FLAG_RIVAL_WAITING")
+    reg.propose_flag(55, "FLAG_DEFEATED_GYM1_LEADER")
     result = mw.build_object_events(
         map_json, consts, _SLICE, pory_labels=labels, npc_gfx=_npc_gfx_fixture(),
         passability=_passability_fixture(30, 30, blocked_cells=set()),
-        required_actor_ids={141},
+        required_actor_ids={141}, flag_registry=reg,
     )
     headers = [d.splitlines()[0] for d in result.dispatchers]
     assert headers.count("script Map040_EV141_Dispatch {") <= 1
@@ -2432,6 +2437,34 @@ def test_build_object_events_drops_no_silent_defaults() -> None:
         5: mw.DROP_DOOR_SHEET,
         6: mw.DROP_OPACITY0,
     }
+
+
+def _cmd(code: int, *params: object) -> dict:
+    return {"code": code, "indent": 0, "parameters": list(params)}
+
+
+@pytest.mark.parametrize("cmds", [
+    [_cmd(101, "Oops!")],  # Route 4 EV070: the bridge warning
+    [_cmd(121, 63, 63, 0)],
+    [_cmd(122, 104, 104, 0, 0, 3)],
+    [_cmd(301, 0, 1, False, False)],
+])
+def test_blank_touch_scene_is_kept(cmds: list[dict]) -> None:
+    """A blank player-touch event whose pages carry text, state writes or a
+    battle is a scene, not a helper: kept, so the converter emits it as a
+    coord_event and beat_gen writes its beat."""
+    assert not mw.blank_touch_drop(_event(1, 0, 0, [_page(trigger=1, cmds=cmds)]))
+
+
+@pytest.mark.parametrize("cmds", [
+    [_cmd(209, -1, {}), _cmd(210), _cmd(123, "A", 0)],  # funnel / ledge push
+    [_cmd(206, 0, 20)],  # fog opacity (Burole gym)
+    [_cmd(355, "Kernel.pbCancelVehicles")],  # Route 1 surf-cancel tiles
+    [_cmd(355, "pbBridgeOn")],
+])
+def test_blank_touch_helper_still_drops(cmds: list[dict]) -> None:
+    """Player-only move routes, fog changes and script helpers stay dropped."""
+    assert mw.blank_touch_drop(_event(1, 0, 0, [_page(trigger=1, cmds=cmds)]))
 
 
 def test_build_object_events_stripped_event_dropped_before_gfx_lookup() -> None:
@@ -3126,6 +3159,36 @@ def test_refresh_script_acts_only_on_state_change_and_lists_guards() -> None:
     assert mw.refresh_guard_symbols(script, "Map032_RefreshVisibility") == (
         set(), {"VAR_QUEST_LOG"},
     )
+
+
+def test_refresh_script_blank_entry_removes_unconditionally() -> None:
+    """A hidden cutscene actor retired by a graphicless page is removed
+    whenever that page is live, even though its flag is still set (a cutscene
+    addobject()ed it): RMXP draws nothing there (CH11 Route 4 EV072)."""
+    script = mw.render_visibility_refresh_script(
+        76, [], [(72, "WarnNPC", "FLAG_TEMP_13", 31, "flag(FLAG_COMETCAVEBEWARE)")],
+    )
+    assert script is not None
+    assert "    if (flag(FLAG_COMETCAVEBEWARE)) {\n        setflag(FLAG_TEMP_13)\n" \
+        "        removeobject(31)\n    }" in script
+    assert mw.refresh_guard_symbols(script, "Map076_RefreshVisibility") == (
+        {"FLAG_COMETCAVEBEWARE"}, set(),
+    )
+
+
+def test_visibility_expr_graphicless_after_skips_lower_blank_pages() -> None:
+    """Only a blank page ABOVE the sprite page retires the actor; a blank page
+    at or below it may be dressed by a cutscene and is left alone."""
+    reg = FlagRegistry()
+    reg.propose_flag(63, "FLAG_COMETCAVEBEWARE")
+    reg.propose_flag(64, "FLAG_LATER")
+    pages = [
+        _page(),  # blank boot page, below the sprite page
+        _page(cond=_sw_cond(64), name="HGSS_145", opacity=0),
+        _page(cond=_sw_cond(63)),  # blank, retires it
+    ]
+    expr, always = mw._visibility_expr(pages, 76, 72, reg, graphicless_after=1)
+    assert (expr, always) == ("flag(FLAG_COMETCAVEBEWARE)", False)
 
 
 _REFRESH_PORY = """script Map068_EV015_Page1 {

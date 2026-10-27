@@ -394,6 +394,22 @@ None of the six needs an operator ruling; each follows a standing rule or is set
   (ledge/stair helpers, Burole's invisible walls), a few are scenes (here; map 040 EV020/EV021).
   **Operator 2026-10-26: run the suite as is, and REMIND THE OPERATOR before CH11 closes** — the open question
   is whether to emit dialogue-carrying blank touch events as coord events (likely regenerates CH06).
+  **Fixed 2026-10-26:** `blank_touch_drop` now keeps an event any of whose pages carries a scene command
+  (text 101, switch/var writes 121/122, battle 301); it emits as a plain coord_event on (39,44) and beat_gen
+  writes `m076e070p0` (ROM-graded: text, `FLAG_COMETCAVEBEWARE`, displacement) + the spent re-step `p1`. EV072
+  spawns by the scene's `addobject`. The first run failed the visibility check: the NPC stayed drawn at (39,51)
+  after the flag turned its page blank. The refresh script's no-op guard (never yank an actor a cutscene
+  `addobject`ed) was the cause; a page with no graphic draws nothing in RMXP, so hidden cutscene actors now get
+  an unconditional `removeobject` while a graphicless page ABOVE their sprite page is live
+  (`_visibility_expr(..., graphicless_after=)`, `blank_entries`). That also adds such removals to Moki, Kevlar
+  PC, Nowtoch, Route 2 and the player's/Theo's houses; the full from-boot run stayed green (732/732). The funnels stay dropped, faithfully: Essentials checks touch triggers
+  only at a step's end and never while an event runs (`Game_Player#check_event_trigger_here`), so in Uranium
+  a flank push lands on (39,44) without firing the scene — the wiki's "avoidable from the left or right".
+  Nowtoch's EV020/EV021 are claimed as diagonal stairs before this test, so CH06 does not change. The
+  scene's second exclamation targets EV005 at (28,101), far off-screen (an authoring slip, invisible in
+  RMXP); in the ROM the unspawned object makes `applymovement`/`waitmovement` a no-op. Outside the slice the
+  rule revives 40 scene events (maps 8, 71, 75, 84, 111, 123, 137, 141, 144, 155, 174, 175, 206, 209, 212,
+  216); each is reviewed when its chapter opens.
 - **Cave mouth (EV021) held out of the plan:** the Hiker and Theo clear only on var106, which only the row-15
   scene writes as the player leaves for map 7. `beat_gen._exit_only_walls` now holds such actors as walls, so
   the route has one exit (the row-15 cells).

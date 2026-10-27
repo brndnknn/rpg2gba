@@ -468,11 +468,11 @@
     "derived_hash": "ccfaa54565950515"
   },
   "map076/ev070/p0": {
-    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer); script: pbCallBub(2,72,3)",
+    "disposition": "beat:m076e070p0",
     "derived_hash": "566a8048864c2350"
   },
   "map076/ev070/p1": {
-    "disposition": "cosmetic",
+    "disposition": "beat:m076e070p1",
     "derived_hash": "1298a5ef339ea5fe"
   },
   "map076/ev071/p0": {

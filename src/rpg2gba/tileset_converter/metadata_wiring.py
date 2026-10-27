@@ -731,15 +731,31 @@ def _event_transfers(event: dict) -> list[tuple[int, int, int, int | None]]:
     return out
 
 
+# RMXP command codes that make a blank touch event a SCENE rather than a
+# helper: Show Text, Control Switches / Variables, Battle Processing. What is
+# left after them is presentation the port carries natively or not at all --
+# player-only move routes (funnels, ledge pushes), fog/tone changes, the
+# `pbBridgeOn/Off` layer toggles, `pbCancelVehicles`.
+_SCENE_CODES = frozenset({101, 121, 122, 301})
+
+
+def _event_has_scene(event: dict) -> bool:
+    """Does any page of `event` carry a scene command (`_SCENE_CODES`)?"""
+    return any(cmd["code"] in _SCENE_CODES
+               for page in event["pages"] for cmd in page.get("list", []))
+
+
 def blank_touch_drop(event: dict) -> bool:
     """Does `build_object_events` drop `event` as `DROP_BLANK_TRIGGER1`?
 
-    Its boot page has no graphic and a player-touch trigger, and no page
+    Its boot page has no graphic and a player-touch trigger, no page
     anywhere transfers (a transferring one is a gated door, kept as a
-    coord_event). The one predicate both the converter and `beat_gen`
-    read, so the generator never writes a beat for an event the ROM
-    lacks (ROM run 53: Route 1's surf-cancel tiles, ev143-147). Strip-
-    listed, stair and template events are decided before this test."""
+    coord_event), and no page carries a scene (`_SCENE_CODES`; CH11 Route 4
+    EV070, the bridge warning, kept as a coord_event). The one predicate both
+    the converter and `beat_gen` read, so the generator never writes a beat
+    for an event the ROM lacks (ROM run 53: Route 1's surf-cancel tiles,
+    ev143-147). Strip-listed, stair and template events are decided before
+    this test."""
     page = select_boot_page(event)
     if page is None:
         return False
@@ -747,6 +763,7 @@ def blank_touch_drop(event: dict) -> bool:
         not page.get("graphic", {}).get("character_name")
         and page.get("trigger") == TRIGGER_PLAYER_TOUCH
         and not _event_transfers(event)
+        and not _event_has_scene(event)
     )
 
 
@@ -1778,12 +1795,19 @@ def _visibility_expr(
     eid: int,
     flag_registry: FlagRegistry | None,
     wall: bool = False,
+    graphicless_after: int | None = None,
 ) -> tuple[str | None, bool]:
     """The Poryscript condition under which a hidden actor is VISIBLE, per
     RMXP highest-active-page semantics (see `_visibility_transition_lines`,
     which wraps this). Returns `(expr, always_visible)`: `expr` is None when
     no page ever qualifies as visible (never auto-shown) or when
-    `always_visible`. Fails loud on an unresolvable condition term."""
+    `always_visible`. Fails loud on an unresolvable condition term.
+
+    `graphicless_after=k` instead qualifies the pages after page k with NO
+    character graphic: the condition under which a page change has retired
+    the actor's sprite page k, so RMXP draws nothing whatever a route did to
+    its opacity (`render_visibility_refresh_script`'s `blank_entries`). A
+    blank page at or below k is left alone: a cutscene may dress it."""
     clauses: list[str] = []
     always_visible = False
     # An invisible wall's wall pages count as present (the event spawns and
@@ -1792,7 +1816,10 @@ def _visibility_expr(
     for i, p in enumerate(pages):
         gname = p.get("graphic", {}).get("character_name") or ""
         opacity = p.get("graphic", {}).get("opacity", 255)
-        if wall_event:
+        if graphicless_after is not None:
+            if gname or i <= graphicless_after:
+                continue
+        elif wall_event:
             if not is_invisible_wall_page(p):
                 continue
         elif not gname or opacity <= 0:
@@ -1980,6 +2007,7 @@ def visibility_refresh_label(uranium_id: int) -> str:
 def render_visibility_refresh_script(
     uranium_id: int,
     entries: list[tuple[int, str, str, int, str]],
+    blank_entries: list[tuple[int, str, str, int, str]] | None = None,
 ) -> str | None:
     """One `script MapNNN_RefreshVisibility { ... }` covering every hidden
     actor of the map that has a guardable visibility condition. Each entry is
@@ -1998,8 +2026,16 @@ def render_visibility_refresh_script(
     `RemoveObjectEventByLocalIdAndMap`). Local ids are the FINAL compiled ids
     (the dispatcher channel is not remapped). The first body line is a
     machine-readable list of the guard symbols (`VISIBILITY_REFRESH_GUARDS_PREFIX`)
-    that `refresh_guard_symbols` reads back in the staging pass."""
-    if not entries:
+    that `refresh_guard_symbols` reads back in the staging pass.
+
+    `blank_entries` (same shape; the expr is `_visibility_expr(...,
+    graphicless=True)`) are hidden cutscene actors that a page with NO graphic
+    can retire: while that expr holds the actor is removed UNCONDITIONALLY.
+    The no-op guard above protects an actor a cutscene `addobject`ed while its
+    live page still has a sprite; a graphicless page draws nothing in RMXP, so
+    there is nothing to protect (CH11 Route 4 EV072: the bridge warning NPC
+    walks off and is gone once FLAG_COMETCAVEBEWARE turns its page blank)."""
+    if not entries and not blank_entries:
         return None
     flags: set[str] = set()
     variables: set[str] = set()
@@ -2019,6 +2055,16 @@ def render_visibility_refresh_script(
             f"            setflag({flag})",
             f"            removeobject({local_id})",
             "        }",
+            "    }",
+        ]
+    for eid, name, flag, local_id, expr in blank_entries or []:
+        flags.update(_REFRESH_GUARD_FLAG_RE.findall(expr))
+        variables.update(_REFRESH_GUARD_VAR_RE.findall(expr))
+        body += [
+            f"    # EV{eid:03d} {name} (graphicless page)".rstrip(),
+            f"    if ({expr}) {{",
+            f"        setflag({flag})",
+            f"        removeobject({local_id})",
             "    }",
         ]
     guards = " ".join(sorted(flags | variables))
@@ -3104,12 +3150,14 @@ def build_object_events(
                 # page has no code-201 — see its docstring and the findings
                 # doc). It is a real, live door: keep it as a coord_event so the
                 # dispatcher picks the page and that page's body runs its own
-                # warp(). Blank player-touch events with NO transfer anywhere
-                # are the original inert shape and still drop
-                # (`blank_touch_drop`, which beat_gen reads too).
+                # warp(). A blank touch SCENE (no transfer, but text or state
+                # writes -- Route 4's bridge warning) is kept as a plain
+                # coord_event. Blank player-touch events with neither are the
+                # original inert shape and still drop (`blank_touch_drop`,
+                # which beat_gen reads too).
                 if not blank_touch_drop(event):
                     emit_kind = "coord"
-                    gated_door = True
+                    gated_door = bool(_event_transfers(event))
                 else:
                     _drop(eid, DROP_BLANK_TRIGGER1)
                     continue
@@ -3465,6 +3513,7 @@ def build_object_events(
             result.local_id_map[str(eid)] = len(result.object_events)
 
     refresh_entries: list[tuple[int, str, str, int, str]] = []
+    blank_entries: list[tuple[int, str, str, int, str]] = []
     for eid in vanishing_ids:
         local_id = result.local_id_map.get(str(eid))
         if local_id is None:
@@ -3599,8 +3648,19 @@ def build_object_events(
                 (eid, actor_event.get("name", ""), vis_flags[eid],
                  len(result.object_events), refresh_expr)
             )
+        if not always_visible and not wall_actor:
+            blank_expr, blank_always = _visibility_expr(
+                actor_pages, uid, eid, flag_registry, graphicless_after=graphic_idx,
+            )
+            if blank_expr is not None and not blank_always:
+                blank_entries.append(
+                    (eid, actor_event.get("name", ""), vis_flags[eid],
+                     len(result.object_events), blank_expr)
+                )
 
-    result.refresh_script = render_visibility_refresh_script(uid, refresh_entries)
+    result.refresh_script = render_visibility_refresh_script(
+        uid, refresh_entries, blank_entries,
+    )
 
     if len(result.object_events) > 64:
         raise ValueError(
