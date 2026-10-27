@@ -114,6 +114,7 @@ from rpg2gba.beat_gen.select import (
     cleared_obstacle_pages,
     dropped_events,
     empty_events,
+    funnel_pages,
     select_rows,
 )
 from rpg2gba.beat_gen.round_trip import find_round_trip
@@ -2046,6 +2047,14 @@ def _dropped_events(rows: Sequence[ManifestRow],
     return out
 
 
+def _funnel_pages(rows: Sequence[ManifestRow], build_dir: Path) -> dict[str, str]:
+    """`select.funnel_pages` over every map `rows` touch."""
+    out: dict[str, str] = {}
+    for map_id in sorted({r.map_id for r in rows if r.map_id is not None}):
+        out.update(funnel_pages(map_id, load_map_json(map_id, build_dir / "maps")))
+    return out
+
+
 def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
                out_dir: Path = DEFAULT_OUT_DIR,
                module_dir: Path = DEFAULT_MODULE_DIR) -> ChapterPlan:
@@ -2088,6 +2097,7 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
     selection = split_outbound(select_rows(rows, verdicts, floors, stripped=stripped,
                                            empty=empty,
                                            dropped=_dropped_events(rows, build_dir),
+                                           funnels=_funnel_pages(rows, build_dir),
                                            held=held, held_obstacles=held_obstacles,
                                            foreign_cleared=foreign_cleared,
                                            cleared_pages=cleared_pages),
@@ -2176,7 +2186,8 @@ def build_plan(chapter_id: str, *, build_dir: Path = BUILD_DIR,
         inbound_sel = select_rows(inbound, {v.row_id: v for v in stories[predecessor].rows},
                                   pred_floors, stripped=stripped,
                                   empty=_empty_events(inbound, build_dir),
-                                  dropped=_dropped_events(inbound, build_dir))
+                                  dropped=_dropped_events(inbound, build_dir),
+                                  funnels=_funnel_pages(inbound, build_dir))
         selection = Selection(owned=inbound_sel.owned + selection.owned,
                               refusals=inbound_sel.refusals + selection.refusals,
                               elsewhere=inbound_sel.elsewhere + selection.elsewhere)

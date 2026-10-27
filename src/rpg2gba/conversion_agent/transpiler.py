@@ -65,6 +65,7 @@ from rpg2gba import ingame_trades as _trades
 from rpg2gba.pbs_converter._naming import to_constant
 from rpg2gba.ruby_subset.builtins import NUM_BADGES, badge_flag
 from rpg2gba.pbs_converter.heal_locations import _CALL_RE as _SET_POKEMON_CENTER_RE
+from rpg2gba.tileset_converter.funnels import funnel_targets, page_push_landing, touch_entry_label
 from rpg2gba.tileset_converter.npc_gfx import is_door_sheet
 
 logger = logging.getLogger(__name__)
@@ -1402,6 +1403,19 @@ class TranspileContext:
         pairs = blanking_self_switches(events)
         self.vanishing_switches[map_id] = pairs
         return pairs
+
+    # Scene funnels per map: funnel event id -> (scene event id, scene cell).
+    # A funnel's pushing page ends in `goto(touch_entry_label(scene))` instead
+    # of `end` (see `tileset_converter.funnels`).
+    funnels: dict[int, dict[int, tuple[int, tuple[int, int]]]] = field(default_factory=dict)
+
+    def register_map_funnels(self, map_id: int, events: list[dict]) -> None:
+        """Pre-scan ``events`` for scene funnels. Call once per map before
+        transpiling."""
+        cells = {e["id"]: (e["x"], e["y"]) for e in events if e}
+        self.funnels[map_id] = {
+            fid: (sid, cells[sid]) for fid, sid in funnel_targets(events).items()
+        }
 
     # Uranium internal item/berry symbol -> ITEM_* constant, from
     # reference/uranium_id_map.json's "items" table (CLAUDE.md §4.3). Used
@@ -6444,7 +6458,15 @@ def transpile_event(map_id: int, event: dict, ctx: TranspileContext) -> Transpil
             # cutscenes use lockall/releaseall, not lock/release.
             body = ["lockall", *body, "releaseall"]
         body = body or []
-        body.append("end")
+        funnel = ctx.funnels.get(map_id, {}).get(event.get("id"))
+        if (funnel is not None and body and trigger == 1
+                and page_push_landing(page, event["x"], event["y"]) == funnel[1]):
+            # A scene funnel's push lands the player on the scene's cell; the
+            # engine would not fire it from a scripted move, so enter it
+            # (`tileset_converter.funnels`, operator ruling 2026-10-27).
+            body.append(f"goto({touch_entry_label(map_id, funnel[0])})")
+        else:
+            body.append("end")
         inner = "\n".join(f"    {ln}" for ln in body)
         header = f"# {name}\n" if name and not name.startswith("EV") else ""
         blocks.append(f"{header}script {label} {{\n{inner}\n}}")

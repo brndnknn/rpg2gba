@@ -327,6 +327,45 @@ def test_dropped_event_rows_are_converter_dropped_not_owned():
         ("map033/ev147/p0", "converter_dropped")]
 
 
+def _bridge() -> dict:
+    """Route 4: EV032 @(38,44) slides the player right onto EV070's scene."""
+    push = {"code": 209, "parameters": [-1, {"list": [
+        {"code": 3, "parameters": []}, {"code": 19, "parameters": []},
+        {"code": 0, "parameters": []}]}]}
+    funnel = _touch_event(32, push, {"code": 123, "parameters": ["A", 0]})
+    funnel["pages"].append({"trigger": 1, "graphic": {"character_name": ""}, "list": [],
+                            "condition": {"self_switch_valid": True, "self_switch_ch": "A"}})
+    funnel["pages"].append({"trigger": 1, "graphic": {"character_name": ""}, "list": [],
+                            "condition": {"switch1_valid": True, "switch1_id": 63}})
+    scene = _touch_event(70, {"code": 101, "parameters": ["Oops!"]})
+    funnel["x"], funnel["y"], scene["x"], scene["y"] = 38, 44, 39, 44
+    return {"events": [None, funnel, scene]}
+
+
+def test_funnel_pages_name_the_pushing_page():
+    """The pushing page and the self-switch page it alone sets; the
+    story-switch page (live after the scene) keeps its own beat."""
+    got = select.funnel_pages(76, _bridge())
+    assert list(got) == ["map076/ev032/p0", "map076/ev032/p1"]
+    assert "ev070" in got["map076/ev032/p0"]
+    # kept by the converter, so not converter_dropped
+    assert select.dropped_events(76, _bridge()) == {}
+
+
+def test_funnel_rows_are_walked_with_the_scene_not_owned():
+    from rpg2gba.beat_floor.assertion import RowFloor
+    from rpg2gba.chapter_manifest.schema import ManifestRow
+
+    row = ManifestRow(row_id="map076/ev032/p0", kind="page", map_id=76, content_hash="x",
+                      event_id=32)
+    floor = RowFloor(row_id=row.row_id, trigger="player_touch", assertions=(), refusals=())
+    sel = select.select_rows([row], {}, {row.row_id: floor},
+                             funnels=select.funnel_pages(76, _bridge()))
+    assert sel.owned == () and sel.refusals == ()
+    assert [(e.row_id, e.status) for e in sel.elsewhere] == [
+        ("map076/ev032/p0", "walked_with_page")]
+
+
 # --- #63: an obstacle's empty post-clear page --------------------------------
 
 def _rock_rows() -> tuple[ManifestRow, ManifestRow]:

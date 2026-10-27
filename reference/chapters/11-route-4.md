@@ -402,7 +402,8 @@ None of the six needs an operator ruling; each follows a standing rule or is set
   `addobject`ed) was the cause; a page with no graphic draws nothing in RMXP, so hidden cutscene actors now get
   an unconditional `removeobject` while a graphicless page ABOVE their sprite page is live
   (`_visibility_expr(..., graphicless_after=)`, `blank_entries`). That also adds such removals to Moki, Kevlar
-  PC, Nowtoch, Route 2 and the player's/Theo's houses; the full from-boot run stayed green (732/732). The funnels stay dropped, faithfully: Essentials checks touch triggers
+  PC, Nowtoch, Route 2 and the player's/Theo's houses; the full from-boot run stayed green (732/732). The
+  funnels were first left dropped (superseded below), as faithful: Essentials checks touch triggers
   only at a step's end and never while an event runs (`Game_Player#check_event_trigger_here`), so in Uranium
   a flank push lands on (39,44) without firing the scene — the wiki's "avoidable from the left or right".
   Nowtoch's EV020/EV021 are claimed as diagonal stairs before this test, so CH06 does not change. The
@@ -410,6 +411,18 @@ None of the six needs an operator ruling; each follows a standing rule or is set
   RMXP); in the ROM the unspawned object makes `applymovement`/`waitmovement` a no-op. Outside the slice the
   rule revives 40 scene events (maps 8, 71, 75, 84, 111, 123, 137, 141, 144, 155, 174, 175, 206, 209, 212,
   216); each is reviewed when its chapter opens.
+  **Operator 2026-10-27: the funnels come back and DO fire the scene** (walk confirmed the flanks skip it;
+  "clearly meant to be triggered regardless"). This deliberately departs from Uranium's runtime for its
+  evident intent. `tileset_converter.funnels` finds a blank touch event whose boot page pushes the player
+  onto a blank touch scene's cell; `blank_touch_drop` keeps it, the transpiler ends its pushing page with
+  `goto(Map076_EV070_TouchEntry)` instead of `end`, and `metadata_wiring` emits that label as an alias of
+  the scene's touch script. Corpus-wide the same shape recurs on maps 141 (EV023/024 -> EV025), 163
+  (EV013 -> EV011), 175 (EV049/050 -> EV051) and 216 (EV014 -> EV010); they get the rule when their
+  chapters open. The story model does not see the chain, so `beat_gen.select.funnel_pages` files a
+  funnel's pushing page and its self-switch-only page `walked_with_page` (a separate beat fired the
+  scene early); the scene keeps its own beat from
+  the middle cell, and the flank slide is `[eye]` at the walk. Green 734/734 from boot on the rebuilt
+  ROM; both flanks probed in the emulator (slide to (39,44), scene runs, `FLAG_COMETCAVEBEWARE` set); manifest 0 errors.
 - **Cave mouth (EV021) held out of the plan:** the Hiker and Theo clear only on var106, which only the row-15
   scene writes as the player leaves for map 7. `beat_gen._exit_only_walls` now holds such actors as walls, so
   the route has one exit (the row-15 cells).

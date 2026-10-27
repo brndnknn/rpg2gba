@@ -216,7 +216,7 @@
     "derived_hash": "430d7367afc5c66f"
   },
   "map076/ev032/p0": {
-    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer)",
+    "disposition": "elsewhere:walked_with_page: scene funnel: slides the player onto ev070 (39,44) and runs its scene; walked with that event's page beat, flank entry checked by eye",
     "derived_hash": "024e2ea4a828e949"
   },
   "map076/ev032/p1": {
@@ -224,11 +224,11 @@
     "derived_hash": "6c2d90d22489cb2a"
   },
   "map076/ev032/p2": {
-    "disposition": "cosmetic",
+    "disposition": "beat:m076e032p2",
     "derived_hash": "1298a5ef339ea5fe"
   },
   "map076/ev033/p0": {
-    "disposition": "elsewhere:converter_dropped: converter drops it (blank_trigger1: blank graphic, player touch, no transfer)",
+    "disposition": "elsewhere:walked_with_page: scene funnel: slides the player onto ev070 (39,44) and runs its scene; walked with that event's page beat, flank entry checked by eye",
     "derived_hash": "2f8b964912319933"
   },
   "map076/ev033/p1": {
@@ -236,7 +236,7 @@
     "derived_hash": "6c2d90d22489cb2a"
   },
   "map076/ev033/p2": {
-    "disposition": "cosmetic",
+    "disposition": "beat:m076e033p2",
     "derived_hash": "1298a5ef339ea5fe"
   },
   "map076/ev034/p0": {

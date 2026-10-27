@@ -22,6 +22,7 @@ from rpg2gba.conversion_agent.flag_registry import (
     FlagRegistry,
     temp_switch_flag_name,
 )
+from rpg2gba.tileset_converter import funnels
 from rpg2gba.tileset_converter import layout as layout_mod
 from rpg2gba.tileset_converter import map_constants as mc
 from rpg2gba.tileset_converter import metadata_wiring as mw
@@ -2465,6 +2466,40 @@ def test_blank_touch_scene_is_kept(cmds: list[dict]) -> None:
 def test_blank_touch_helper_still_drops(cmds: list[dict]) -> None:
     """Player-only move routes, fog changes and script helpers stay dropped."""
     assert mw.blank_touch_drop(_event(1, 0, 0, [_page(trigger=1, cmds=cmds)]))
+
+
+def _push(*moves: int) -> dict:
+    """A 209 move route on the player (RMXP move codes, then the 0 terminator)."""
+    route = {"list": [{"code": c, "parameters": []} for c in (*moves, 0)]}
+    return _cmd(209, -1, route)
+
+
+def _route4_bridge() -> list[dict]:
+    """Route 4's bridge band: EV032/EV033 push onto the EV070 scene cell."""
+    funnel = [_cmd(209, -1, {}), _cmd(210), _cmd(123, "A", 0)]
+    return [
+        _event(32, 38, 44, [_page(trigger=1, cmds=[_push(3, 19), _cmd(210), _cmd(123, "A", 0)])]),
+        _event(33, 40, 44, [_page(trigger=1, cmds=[_push(2, 19), _cmd(210), _cmd(123, "A", 0)])]),
+        _event(70, 39, 44, [_page(trigger=1, cmds=[_cmd(101, "Oops!"), _cmd(121, 63, 63, 0)])]),
+        # pushes, but onto a cell with no scene: a plain helper
+        _event(80, 10, 10, [_page(trigger=1, cmds=[_push(3)])]),
+        # an unparsed-route helper at the scene's side stays a helper too
+        _event(81, 39, 45, [_page(trigger=1, cmds=funnel)]),
+    ]
+
+
+def test_funnel_targets_finds_pushes_onto_a_scene() -> None:
+    assert funnels.funnel_targets(_route4_bridge()) == {32: 70, 33: 70}
+
+
+def test_blank_touch_funnel_is_kept_only_with_map_context() -> None:
+    """The funnel is kept when the map's funnel ids are passed; a push that
+    lands nowhere scenic still drops."""
+    events = {e["id"]: e for e in _route4_bridge()}
+    ids = funnels.funnel_targets(list(events.values()))
+    assert not mw.blank_touch_drop(events[32], ids)
+    assert mw.blank_touch_drop(events[32])
+    assert mw.blank_touch_drop(events[80], ids)
 
 
 def test_build_object_events_stripped_event_dropped_before_gfx_lookup() -> None:

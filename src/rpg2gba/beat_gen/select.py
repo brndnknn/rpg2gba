@@ -13,8 +13,9 @@ from collections.abc import Collection, Mapping, Sequence
 
 from rpg2gba.beat_floor.assertion import RowFloor
 from rpg2gba.beat_gen.plan import Blocker, Elsewhere, Refusal, Selection
-from rpg2gba.chapter_manifest.schema import ManifestRow, parse_row_id
+from rpg2gba.chapter_manifest.schema import ManifestRow, page_row_id, parse_row_id
 from rpg2gba.story_state.model import RowVerdict
+from rpg2gba.tileset_converter.funnels import funnel_targets, page_push_landing
 from rpg2gba.tileset_converter.metadata_wiring import blank_touch_drop
 from rpg2gba.tileset_converter.stairs import stair_event_ids
 
@@ -176,8 +177,9 @@ def dropped_events(map_id: int, map_json: Mapping) -> dict[tuple[int, int], str]
     out: dict[tuple[int, int], str] = {}
     # Stair cells drop earlier (`DROP_STAIR`) and are terrain rows, not this.
     stairs = stair_event_ids(dict(map_json))
+    funnels = funnel_targets(list(map_json.get("events") or []))
     for event in map_json.get("events") or []:
-        if not event or event["id"] in stairs or not blank_touch_drop(event):
+        if not event or event["id"] in stairs or not blank_touch_drop(event, funnels):
             continue
         scripts = [
             p for page in event.get("pages") or [] for c in page.get("list") or []
@@ -190,6 +192,40 @@ def dropped_events(map_id: int, map_json: Mapping) -> dict[tuple[int, int], str]
     return out
 
 
+def funnel_pages(map_id: int, map_json: Mapping) -> dict[str, str]:
+    """page row id -> detail for each scene funnel's pushing page on one map
+    (`tileset_converter.funnels`, operator ruling 2026-10-27). In the ROM
+    that page slides the player onto the scene's cell and runs the scene, so
+    it is one firing with the scene's own page: the scene's beat walks it from
+    the scene's cell, and the flank entry is checked by eye at the walk. A
+    separate funnel beat would spend the scene before its own beat (the story
+    model does not see the chain). A page gated on nothing but a self switch
+    is listed too: only the funnel's own firing sets it, so it goes live only
+    after the scene has run, and a beat the generator ordered before the
+    scene would fire the chain early (ROM run 2026-10-27, Route 4 ev032/p1)."""
+    events = list(map_json.get("events") or [])
+    by_id = {e["id"]: e for e in events if e}
+    out: dict[str, str] = {}
+    for fid, sid in funnel_targets(events).items():
+        event, scene = by_id[fid], by_id[sid]
+        where = f"ev{sid:03d} ({scene['x']},{scene['y']})"
+        for idx, page in enumerate(event["pages"]):
+            cond = page.get("condition") or {}
+            if (page.get("trigger") == 1 and page_push_landing(
+                    page, event["x"], event["y"]) == (scene["x"], scene["y"])):
+                out[page_row_id(map_id, fid, idx)] = (
+                    f"scene funnel: slides the player onto {where} and runs its "
+                    f"scene; walked with that event's page beat, flank entry "
+                    f"checked by eye")
+            elif (cond.get("self_switch_valid") and not cond.get("switch1_valid")
+                    and not cond.get("switch2_valid") and not cond.get("variable_valid")):
+                out[page_row_id(map_id, fid, idx)] = (
+                    f"scene funnel: its self switch is set only by the funnel's own "
+                    f"firing, which runs the scene at {where}; walked with that "
+                    f"event's page beat")
+    return out
+
+
 def select_rows(
     rows: Sequence[ManifestRow],
     verdicts: Mapping[str, RowVerdict],
@@ -198,6 +234,7 @@ def select_rows(
     stripped: Mapping[tuple[int, int], str | None] | None = None,
     empty: Collection[tuple[int, int]] = frozenset(),
     dropped: Mapping[tuple[int, int], str] | None = None,
+    funnels: Mapping[str, str] | None = None,
     held: Collection[str] = frozenset(),
     held_obstacles: Collection[tuple[int, int]] = frozenset(),
     foreign_cleared: Collection[tuple[int, int]] = frozenset(),
@@ -231,6 +268,9 @@ def select_rows(
     `dropped` is `dropped_events` over the chapter's maps: those events'
     rows are `converter_dropped`, after the empty rule.
 
+    `funnels` is `funnel_pages` over the chapter's maps (page row id ->
+    detail): those pages are `walked_with_page`, after the dropped rule.
+
     `cleared_pages` is `cleared_obstacle_pages`: those rows are `empty_page`,
     just before the capability rule (Rule 6) would call them `blocked`."""
     owned: list[ManifestRow] = []
@@ -262,6 +302,12 @@ def select_rows(
             elsewhere.append(Elsewhere(
                 row.row_id, "converter_dropped",
                 detail=dropped[(row.map_id, row.event_id)]))
+            continue
+
+        # Rule 1d: a scene funnel's pushing page fires with the scene.
+        if funnels and row.row_id in funnels:
+            elsewhere.append(Elsewhere(row.row_id, "walked_with_page",
+                                       detail=funnels[row.row_id]))
             continue
 
         verdict = verdicts.get(row.row_id)

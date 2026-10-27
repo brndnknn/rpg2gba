@@ -51,6 +51,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Collection
 
 from ..conversion_agent.deterministic import RMXP_DIRECTION_TO_DIR_CONST
 from ..conversion_agent.flag_registry import (
@@ -77,6 +78,7 @@ from .npc_gfx import (
 )
 from .route_bytecode import RouteRegistry
 from .route_sim import simulate_route
+from .funnels import event_has_scene, funnel_targets, touch_entry_label
 from .stairs import StairSide, stair_cell_sides, stair_event_ids
 
 logger = logging.getLogger(__name__)
@@ -731,27 +733,15 @@ def _event_transfers(event: dict) -> list[tuple[int, int, int, int | None]]:
     return out
 
 
-# RMXP command codes that make a blank touch event a SCENE rather than a
-# helper: Show Text, Control Switches / Variables, Battle Processing. What is
-# left after them is presentation the port carries natively or not at all --
-# player-only move routes (funnels, ledge pushes), fog/tone changes, the
-# `pbBridgeOn/Off` layer toggles, `pbCancelVehicles`.
-_SCENE_CODES = frozenset({101, 121, 122, 301})
-
-
-def _event_has_scene(event: dict) -> bool:
-    """Does any page of `event` carry a scene command (`_SCENE_CODES`)?"""
-    return any(cmd["code"] in _SCENE_CODES
-               for page in event["pages"] for cmd in page.get("list", []))
-
-
-def blank_touch_drop(event: dict) -> bool:
+def blank_touch_drop(event: dict, funnel_ids: Collection[int] = ()) -> bool:
     """Does `build_object_events` drop `event` as `DROP_BLANK_TRIGGER1`?
 
     Its boot page has no graphic and a player-touch trigger, no page
     anywhere transfers (a transferring one is a gated door, kept as a
-    coord_event), and no page carries a scene (`_SCENE_CODES`; CH11 Route 4
-    EV070, the bridge warning, kept as a coord_event). The one predicate both
+    coord_event), no page carries a scene (`funnels.SCENE_CODES`; CH11 Route 4
+    EV070, the bridge warning, kept as a coord_event), and it is not a scene
+    funnel (`funnel_ids`, from `funnels.funnel_targets` over the map's events;
+    Route 4's EV032/EV033). The one predicate both
     the converter and `beat_gen` read, so the generator never writes a beat
     for an event the ROM lacks (ROM run 53: Route 1's surf-cancel tiles,
     ev143-147). Strip-listed, stair and template events are decided before
@@ -763,7 +753,8 @@ def blank_touch_drop(event: dict) -> bool:
         not page.get("graphic", {}).get("character_name")
         and page.get("trigger") == TRIGGER_PLAYER_TOUCH
         and not _event_transfers(event)
-        and not _event_has_scene(event)
+        and not event_has_scene(event)
+        and event["id"] not in funnel_ids
     )
 
 
@@ -2694,6 +2685,8 @@ def build_object_events(
     # RMXP-id -> 1-based-position table this module hands to
     # `write_local_id_tables`).
     stair_ids = stair_event_ids(map_json)
+    funnels = funnel_targets(map_json.get("events") or [])
+    funnel_scene_ids = set(funnels.values())
 
     hidden_actor_ids: list[int] = []
     if required_actor_ids:
@@ -3152,10 +3145,12 @@ def build_object_events(
                 # dispatcher picks the page and that page's body runs its own
                 # warp(). A blank touch SCENE (no transfer, but text or state
                 # writes -- Route 4's bridge warning) is kept as a plain
-                # coord_event. Blank player-touch events with neither are the
+                # coord_event, and so is a funnel that pushes the player onto
+                # one (`funnels`; its page ends by entering the scene).
+                # Blank player-touch events with none of these are the
                 # original inert shape and still drop (`blank_touch_drop`,
                 # which beat_gen reads too).
-                if not blank_touch_drop(event):
+                if not blank_touch_drop(event, funnels):
                     emit_kind = "coord"
                     gated_door = bool(_event_transfers(event))
                 else:
@@ -3225,6 +3220,18 @@ def build_object_events(
                 script = NO_SCRIPT
         elif dispatcher is not None:
             result.dispatchers.append(dispatcher)
+
+        if eid in funnel_scene_ids:
+            # The label a funnel's pushing page `goto`s (transpiler side of
+            # `funnels`): an alias of this scene's resolved touch script.
+            if emit_kind != "coord" or script == NO_SCRIPT:
+                raise ValueError(
+                    f"map {uid} EV{eid:03d}: funnel target resolved to no "
+                    f"touch script ({emit_kind}, {script}) -- the funnel's "
+                    f"goto({touch_entry_label(uid, eid)}) would dangle"
+                )
+            result.dispatchers.append(
+                f"script {touch_entry_label(uid, eid)} {{\n    goto({script})\n}}")
 
         if emit_kind == "bg":
             result.bg_events.append(BgEvent(x=event["x"], y=event["y"], script=script))

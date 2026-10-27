@@ -153,6 +153,8 @@ def transpile_map(
     ctx.register_map_rocks(map_id, map_json.get("events", []))
     # Self switches that blank their event: a remote write despawns it too.
     ctx.register_map_vanishers(map_id, map_json.get("events", []))
+    # Scene funnels: their pushing page enters the scene it lands on.
+    ctx.register_map_funnels(map_id, map_json.get("events", []))
 
     for event in map_json.get("events", []):
         event_id = event.get("id")
