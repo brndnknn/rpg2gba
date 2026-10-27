@@ -161,7 +161,7 @@ def test_real_chapters_json_reconciles_with_documented_milestones() -> None:
 
     slices = gated_chapter_slices(current_slice_ids=SLICE_MAP_IDS)
     sizes = {s.chapter_id: len(s.authoring_slice) for s in slices}
-    assert sizes == {"CH01": 8, "CH02": 10, "CH03": 15, "CH04": 16, "CH05": 18, "CH06": 24, "CH09": 27, "CH10": 34}
+    assert sizes == {"CH01": 8, "CH02": 10, "CH03": 15, "CH04": 16, "CH05": 18, "CH06": 24, "CH09": 27, "CH10": 34, "CH11": 36}
 
 
 def test_no_built_chapters_fails_loud(tmp_path: Path) -> None:
@@ -320,8 +320,8 @@ def test_report_format_lists_findings() -> None:
 )
 def test_real_gated_chapters_reconcile_and_run() -> None:
     """The detector must at least run cleanly end-to-end over the real,
-    currently-gated chapters that add maps (CH01-CH06, CH09, CH10) without raising -- the substantive
+    currently-gated chapters that add maps (CH01-CH06, CH09-CH11) without raising -- the substantive
     findings are reported by hand, not asserted here, since they are exactly
     what this task exists to discover."""
     reports = slice_growth.detect_slice_growth(maps_dir=BUILD_MAPS)
-    assert [r.chapter_id for r in reports] == ["CH01", "CH02", "CH03", "CH04", "CH05", "CH06", "CH09", "CH10"]
+    assert [r.chapter_id for r in reports] == ["CH01", "CH02", "CH03", "CH04", "CH05", "CH06", "CH09", "CH10", "CH11"]

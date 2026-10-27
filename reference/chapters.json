@@ -154,7 +154,7 @@
     {
       "id": "CH11", "act": "A3", "title": "Route 4", "wiki_page": "Route 4",
       "visit": 1, "outdoor": 76, "maps": [76, 9],
-      "predecessor": "CH10", "tier": "thin", "status": "in_progress", "notes": ""
+      "predecessor": "CH10", "tier": "thin", "status": "built", "notes": ""
     },
     {
       "id": "CH12", "act": "A3", "title": "Comet Cave", "wiki_page": "Comet Cave",
